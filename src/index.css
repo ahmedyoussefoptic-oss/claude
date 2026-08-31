@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Tajawal', 'Cairo', system-ui, sans-serif;
+  --color-primary: #0284c7;
+  --color-primary-dark: #0369a1;
+  --color-secondary: #0ea5e9;
+  --color-accent: #38bdf8;
+  --color-background: #f8fafc;
+  --color-surface: #ffffff;
+  --color-text-main: #0f172a;
+  --color-text-muted: #64748b;
+  --color-border: #e2e8f0;
+}
+
+@layer base {
+  body {
+    @apply bg-background text-text-main font-sans antialiased;
+  }
+}
