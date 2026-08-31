@@ -5,6 +5,7 @@ import Login from './components/auth/Login';
 import AppLayout from './components/layout/AppLayout';
 import Dashboard from './pages/Dashboard';
 import ComplaintsList from './pages/ComplaintsList';
+import ParentPortal from './pages/ParentPortal';
 
 // Placeholder Pages
 const Search = () => <div className="p-4"><h1 className="text-2xl font-bold">البحث</h1></div>;
@@ -34,6 +35,8 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Public Routes */}
+        <Route path="/track" element={<ParentPortal />} />
         <Route path="/login" element={<Login />} />
         
         {/* Protected Routes */}
