@@ -3,9 +3,9 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import useAuthStore from './stores/useAuthStore';
 import Login from './components/auth/Login';
 import AppLayout from './components/layout/AppLayout';
+import Dashboard from './pages/Dashboard';
 
 // Placeholder Pages
-const Dashboard = () => <div className="p-4"><h1 className="text-2xl font-bold">الرئيسية</h1></div>;
 const ComplaintsList = () => <div className="p-4"><h1 className="text-2xl font-bold">الشكاوى</h1></div>;
 const Search = () => <div className="p-4"><h1 className="text-2xl font-bold">البحث</h1></div>;
 
