@@ -1,0 +1,10 @@
+# حماية عامة
+Options -Indexes
+<FilesMatch "\.(sqlite|log|md)$">
+  Require all denied
+</FilesMatch>
+<Files "config.php">
+  Require all denied
+</Files>
+# صفحة الدخول هي الافتراضية
+DirectoryIndex index.php
