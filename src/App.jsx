@@ -4,9 +4,9 @@ import useAuthStore from './stores/useAuthStore';
 import Login from './components/auth/Login';
 import AppLayout from './components/layout/AppLayout';
 import Dashboard from './pages/Dashboard';
+import ComplaintsList from './pages/ComplaintsList';
 
 // Placeholder Pages
-const ComplaintsList = () => <div className="p-4"><h1 className="text-2xl font-bold">الشكاوى</h1></div>;
 const Search = () => <div className="p-4"><h1 className="text-2xl font-bold">البحث</h1></div>;
 
 const ProtectedRoute = ({ children }) => {
