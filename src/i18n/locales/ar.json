@@ -1,0 +1,69 @@
+{
+  "common": {
+    "loading": "جاري التحميل...",
+    "save": "حفظ",
+    "cancel": "إلغاء",
+    "close": "إغلاق",
+    "edit": "تعديل",
+    "delete": "حذف",
+    "search": "بحث",
+    "export": "تصدير",
+    "language": "English"
+  },
+  "nav": {
+    "dashboard": "الرئيسية",
+    "complaints": "الشكاوى",
+    "lostFound": "المفقودات",
+    "techSupport": "حل المشكلات التقنية",
+    "flowMap": "خريطة المسار",
+    "advancedSearch": "البحث المتقدم",
+    "users": "المستخدمين",
+    "settings": "الإعدادات",
+    "logout": "تسجيل الخروج"
+  },
+  "app": {
+    "brand": "المكتشف العالمية",
+    "brandShort": "المكتشف",
+    "tagline": "نظام إدارة الشكاوى"
+  },
+  "login": {
+    "title": "نظام شكاوى المكتشف",
+    "subtitle": "سجل دخولك لمتابعة لوحة المؤشرات والشكاوى",
+    "email": "البريد الإلكتروني",
+    "password": "كلمة المرور",
+    "submit": "تسجيل الدخول",
+    "invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة."
+  },
+  "notifications": {
+    "title": "الإشعارات",
+    "empty": "لا توجد إشعارات"
+  },
+  "dashboard": {
+    "greeting": "مرحباً {{name}} 👋",
+    "subtitle": "إليك ملخص سريع لحالة الشكاوى",
+    "exportReport": "تصدير التقرير",
+    "newComplaint": "شكوى جديدة",
+    "totalComplaints": "إجمالي الشكاوى",
+    "inProgress": "قيد المعالجة",
+    "overdue": "متأخرة (SLA)",
+    "solved": "تم الحل",
+    "satisfaction": "رضا أولياء الأمور",
+    "avgResolution": "متوسط زمن الحل",
+    "slaCompliance": "الالتزام بمدة الحل",
+    "reopened": "شكاوى معاد فتحها",
+    "basedOnSurveys": "بناءً على {{count}} استبيان",
+    "noSurveys": "لا توجد استبيانات بعد",
+    "sinceReceipt": "من وقت الاستلام حتى الحل",
+    "slaSub": "نسبة الشكاوى المحلولة داخل المدة المحددة",
+    "reopenedSub": "لم يقتنع ولي الأمر بالحل",
+    "weeklyTrend": "معدل الشكاوى هذا الأسبوع",
+    "byBranch": "الشكاوى حسب الفرع",
+    "recentComplaints": "أحدث الشكاوى",
+    "noComplaints": "لا يوجد شكاوى حالياً",
+    "ticketNumber": "رقم التذكرة",
+    "parent": "ولي الأمر",
+    "classification": "التصنيف",
+    "branch": "الفرع",
+    "status": "الحالة"
+  }
+}

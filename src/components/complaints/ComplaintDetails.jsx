@@ -1,8 +1,187 @@
-import { X, Send, Paperclip, Clock, CheckCircle2, User, Phone, MapPin } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, Trash2 } from 'lucide-react';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db } from '../../config/firebase';
+import useAuthStore from '../../stores/useAuthStore';
+import { useUsers } from '../../hooks/useUsers';
+import { waLink, buildResolutionMessage } from '../../utils/whatsapp';
+import { ROLES } from '../../config/roles';
+import { format } from 'date-fns';
+import { ar } from 'date-fns/locale';
+
+const FLOW_STEPS = [
+  { key: 'RECEIVED', label: 'استلام الشكوى', match: () => true },
+  { key: 'ASSIGNED', label: 'الإسناد لمختص', match: (l) => ['COMPLAINT_ASSIGNED', 'COMPLAINT_TRANSFERRED'].includes(l.action) },
+  { key: 'IN_PROGRESS', label: 'قيد المعالجة', match: (l) => l.action === 'COMPLAINT_ACKNOWLEDGED' },
+  { key: 'SOLVED', label: 'تسجيل الحل', match: (l) => l.action === 'SOLUTION_ADDED' },
+  { key: 'CLOSED', label: 'الإغلاق', match: (l) => l.action === 'SURVEY_SUBMITTED' || l.action === 'COMPLAINT_CLOSED' },
+];
+
+const getStatusBadge = (status) => {
+  switch (status) {
+    case 'RECEIVED': return 'bg-blue-100 text-blue-800 border-blue-200';
+    case 'IN_PROGRESS': return 'bg-amber-100 text-amber-800 border-amber-200';
+    case 'WAITING_PARENT_RESPONSE': return 'bg-purple-100 text-purple-800 border-purple-200';
+    case 'SOLVED': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    case 'CLOSED': return 'bg-slate-100 text-slate-800 border-slate-200';
+    case 'REJECTED': return 'bg-red-100 text-red-800 border-red-200';
+    case 'ESCALATED': return 'bg-orange-100 text-orange-800 border-orange-200';
+    default: return 'bg-slate-100 text-slate-800 border-slate-200';
+  }
+};
+
+const getStatusName = (status) => {
+  switch (status) {
+    case 'RECEIVED': return 'مستلمة';
+    case 'IN_PROGRESS': return 'قيد المعالجة';
+    case 'WAITING_PARENT_RESPONSE': return 'بانتظار الرد';
+    case 'SOLVED': return 'تم الحل';
+    case 'CLOSED': return 'مغلقة';
+    case 'REJECTED': return 'مرفوضة';
+    case 'ESCALATED': return 'مصعدة';
+    default: return status;
+  }
+};
+
+const getActionName = (action) => {
+  switch (action) {
+    case 'COMPLAINT_CREATED': return 'تم تسجيل الشكوى';
+    case 'COMPLAINT_ASSIGNED': return 'تم إسناد الشكوى لمختص';
+    case 'COMPLAINT_TRANSFERRED': return 'تم تحويل الشكوى لمختص آخر';
+    case 'COMPLAINT_ACKNOWLEDGED': return 'تم تأكيد الاستلام';
+    case 'COMPLAINT_STATUS_CHANGED': return 'تم تغيير الحالة';
+    case 'SOLUTION_ADDED': return 'تم تقديم حل';
+    case 'COMPLAINT_SOLVED': return 'تم إغلاق الشكوى (محلولة)';
+    case 'COMPLAINT_ESCALATED': return 'تم تصعيد الشكوى';
+    case 'COMPLAINT_REJECTED': return 'تم رفض الشكوى';
+    case 'COMPLAINT_REOPENED': return 'تم إعادة فتح الشكوى';
+    case 'SURVEY_SUBMITTED': return 'تم استلام تقييم ولي الأمر';
+    case 'INTERNAL_COMMENT_ADDED': return 'تعليق داخلي';
+    default: return action;
+  }
+};
 
 export default function ComplaintDetails({ complaint, onClose }) {
+  const { user, userData } = useAuthStore();
+  const users = useUsers();
+  const [logs, setLogs] = useState([]);
   const [reply, setReply] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState('history'); // 'history' | 'internal'
+  const [assigneeId, setAssigneeId] = useState('');
+
+  const isAdmin = userData?.role === ROLES.ADMIN;
+  // Mirrors firestore.rules' canEditRecord/canDeleteRecord: a branch-scoped
+  // holder of the edit/delete permission only gets it for their own branch
+  // — otherwise the buttons render but every write is rejected server-side.
+  const inScope = isAdmin || userData?.access === 'all' || userData?.branch === complaint.branch;
+  const canEdit = isAdmin || (inScope && userData?.perms?.edit === true);
+  const canDelete = isAdmin || (inScope && userData?.perms?.delete === true);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, `complaints/${complaint.id}/activityLog`),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setLogs(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsubscribe();
+  }, [complaint.id]);
+
+  const addLog = async (action, metadata = {}, updates = null) => {
+    const now = serverTimestamp();
+    await addDoc(collection(db, `complaints/${complaint.id}/activityLog`), {
+      action,
+      actorId: user.uid,
+      actorName: userData?.name || 'مستخدم',
+      metadata,
+      createdAt: now
+    });
+
+    if (updates) {
+      const changes = typeof updates === 'string' ? { status: updates } : updates;
+      await updateDoc(doc(db, 'complaints', complaint.id), {
+        ...changes,
+        updatedAt: now
+      });
+    }
+  };
+
+  const handleAction = async (actionType) => {
+    setLoading(true);
+    try {
+      if (actionType === 'ACKNOWLEDGE') {
+        await addLog('COMPLAINT_ACKNOWLEDGED', {}, 'IN_PROGRESS');
+      } else if (actionType === 'ESCALATE') {
+        await addLog('COMPLAINT_ESCALATED', {}, 'ESCALATED');
+      } else if (actionType === 'SOLVE') {
+        if (!reply.trim()) {
+          alert('يرجى كتابة تفاصيل الحل في صندوق النص أدناه قبل الإغلاق.');
+          return;
+        }
+        await addLog('SOLUTION_ADDED', { solutionDetails: reply }, { status: 'SOLVED', solutionDetails: reply, solvedAt: serverTimestamp() });
+        setReply('');
+      } else if (actionType === 'COMMENT') {
+        if (!reply.trim()) return;
+        await addLog('INTERNAL_COMMENT_ADDED', { comment: reply });
+        setReply('');
+      } else if (actionType === 'WAIT_PARENT') {
+        await addLog('COMPLAINT_STATUS_CHANGED', { to: 'WAITING_PARENT_RESPONSE' }, 'WAITING_PARENT_RESPONSE');
+      } else if (actionType === 'ASSIGN') {
+        if (!assigneeId) {
+          alert('يرجى اختيار المختص أولاً.');
+          return;
+        }
+        const assignee = users.find((u) => u.id === assigneeId);
+        const isReassign = !!complaint.assignedTo;
+        await addLog(
+          isReassign ? 'COMPLAINT_TRANSFERRED' : 'COMPLAINT_ASSIGNED',
+          { fromUserId: complaint.assignedTo || null, fromUserName: complaint.assignedToName || null, toUserId: assigneeId, toUserName: assignee?.name },
+          { assignedTo: assigneeId, assignedToName: assignee?.name || '', assignedAt: serverTimestamp() }
+        );
+        setAssigneeId('');
+      } else if (actionType === 'REJECT') {
+        if (!reply.trim()) {
+          alert('يرجى كتابة سبب رفض الشكوى في صندوق النص أدناه.');
+          return;
+        }
+        await addLog('COMPLAINT_REJECTED', { reason: reply }, 'REJECTED');
+        setReply('');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    const reason = prompt('اكتب سبب حذف الشكوى نهائياً (إلزامي):');
+    if (!reason) return;
+    setLoading(true);
+    try {
+      await addLog('COMPLAINT_DELETED', { reason });
+      await deleteDoc(doc(db, 'complaints', complaint.id));
+      onClose();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Filter logs for general timeline vs internal
+  const timelineLogs = logs.filter(l => l.action !== 'INTERNAL_COMMENT_ADDED');
+  const internalLogs = logs.filter(l => l.action === 'INTERNAL_COMMENT_ADDED');
+
+  // Derive the complaint's flow-map progress from its activity log, most
+  // recent first, so we can render a done/current stepper.
+  const stepStates = FLOW_STEPS.map((step) => {
+    const match = [...logs].reverse().find((l) => step.match(l));
+    return { ...step, done: !!match, at: match?.createdAt };
+  });
+  const firstPendingIndex = stepStates.findIndex((s) => !s.done);
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex justify-end">
@@ -12,26 +191,149 @@ export default function ComplaintDetails({ complaint, onClose }) {
         <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between sticky top-0 z-10">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-xl font-bold text-slate-900">شكوى #CMP-{complaint.id}</h2>
-              <span className="px-2.5 py-1 rounded-md text-xs font-medium border bg-amber-100 text-amber-800 border-amber-200">
-                {complaint.status}
+              <h2 className="text-xl font-bold text-slate-900">شكوى #{complaint.complaintId}</h2>
+              <span className={`px-2.5 py-1 rounded-md text-xs font-medium border ${getStatusBadge(complaint.status)}`}>
+                {getStatusName(complaint.status)}
               </span>
             </div>
             <p className="text-sm text-slate-500 flex items-center gap-2">
-              <Clock className="w-4 h-4" /> 15 أكتوبر 2024 - 10:30 صباحاً
+              <Clock className="w-4 h-4" /> 
+              {complaint.createdAt ? format(complaint.createdAt.toDate(), 'PP p', { locale: ar }) : ''}
             </p>
           </div>
-          <button 
-            onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => window.print()}
+              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+              title="طباعة"
+            >
+              <Printer className="w-5 h-5" />
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+          </div>
         </div>
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          
+
+          {/* Action Buttons for Staff */}
+          {!canEdit && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3 print:hidden">
+              صلاحيتك اطلاع فقط على هذه الشكوى — لا تملك صلاحية التعديل.
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2 print:hidden">
+            {canEdit && complaint.status === 'RECEIVED' && (
+              <button disabled={loading} onClick={() => handleAction('ACKNOWLEDGE')} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
+                تأكيد الاستلام
+              </button>
+            )}
+            {canEdit && (complaint.status === 'IN_PROGRESS' || complaint.status === 'RECEIVED') && (
+              <>
+                <button disabled={loading} onClick={() => handleAction('WAIT_PARENT')} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
+                  بانتظار ولي الأمر
+                </button>
+                <button disabled={loading} onClick={() => handleAction('SOLVE')} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors">
+                  حل الشكوى
+                </button>
+              </>
+            )}
+            {canEdit && complaint.status !== 'SOLVED' && complaint.status !== 'CLOSED' && (
+              <button disabled={loading} onClick={() => handleAction('ESCALATE')} className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors">
+                تصعيد للإدارة
+              </button>
+            )}
+            {canEdit && complaint.status === 'RECEIVED' && (
+              <button disabled={loading} onClick={() => handleAction('REJECT')} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
+                رفض الشكوى
+              </button>
+            )}
+            {['SOLVED', 'CLOSED'].includes(complaint.status) && complaint.solutionDetails && complaint.parentPhone && (
+              <a
+                href={waLink(complaint.parentPhone, buildResolutionMessage(complaint, complaint.solutionDetails))}
+                target="_blank"
+                rel="noreferrer"
+                className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4" />
+                إرسال رسالة الحل عبر واتساب
+              </a>
+            )}
+            {canDelete && (
+              <button disabled={loading} onClick={handleDelete} className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors flex items-center gap-2 mr-auto">
+                <Trash2 className="w-4 h-4" />
+                حذف الشكوى نهائياً
+              </button>
+            )}
+          </div>
+
+          {/* Flow map — where this complaint currently stands */}
+          <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm print:hidden">
+            <h3 className="font-bold text-slate-900 text-sm mb-4">🗺️ مسار الشكوى</h3>
+            <div className="flex items-start">
+              {stepStates.map((s, i) => {
+                const isCurrent = !s.done && i === firstPendingIndex;
+                return (
+                  <div key={s.key} className="flex items-center flex-1 last:flex-none">
+                    <div className="flex flex-col items-center text-center gap-1 min-w-[84px]">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                        s.done ? 'bg-emerald-500 text-white' : isCurrent ? 'bg-primary text-white' : 'bg-slate-100 text-slate-400'
+                      }`}>
+                        {s.done ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
+                      </div>
+                      <p className={`text-[11px] leading-tight ${s.done || isCurrent ? 'text-slate-800 font-medium' : 'text-slate-400'}`}>{s.label}</p>
+                      {s.at && <p className="text-[10px] text-slate-400" dir="ltr">{format(s.at.toDate(), 'P', { locale: ar })}</p>}
+                    </div>
+                    {i < stepStates.length - 1 && (
+                      <div className={`h-0.5 flex-1 mx-1 ${stepStates[i + 1].done || s.done ? 'bg-emerald-400' : 'bg-slate-200'}`} />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Assignment / Transfer */}
+          {canEdit && complaint.status !== 'CLOSED' && complaint.status !== 'REJECTED' && (
+            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm print:hidden">
+              <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-slate-400" />
+                {complaint.assignedTo ? 'تحويل الشكوى لمختص آخر' : 'إسناد الشكوى لمختص'}
+              </h3>
+              {complaint.assignedToName && (
+                <p className="text-sm text-slate-500 mb-3">المختص الحالي: <span className="font-medium text-slate-800">{complaint.assignedToName}</span></p>
+              )}
+              <div className="flex gap-3">
+                <select
+                  value={assigneeId}
+                  onChange={(e) => setAssigneeId(e.target.value)}
+                  className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+                >
+                  <option value="">اختر المختص...</option>
+                  {users
+                    .filter((u) => u.id !== complaint.assignedTo && u.role === 'SPECIALIST' && u.active !== false &&
+                      (u.access === 'all' || !complaint.branch || u.branch === complaint.branch))
+                    .sort((a, b) => {
+                      const aMatch = a.department === complaint.complaintType ? 0 : 1;
+                      const bMatch = b.department === complaint.complaintType ? 0 : 1;
+                      return aMatch - bMatch;
+                    })
+                    .map((u) => (
+                      <option key={u.id} value={u.id}>{u.name}{u.jobTitle ? ` — ${u.jobTitle}` : ''}</option>
+                    ))}
+                </select>
+                <button disabled={loading || !assigneeId} onClick={() => handleAction('ASSIGN')} className="px-5 py-2.5 bg-slate-800 text-white rounded-xl text-sm font-medium hover:bg-slate-900 transition-colors disabled:opacity-50">
+                  {complaint.assignedTo ? 'تحويل' : 'إسناد'}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Info Cards */}
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white p-4 rounded-xl border border-slate-100 flex items-start gap-3 shadow-sm">
@@ -40,9 +342,9 @@ export default function ComplaintDetails({ complaint, onClose }) {
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-0.5">ولي الأمر</p>
-                <p className="font-medium text-slate-900">{complaint.parent}</p>
-                <p className="text-sm text-slate-500 mt-1 flex items-center gap-1">
-                  <Phone className="w-3.5 h-3.5" /> 0501234567
+                <p className="font-medium text-slate-900">{complaint.parentName}</p>
+                <p className="text-sm text-slate-500 mt-1 flex items-center gap-1" dir="ltr">
+                  <Phone className="w-3.5 h-3.5" /> {complaint.parentPhone}
                 </p>
               </div>
             </div>
@@ -52,79 +354,139 @@ export default function ComplaintDetails({ complaint, onClose }) {
                 <MapPin className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-0.5">الفرع و الطالب</p>
-                <p className="font-medium text-slate-900">{complaint.branch}</p>
-                <p className="text-sm text-slate-500 mt-1">{complaint.student}</p>
+                <p className="text-xs text-slate-500 mb-0.5">الفرع والطالب</p>
+                <p className="font-medium text-slate-900">{complaint.studentName}</p>
+                <p className="text-sm text-slate-500 mt-1">{complaint.branch} - {complaint.grade}</p>
               </div>
             </div>
           </div>
 
           {/* Complaint Text */}
           <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
-            <h3 className="font-bold text-slate-900 mb-3 text-lg flex items-center gap-2">
-              التفاصيل الأساسية
-            </h3>
-            <p className="text-slate-600 leading-relaxed text-sm">
-              واجهنا مشكلة في تأخر الباص عن الموعد المعتاد لمدة 45 دقيقة يوم الأحد الماضي، مما أدى لتأخر ابني عن الحصة الأولى. نرجو منكم حل المشكلة أو تغيير السائق في أقرب وقت ممكن.
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <h3 className="font-bold text-slate-900 text-lg">{complaint.subject || 'التفاصيل الأساسية'}</h3>
+              <div className="flex gap-1.5 shrink-0">
+                <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded whitespace-nowrap">{complaint.complaintType}</span>
+                {complaint.subType && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded whitespace-nowrap">{complaint.subType}</span>}
+              </div>
+            </div>
+            <p className="text-slate-600 leading-relaxed text-sm whitespace-pre-wrap">
+              {complaint.details}
             </p>
+            
+            {/* Attachments */}
+            {complaint.attachments && complaint.attachments.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <h4 className="text-sm font-medium text-slate-700 mb-2">المرفقات:</h4>
+                <div className="flex flex-wrap gap-2">
+                  {complaint.attachments.map((file, i) => (
+                    file.mimeType?.startsWith('audio/') ? (
+                      <div key={i} className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-lg">
+                        <p className="text-xs text-slate-500 mb-1" dir="ltr">{file.fileName}</p>
+                        <audio controls src={file.fileUrl} className="w-full h-9" />
+                      </div>
+                    ) : (
+                      <a key={i} href={file.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-sm text-primary hover:bg-slate-100 transition-colors">
+                        <Paperclip className="w-4 h-4" />
+                        <span dir="ltr">{file.fileName}</span>
+                      </a>
+                    )
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Timeline / History */}
+          {/* Tabs */}
           <div>
-            <h3 className="font-bold text-slate-900 mb-4 px-1">سجل المتابعة</h3>
-            <div className="space-y-4 relative before:absolute before:inset-y-0 before:right-[15px] before:w-[2px] before:bg-slate-200">
-              
-              {/* Event 1 */}
-              <div className="relative flex gap-4">
-                <div className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center shrink-0 z-10 shadow-sm shadow-primary/30 ring-4 ring-slate-50">
-                  <CheckCircle2 className="w-5 h-5" />
-                </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex-1">
-                  <div className="flex justify-between mb-2">
-                    <p className="font-medium text-slate-900">تم تسجيل الشكوى</p>
-                    <p className="text-xs text-slate-400" dir="ltr">15 Oct, 10:30 AM</p>
-                  </div>
-                  <p className="text-sm text-slate-600">بواسطة: خدمة العملاء (سارة)</p>
-                </div>
-              </div>
-
-              {/* Event 2 */}
-              <div className="relative flex gap-4">
-                <div className="w-8 h-8 rounded-full bg-amber-500 text-white flex items-center justify-center shrink-0 z-10 shadow-sm ring-4 ring-slate-50">
-                  <Clock className="w-4 h-4" />
-                </div>
-                <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex-1">
-                  <div className="flex justify-between mb-2">
-                    <p className="font-medium text-slate-900">تم التحويل للمشرف</p>
-                    <p className="text-xs text-slate-400" dir="ltr">15 Oct, 11:00 AM</p>
-                  </div>
-                  <p className="text-sm text-slate-600">رسالة: يرجى المتابعة مع شركة النقل وإفادتنا.</p>
-                </div>
-              </div>
-
+            <div className="flex gap-4 border-b border-slate-200 mb-4 px-1">
+              <button onClick={() => setActiveTab('history')} className={`pb-2 font-medium text-sm transition-colors ${activeTab === 'history' ? 'border-b-2 border-primary text-primary' : 'text-slate-500 hover:text-slate-700'}`}>
+                سجل المتابعة
+              </button>
+              <button onClick={() => setActiveTab('internal')} className={`pb-2 font-medium text-sm transition-colors ${activeTab === 'internal' ? 'border-b-2 border-primary text-primary' : 'text-slate-500 hover:text-slate-700'}`}>
+                التعليقات الداخلية
+              </button>
             </div>
+
+            {activeTab === 'history' ? (
+              <div className="space-y-4 relative before:absolute before:inset-y-0 before:right-[15px] before:w-[2px] before:bg-slate-200">
+                {timelineLogs.map((log) => (
+                  <div key={log.id} className="relative flex gap-4">
+                    <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center shrink-0 z-10 shadow-sm ring-4 ring-slate-50">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                    <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex-1">
+                      <div className="flex justify-between mb-2">
+                        <p className="font-medium text-slate-900">{getActionName(log.action)}</p>
+                        <p className="text-xs text-slate-400" dir="ltr">
+                          {log.createdAt ? format(log.createdAt.toDate(), 'p', { locale: ar }) : ''}
+                        </p>
+                      </div>
+                      <p className="text-sm text-slate-600 mb-1">بواسطة: {log.actorName || 'النظام'}</p>
+                      {log.metadata?.solutionDetails && (
+                        <div className="mt-2 p-3 bg-emerald-50 text-emerald-800 rounded-lg text-sm border border-emerald-100">
+                          <strong>الحل:</strong> {log.metadata.solutionDetails}
+                        </div>
+                      )}
+                      {log.metadata?.reason && (
+                        <div className="mt-2 p-3 bg-red-50 text-red-800 rounded-lg text-sm border border-red-100">
+                          <strong>السبب:</strong> {log.metadata.reason}
+                        </div>
+                      )}
+                      {log.metadata?.toUserName && (
+                        <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200">
+                          إلى: <strong>{log.metadata.toUserName}</strong>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-4 print:hidden">
+                {internalLogs.length === 0 ? (
+                  <p className="text-slate-500 text-sm text-center py-4">لا توجد تعليقات داخلية.</p>
+                ) : (
+                  internalLogs.map((log) => (
+                    <div key={log.id} className="bg-amber-50 p-4 rounded-xl border border-amber-100">
+                      <div className="flex justify-between mb-1">
+                        <p className="font-medium text-amber-900 text-sm">{log.actorName}</p>
+                        <p className="text-xs text-amber-600/70" dir="ltr">
+                          {log.createdAt ? format(log.createdAt.toDate(), 'PP p', { locale: ar }) : ''}
+                        </p>
+                      </div>
+                      <p className="text-sm text-amber-800 whitespace-pre-wrap">{log.metadata?.comment}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Action Bar */}
-        <div className="bg-white border-t border-slate-200 p-4">
+        <div className="bg-white border-t border-slate-200 p-4 print:hidden">
           <div className="flex items-end gap-3">
-            <button className="p-3 text-slate-400 hover:text-primary hover:bg-primary/5 rounded-xl transition-colors border border-transparent hover:border-primary/20 bg-slate-50">
-              <Paperclip className="w-5 h-5" />
-            </button>
             <div className="flex-1 relative">
-              <textarea 
+              <textarea
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
-                placeholder="اكتب رداً أو تحديثاً للحالة..."
+                placeholder={activeTab === 'internal' ? "اكتب تعليقاً داخلياً..." : "اكتب الحل هنا، أو سبب الرفض إن لزم..."}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none resize-none h-[52px]"
                 rows={1}
               />
             </div>
-            <button className="px-6 h-[52px] bg-primary text-white rounded-xl hover:bg-primary-dark font-medium transition-colors shadow-sm flex items-center gap-2">
-              إرسال
-              <Send className="w-4 h-4 -scale-x-100" />
-            </button>
+            {activeTab === 'internal' ? (
+              <button disabled={loading} onClick={() => handleAction('COMMENT')} className="px-6 h-[52px] bg-slate-800 text-white rounded-xl hover:bg-slate-900 font-medium transition-colors shadow-sm flex items-center gap-2">
+                تعليق
+                <Send className="w-4 h-4 -scale-x-100" />
+              </button>
+            ) : (
+              <button disabled={loading || !canEdit} onClick={() => handleAction('SOLVE')} className="px-6 h-[52px] bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50">
+                حل
+                <CheckCircle2 className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 

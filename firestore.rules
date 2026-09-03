@@ -1,0 +1,179 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Function to check if user is an admin
+    // NOTE: role values are stored/compared as 'ADMIN' (uppercase) everywhere
+    // in the app (see src/config/roles.js) — this must match, or every
+    // isAdmin() check below silently evaluates to false for real users.
+    function isAdmin() {
+      return isAuthenticated() && (
+        request.auth.token.role == 'ADMIN' ||
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN'
+      );
+    }
+
+    // The caller's own staff profile doc, or null if signed out. Field
+    // accessors below use get(key, default) so accounts created before the
+    // access/perms schema existed don't error the rule out.
+    function myDoc() {
+      return isAuthenticated()
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data
+        : null;
+    }
+    function myPerm(p) {
+      return myDoc() != null && myDoc().get('perms', {}).get(p, false) == true;
+    }
+    function inMyScope(branch) {
+      let u = myDoc();
+      return u != null && (u.get('access', 'branch') == 'all' || u.get('branch', null) == branch);
+    }
+    function canEditRecord(branch) {
+      return isAdmin() || (myPerm('edit') && inMyScope(branch));
+    }
+    function canDeleteRecord(branch) {
+      return isAdmin() || (myPerm('delete') && inMyScope(branch));
+    }
+
+    // A narrow allowance for the public parent-tracking portal: an
+    // unauthenticated parent may only touch the satisfaction-survey /
+    // reopen fields on a complaint they already know the ID of — never
+    // arbitrary fields.
+    function isParentPortalUpdate() {
+      let incoming = request.resource.data;
+      let affected = incoming.diff(resource.data).affectedKeys();
+      // Only reachable from a SOLVED complaint, and only into CLOSED (parent
+      // satisfied) or IN_PROGRESS (parent reopened) — blocks an anonymous
+      // caller from touching a complaint in any other state or setting an
+      // arbitrary status (e.g. silently closing/hiding an open complaint).
+      return resource.data.status == 'SOLVED' &&
+        (incoming.status == 'CLOSED' || incoming.status == 'IN_PROGRESS') &&
+        affected.hasOnly(['satisfactionRate', 'satisfactionDetails', 'parentFeedback', 'status', 'closedAt', 'reopened', 'updatedAt']);
+    }
+
+    // A non-admin holding the "manage users" permission may never grant (to
+    // anyone, including themselves) admin-equivalent power: the ADMIN role,
+    // org-wide 'all' access, or the users-management permission itself.
+    // Without this cap, perms.users was equivalent to full admin.
+    function grantsAdminPower(data) {
+      return data.role == 'ADMIN' ||
+        data.get('access', 'branch') == 'all' ||
+        data.get('perms', {}).get('users', false) == true;
+    }
+
+    // Users collection
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      // Admins may do anything. A "manage users" holder may only create or
+      // touch OTHER staff accounts, may never grant admin-equivalent power,
+      // and may never act on an existing admin's account.
+      allow create: if isAdmin() || (myPerm('users') && !grantsAdminPower(request.resource.data));
+      allow delete: if isAdmin() || (
+        myPerm('users') && request.auth.uid != userId && resource.data.role != 'ADMIN'
+      );
+      allow update: if isAdmin() || (
+        myPerm('users') && request.auth.uid != userId &&
+        resource.data.role != 'ADMIN' && !grantsAdminPower(request.resource.data)
+      ) || (
+        // A signed-in user may rename themselves, but never touch the
+        // security-relevant fields (role/branch/access/perms) on their own
+        // doc — otherwise any account could grant itself admin rights.
+        isAuthenticated() && request.auth.uid == userId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+      );
+    }
+
+    // Branches collection
+    match /branches/{branchId} {
+      allow read: if true; // Branches can be read by public (for complaint form)
+      allow write: if isAdmin();
+    }
+
+    // Departments collection
+    match /departments/{departmentId} {
+      allow read: if true; // Departments can be read by public (for complaint form)
+      allow write: if isAdmin();
+    }
+
+    // Complaints collection
+    match /complaints/{complaintId} {
+      // Public can read a specific complaint if they have the exact ID (Parent tracking).
+      // NOTE: the parent-tracking portal itself looks complaints up by a
+      // human-readable complaintId field, which Firestore treats as a `list`
+      // (not `get`) — that path goes through the trackComplaint Cloud
+      // Function (Admin SDK) instead of a direct client query, precisely so
+      // `list` here can stay staff-only without breaking the public portal.
+      allow get: if true;
+      // Listing requires authentication AND being in scope of the branch —
+      // callers must filter their query by `branch` for this to resolve.
+      allow list: if isAuthenticated() && (isAdmin() || inMyScope(resource.data.branch));
+      // Creating complaints is allowed by public (via form) or authenticated staff
+      allow create: if true;
+      // Staff can update within their branch scope + edit permission; the
+      // parent portal may additionally submit a survey/reopen while signed out.
+      allow update: if (isAuthenticated() && canEditRecord(resource.data.branch)) || isParentPortalUpdate();
+      allow delete: if isAuthenticated() && canDeleteRecord(resource.data.branch);
+
+      // Activity log subcollection — treated as an append-only audit trail;
+      // only admins may edit/remove entries after the fact.
+      match /activityLog/{logId} {
+        // Public read is required for parent tracking (ParentPortal); write is allowed
+        // by public too since the parent-facing survey submission adds a log entry
+        // while unauthenticated.
+        allow read: if true;
+        allow create: if true;
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Lost & Found items collection
+    match /lostFoundItems/{itemId} {
+      allow get: if true;
+      allow list: if isAuthenticated() && (isAdmin() || inMyScope(resource.data.branch));
+      allow create: if true;
+      allow update: if isAuthenticated() && canEditRecord(resource.data.branch);
+      allow delete: if isAuthenticated() && canDeleteRecord(resource.data.branch);
+
+      match /activityLog/{logId} {
+        allow read: if true;
+        allow create: if true;
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Tech-support tickets — holds national IDs and is adjacent to a
+    // credential-delivery workflow, so unlike complaints/lost-found this is
+    // never publicly readable or creatable; staff must be signed in for
+    // every operation, not just write.
+    match /techSupportTickets/{ticketId} {
+      allow get: if isAuthenticated() && (isAdmin() || inMyScope(resource.data.branch));
+      allow list: if isAuthenticated() && (isAdmin() || inMyScope(resource.data.branch));
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && canEditRecord(resource.data.branch);
+      allow delete: if isAuthenticated() && canDeleteRecord(resource.data.branch);
+
+      match /activityLog/{logId} {
+        allow read, create: if isAuthenticated();
+        allow update, delete: if isAdmin();
+      }
+    }
+
+    // Notifications collection — created only by Cloud Functions (Admin SDK,
+    // bypasses these rules). Clients may only read/update their own.
+    match /notifications/{notificationId} {
+      allow read: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow update: if isAuthenticated() && request.auth.uid == resource.data.userId;
+      allow create, delete: if false;
+    }
+
+    // Other collections
+    match /{document=**} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

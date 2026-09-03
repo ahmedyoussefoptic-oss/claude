@@ -37,6 +37,13 @@ const useAuthStore = create((set) => ({
           
           if (userDoc.exists()) {
             const data = userDoc.data();
+
+            if (data.active === false) {
+              await signOut(auth);
+              set({ user: null, role: null, userData: null, loading: false, error: 'تم إيقاف حسابك. يرجى مراجعة مدير النظام.' });
+              return;
+            }
+
             set({
               user,
               role: data.role || idTokenResult.claims.role || 'spec',

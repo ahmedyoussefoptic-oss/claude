@@ -1,0 +1,65 @@
+// Best-effort formatting for wa.me links: normalizes Arabic-Indic/Persian
+// digits (commonly entered on Arabic keyboards) to ASCII, strips
+// punctuation/spaces, and assumes a Saudi (+966) local number when no
+// country code is present.
+export function toWhatsAppNumber(phone) {
+  const normalized = (phone || '').replace(/[٠-٩۰-۹]/g, (d) =>
+    String(d.charCodeAt(0) & 0xf)
+  );
+  let digits = normalized.replace(/\D/g, '');
+  if (digits.startsWith('00')) digits = digits.slice(2);
+  if (digits.startsWith('0')) digits = '966' + digits.slice(1);
+  return digits;
+}
+
+export function trackingLink(complaintId) {
+  return `${window.location.origin}/track?id=${encodeURIComponent(complaintId)}`;
+}
+
+export function buildReceiptMessage(complaint) {
+  return [
+    `مرحباً ${complaint.parentName}،`,
+    `شكراً لتواصلكم مع مدارس مكتشف العالمية.`,
+    `تم استلام شكواكم رقم ${complaint.complaintId} الخاصة بالطالب/ة ${complaint.studentName} وسيتم التواصل معكم قريباً.`,
+    '',
+    `يمكنكم متابعة حالة الشكوى عبر الرابط التالي: ${trackingLink(complaint.complaintId)}`,
+    '',
+    'مدارس مكتشف العالمية',
+  ].join('\n');
+}
+
+export function buildResolutionMessage(complaint, solutionDetails) {
+  return [
+    `مرحباً ${complaint.parentName}،`,
+    `تم حل الشكوى رقم ${complaint.complaintId} الخاصة بالطالب/ة ${complaint.studentName}.`,
+    '',
+    'طريقة الحل:',
+    solutionDetails,
+    '',
+    `يمكنكم تقييم الخدمة عبر الرابط التالي: ${trackingLink(complaint.complaintId)}`,
+    '',
+    'مدارس مكتشف العالمية',
+  ].join('\n');
+}
+
+export function waLink(phone, message) {
+  return `https://wa.me/${toWhatsAppNumber(phone)}?text=${encodeURIComponent(message)}`;
+}
+
+// One-time platform-credential message for the tech-support module. The
+// caller must never persist `username`/`tempPassword` anywhere — build the
+// link, let the browser open WhatsApp, then discard the values from state.
+export function buildCredentialMessage({ ticketId, studentName, platformName, platformLink, username, tempPassword }) {
+  return [
+    'مدارس المكتشف العالمية',
+    `عزيزي ولي أمر الطالب/ة: ${studentName}`,
+    `تم إعادة تفعيل حساب ${platformName || 'المنصة التعليمية'} بناءً على بلاغكم رقم ${ticketId}.`,
+    '',
+    `• رابط المنصة: ${platformLink || '—'}`,
+    `• اسم المستخدم: ${username}`,
+    `• الرمز السري المؤقت: ${tempPassword}`,
+    '',
+    'يُرجى تغيير الرمز السري فور أول دخول. الرمز صالح لمدة 24 ساعة.',
+    'لأي استفسار: مركز خدمة العملاء',
+  ].join('\n');
+}

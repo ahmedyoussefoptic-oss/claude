@@ -1,0 +1,15 @@
+export const ROLES = {
+  ADMIN: 'ADMIN',
+  UPPER_MANAGEMENT: 'UPPER_MANAGEMENT',
+  DEPARTMENT_MANAGER: 'DEPARTMENT_MANAGER',
+  SPECIALIST: 'SPECIALIST',
+  CUSTOMER_SERVICE: 'CUSTOMER_SERVICE',
+};
+
+export const ROLE_LABELS = {
+  [ROLES.ADMIN]: 'مدير النظام',
+  [ROLES.UPPER_MANAGEMENT]: 'الإدارة العليا',
+  [ROLES.DEPARTMENT_MANAGER]: 'مدير القسم',
+  [ROLES.SPECIALIST]: 'مختص حل الشكاوى',
+  [ROLES.CUSTOMER_SERVICE]: 'خدمة العملاء',
+};

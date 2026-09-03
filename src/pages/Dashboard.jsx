@@ -1,108 +1,306 @@
-import { FileText, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
+import { FileText, Clock, AlertTriangle, CheckCircle2, Download, Plus, Star, Gauge, Repeat } from 'lucide-react';
+import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { db } from '../config/firebase';
 import StatCard from '../components/dashboard/StatCard';
 import { TrendChart, BranchChart } from '../components/dashboard/Charts';
 import useAuthStore from '../stores/useAuthStore';
+import { useBranches } from '../hooks/useOrgData';
+import ComplaintForm from '../components/complaints/ComplaintForm';
+
+const WEEKDAY_LABELS_AR = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+const WEEKDAY_LABELS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// Formats a millisecond duration as a short localized string, e.g.
+// "يومان و3 ساعات" (ar) or "2d 3h" (en).
+function formatDuration(ms, lang) {
+  const hours = Math.floor(ms / (1000 * 60 * 60));
+  const isAr = lang === 'ar';
+  if (hours < 1) return isAr ? 'أقل من ساعة' : 'Less than an hour';
+  const days = Math.floor(hours / 24);
+  const remHours = hours % 24;
+  if (isAr) {
+    if (days > 0) return remHours > 0 ? `${days} يوم و${remHours} ساعة` : `${days} يوم`;
+    return `${hours} ساعة`;
+  }
+  if (days > 0) return remHours > 0 ? `${days}d ${remHours}h` : `${days}d`;
+  return `${hours}h`;
+}
 
 export default function Dashboard() {
+  const { t, i18n } = useTranslation();
   const { userData } = useAuthStore();
+  const branches = useBranches();
+  const [showNewForm, setShowNewForm] = useState(false);
+  const [complaints, setComplaints] = useState([]);
+  const [stats, setStats] = useState({
+    total: 0,
+    inProgress: 0,
+    overdue: 0,
+    solved: 0,
+    avgResolution: null,
+    slaCompliance: null,
+    satisfaction: null,
+    satisfactionCount: 0,
+    reopened: 0,
+  });
+
+  useEffect(() => {
+    if (!userData) return;
+    const constraints = [orderBy('createdAt', 'desc')];
+    if (userData.access !== 'all') {
+      constraints.unshift(where('branch', '==', userData.branch || '__NONE__'));
+    }
+    const q = query(collection(db, 'complaints'), ...constraints);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setComplaints(docs);
+
+      const resolved = docs.filter(c => c.solvedAt && c.createdAt);
+      const avgResolutionMs = resolved.length
+        ? resolved.reduce((sum, c) => sum + (c.solvedAt.toMillis() - c.createdAt.toMillis()), 0) / resolved.length
+        : null;
+
+      const withDueDate = resolved.filter(c => c.dueDate);
+      const withinSla = withDueDate.filter(c => c.solvedAt.toMillis() <= c.dueDate.toMillis());
+      const slaCompliance = withDueDate.length ? Math.round((withinSla.length / withDueDate.length) * 100) : null;
+
+      const rated = docs.filter(c => typeof c.satisfactionRate === 'number');
+      const satisfaction = rated.length
+        ? (rated.reduce((sum, c) => sum + c.satisfactionRate, 0) / rated.length)
+        : null;
+
+      const newStats = {
+        total: docs.length,
+        inProgress: docs.filter(c => c.status === 'IN_PROGRESS' || c.status === 'RECEIVED').length,
+        overdue: docs.filter(c => c.isOverdue).length,
+        solved: docs.filter(c => c.status === 'SOLVED' || c.status === 'CLOSED').length,
+        avgResolution: avgResolutionMs,
+        slaCompliance,
+        satisfaction,
+        satisfactionCount: rated.length,
+        reopened: docs.filter(c => c.reopened).length,
+      };
+      setStats(newStats);
+    });
+    return () => unsubscribe();
+  }, [userData?.access, userData?.branch]);
+
+  const branchChartData = useMemo(() => {
+    return branches
+      .map((b) => ({
+        name: b.name.replace('فرع ', ''),
+        value: complaints.filter((c) => c.branch === b.id).length,
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [complaints, branches]);
+
+  const trendChartData = useMemo(() => {
+    const days = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setHours(0, 0, 0, 0);
+      d.setDate(d.getDate() - i);
+      days.push(d);
+    }
+    const weekdayLabels = i18n.language === 'ar' ? WEEKDAY_LABELS_AR : WEEKDAY_LABELS_EN;
+    return days.map((day) => {
+      const next = new Date(day);
+      next.setDate(next.getDate() + 1);
+      const value = complaints.filter((c) => {
+        if (!c.createdAt) return false;
+        const ts = c.createdAt.toDate().getTime();
+        return ts >= day.getTime() && ts < next.getTime();
+      }).length;
+      return { name: weekdayLabels[day.getDay()], value };
+    });
+  }, [complaints, i18n.language]);
+
+  const handleExportCSV = () => {
+    if (complaints.length === 0) return;
+    
+    // CSV Header
+    let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
+    csvContent += "رقم التذكرة,ولي الأمر,الطالب,التصنيف,الفرع,الحالة\n";
+    
+    complaints.forEach(c => {
+      const row = `${c.complaintId},"${c.parentName}","${c.studentName}","${c.complaintType}","${c.branch}","${c.status}"`;
+      csvContent += row + "\n";
+    });
+    
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `complaints_report_${new Date().toLocaleDateString()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case 'RECEIVED': return 'bg-blue-100 text-blue-800';
+      case 'IN_PROGRESS': return 'bg-amber-100 text-amber-800';
+      case 'WAITING_PARENT_RESPONSE': return 'bg-purple-100 text-purple-800';
+      case 'SOLVED': return 'bg-emerald-100 text-emerald-800';
+      case 'CLOSED': return 'bg-slate-100 text-slate-800';
+      case 'REJECTED': return 'bg-red-100 text-red-800';
+      case 'ESCALATED': return 'bg-orange-100 text-orange-800';
+      default: return 'bg-slate-100 text-slate-800';
+    }
+  };
+
+  const getStatusName = (status) => {
+    switch (status) {
+      case 'RECEIVED': return 'مستلمة';
+      case 'IN_PROGRESS': return 'قيد المعالجة';
+      case 'WAITING_PARENT_RESPONSE': return 'بانتظار الرد';
+      case 'SOLVED': return 'تم الحل';
+      case 'CLOSED': return 'مغلقة';
+      case 'REJECTED': return 'مرفوضة';
+      case 'ESCALATED': return 'مصعدة';
+      default: return status;
+    }
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">مرحباً {userData?.name || 'مستخدم'} 👋</h1>
-          <p className="text-slate-500 mt-1">إليك ملخص سريع لحالة الشكاوى اليوم</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t('dashboard.greeting', { name: userData?.name || (i18n.language === 'ar' ? 'مستخدم' : 'User') })}</h1>
+          <p className="text-slate-500 mt-1">{t('dashboard.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
-          <button className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors">
-            تصدير التقرير
+          <button onClick={handleExportCSV} className="px-4 py-2.5 flex items-center gap-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm">
+            <Download className="w-4 h-4" />
+            {t('dashboard.exportReport')}
           </button>
-          <button className="px-4 py-2 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm">
-            شكوى جديدة
+          <button onClick={() => setShowNewForm(true)} className="px-4 py-2.5 flex items-center gap-2 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm">
+            <Plus className="w-4 h-4" />
+            {t('dashboard.newComplaint')}
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          title="إجمالي الشكاوى"
-          value="1,284"
+          title={t('dashboard.totalComplaints')}
+          value={stats.total.toString()}
           icon={FileText}
-          trend={12}
-          trendLabel="عن الشهر الماضي"
           colorClass="text-sky-600"
           bgClass="bg-sky-50"
         />
         <StatCard
-          title="قيد المعالجة"
-          value="45"
+          title={t('dashboard.inProgress')}
+          value={stats.inProgress.toString()}
           icon={Clock}
           colorClass="text-amber-600"
           bgClass="bg-amber-50"
         />
         <StatCard
-          title="متأخرة (SLA)"
-          value="12"
+          title={t('dashboard.overdue')}
+          value={stats.overdue.toString()}
           icon={AlertTriangle}
-          trend={-5}
-          trendLabel="أقل من الأسبوع الماضي"
           colorClass="text-red-600"
           bgClass="bg-red-50"
         />
         <StatCard
-          title="تم الحل"
-          value="1,227"
+          title={t('dashboard.solved')}
+          value={stats.solved.toString()}
           icon={CheckCircle2}
-          trend={8}
-          trendLabel="ارتفاع في نسبة الحل"
           colorClass="text-emerald-600"
           bgClass="bg-emerald-50"
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <TrendChart />
-        </div>
-        <div className="lg:col-span-1">
-          <BranchChart />
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          title={t('dashboard.satisfaction')}
+          value={stats.satisfaction != null ? `${stats.satisfaction.toFixed(1)} / 5` : '—'}
+          sub={stats.satisfactionCount > 0 ? t('dashboard.basedOnSurveys', { count: stats.satisfactionCount }) : t('dashboard.noSurveys')}
+          icon={Star}
+          colorClass="text-amber-600"
+          bgClass="bg-amber-50"
+        />
+        <StatCard
+          title={t('dashboard.avgResolution')}
+          value={stats.avgResolution != null ? formatDuration(stats.avgResolution, i18n.language) : '—'}
+          sub={t('dashboard.sinceReceipt')}
+          icon={Clock}
+          colorClass="text-sky-600"
+          bgClass="bg-sky-50"
+        />
+        <StatCard
+          title={t('dashboard.slaCompliance')}
+          value={stats.slaCompliance != null ? `${stats.slaCompliance}%` : '—'}
+          sub={t('dashboard.slaSub')}
+          icon={Gauge}
+          colorClass="text-emerald-600"
+          bgClass="bg-emerald-50"
+        />
+        <StatCard
+          title={t('dashboard.reopened')}
+          value={stats.reopened.toString()}
+          sub={t('dashboard.reopenedSub')}
+          icon={Repeat}
+          colorClass="text-orange-600"
+          bgClass="bg-orange-50"
+        />
       </div>
-      
-      {/* Recent Activity Table Placeholder */}
+
+      <div>
+        <TrendChart data={trendChartData} title={t('dashboard.weeklyTrend')} />
+      </div>
+      <div>
+        <BranchChart data={branchChartData} title={t('dashboard.byBranch')} />
+      </div>
+
+      {/* Recent Activity Table */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-100">
-          <h3 className="text-lg font-bold text-slate-900">أحدث الشكاوى</h3>
+          <h3 className="text-lg font-bold text-slate-900">{t('dashboard.recentComplaints')}</h3>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-right">
             <thead className="bg-slate-50 text-slate-500 text-sm">
               <tr>
-                <th className="px-6 py-4 font-medium">رقم التذكرة</th>
-                <th className="px-6 py-4 font-medium">ولي الأمر</th>
-                <th className="px-6 py-4 font-medium">التصنيف</th>
-                <th className="px-6 py-4 font-medium">الفرع</th>
-                <th className="px-6 py-4 font-medium">الحالة</th>
+                <th className="px-6 py-4 font-medium">{t('dashboard.ticketNumber')}</th>
+                <th className="px-6 py-4 font-medium">{t('dashboard.parent')}</th>
+                <th className="px-6 py-4 font-medium">{t('dashboard.classification')}</th>
+                <th className="px-6 py-4 font-medium">{t('dashboard.branch')}</th>
+                <th className="px-6 py-4 font-medium">{t('dashboard.status')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
-              {[1, 2, 3, 4, 5].map((i) => (
-                <tr key={i} className="hover:bg-slate-50 transition-colors">
-                  <td className="px-6 py-4 font-medium text-slate-900">#CMP-{2024000 + i}</td>
-                  <td className="px-6 py-4 text-slate-600">أحمد يوسف</td>
-                  <td className="px-6 py-4 text-slate-600">رسوم دراسية</td>
-                  <td className="px-6 py-4 text-slate-600">بنين عام</td>
+              {complaints.slice(0, 5).map((c) => (
+                <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-6 py-4 font-medium text-slate-900" dir="ltr">{c.complaintId}</td>
+                  <td className="px-6 py-4 text-slate-600">{c.parentName}</td>
+                  <td className="px-6 py-4 text-slate-600">{c.complaintType}</td>
+                  <td className="px-6 py-4 text-slate-600">{c.branch}</td>
                   <td className="px-6 py-4">
-                    <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
-                      قيد المعالجة
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadge(c.status)}`}>
+                      {getStatusName(c.status)}
                     </span>
                   </td>
                 </tr>
               ))}
+              {complaints.length === 0 && (
+                <tr>
+                  <td colSpan="5" className="px-6 py-8 text-center text-slate-500">
+                    {t('dashboard.noComplaints')}
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {showNewForm && (
+        <ComplaintForm onClose={() => setShowNewForm(false)} />
+      )}
     </div>
   );
 }

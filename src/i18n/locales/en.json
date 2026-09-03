@@ -1,0 +1,69 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "close": "Close",
+    "edit": "Edit",
+    "delete": "Delete",
+    "search": "Search",
+    "export": "Export",
+    "language": "العربية"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "complaints": "Complaints",
+    "lostFound": "Lost & Found",
+    "techSupport": "Tech Support",
+    "flowMap": "Flow Map",
+    "advancedSearch": "Advanced Search",
+    "users": "Users",
+    "settings": "Settings",
+    "logout": "Log Out"
+  },
+  "app": {
+    "brand": "Al Moktashef International",
+    "brandShort": "Al Moktashef",
+    "tagline": "Complaints Management System"
+  },
+  "login": {
+    "title": "Al Moktashef Complaints System",
+    "subtitle": "Sign in to access the dashboard and complaints",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign In",
+    "invalidCredentials": "Incorrect email or password."
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications"
+  },
+  "dashboard": {
+    "greeting": "Welcome {{name}} 👋",
+    "subtitle": "Here's a quick summary of your complaints",
+    "exportReport": "Export Report",
+    "newComplaint": "New Complaint",
+    "totalComplaints": "Total Complaints",
+    "inProgress": "In Progress",
+    "overdue": "Overdue (SLA)",
+    "solved": "Solved",
+    "satisfaction": "Parent Satisfaction",
+    "avgResolution": "Avg. Resolution Time",
+    "slaCompliance": "SLA Compliance",
+    "reopened": "Reopened Complaints",
+    "basedOnSurveys": "Based on {{count}} surveys",
+    "noSurveys": "No surveys yet",
+    "sinceReceipt": "From receipt to resolution",
+    "slaSub": "Complaints resolved within their SLA",
+    "reopenedSub": "Parent was not satisfied with the resolution",
+    "weeklyTrend": "Complaints This Week",
+    "byBranch": "Complaints by Branch",
+    "recentComplaints": "Recent Complaints",
+    "noComplaints": "No complaints yet",
+    "ticketNumber": "Ticket #",
+    "parent": "Parent",
+    "classification": "Type",
+    "branch": "Branch",
+    "status": "Status"
+  }
+}

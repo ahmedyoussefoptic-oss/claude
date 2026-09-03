@@ -4,14 +4,14 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getFunctions } from 'firebase/functions';
 
-// TODO: Replace with your Firebase project configuration
+// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDkUAbMWSuQcHRz0-cwQjRvE3kXuJqBoX8",
+  authDomain: "mis-complaints.firebaseapp.com",
+  projectId: "mis-complaints",
+  storageBucket: "mis-complaints.firebasestorage.app",
+  messagingSenderId: "276652032120",
+  appId: "1:276652032120:web:d981177284c52e64b6ad8d"
 };
 
 const app = initializeApp(firebaseConfig);

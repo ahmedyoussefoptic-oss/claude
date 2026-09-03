@@ -3,26 +3,17 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import useAuthStore from './stores/useAuthStore';
 import Login from './components/auth/Login';
 import AppLayout from './components/layout/AppLayout';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 import Dashboard from './pages/Dashboard';
 import ComplaintsList from './pages/ComplaintsList';
+import LostFound from './pages/LostFound';
+import TechSupport from './pages/TechSupport';
+import FlowMap from './pages/FlowMap';
+import Search from './pages/Search';
 import ParentPortal from './pages/ParentPortal';
-
-// Placeholder Pages
-const Search = () => <div className="p-4"><h1 className="text-2xl font-bold">البحث</h1></div>;
-
-const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuthStore();
-  
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full"></div></div>;
-  }
-  
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-  
-  return children;
-};
+import Users from './pages/Users';
+import Settings from './pages/Settings';
+import { ROLES } from './config/roles';
 
 function App() {
   const { initialize } = useAuthStore();
@@ -44,7 +35,20 @@ function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="complaints" element={<ComplaintsList />} />
+          <Route path="lost-found" element={<LostFound />} />
+          <Route path="tech-support" element={<TechSupport />} />
+          <Route path="flow-map" element={<FlowMap />} />
           <Route path="search" element={<Search />} />
+          <Route path="users" element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN]} requirePerm="users">
+              <Users />
+            </ProtectedRoute>
+          } />
+          <Route path="settings" element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+              <Settings />
+            </ProtectedRoute>
+          } />
         </Route>
       </Routes>
     </BrowserRouter>

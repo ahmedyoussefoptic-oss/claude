@@ -1,52 +1,550 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const admin = require("firebase-admin");
+const { onDocumentUpdated, onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { defineSecret } = require("firebase-functions/params");
+const { initializeApp } = require("firebase-admin/app");
+const { getFirestore, Timestamp } = require("firebase-admin/firestore");
+const { getAuth } = require("firebase-admin/auth");
+const nodemailer = require("nodemailer");
 
-admin.initializeApp();
-const db = admin.firestore();
+initializeApp();
+const db = getFirestore();
+const auth = getAuth();
 
-exports.scheduledSlaEngine = onSchedule("every 1 hours", async (event) => {
-  const now = admin.firestore.Timestamp.now();
-  
-  // Get complaints that are open or processing and not yet overdue
-  const complaintsRef = db.collection("complaints");
-  const q = complaintsRef.where("status", "in", ["مفتوحة", "قيد المعالجة"]);
-  
-  const snapshot = await q.get();
-  
-  if (snapshot.empty) {
-    console.log("No active complaints found for SLA check.");
-    return;
+const GMAIL_USER = defineSecret("GMAIL_USER");
+const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
+const EMAIL_SECRETS = [GMAIL_USER, GMAIL_APP_PASSWORD];
+
+async function sendEmail(to, subject, text) {
+  if (!to) return;
+  try {
+    const transporter = nodemailer.createTransport({
+      service: "gmail",
+      auth: { user: GMAIL_USER.value(), pass: GMAIL_APP_PASSWORD.value() },
+    });
+    await transporter.sendMail({
+      from: `"مدارس مكتشف العالمية" <${GMAIL_USER.value()}>`,
+      to,
+      subject,
+      text,
+    });
+  } catch (err) {
+    console.error("Failed to send email to", to, err.message);
+  }
+}
+
+const OPEN_STATUSES = ["RECEIVED", "IN_PROGRESS", "WAITING_PARENT_RESPONSE", "ESCALATED"];
+
+// Removes a staff account (Firebase Auth + Firestore profile) via the Admin
+// SDK. Only callers who are ADMIN or hold the `users` permission may call
+// this. Refuses to delete: yourself, or a staff member with open complaints
+// still assigned to them (those must be reassigned first).
+exports.deleteStaffUser = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  }
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  const isAdminCaller = callerDoc.exists && caller.role === "ADMIN";
+  if (!callerDoc.exists || !(isAdminCaller || caller.perms?.users)) {
+    throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
-  const batch = db.batch();
-  let updatedCount = 0;
-
-  snapshot.forEach((doc) => {
-    const data = doc.data();
-    // Assuming 'dueDate' is a Timestamp field
-    if (data.dueDate && data.dueDate.toMillis() < now.toMillis()) {
-      // SLA breached!
-      batch.update(doc.ref, {
-        status: "متأخرة",
-        updatedAt: now,
-      });
-      
-      // Add history record
-      const historyRef = doc.ref.collection('history').doc();
-      batch.set(historyRef, {
-        status: "تأخير في الحل (SLA Breach)",
-        timestamp: now,
-        system: true
-      });
-      
-      updatedCount++;
+  const { uid } = request.data || {};
+  if (!uid) {
+    throw new HttpsError("invalid-argument", "معرّف الموظف مطلوب.");
+  }
+  if (uid === request.auth.uid) {
+    throw new HttpsError("failed-precondition", "لا يمكن حذف المستخدم الذي تعمل باسمه حالياً.");
+  }
+  // A "manage users" holder (non-admin) may never delete an admin account —
+  // only a real admin can remove another admin.
+  if (!isAdminCaller) {
+    const targetDoc = await db.collection("users").doc(uid).get();
+    if (targetDoc.exists && targetDoc.data().role === "ADMIN") {
+      throw new HttpsError("permission-denied", "لا يمكن حذف حساب مدير النظام.");
     }
+  }
+
+  const openCount = (
+    await db.collection("complaints")
+      .where("assignedTo", "==", uid)
+      .where("status", "in", OPEN_STATUSES)
+      .get()
+  ).size;
+  if (openCount > 0) {
+    throw new HttpsError("failed-precondition", `لا يمكن الحذف: لدى هذا الموظف ${openCount} شكوى مفتوحة — أعد إسنادها أولاً.`);
+  }
+
+  await db.collection("users").doc(uid).delete();
+  try {
+    await auth.deleteUser(uid);
+  } catch (err) {
+    // Auth user may already be gone; the Firestore profile removal above is what matters most.
+    console.error("Auth deleteUser failed for", uid, err.message);
+  }
+
+  return { ok: true };
+});
+
+// Creates a staff account (Firebase Auth user + Firestore profile + role
+// custom claim) using the Admin SDK, so the caller's own session is not
+// affected — the previous client-side createUserWithEmailAndPassword flow
+// signed the calling admin out every time a new employee account was added.
+// Only callers whose own Firestore user doc has role == 'ADMIN' may call this.
+exports.createStaffUser = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  }
+
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  const isAdminCaller = callerDoc.exists && caller.role === "ADMIN";
+  if (!callerDoc.exists || !(isAdminCaller || caller.perms?.users)) {
+    throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
+  }
+
+  const { name, email, password, role, branch, access, perms, phone, jobTitle, department, active } = request.data || {};
+  if (!name || !email || !password || !role) {
+    throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
+  }
+  // A "manage users" holder (non-admin) may create staff accounts, but can
+  // never grant admin-equivalent power — otherwise perms.users is a full
+  // privilege-escalation path to ADMIN.
+  const grantsAdminPower = role === "ADMIN" || access === "all" || !!perms?.users;
+  if (!isAdminCaller && grantsAdminPower) {
+    throw new HttpsError(
+      "permission-denied",
+      "لا يمكنك منح صلاحية مدير النظام أو الوصول الكامل لكل الفروع أو صلاحية إدارة المستخدمين."
+    );
+  }
+
+  let userRecord;
+  try {
+    userRecord = await auth.createUser({ email, password, displayName: name });
+  } catch (err) {
+    throw new HttpsError("already-exists", err.message);
+  }
+
+  await auth.setCustomUserClaims(userRecord.uid, { role });
+
+  await db.collection("users").doc(userRecord.uid).set({
+    name,
+    email,
+    role,
+    branch: branch || null,
+    access: access === "all" ? "all" : "branch",
+    perms: {
+      edit: !!perms?.edit,
+      delete: !!perms?.delete,
+      users: !!perms?.users,
+    },
+    phone: phone || null,
+    jobTitle: jobTitle || null,
+    department: department || null,
+    active: active !== false,
+    createdAt: Timestamp.now(),
+    createdBy: request.auth.uid,
   });
 
-  if (updatedCount > 0) {
-    await batch.commit();
-    console.log(`Updated ${updatedCount} complaints to overdue status.`);
-  } else {
-    console.log("No complaints breached SLA in this run.");
+  return { uid: userRecord.uid };
+});
+
+// Sets a new password for an existing staff account via the Admin SDK.
+// Only callers who are ADMIN or hold the "users" permission may call this.
+exports.resetStaffPassword = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
   }
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  const isAdminCaller = callerDoc.exists && caller.role === "ADMIN";
+  if (!callerDoc.exists || !(isAdminCaller || caller.perms?.users)) {
+    throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
+  }
+
+  const { uid, newPassword } = request.data || {};
+  if (!uid || !newPassword) {
+    throw new HttpsError("invalid-argument", "معرّف الموظف وكلمة المرور الجديدة مطلوبان.");
+  }
+  if (newPassword.length < 6) {
+    throw new HttpsError("invalid-argument", "يجب ألا تقل كلمة المرور عن 6 أحرف.");
+  }
+  // A "manage users" holder (non-admin) may never reset an admin's password
+  // (or their own via this admin-only flow) — that's an account takeover.
+  if (!isAdminCaller) {
+    if (uid === request.auth.uid) {
+      throw new HttpsError("permission-denied", "لا يمكنك إعادة تعيين كلمة مرورك الخاصة من هنا.");
+    }
+    const targetDoc = await db.collection("users").doc(uid).get();
+    if (!targetDoc.exists || targetDoc.data().role === "ADMIN") {
+      throw new HttpsError("permission-denied", "لا يمكن إعادة تعيين كلمة مرور مدير النظام.");
+    }
+  }
+
+  await auth.updateUser(uid, { password: newPassword });
+  return { ok: true };
+});
+
+// Creates in-app notification documents for a list of recipient user ids.
+// Read by the NotificationBell UI (src/components/layout/NotificationBell.jsx).
+async function notifyUsers(userIds, { title, body, complaintId, type }) {
+  const uniqueIds = [...new Set(userIds)].filter(Boolean);
+  if (uniqueIds.length === 0) return;
+
+  const now = Timestamp.now();
+  const batch = db.batch();
+  uniqueIds.forEach((userId) => {
+    const ref = db.collection("notifications").doc();
+    batch.set(ref, { userId, title, body, complaintId: complaintId || null, type, read: false, createdAt: now });
+  });
+  await batch.commit();
+}
+
+// Returns the uids of all users holding any of the given roles.
+async function getUserIdsByRoles(roles) {
+  const snapshot = await db.collection("users").where("role", "in", roles).get();
+  return snapshot.docs.map((d) => d.id);
+}
+
+// Helper to add working hours skipping weekends (Fri/Sat)
+function addWorkingHours(startDate, hoursToAdd) {
+  let currentDate = new Date(startDate.getTime());
+  let remainingHours = hoursToAdd;
+
+  while (remainingHours > 0) {
+    currentDate.setHours(currentDate.getHours() + 1);
+    const day = currentDate.getDay(); // 0 = Sunday, 5 = Friday, 6 = Saturday
+    if (day !== 5 && day !== 6) {
+      remainingHours--;
+    }
+  }
+  return currentDate;
+}
+
+// 1. Calculate Initial SLA when Complaint is Created + email the parent a receipt confirmation
+exports.calculateInitialSLA = onDocumentCreated({ document: "complaints/{complaintId}", secrets: EMAIL_SECRETS }, async (event) => {
+  const snap = event.data;
+  if (!snap) return;
+
+  const data = snap.data();
+
+  if (data.parentEmail) {
+    await sendEmail(
+      data.parentEmail,
+      `تم استلام شكواكم رقم ${data.complaintId}`,
+      `مرحباً ${data.parentName}،\n\nشكراً لتواصلكم مع مدارس مكتشف العالمية.\nتم استلام شكواكم رقم ${data.complaintId} الخاصة بالطالب/ة ${data.studentName} وسيتم التواصل معكم قريباً.\n\nيمكنكم متابعة حالة الشكوى عبر الرابط التالي:\nhttps://mis-complaints.web.app/track?id=${data.complaintId}\n\nمدارس مكتشف العالمية`
+    );
+  }
+
+  // If the complaint was created with an assignee already chosen, notify
+  // them immediately — later reassignments are handled in handleSlaStatusChanges.
+  if (data.assignedTo) {
+    await notifyUsers([data.assignedTo], {
+      title: "تم إسناد شكوى لك",
+      body: `الشكوى رقم ${data.complaintId} تم إسنادها إليك للمعالجة.`,
+      complaintId: event.params.complaintId,
+      type: "ASSIGNED",
+    });
+  }
+
+  if (data.dueDate) return; // Already has due date
+
+  const priority = data.priority || 'NORMAL';
+  let hours = 48;
+  if (priority === 'URGENT') hours = 6;
+  if (priority === 'HIGH') hours = 24;
+
+  const dueDate = addWorkingHours(new Date(), hours);
+
+  return snap.ref.update({
+    dueDate: Timestamp.fromDate(dueDate),
+    slaStatus: 'ACTIVE'
+  });
+});
+
+// Tech-support tickets: compute the 4-working-hour close SLA and notify an
+// assignee chosen at creation time (the form auto-assigns an IT specialist).
+exports.calculateItTicketSla = onDocumentCreated("techSupportTickets/{ticketId}", async (event) => {
+  const snap = event.data;
+  if (!snap) return;
+  const data = snap.data();
+
+  if (data.assignedTo) {
+    await notifyUsers([data.assignedTo], {
+      title: "بلاغ تقني جديد أُسند إليك",
+      body: `البلاغ رقم ${data.ticketId} (${data.problemType}) تم إسناده إليك.`,
+      complaintId: event.params.ticketId,
+      type: "IT_ASSIGNED",
+    });
+  }
+
+  if (data.dueDate) return;
+  const dueDate = addWorkingHours(new Date(), 4);
+  return snap.ref.update({ dueDate: Timestamp.fromDate(dueDate) });
+});
+
+// Notifies a (re)assigned IT specialist on later transfers — creation-time
+// assignment is handled by calculateItTicketSla above. Also notifies
+// managers/executives when a staff member manually escalates a ticket
+// (see TechSupportDetails.jsx's handleEscalate, which bumps `escalation`).
+exports.handleItTicketAssignment = onDocumentUpdated("techSupportTickets/{ticketId}", async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
+  if (after.assignedTo && after.assignedTo !== before.assignedTo) {
+    await notifyUsers([after.assignedTo], {
+      title: "تم إسناد بلاغ تقني لك",
+      body: `البلاغ رقم ${after.ticketId} تم إسناده إليك للمعالجة.`,
+      complaintId: event.params.ticketId,
+      type: "IT_ASSIGNED",
+    });
+  }
+
+  if ((after.escalation || 0) > (before.escalation || 0)) {
+    const itManagers = await db.collection("users").where("role", "==", "DEPARTMENT_MANAGER").where("department", "==", "IT").get();
+    const upperManagement = await getUserIdsByRoles(["UPPER_MANAGEMENT", "ADMIN"]);
+    const userIds = [...itManagers.docs.map((d) => d.id), ...upperManagement];
+    await notifyUsers(userIds, {
+      title: "تصعيد بلاغ تقني",
+      body: `البلاغ رقم ${after.ticketId} تم تصعيده ويحتاج متابعة.`,
+      complaintId: event.params.ticketId,
+      type: "IT_ESCALATED",
+    });
+  }
+});
+
+// Emails a staff member whenever they receive an in-app notification
+// (assignment, SLA reminder, escalation), so nothing depends on them having
+// the app open.
+exports.emailOnNotification = onDocumentCreated({ document: "notifications/{notificationId}", secrets: EMAIL_SECRETS }, async (event) => {
+  const data = event.data?.data();
+  if (!data) return;
+
+  const userDoc = await db.collection("users").doc(data.userId).get();
+  const email = userDoc.exists ? userDoc.data().email : null;
+  if (!email) return;
+
+  await sendEmail(email, data.title, `${data.body}\n\nhttps://mis-complaints.web.app/complaints`);
+});
+
+// 2. Handle SLA Pause/Resume on Status Change, plus assignment/escalation notifications
+exports.handleSlaStatusChanges = onDocumentUpdated("complaints/{complaintId}", async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
+  const complaintId = event.params.complaintId;
+
+  // Notify the specialist when a complaint is (re)assigned to them
+  if (after.assignedTo && after.assignedTo !== before.assignedTo) {
+    await notifyUsers([after.assignedTo], {
+      title: "تم إسناد شكوى لك",
+      body: `الشكوى رقم ${after.complaintId} تم إسنادها إليك للمعالجة.`,
+      complaintId,
+      type: "ASSIGNED",
+    });
+  }
+
+  // Notify managers/admin when a complaint is escalated (manually or via SLA breach)
+  if (before.status !== 'ESCALATED' && after.status === 'ESCALATED') {
+    const managerIds = await getUserIdsByRoles(["DEPARTMENT_MANAGER", "UPPER_MANAGEMENT", "ADMIN"]);
+    await notifyUsers(managerIds, {
+      title: "تصعيد شكوى",
+      body: `الشكوى رقم ${after.complaintId} تم تصعيدها وتحتاج متابعة.`,
+      complaintId,
+      type: "ESCALATED",
+    });
+  }
+
+  // If status changed TO WAITING_PARENT_RESPONSE
+  if (before.status !== 'WAITING_PARENT_RESPONSE' && after.status === 'WAITING_PARENT_RESPONSE') {
+    return event.data.after.ref.update({
+      slaPausedAt: Timestamp.now(),
+      slaStatus: 'PAUSED'
+    });
+  }
+
+  // If status changed FROM WAITING_PARENT_RESPONSE back to active
+  if (before.status === 'WAITING_PARENT_RESPONSE' && after.status !== 'WAITING_PARENT_RESPONSE') {
+    const pausedAt = after.slaPausedAt;
+    const currentDueDate = after.dueDate;
+
+    if (pausedAt && currentDueDate) {
+      const now = Date.now();
+      const pausedTimeMs = now - pausedAt.toMillis();
+      
+      const newDueDateMs = currentDueDate.toMillis() + pausedTimeMs;
+      
+      return event.data.after.ref.update({
+        dueDate: Timestamp.fromMillis(newDueDateMs),
+        slaPausedAt: null,
+        slaStatus: 'ACTIVE'
+      });
+    }
+  }
+
+  // If closed or solved, clear slaStatus
+  if (['SOLVED', 'CLOSED', 'REJECTED'].includes(after.status) && !['SOLVED', 'CLOSED', 'REJECTED'].includes(before.status)) {
+    return event.data.after.ref.update({
+      slaStatus: 'STOPPED'
+    });
+  }
+
+  return null;
+});
+
+// 3. Hourly Cron Job to Check SLA Breaches + send a reminder ~2h before the deadline
+//
+// Each document is processed independently (not a single shared batch):
+// - The breach/escalation write carries a `lastUpdateTime` precondition, so
+//   if a staff member resolves the complaint/ticket in the window between
+//   this job's read and its write, the write is rejected instead of
+//   silently stomping the concurrent resolution and reopening it.
+// - A reminder/flag is only persisted AFTER its notification has been sent
+//   successfully — previously the "sent" flag was committed first, so any
+//   failure in the notification step permanently suppressed that reminder
+//   (the flag guard meant it would never be retried on a later run).
+exports.scheduledSlaEngine = onSchedule("every 1 hours", async (event) => {
+  const now = Timestamp.now();
+  const twoHoursFromNow = Timestamp.fromMillis(now.toMillis() + 2 * 60 * 60 * 1000);
+
+  // Only check active tickets (not paused, not stopped)
+  const complaintsRef = db.collection("complaints");
+  const q = complaintsRef.where("slaStatus", "==", "ACTIVE")
+                         .where("isOverdue", "==", false);
+
+  const snapshot = await q.get();
+
+  if (snapshot.empty) {
+    console.log("No active complaints found for SLA check.");
+  }
+
+  for (const doc of snapshot.docs) {
+    const data = doc.data();
+    if (!data.dueDate) continue;
+
+    try {
+      if (data.dueDate.toMillis() < now.toMillis()) {
+        // SLA breached! Guard against a concurrent resolution with a
+        // precondition on the read's update time.
+        await doc.ref.update(
+          { isOverdue: true, status: "ESCALATED", updatedAt: now },
+          { lastUpdateTime: doc.updateTime }
+        );
+        await db.collection(`complaints/${doc.id}/activityLog`).add({
+          action: "SLA_BREACH",
+          actorId: "SYSTEM",
+          actorName: "النظام",
+          metadata: { info: "تجاوز الوقت المحدد للحل (SLA Breach)" },
+          createdAt: now,
+        });
+      } else if (!data.reminderSent && data.dueDate.toMillis() <= twoHoursFromNow.toMillis()) {
+        // Due within the next 2 hours: notify first, then mark as sent —
+        // if notifyUsers throws, reminderSent stays false and the next
+        // hourly run retries it instead of losing the reminder forever.
+        const recipient = data.assignedTo || data.receiver;
+        if (recipient) {
+          await notifyUsers([recipient], {
+            title: "تذكير: اقتراب موعد استحقاق الشكوى",
+            body: `الشكوى رقم ${data.complaintId} تستحق الحل خلال ساعتين تقريباً.`,
+            complaintId: doc.id,
+            type: "SLA_WARNING",
+          });
+        }
+        await doc.ref.update({ reminderSent: true }, { lastUpdateTime: doc.updateTime });
+      }
+    } catch (err) {
+      console.error(`SLA check failed for complaint ${doc.id}:`, err.message);
+    }
+  }
+
+  // --- Tech-support tickets: 4-hour close SLA + 1-hour start-processing check ---
+  // 'NEW' (never assigned — e.g. no active IT specialist at creation time)
+  // is included so an unassigned ticket doesn't sit forever with a blown
+  // SLA and no escalation.
+  const itSnapshot = await db.collection("techSupportTickets")
+    .where("status", "in", ["NEW", "ASSIGNED", "IN_PROGRESS", "WAITING_CONFIRMATION"])
+    .get();
+
+  for (const doc of itSnapshot.docs) {
+    const data = doc.data();
+
+    try {
+      if (data.dueDate && !data.isOverdue && data.dueDate.toMillis() < now.toMillis()) {
+        const level = (data.escalation || 0) >= 1 ? 2 : 1;
+        await doc.ref.update(
+          { isOverdue: true, escalation: level, updatedAt: now },
+          { lastUpdateTime: doc.updateTime }
+        );
+        await db.collection(`techSupportTickets/${doc.id}/activityLog`).add({
+          action: "TICKET_ESCALATED",
+          actorId: "SYSTEM",
+          actorName: "النظام",
+          metadata: { info: `تجاوز مدة الإغلاق المعتمدة (4 ساعات) — تصعيد مستوى ${level}` },
+          createdAt: now,
+        });
+
+        const userIds = level === 1
+          ? (await db.collection("users").where("role", "==", "DEPARTMENT_MANAGER").where("department", "==", "IT").get()).docs.map((d) => d.id)
+          : await getUserIdsByRoles(["UPPER_MANAGEMENT", "ADMIN"]);
+        await notifyUsers(userIds, {
+          title: "تصعيد بلاغ تقني",
+          body: `البلاغ رقم ${data.ticketId} تجاوز مدة الإغلاق المعتمدة ويحتاج متابعة فورية.`,
+          complaintId: doc.id,
+          type: "IT_ESCALATED",
+        });
+      } else if (data.status === "ASSIGNED" && data.assignedAt && !data.startReminderSent) {
+        const elapsed = now.toMillis() - data.assignedAt.toMillis();
+        if (elapsed >= 60 * 60 * 1000 && data.assignedTo) {
+          await notifyUsers([data.assignedTo], {
+            title: "تذكير: لم تبدأ معالجة البلاغ التقني بعد",
+            body: `البلاغ رقم ${data.ticketId} أُسند إليك منذ أكثر من ساعة ولم تبدأ معالجته.`,
+            complaintId: doc.id,
+            type: "IT_ASSIGNED",
+          });
+          await doc.ref.update({ startReminderSent: true }, { lastUpdateTime: doc.updateTime });
+        }
+      }
+    } catch (err) {
+      console.error(`SLA check failed for tech ticket ${doc.id}:`, err.message);
+    }
+  }
+});
+
+// Public parent-tracking lookup. The portal searches complaints by a
+// human-readable `complaintId` field (not the Firestore document ID), which
+// Firestore's security rules treat as a `list` operation — something an
+// anonymous visitor can never be granted without also exposing the whole
+// collection to enumeration. Doing the lookup here with the Admin SDK
+// (bypasses rules) and returning only a parent-safe field subset solves both
+// problems at once: the portal works, and no internal-only field ever
+// reaches an unauthenticated client.
+exports.trackComplaint = onCall(async (request) => {
+  const complaintId = (request.data?.complaintId || "").trim();
+  if (!complaintId) {
+    throw new HttpsError("invalid-argument", "رقم الشكوى مطلوب.");
+  }
+
+  const snapshot = await db.collection("complaints").where("complaintId", "==", complaintId).limit(1).get();
+  if (snapshot.empty) {
+    throw new HttpsError("not-found", "عفواً، لم يتم العثور على شكوى بهذا الرقم.");
+  }
+
+  const doc = snapshot.docs[0];
+  const data = doc.data();
+
+  const logsSnapshot = await db.collection(`complaints/${doc.id}/activityLog`).orderBy("createdAt", "desc").get();
+  const history = logsSnapshot.docs
+    .map((d) => d.data())
+    .filter((l) => l.action !== "INTERNAL_COMMENT_ADDED")
+    .map((l) => ({
+      action: l.action,
+      createdAtMillis: l.createdAt?.toMillis?.() ?? null,
+      metadata: l.metadata?.solutionDetails ? { solutionDetails: l.metadata.solutionDetails } : undefined,
+    }));
+
+  return {
+    id: doc.id,
+    complaintId: data.complaintId,
+    status: data.status,
+    history,
+  };
 });
