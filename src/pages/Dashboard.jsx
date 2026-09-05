@@ -1,13 +1,34 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FileText, Clock, AlertTriangle, CheckCircle2, Download, Plus, Star, Gauge, Repeat } from 'lucide-react';
+import { FileText, Clock, AlertTriangle, CheckCircle2, Download, Plus, Star, Gauge, Repeat, Wrench, ShieldAlert, PackageSearch, PackageCheck } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import StatCard from '../components/dashboard/StatCard';
 import { TrendChart, BranchChart } from '../components/dashboard/Charts';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
+import { OPEN_TICKET_STATUSES } from '../config/techSupport';
 import ComplaintForm from '../components/complaints/ComplaintForm';
+
+// Generic branch-scoped live-count hook shared by the tech-support and
+// lost-found KPI cards below — same scoping rule as the complaints query.
+function useBranchScopedCollection(collectionName, userData) {
+  const [docs, setDocs] = useState([]);
+  useEffect(() => {
+    if (!userData) return;
+    const constraints = [orderBy('createdAt', 'desc')];
+    if (userData.access !== 'all') {
+      constraints.unshift(where('branch', '==', userData.branch || '__NONE__'));
+    }
+    const q = query(collection(db, collectionName), ...constraints);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setDocs(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [collectionName, userData?.access, userData?.branch]);
+  return docs;
+}
 
 const WEEKDAY_LABELS_AR = ['الأحد', 'الإثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
 const WEEKDAY_LABELS_EN = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -32,6 +53,16 @@ export default function Dashboard() {
   const { t, i18n } = useTranslation();
   const { userData } = useAuthStore();
   const branches = useBranches();
+  const techTickets = useBranchScopedCollection('techSupportTickets', userData);
+  const lostFoundItems = useBranchScopedCollection('lostFoundItems', userData);
+  const techStats = useMemo(() => ({
+    open: techTickets.filter((t) => OPEN_TICKET_STATUSES.includes(t.status)).length,
+    overdue: techTickets.filter((t) => t.isOverdue).length,
+  }), [techTickets]);
+  const lostFoundStats = useMemo(() => ({
+    unclaimed: lostFoundItems.filter((i) => i.status === 'UNCLAIMED').length,
+    returned: lostFoundItems.filter((i) => i.status === 'RETURNED').length,
+  }), [lostFoundItems]);
   const [showNewForm, setShowNewForm] = useState(false);
   const [complaints, setComplaints] = useState([]);
   const [stats, setStats] = useState({
@@ -188,29 +219,29 @@ export default function Dashboard() {
           title={t('dashboard.totalComplaints')}
           value={stats.total.toString()}
           icon={FileText}
-          colorClass="text-sky-600"
-          bgClass="bg-sky-50"
+          gradient="from-sky-500 to-blue-600"
+          to="/complaints"
         />
         <StatCard
           title={t('dashboard.inProgress')}
           value={stats.inProgress.toString()}
           icon={Clock}
-          colorClass="text-amber-600"
-          bgClass="bg-amber-50"
+          gradient="from-amber-400 to-orange-500"
+          to="/complaints"
         />
         <StatCard
           title={t('dashboard.overdue')}
           value={stats.overdue.toString()}
           icon={AlertTriangle}
-          colorClass="text-red-600"
-          bgClass="bg-red-50"
+          gradient="from-red-500 to-rose-600"
+          to="/complaints"
         />
         <StatCard
           title={t('dashboard.solved')}
           value={stats.solved.toString()}
           icon={CheckCircle2}
-          colorClass="text-emerald-600"
-          bgClass="bg-emerald-50"
+          gradient="from-emerald-500 to-teal-600"
+          to="/complaints"
         />
       </div>
 
@@ -220,33 +251,67 @@ export default function Dashboard() {
           value={stats.satisfaction != null ? `${stats.satisfaction.toFixed(1)} / 5` : '—'}
           sub={stats.satisfactionCount > 0 ? t('dashboard.basedOnSurveys', { count: stats.satisfactionCount }) : t('dashboard.noSurveys')}
           icon={Star}
-          colorClass="text-amber-600"
-          bgClass="bg-amber-50"
+          gradient="from-amber-400 to-yellow-500"
+          to="/complaints"
         />
         <StatCard
           title={t('dashboard.avgResolution')}
           value={stats.avgResolution != null ? formatDuration(stats.avgResolution, i18n.language) : '—'}
           sub={t('dashboard.sinceReceipt')}
           icon={Clock}
-          colorClass="text-sky-600"
-          bgClass="bg-sky-50"
+          gradient="from-cyan-500 to-sky-600"
+          to="/complaints"
         />
         <StatCard
           title={t('dashboard.slaCompliance')}
           value={stats.slaCompliance != null ? `${stats.slaCompliance}%` : '—'}
           sub={t('dashboard.slaSub')}
           icon={Gauge}
-          colorClass="text-emerald-600"
-          bgClass="bg-emerald-50"
+          gradient="from-green-500 to-emerald-600"
+          to="/complaints"
         />
         <StatCard
           title={t('dashboard.reopened')}
           value={stats.reopened.toString()}
           sub={t('dashboard.reopenedSub')}
           icon={Repeat}
-          colorClass="text-orange-600"
-          bgClass="bg-orange-50"
+          gradient="from-orange-500 to-red-500"
+          to="/complaints"
         />
+      </div>
+
+      <div>
+        <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">نظرة شاملة على النظام</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="بلاغات الدعم الفني المفتوحة"
+            value={techStats.open.toString()}
+            icon={Wrench}
+            gradient="from-violet-500 to-purple-600"
+            to="/tech-support"
+          />
+          <StatCard
+            title="بلاغات دعم فني متأخرة"
+            value={techStats.overdue.toString()}
+            icon={ShieldAlert}
+            gradient="from-fuchsia-500 to-pink-600"
+            to="/tech-support"
+          />
+          <StatCard
+            title="مفقودات بانتظار المطالبة"
+            value={lostFoundStats.unclaimed.toString()}
+            icon={PackageSearch}
+            gradient="from-teal-500 to-cyan-600"
+            to="/lost-found"
+          />
+          <StatCard
+            title="مفقودات تم تسليمها"
+            value={lostFoundStats.returned.toString()}
+            icon={PackageCheck}
+            gradient="from-lime-500 to-green-600"
+            to="/lost-found"
+          />
+        </div>
       </div>
 
       <div>

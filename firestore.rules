@@ -100,6 +100,14 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Misc system settings (e.g. editable WhatsApp message templates) —
+    // staff need to read them to build outgoing messages, only an admin may
+    // edit the wording.
+    match /settings/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
     // Complaints collection
     match /complaints/{complaintId} {
       // Public can read a specific complaint if they have the exact ID (Parent tracking).

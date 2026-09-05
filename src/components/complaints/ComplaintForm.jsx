@@ -7,6 +7,7 @@ import useAuthStore from '../../stores/useAuthStore';
 import { useBranches, useDepartments } from '../../hooks/useOrgData';
 import { useUsers } from '../../hooks/useUsers';
 import { waLink, buildReceiptMessage } from '../../utils/whatsapp';
+import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { COMPLAINT_TYPES, SUB_TYPES, STAGES } from '../../config/complaintTypes';
 
@@ -31,6 +32,7 @@ export default function ComplaintForm({ onClose }) {
   const branches = useBranches();
   const departments = useDepartments();
   const staff = useUsers();
+  const templates = useMessageTemplates();
 
   const [formData, setFormData] = useState({
     parentName: '',
@@ -249,7 +251,7 @@ export default function ComplaintForm({ onClose }) {
 
           {savedComplaint.parentPhone && (
             <a
-              href={waLink(savedComplaint.parentPhone, buildReceiptMessage(savedComplaint))}
+              href={waLink(savedComplaint.parentPhone, buildReceiptMessage(savedComplaint, templates.receipt))}
               target="_blank"
               rel="noreferrer"
               className="w-full px-4 py-2.5 bg-[#25D366] text-white rounded-xl text-sm font-medium hover:brightness-95 transition-all flex items-center justify-center gap-2 mb-3"

@@ -5,6 +5,7 @@ import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useUsers } from '../../hooks/useUsers';
 import { waLink, buildResolutionMessage } from '../../utils/whatsapp';
+import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { ROLES } from '../../config/roles';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -64,6 +65,7 @@ const getActionName = (action) => {
 export default function ComplaintDetails({ complaint, onClose }) {
   const { user, userData } = useAuthStore();
   const users = useUsers();
+  const templates = useMessageTemplates();
   const [logs, setLogs] = useState([]);
   const [reply, setReply] = useState('');
   const [loading, setLoading] = useState(false);
@@ -255,7 +257,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
             )}
             {['SOLVED', 'CLOSED'].includes(complaint.status) && complaint.solutionDetails && complaint.parentPhone && (
               <a
-                href={waLink(complaint.parentPhone, buildResolutionMessage(complaint, complaint.solutionDetails))}
+                href={waLink(complaint.parentPhone, buildResolutionMessage(complaint, complaint.solutionDetails, templates.resolution))}
                 target="_blank"
                 rel="noreferrer"
                 className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"

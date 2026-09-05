@@ -1,9 +1,23 @@
-export default function StatCard({ title, value, icon: Icon, trend, trendLabel, sub, colorClass = "text-primary", bgClass = "bg-primary/10" }) {
+import { useNavigate } from 'react-router-dom';
+
+export default function StatCard({ title, value, icon: Icon, trend, trendLabel, sub, gradient = 'from-sky-500 to-blue-600', to }) {
+  const navigate = useNavigate();
+  const clickable = !!to;
+
   return (
-    <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+    <div
+      onClick={clickable ? () => navigate(to) : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(to); } } : undefined}
+      role={clickable ? 'button' : undefined}
+      tabIndex={clickable ? 0 : undefined}
+      className={`relative overflow-hidden bg-white rounded-2xl p-6 border border-slate-100 shadow-sm transition-all duration-200 ${
+        clickable ? 'cursor-pointer hover:-translate-y-1 hover:shadow-xl focus:outline-none focus:ring-2 focus:ring-primary/30' : 'hover:shadow-md'
+      }`}
+    >
+      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${gradient}`} />
       <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-slate-500 mb-1">{title}</p>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-slate-500 mb-1 truncate">{title}</p>
           <h3 className="text-3xl font-bold text-slate-900">{value}</h3>
 
           {trend != null && (
@@ -19,7 +33,7 @@ export default function StatCard({ title, value, icon: Icon, trend, trendLabel, 
           )}
         </div>
 
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${bgClass} ${colorClass}`}>
+        <div className={`w-12 h-12 shrink-0 rounded-xl flex items-center justify-center bg-gradient-to-br ${gradient} text-white shadow-md shadow-black/10`}>
           <Icon className="w-6 h-6" />
         </div>
       </div>

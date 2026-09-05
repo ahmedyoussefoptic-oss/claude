@@ -7,6 +7,7 @@ import { useUsers } from '../../hooks/useUsers';
 import { ROLES } from '../../config/roles';
 import { PROBLEM_TYPES, PLATFORMS, TICKET_STATUS_LABELS, TICKET_STATUS_BADGE } from '../../config/techSupport';
 import { waLink, buildCredentialMessage, toWhatsAppNumber } from '../../utils/whatsapp';
+import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 
@@ -29,6 +30,7 @@ const getActionName = (action) => {
 export default function TechSupportDetails({ ticket, onClose }) {
   const { user, userData } = useAuthStore();
   const users = useUsers();
+  const templates = useMessageTemplates();
   const [logs, setLogs] = useState([]);
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
@@ -101,7 +103,7 @@ export default function TechSupportDetails({ ticket, onClose }) {
       platformLink: ticket.platformLink,
       username,
       tempPassword,
-    });
+    }, templates.credential);
     window.open(waLink(ticket.parentPhone, message), '_blank');
     setLoading(true);
     try {
