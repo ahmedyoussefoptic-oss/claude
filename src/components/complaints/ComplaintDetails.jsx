@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, Trash2 } from 'lucide-react';
+import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, Trash2, Star } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
@@ -9,6 +9,12 @@ import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { ROLES } from '../../config/roles';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
+
+const RATING_LABELS = {
+  resolutionSpeed: 'سرعة حل الملاحظة',
+  solutionQuality: 'جودة الحل',
+  staffProfessionalism: 'احترافية الموظفين',
+};
 
 const FLOW_STEPS = [
   { key: 'RECEIVED', label: 'استلام الملاحظة', match: () => true },
@@ -299,6 +305,45 @@ export default function ComplaintDetails({ complaint, onClose }) {
               })}
             </div>
           </div>
+
+          {/* Parent satisfaction survey — shows what the parent reported for
+              THIS student/complaint; visible as soon as satisfactionRate or
+              a reopen reason has been recorded via the public tracking portal. */}
+          {(typeof complaint.satisfactionRate === 'number' || complaint.parentFeedback) && (
+            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm print:hidden">
+              <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-2">
+                <Star className="w-4 h-4 text-amber-400" />
+                استبيان رضا ولي الأمر
+              </h3>
+              {typeof complaint.satisfactionRate === 'number' ? (
+                <>
+                  <div className="flex items-center gap-1.5 mb-4">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                      <Star key={n} className={`w-5 h-5 ${n <= Math.round(complaint.satisfactionRate) ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`} />
+                    ))}
+                    <span className="text-sm font-bold text-slate-700 mr-1">{complaint.satisfactionRate.toFixed(1)} / 5</span>
+                  </div>
+                  {complaint.satisfactionDetails && (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+                      {Object.entries(RATING_LABELS).map(([key, label]) => (
+                        <div key={key} className="bg-slate-50 rounded-lg p-2.5 text-center">
+                          <p className="text-xs text-slate-500 mb-1">{label}</p>
+                          <p className="text-sm font-bold text-slate-800">{complaint.satisfactionDetails[key] ?? '—'} / 5</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-3">
+                  لم يقتنع ولي الأمر بالحل وأعاد فتح الملاحظة دون تقييم.
+                </p>
+              )}
+              {complaint.parentFeedback && (
+                <p className="text-sm text-slate-600 bg-slate-50 rounded-lg p-3 border border-slate-100">"{complaint.parentFeedback}"</p>
+              )}
+            </div>
+          )}
 
           {/* Assignment / Transfer */}
           {canEdit && complaint.status !== 'CLOSED' && complaint.status !== 'REJECTED' && (

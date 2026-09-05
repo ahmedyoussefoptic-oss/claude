@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FileText, Clock, AlertTriangle, CheckCircle2, Download, Plus, Star, Gauge, Repeat, Wrench, ShieldAlert, PackageSearch, PackageCheck } from 'lucide-react';
+import { FileText, Clock, AlertTriangle, CheckCircle2, Download, Plus, Star, Gauge, Repeat, Wrench, ShieldAlert, PackageSearch, PackageCheck, GraduationCap, Briefcase, AlertOctagon } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import StatCard from '../components/dashboard/StatCard';
@@ -75,6 +75,9 @@ export default function Dashboard() {
     satisfaction: null,
     satisfactionCount: 0,
     reopened: 0,
+    academic: 0,
+    administrative: 0,
+    behavioral: 0,
   });
 
   useEffect(() => {
@@ -112,6 +115,9 @@ export default function Dashboard() {
         satisfaction,
         satisfactionCount: rated.length,
         reopened: docs.filter(c => c.reopened).length,
+        academic: docs.filter(c => c.complaintType === 'ACADEMIC').length,
+        administrative: docs.filter(c => c.complaintType === 'ADMINISTRATIVE').length,
+        behavioral: docs.filter(c => c.complaintType === 'BEHAVIORAL').length,
       };
       setStats(newStats);
     });
@@ -278,6 +284,33 @@ export default function Dashboard() {
           gradient="from-orange-500 to-red-500"
           to="/complaints"
         />
+      </div>
+
+      <div>
+        <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">الملاحظات حسب التصنيف</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCard
+            title="ملاحظات أكاديمية"
+            value={stats.academic.toString()}
+            icon={GraduationCap}
+            gradient="from-indigo-500 to-violet-600"
+            to="/complaints"
+          />
+          <StatCard
+            title="ملاحظات إدارية"
+            value={stats.administrative.toString()}
+            icon={Briefcase}
+            gradient="from-cyan-500 to-teal-600"
+            to="/complaints"
+          />
+          <StatCard
+            title="ملاحظات سلوكية"
+            value={stats.behavioral.toString()}
+            icon={AlertOctagon}
+            gradient="from-rose-500 to-pink-600"
+            to="/complaints"
+          />
+        </div>
       </div>
 
       <div>

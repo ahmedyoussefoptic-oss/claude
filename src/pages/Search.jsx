@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Search as SearchIcon, Loader2, ChevronLeft, Download } from 'lucide-react';
+import { Search as SearchIcon, Loader2, ChevronLeft, Download, Star } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useBranches } from '../hooks/useOrgData';
@@ -217,6 +217,7 @@ export default function Search() {
                   <th className="px-6 py-4 font-medium whitespace-nowrap">الفرع</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">التاريخ</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">الحالة</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">استبيان ولي الأمر</th>
                   <th className="px-6 py-4"></th>
                 </tr>
               </thead>
@@ -237,6 +238,18 @@ export default function Search() {
                         {STATUS_NAME[c.status] || c.status}
                       </span>
                     </td>
+                    <td className="px-6 py-4">
+                      {typeof c.satisfactionRate === 'number' ? (
+                        <span className="inline-flex items-center gap-1 text-amber-600 font-medium">
+                          <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                          {c.satisfactionRate.toFixed(1)} / 5
+                        </span>
+                      ) : c.reopened ? (
+                        <span className="text-xs text-red-500">أُعيد فتحها دون تقييم</span>
+                      ) : (
+                        <span className="text-xs text-slate-300">— لم يُستبيَن —</span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-left">
                       <div className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors mr-auto">
                         <ChevronLeft className="w-5 h-5" />
@@ -246,7 +259,7 @@ export default function Search() {
                 ))}
                 {results.length === 0 && (
                   <tr>
-                    <td colSpan="6" className="px-6 py-12 text-center text-slate-500">
+                    <td colSpan="7" className="px-6 py-12 text-center text-slate-500">
                       لا توجد نتائج مطابقة
                     </td>
                   </tr>
