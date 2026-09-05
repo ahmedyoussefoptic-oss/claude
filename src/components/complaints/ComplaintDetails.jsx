@@ -10,7 +10,7 @@ import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 
 const FLOW_STEPS = [
-  { key: 'RECEIVED', label: 'استلام الشكوى', match: () => true },
+  { key: 'RECEIVED', label: 'استلام الملاحظة', match: () => true },
   { key: 'ASSIGNED', label: 'الإسناد لمختص', match: (l) => ['COMPLAINT_ASSIGNED', 'COMPLAINT_TRANSFERRED'].includes(l.action) },
   { key: 'IN_PROGRESS', label: 'قيد المعالجة', match: (l) => l.action === 'COMPLAINT_ACKNOWLEDGED' },
   { key: 'SOLVED', label: 'تسجيل الحل', match: (l) => l.action === 'SOLUTION_ADDED' },
@@ -45,16 +45,16 @@ const getStatusName = (status) => {
 
 const getActionName = (action) => {
   switch (action) {
-    case 'COMPLAINT_CREATED': return 'تم تسجيل الشكوى';
-    case 'COMPLAINT_ASSIGNED': return 'تم إسناد الشكوى لمختص';
-    case 'COMPLAINT_TRANSFERRED': return 'تم تحويل الشكوى لمختص آخر';
+    case 'COMPLAINT_CREATED': return 'تم تسجيل الملاحظة';
+    case 'COMPLAINT_ASSIGNED': return 'تم إسناد الملاحظة لمختص';
+    case 'COMPLAINT_TRANSFERRED': return 'تم تحويل الملاحظة لمختص آخر';
     case 'COMPLAINT_ACKNOWLEDGED': return 'تم تأكيد الاستلام';
     case 'COMPLAINT_STATUS_CHANGED': return 'تم تغيير الحالة';
     case 'SOLUTION_ADDED': return 'تم تقديم حل';
-    case 'COMPLAINT_SOLVED': return 'تم إغلاق الشكوى (محلولة)';
-    case 'COMPLAINT_ESCALATED': return 'تم تصعيد الشكوى';
-    case 'COMPLAINT_REJECTED': return 'تم رفض الشكوى';
-    case 'COMPLAINT_REOPENED': return 'تم إعادة فتح الشكوى';
+    case 'COMPLAINT_SOLVED': return 'تم إغلاق الملاحظة (محلولة)';
+    case 'COMPLAINT_ESCALATED': return 'تم تصعيد الملاحظة';
+    case 'COMPLAINT_REJECTED': return 'تم رفض الملاحظة';
+    case 'COMPLAINT_REOPENED': return 'تم إعادة فتح الملاحظة';
     case 'SURVEY_SUBMITTED': return 'تم استلام تقييم ولي الأمر';
     case 'INTERNAL_COMMENT_ADDED': return 'تعليق داخلي';
     default: return action;
@@ -143,7 +143,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
         setAssigneeId('');
       } else if (actionType === 'REJECT') {
         if (!reply.trim()) {
-          alert('يرجى كتابة سبب رفض الشكوى في صندوق النص أدناه.');
+          alert('يرجى كتابة سبب رفض الملاحظة في صندوق النص أدناه.');
           return;
         }
         await addLog('COMPLAINT_REJECTED', { reason: reply }, 'REJECTED');
@@ -157,7 +157,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
   };
 
   const handleDelete = async () => {
-    const reason = prompt('اكتب سبب حذف الشكوى نهائياً (إلزامي):');
+    const reason = prompt('اكتب سبب حذف الملاحظة نهائياً (إلزامي):');
     if (!reason) return;
     setLoading(true);
     try {
@@ -191,7 +191,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
         <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between sticky top-0 z-10">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-xl font-bold text-slate-900">شكوى #{complaint.complaintId}</h2>
+              <h2 className="text-xl font-bold text-slate-900">ملاحظة #{complaint.complaintId}</h2>
               <span className={`px-2.5 py-1 rounded-md text-xs font-medium border ${getStatusBadge(complaint.status)}`}>
                 {getStatusName(complaint.status)}
               </span>
@@ -224,7 +224,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
           {/* Action Buttons for Staff */}
           {!canEdit && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3 print:hidden">
-              صلاحيتك اطلاع فقط على هذه الشكوى — لا تملك صلاحية التعديل.
+              صلاحيتك اطلاع فقط على هذه الملاحظة — لا تملك صلاحية التعديل.
             </div>
           )}
           <div className="flex flex-wrap gap-2 print:hidden">
@@ -239,7 +239,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
                   بانتظار ولي الأمر
                 </button>
                 <button disabled={loading} onClick={() => handleAction('SOLVE')} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors">
-                  حل الشكوى
+                  حل الملاحظة
                 </button>
               </>
             )}
@@ -250,7 +250,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
             )}
             {canEdit && complaint.status === 'RECEIVED' && (
               <button disabled={loading} onClick={() => handleAction('REJECT')} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
-                رفض الشكوى
+                رفض الملاحظة
               </button>
             )}
             {['SOLVED', 'CLOSED'].includes(complaint.status) && complaint.solutionDetails && complaint.parentPhone && (
@@ -267,14 +267,14 @@ export default function ComplaintDetails({ complaint, onClose }) {
             {canDelete && (
               <button disabled={loading} onClick={handleDelete} className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors flex items-center gap-2 mr-auto">
                 <Trash2 className="w-4 h-4" />
-                حذف الشكوى نهائياً
+                حذف الملاحظة نهائياً
               </button>
             )}
           </div>
 
           {/* Flow map — where this complaint currently stands */}
           <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm print:hidden">
-            <h3 className="font-bold text-slate-900 text-sm mb-4">🗺️ مسار الشكوى</h3>
+            <h3 className="font-bold text-slate-900 text-sm mb-4">🗺️ مسار الملاحظة</h3>
             <div className="flex items-start">
               {stepStates.map((s, i) => {
                 const isCurrent = !s.done && i === firstPendingIndex;
@@ -303,7 +303,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
             <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm print:hidden">
               <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-slate-400" />
-                {complaint.assignedTo ? 'تحويل الشكوى لمختص آخر' : 'إسناد الشكوى لمختص'}
+                {complaint.assignedTo ? 'تحويل الملاحظة لمختص آخر' : 'إسناد الملاحظة لمختص'}
               </h3>
               {complaint.assignedToName && (
                 <p className="text-sm text-slate-500 mb-3">المختص الحالي: <span className="font-medium text-slate-800">{complaint.assignedToName}</span></p>

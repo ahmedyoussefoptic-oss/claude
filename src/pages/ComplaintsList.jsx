@@ -90,7 +90,7 @@ export default function ComplaintsList() {
   const handleExportCSV = () => {
     if (filteredComplaints.length === 0) return;
     let csvContent = "data:text/csv;charset=utf-8,﻿";
-    csvContent += "رقم الشكوى,الطالب,ولي الأمر,التصنيف,الفرع,التاريخ,الحالة\n";
+    csvContent += "رقم الملاحظة,الطالب,ولي الأمر,التصنيف,الفرع,التاريخ,الحالة\n";
     filteredComplaints.forEach((c) => {
       const createdAt = c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd HH:mm') : '';
       csvContent += `${c.complaintId},"${c.studentName || ''}","${c.parentName || ''}","${c.complaintType || ''}","${c.branch || ''}","${createdAt}","${getStatusName(c.status)}"\n`;
@@ -108,8 +108,8 @@ export default function ComplaintsList() {
     <div className="max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">سجل الشكاوى</h1>
-          <p className="text-slate-500 mt-1">إدارة ومتابعة جميع شكاوى أولياء الأمور</p>
+          <h1 className="text-2xl font-bold text-slate-900">سجل الملاحظات</h1>
+          <p className="text-slate-500 mt-1">إدارة ومتابعة جميع ملاحظات أولياء الأمور</p>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={handleExportCSV} disabled={filteredComplaints.length === 0} className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50">
@@ -121,7 +121,7 @@ export default function ComplaintsList() {
             className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            شكوى جديدة
+            ملاحظة جديدة
           </button>
         </div>
       </div>
@@ -137,7 +137,7 @@ export default function ComplaintsList() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث برقم الشكوى، اسم الطالب..."
+              placeholder="ابحث برقم الملاحظة، اسم الطالب..."
               className="block w-full pr-10 pl-3 py-2 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none text-sm"
             />
           </div>
@@ -165,7 +165,7 @@ export default function ComplaintsList() {
             <table className="w-full text-right">
               <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-100">
                 <tr>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">رقم الشكوى</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">رقم الملاحظة</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">الطالب / ولي الأمر</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">التصنيف</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">الفرع</th>
@@ -202,7 +202,7 @@ export default function ComplaintsList() {
                 {filteredComplaints.length === 0 && (
                   <tr>
                     <td colSpan="7" className="px-6 py-12 text-center text-slate-500">
-                      لا يوجد شكاوى مطابقة
+                      لا يوجد ملاحظات مطابقة
                     </td>
                   </tr>
                 )}

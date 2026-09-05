@@ -231,7 +231,7 @@ export default function ComplaintForm({ onClose }) {
       });
     } catch (err) {
       console.error(err);
-      setError('حدث خطأ أثناء حفظ الشكوى. يرجى المحاولة مرة أخرى.');
+      setError('حدث خطأ أثناء حفظ الملاحظة. يرجى المحاولة مرة أخرى.');
     } finally {
       setLoading(false);
     }
@@ -244,8 +244,8 @@ export default function ComplaintForm({ onClose }) {
           <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-7 h-7" />
           </div>
-          <h2 className="text-lg font-bold text-slate-900 mb-1">تم حفظ الشكوى بنجاح</h2>
-          <p className="text-sm text-slate-500 mb-6">رقم الشكوى: <span className="font-mono font-bold text-slate-900" dir="ltr">{savedComplaint.complaintId}</span></p>
+          <h2 className="text-lg font-bold text-slate-900 mb-1">تم حفظ الملاحظة بنجاح</h2>
+          <p className="text-sm text-slate-500 mb-6">رقم الملاحظة: <span className="font-mono font-bold text-slate-900" dir="ltr">{savedComplaint.complaintId}</span></p>
 
           {savedComplaint.parentPhone && (
             <a
@@ -276,8 +276,8 @@ export default function ComplaintForm({ onClose }) {
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">تسجيل شكوى جديدة</h2>
-            <p className="text-sm text-slate-500 mt-1">يرجى تعبئة بيانات الشكوى بدقة</p>
+            <h2 className="text-xl font-bold text-slate-900">تسجيل ملاحظة جديدة</h2>
+            <p className="text-sm text-slate-500 mt-1">يرجى تعبئة بيانات الملاحظة بدقة</p>
           </div>
           <button 
             onClick={onClose}
@@ -382,7 +382,7 @@ export default function ComplaintForm({ onClose }) {
 
             {/* Section 3 */}
             <div className="space-y-4">
-              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2 mt-6">تفاصيل الشكوى</h3>
+              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2 mt-6">تفاصيل الملاحظة</h3>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
@@ -414,7 +414,7 @@ export default function ComplaintForm({ onClose }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">عنوان مختصر للشكوى <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">عنوان مختصر للملاحظة <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   name="subject"
@@ -427,7 +427,7 @@ export default function ComplaintForm({ onClose }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">نص الشكوى <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">نص الملاحظة <span className="text-red-500">*</span></label>
                 <textarea
                   name="details"
                   value={formData.details}
@@ -445,7 +445,7 @@ export default function ComplaintForm({ onClose }) {
                   <option value="">بدون إسناد الآن (يمكن إسنادها لاحقاً)</option>
                   {eligibleAssignees.map(u => <option key={u.id} value={u.id}>{u.name}{u.jobTitle ? ` — ${u.jobTitle}` : ''}</option>)}
                 </select>
-                <p className="text-xs text-slate-500 mt-1">يصل إشعار فوري للمختص المختار (داخل النظام وبالبريد الإلكتروني) بمجرد حفظ الشكوى.</p>
+                <p className="text-xs text-slate-500 mt-1">يصل إشعار فوري للمختص المختار (داخل النظام وبالبريد الإلكتروني) بمجرد حفظ الملاحظة.</p>
               </div>
 
               {/* Upload */}
@@ -519,7 +519,7 @@ export default function ComplaintForm({ onClose }) {
             className="px-5 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2 disabled:opacity-70"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {loading ? 'جاري الحفظ...' : 'حفظ الشكوى'}
+            {loading ? 'جاري الحفظ...' : 'حفظ الملاحظة'}
           </button>
         </div>
 

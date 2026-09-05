@@ -10,6 +10,6 @@ export const ROLE_LABELS = {
   [ROLES.ADMIN]: 'مدير النظام',
   [ROLES.UPPER_MANAGEMENT]: 'الإدارة العليا',
   [ROLES.DEPARTMENT_MANAGER]: 'مدير القسم',
-  [ROLES.SPECIALIST]: 'مختص حل الشكاوى',
+  [ROLES.SPECIALIST]: 'مختص حل الملاحظات',
   [ROLES.CUSTOMER_SERVICE]: 'خدمة العملاء',
 };

@@ -6,7 +6,7 @@ import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
 
 const MAIN_FLOW = [
-  { key: 'RECEIVED', label: 'استلام الشكوى', who: 'موظف خدمة العملاء' },
+  { key: 'RECEIVED', label: 'استلام الملاحظة', who: 'موظف خدمة العملاء' },
   { key: 'IN_PROGRESS', label: 'قيد المعالجة', who: 'المختص المسند إليه' },
   { key: 'WAITING_PARENT_RESPONSE', label: 'بانتظار ولي الأمر', who: 'رد ولي الأمر' },
   { key: 'SOLVED', label: 'تم الحل', who: 'بانتظار الإغلاق' },
@@ -54,8 +54,8 @@ export default function FlowMap() {
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">خريطة مسار الشكاوى</h1>
-          <p className="text-slate-500 mt-1">نظرة عامة حية على عدد الشكاوى في كل مرحلة من مراحل المعالجة</p>
+          <h1 className="text-2xl font-bold text-slate-900">خريطة مسار الملاحظات</h1>
+          <p className="text-slate-500 mt-1">نظرة عامة حية على عدد الملاحظات في كل مرحلة من مراحل المعالجة</p>
         </div>
         {visibleBranches.length > 1 && (
           <select
@@ -99,14 +99,14 @@ export default function FlowMap() {
                 <p className="text-sm font-bold mb-1">{step.label}</p>
                 <p className="text-3xl font-extrabold tabular-nums">{countOf(step.key)}</p>
                 <p className="text-xs mt-1 opacity-80">
-                  {step.key === 'ESCALATED' ? 'تجاوزت مدة الحل المعتمدة (SLA) — تحتاج متابعة فورية' : 'شكاوى رُفضت لعدم اكتمال البيانات'}
+                  {step.key === 'ESCALATED' ? 'تجاوزت مدة الحل المعتمدة (SLA) — تحتاج متابعة فورية' : 'ملاحظات رُفضت لعدم اكتمال البيانات'}
                 </p>
               </div>
             ))}
           </div>
 
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
-            <h3 className="font-bold text-slate-900 mb-1">إجمالي الشكاوى ضمن النطاق الحالي</h3>
+            <h3 className="font-bold text-slate-900 mb-1">إجمالي الملاحظات ضمن النطاق الحالي</h3>
             <p className="text-sm text-slate-500 mb-4">
               {userData?.access === 'all' ? 'كل الفروع' : `فرع: ${branches.find((b) => b.id === userData?.branch)?.name || userData?.branch || '—'}`}
               {branchFilter && ` · مُصفّى على: ${branches.find((b) => b.id === branchFilter)?.name}`}

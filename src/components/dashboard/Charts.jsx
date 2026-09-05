@@ -10,7 +10,7 @@ const dummyData = [
   { name: 'الجمعة', value: 10 },
 ];
 
-export function TrendChart({ data = dummyData, title = 'معدل الشكاوى هذا الأسبوع' }) {
+export function TrendChart({ data = dummyData, title = 'معدل الملاحظات هذا الأسبوع' }) {
   return (
     <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
       <h3 className="text-lg font-bold text-slate-900 mb-6">{title}</h3>
@@ -37,7 +37,7 @@ export function TrendChart({ data = dummyData, title = 'معدل الشكاوى 
   );
 }
 
-export function BranchChart({ data, title = 'الشكاوى حسب الفرع' }) {
+export function BranchChart({ data, title = 'الملاحظات حسب الفرع' }) {
   const defaultData = [
     { name: 'بنين عام', value: 45 },
     { name: 'بنات عام', value: 30 },

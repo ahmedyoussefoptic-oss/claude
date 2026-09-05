@@ -116,7 +116,7 @@ export default function Search() {
   const handleExportCSV = () => {
     if (results.length === 0) return;
     let csvContent = "data:text/csv;charset=utf-8,﻿";
-    csvContent += "رقم الشكوى,الطالب,ولي الأمر,التصنيف,الأولوية,الفرع,الحالة,تاريخ الإنشاء\n";
+    csvContent += "رقم الملاحظة,الطالب,ولي الأمر,التصنيف,الأولوية,الفرع,الحالة,تاريخ الإنشاء\n";
     results.forEach((c) => {
       const createdAt = c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd HH:mm') : '';
       csvContent += `${c.complaintId},"${c.studentName || ''}","${c.parentName || ''}","${c.complaintType || ''}","${c.priority || ''}","${c.branch || ''}","${c.status || ''}","${createdAt}"\n`;
@@ -134,13 +134,13 @@ export default function Search() {
     <div className="max-w-7xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900">البحث المتقدم</h1>
-        <p className="text-slate-500 mt-1">ابحث عن الشكاوى باستخدام أي مجموعة من المعايير التالية</p>
+        <p className="text-slate-500 mt-1">ابحث عن الملاحظات باستخدام أي مجموعة من المعايير التالية</p>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم الشكوى</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم الملاحظة</label>
             <input type="text" name="complaintId" value={filters.complaintId} onChange={handleFilterChange} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
           </div>
           <div>
@@ -195,7 +195,7 @@ export default function Search() {
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <p className="text-sm text-slate-600 flex items-center gap-2">
             <SearchIcon className="w-4 h-4" />
-            {anyFilterActive ? `${results.length} نتيجة` : `${complaints.length} شكوى إجمالاً`}
+            {anyFilterActive ? `${results.length} نتيجة` : `${complaints.length} ملاحظة إجمالاً`}
           </p>
           <button onClick={handleExportCSV} disabled={results.length === 0} className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50">
             <Download className="w-4 h-4" />
@@ -212,7 +212,7 @@ export default function Search() {
             <table className="w-full text-right">
               <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-100">
                 <tr>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">رقم الشكوى</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">رقم الملاحظة</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">الطالب / ولي الأمر</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">الفرع</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">التاريخ</th>

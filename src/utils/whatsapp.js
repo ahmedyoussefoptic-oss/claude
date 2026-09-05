@@ -20,9 +20,9 @@ export function buildReceiptMessage(complaint) {
   return [
     `مرحباً ${complaint.parentName}،`,
     `شكراً لتواصلكم مع مدارس مكتشف العالمية.`,
-    `تم استلام شكواكم رقم ${complaint.complaintId} الخاصة بالطالب/ة ${complaint.studentName} وسيتم التواصل معكم قريباً.`,
+    `تم استلام ملاحظتكم رقم ${complaint.complaintId} الخاصة بالطالب/ة ${complaint.studentName} وسيتم التواصل معكم قريباً.`,
     '',
-    `يمكنكم متابعة حالة الشكوى عبر الرابط التالي: ${trackingLink(complaint.complaintId)}`,
+    `يمكنكم متابعة حالة الملاحظة عبر الرابط التالي: ${trackingLink(complaint.complaintId)}`,
     '',
     'مدارس مكتشف العالمية',
   ].join('\n');
@@ -31,7 +31,7 @@ export function buildReceiptMessage(complaint) {
 export function buildResolutionMessage(complaint, solutionDetails) {
   return [
     `مرحباً ${complaint.parentName}،`,
-    `تم حل الشكوى رقم ${complaint.complaintId} الخاصة بالطالب/ة ${complaint.studentName}.`,
+    `تم حل الملاحظة رقم ${complaint.complaintId} الخاصة بالطالب/ة ${complaint.studentName}.`,
     '',
     'طريقة الحل:',
     solutionDetails,

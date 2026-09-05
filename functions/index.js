@@ -73,7 +73,7 @@ exports.deleteStaffUser = onCall(async (request) => {
       .get()
   ).size;
   if (openCount > 0) {
-    throw new HttpsError("failed-precondition", `لا يمكن الحذف: لدى هذا الموظف ${openCount} شكوى مفتوحة — أعد إسنادها أولاً.`);
+    throw new HttpsError("failed-precondition", `لا يمكن الحذف: لدى هذا الموظف ${openCount} ملاحظة مفتوحة — أعد إسنادها أولاً.`);
   }
 
   await db.collection("users").doc(uid).delete();
@@ -232,8 +232,8 @@ exports.calculateInitialSLA = onDocumentCreated({ document: "complaints/{complai
   if (data.parentEmail) {
     await sendEmail(
       data.parentEmail,
-      `تم استلام شكواكم رقم ${data.complaintId}`,
-      `مرحباً ${data.parentName}،\n\nشكراً لتواصلكم مع مدارس مكتشف العالمية.\nتم استلام شكواكم رقم ${data.complaintId} الخاصة بالطالب/ة ${data.studentName} وسيتم التواصل معكم قريباً.\n\nيمكنكم متابعة حالة الشكوى عبر الرابط التالي:\nhttps://mis-complaints.web.app/track?id=${data.complaintId}\n\nمدارس مكتشف العالمية`
+      `تم استلام ملاحظتكم رقم ${data.complaintId}`,
+      `مرحباً ${data.parentName}،\n\nشكراً لتواصلكم مع مدارس مكتشف العالمية.\nتم استلام ملاحظتكم رقم ${data.complaintId} الخاصة بالطالب/ة ${data.studentName} وسيتم التواصل معكم قريباً.\n\nيمكنكم متابعة حالة الملاحظة عبر الرابط التالي:\nhttps://mis-complaints.web.app/track?id=${data.complaintId}\n\nمدارس مكتشف العالمية`
     );
   }
 
@@ -241,8 +241,8 @@ exports.calculateInitialSLA = onDocumentCreated({ document: "complaints/{complai
   // them immediately — later reassignments are handled in handleSlaStatusChanges.
   if (data.assignedTo) {
     await notifyUsers([data.assignedTo], {
-      title: "تم إسناد شكوى لك",
-      body: `الشكوى رقم ${data.complaintId} تم إسنادها إليك للمعالجة.`,
+      title: "تم إسناد ملاحظة لك",
+      body: `الملاحظة رقم ${data.complaintId} تم إسنادها إليك للمعالجة.`,
       complaintId: event.params.complaintId,
       type: "ASSIGNED",
     });
@@ -336,8 +336,8 @@ exports.handleSlaStatusChanges = onDocumentUpdated("complaints/{complaintId}", a
   // Notify the specialist when a complaint is (re)assigned to them
   if (after.assignedTo && after.assignedTo !== before.assignedTo) {
     await notifyUsers([after.assignedTo], {
-      title: "تم إسناد شكوى لك",
-      body: `الشكوى رقم ${after.complaintId} تم إسنادها إليك للمعالجة.`,
+      title: "تم إسناد ملاحظة لك",
+      body: `الملاحظة رقم ${after.complaintId} تم إسنادها إليك للمعالجة.`,
       complaintId,
       type: "ASSIGNED",
     });
@@ -347,8 +347,8 @@ exports.handleSlaStatusChanges = onDocumentUpdated("complaints/{complaintId}", a
   if (before.status !== 'ESCALATED' && after.status === 'ESCALATED') {
     const managerIds = await getUserIdsByRoles(["DEPARTMENT_MANAGER", "UPPER_MANAGEMENT", "ADMIN"]);
     await notifyUsers(managerIds, {
-      title: "تصعيد شكوى",
-      body: `الشكوى رقم ${after.complaintId} تم تصعيدها وتحتاج متابعة.`,
+      title: "تصعيد ملاحظة",
+      body: `الملاحظة رقم ${after.complaintId} تم تصعيدها وتحتاج متابعة.`,
       complaintId,
       type: "ESCALATED",
     });
@@ -443,8 +443,8 @@ exports.scheduledSlaEngine = onSchedule("every 1 hours", async (event) => {
         const recipient = data.assignedTo || data.receiver;
         if (recipient) {
           await notifyUsers([recipient], {
-            title: "تذكير: اقتراب موعد استحقاق الشكوى",
-            body: `الشكوى رقم ${data.complaintId} تستحق الحل خلال ساعتين تقريباً.`,
+            title: "تذكير: اقتراب موعد استحقاق الملاحظة",
+            body: `الملاحظة رقم ${data.complaintId} تستحق الحل خلال ساعتين تقريباً.`,
             complaintId: doc.id,
             type: "SLA_WARNING",
           });
@@ -520,12 +520,12 @@ exports.scheduledSlaEngine = onSchedule("every 1 hours", async (event) => {
 exports.trackComplaint = onCall(async (request) => {
   const complaintId = (request.data?.complaintId || "").trim();
   if (!complaintId) {
-    throw new HttpsError("invalid-argument", "رقم الشكوى مطلوب.");
+    throw new HttpsError("invalid-argument", "رقم الملاحظة مطلوب.");
   }
 
   const snapshot = await db.collection("complaints").where("complaintId", "==", complaintId).limit(1).get();
   if (snapshot.empty) {
-    throw new HttpsError("not-found", "عفواً، لم يتم العثور على شكوى بهذا الرقم.");
+    throw new HttpsError("not-found", "عفواً، لم يتم العثور على ملاحظة بهذا الرقم.");
   }
 
   const doc = snapshot.docs[0];

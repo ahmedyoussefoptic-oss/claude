@@ -297,7 +297,7 @@ export default function Users() {
             </div>
             {form.role === ROLES.SPECIALIST && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">القسم المسؤول عن الشكوى</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">القسم المسؤول عن الملاحظة</label>
                 <select
                   value={form.department}
                   onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))}
@@ -306,7 +306,7 @@ export default function Users() {
                   <option value="">اختر القسم...</option>
                   {DEPARTMENTS.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
-                <p className="text-xs text-slate-500 mt-1">يحدد نوع الشكاوى (إدارية/أكاديمية/سلوكية) التي يختص بمعالجتها.</p>
+                <p className="text-xs text-slate-500 mt-1">يحدد نوع الملاحظات (إدارية/أكاديمية/سلوكية) التي يختص بمعالجتها.</p>
               </div>
             )}
             <div>
@@ -340,7 +340,7 @@ export default function Users() {
                     disabled={isAdminRole}
                     onChange={(e) => setForm((p) => ({ ...p, perms: { ...p.perms, edit: e.target.checked } }))}
                   />
-                  ✏️ تعديل الشكاوى
+                  ✏️ تعديل الملاحظات
                 </label>
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
@@ -349,7 +349,7 @@ export default function Users() {
                     disabled={isAdminRole}
                     onChange={(e) => setForm((p) => ({ ...p, perms: { ...p.perms, delete: e.target.checked } }))}
                   />
-                  🗑️ حذف الشكاوى
+                  🗑️ حذف الملاحظات
                 </label>
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
@@ -362,7 +362,7 @@ export default function Users() {
                 </label>
               </div>
               <p className="text-xs text-slate-500 mt-2">
-                بدون تفعيل "الاطلاع على جميع الفروع" لن يرى الموظف إلا شكاوى فرعه فقط. "تعديل الشكاوى" يشمل الإسناد والحل والتصعيد؛ بدونه يكون الاطلاع للقراءة فقط.
+                بدون تفعيل "الاطلاع على جميع الفروع" لن يرى الموظف إلا ملاحظات فرعه فقط. "تعديل الملاحظات" يشمل الإسناد والحل والتصعيد؛ بدونه يكون الاطلاع للقراءة فقط.
               </p>
             </div>
 
@@ -402,7 +402,7 @@ export default function Users() {
                   <th className="px-6 py-4 text-sm font-semibold text-slate-600">القسم</th>
                   <th className="px-6 py-4 text-sm font-semibold text-slate-600">نطاق الاطلاع</th>
                   <th className="px-6 py-4 text-sm font-semibold text-slate-600">تعديل</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">حذف الشكاوى</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">حذف الملاحظات</th>
                   <th className="px-6 py-4 text-sm font-semibold text-slate-600">الحالة</th>
                   <th className="px-6 py-4 text-sm font-semibold text-slate-600">إجراءات</th>
                 </tr>

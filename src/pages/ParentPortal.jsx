@@ -25,21 +25,21 @@ const getStatusName = (status) => {
 
 const getActionName = (action) => {
   switch (action) {
-    case 'COMPLAINT_CREATED': return 'تم تسجيل الشكوى';
+    case 'COMPLAINT_CREATED': return 'تم تسجيل الملاحظة';
     case 'COMPLAINT_ASSIGNED': return 'جاري العمل عليها';
     case 'COMPLAINT_TRANSFERRED': return 'جاري العمل عليها';
     case 'COMPLAINT_ACKNOWLEDGED': return 'تم البدء في المعالجة';
-    case 'COMPLAINT_STATUS_CHANGED': return 'تحديث حالة الشكوى';
+    case 'COMPLAINT_STATUS_CHANGED': return 'تحديث حالة الملاحظة';
     case 'SOLUTION_ADDED': return 'تم تقديم حل';
-    case 'COMPLAINT_SOLVED': return 'تم إغلاق الشكوى (محلولة)';
+    case 'COMPLAINT_SOLVED': return 'تم إغلاق الملاحظة (محلولة)';
     case 'COMPLAINT_ESCALATED': return 'تحت متابعة الإدارة العليا';
-    case 'COMPLAINT_REOPENED': return 'تم إعادة فتح الشكوى بناءً على طلبكم';
+    case 'COMPLAINT_REOPENED': return 'تم إعادة فتح الملاحظة بناءً على طلبكم';
     default: return action;
   }
 };
 
 const RATING_LABELS = {
-  resolutionSpeed: 'سرعة حل الشكوى',
+  resolutionSpeed: 'سرعة حل الملاحظة',
   solutionQuality: 'جودة الحل',
   staffProfessionalism: 'احترافية الموظفين',
 };
@@ -89,7 +89,7 @@ export default function ParentPortal() {
 
     } catch (err) {
       console.error(err);
-      setError(err.code === 'functions/not-found' ? 'عفواً، لم يتم العثور على شكوى بهذا الرقم.' : 'حدث خطأ في النظام.');
+      setError(err.code === 'functions/not-found' ? 'عفواً، لم يتم العثور على ملاحظة بهذا الرقم.' : 'حدث خطأ في النظام.');
     } finally {
       setLoading(false);
     }
@@ -184,8 +184,8 @@ export default function ParentPortal() {
       <main className="relative z-10 flex-1 flex flex-col items-center p-6 mt-10">
         
         <div className="w-full max-w-xl mb-10 text-center">
-          <h1 className="text-3xl font-bold text-slate-900 mb-4">بوابة متابعة الشكاوى</h1>
-          <p className="text-slate-500">أدخل رقم الشكوى للاستعلام عن حالتها الحالية.</p>
+          <h1 className="text-3xl font-bold text-slate-900 mb-4">بوابة متابعة الملاحظات</h1>
+          <p className="text-slate-500">أدخل رقم الملاحظة للاستعلام عن حالتها الحالية.</p>
         </div>
 
         {/* Search Box */}
@@ -228,7 +228,7 @@ export default function ParentPortal() {
             <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
               <div className="flex items-center justify-between pb-6 border-b border-slate-100 mb-6">
                 <div>
-                  <p className="text-sm text-slate-500 mb-1">شكوى رقم</p>
+                  <p className="text-sm text-slate-500 mb-1">ملاحظة رقم</p>
                   <h2 className="text-xl font-bold text-slate-900 font-mono">#{result.complaintId}</h2>
                 </div>
                 <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-100 text-amber-800 border border-amber-200">
@@ -277,7 +277,7 @@ export default function ParentPortal() {
                     onClick={() => setWantsReopen(true)}
                     className={`py-3 rounded-xl border text-sm font-medium transition-colors ${wantsReopen === true ? 'bg-red-600 text-white border-red-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                   >
-                    لا، أرغب بإعادة فتح الشكوى
+                    لا، أرغب بإعادة فتح الملاحظة
                   </button>
                 </div>
 
@@ -305,7 +305,7 @@ export default function ParentPortal() {
                       </div>
                     ) : (
                       <p className="text-sm text-slate-600 bg-red-50 border border-red-100 rounded-xl p-3">
-                        سيتم إعادة فتح الشكوى وإرسالها للمختص لمتابعتها مجدداً. يرجى توضيح سبب عدم الرضا أدناه.
+                        سيتم إعادة فتح الملاحظة وإرسالها للمختص لمتابعتها مجدداً. يرجى توضيح سبب عدم الرضا أدناه.
                       </p>
                     )}
 
@@ -324,7 +324,7 @@ export default function ParentPortal() {
                       className={`w-full py-3 text-white rounded-xl font-medium transition-colors disabled:opacity-70 flex items-center justify-center gap-2 ${wantsReopen ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary-dark'}`}
                     >
                       {surveySubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 -scale-x-100" />}
-                      {wantsReopen ? 'إعادة فتح الشكوى' : 'إرسال التقييم'}
+                      {wantsReopen ? 'إعادة فتح الملاحظة' : 'إرسال التقييم'}
                     </button>
                   </form>
                 )}
@@ -346,7 +346,7 @@ export default function ParentPortal() {
                 <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-3">
                   <CheckCircle2 className="w-6 h-6" />
                 </div>
-                <h3 className="font-bold text-amber-900 mb-1">تم إعادة فتح الشكوى</h3>
+                <h3 className="font-bold text-amber-900 mb-1">تم إعادة فتح الملاحظة</h3>
                 <p className="text-sm text-amber-700">سيتم متابعتها من قبل فريقنا مجدداً.</p>
               </div>
             )}
