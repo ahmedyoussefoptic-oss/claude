@@ -163,6 +163,15 @@ service cloud.firestore {
       }
     }
 
+    // Student roster — read by any signed-in staff member so the
+    // complaint/lost-found/tech-support forms can look a student up by
+    // national ID or name and auto-fill the rest; only an admin may bulk
+    // import/edit it (see Settings > import).
+    match /students/{studentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
     // Notifications collection — created only by Cloud Functions (Admin SDK,
     // bypasses these rules). Clients may only read/update their own.
     match /notifications/{notificationId} {

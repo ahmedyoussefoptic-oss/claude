@@ -7,6 +7,7 @@ import useAuthStore from '../../stores/useAuthStore';
 import { useBranches, useDepartments } from '../../hooks/useOrgData';
 import { useUsers } from '../../hooks/useUsers';
 import { waLink, buildReceiptMessage } from '../../utils/whatsapp';
+import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { COMPLAINT_TYPES, SUB_TYPES, STAGES } from '../../config/complaintTypes';
 
 const PRIORITIES = [
@@ -75,6 +76,36 @@ export default function ComplaintForm({ onClose }) {
       [name]: value,
       ...(name === 'complaintType' ? { subType: '' } : {}),
     }));
+  };
+
+  const [studentSuggestions, setStudentSuggestions] = useState([]);
+  const studentNameSearchTimer = useRef(null);
+
+  const applyStudent = (student) => {
+    setFormData((prev) => ({
+      ...prev,
+      studentName: student.name || prev.studentName,
+      studentId: student.nationalId || prev.studentId,
+      branch: student.branch || prev.branch,
+      grade: [student.stageName, student.gradeName, student.className].filter(Boolean).join(' - ') || prev.grade,
+      parentPhone: student.mobile || prev.parentPhone,
+    }));
+    setStudentSuggestions([]);
+  };
+
+  const handleStudentIdBlur = async () => {
+    if (!formData.studentId) return;
+    const student = await lookupStudentById(formData.studentId);
+    if (student) applyStudent(student);
+  };
+
+  const handleStudentNameChange = (e) => {
+    handleChange(e);
+    const term = e.target.value;
+    clearTimeout(studentNameSearchTimer.current);
+    studentNameSearchTimer.current = setTimeout(async () => {
+      setStudentSuggestions(await searchStudentsByName(term));
+    }, 300);
   };
 
   const handleFileChange = (e) => {
@@ -291,13 +322,32 @@ export default function ComplaintForm({ onClose }) {
               <h3 className="text-lg font-bold text-slate-900 border-b border-slate-200 pb-2">بيانات الطالب</h3>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">الاسم <span className="text-red-500">*</span></label>
-                  <input type="text" name="studentName" value={formData.studentName} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+                  <input
+                    type="text" name="studentName" value={formData.studentName} onChange={handleStudentNameChange}
+                    onBlur={() => setTimeout(() => setStudentSuggestions([]), 150)}
+                    autoComplete="off" required
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm"
+                  />
+                  {studentSuggestions.length > 0 && (
+                    <ul className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                      {studentSuggestions.map((s) => (
+                        <li
+                          key={s.nationalId}
+                          onMouseDown={() => applyStudent(s)}
+                          className="px-4 py-2 text-sm hover:bg-slate-50 cursor-pointer flex items-center justify-between"
+                        >
+                          <span>{s.name}</span>
+                          <span className="text-xs text-slate-400" dir="ltr">{s.nationalId}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم الهوية <span className="text-red-500">*</span></label>
-                  <input type="text" name="studentId" value={formData.studentId} onChange={handleChange} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+                  <input type="text" name="studentId" value={formData.studentId} onChange={handleChange} onBlur={handleStudentIdBlur} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
               </div>
 

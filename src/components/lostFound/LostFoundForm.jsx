@@ -6,6 +6,7 @@ import { db, storage } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches } from '../../hooks/useOrgData';
 import { ITEM_CATEGORIES, REPORT_TYPES, generateItemCode } from '../../config/lostFound';
+import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 
 export default function LostFoundForm({ onClose }) {
   const { user } = useAuthStore();
@@ -33,6 +34,34 @@ export default function LostFoundForm({ onClose }) {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const [studentSuggestions, setStudentSuggestions] = useState([]);
+  const studentNameSearchTimer = useRef(null);
+
+  const applyStudent = (student) => {
+    setFormData((prev) => ({
+      ...prev,
+      studentName: student.name || prev.studentName,
+      studentId: student.nationalId || prev.studentId,
+      branch: student.branch || prev.branch,
+    }));
+    setStudentSuggestions([]);
+  };
+
+  const handleStudentIdBlur = async () => {
+    if (!formData.studentId) return;
+    const student = await lookupStudentById(formData.studentId);
+    if (student) applyStudent(student);
+  };
+
+  const handleStudentNameChange = (e) => {
+    handleChange(e);
+    const term = e.target.value;
+    clearTimeout(studentNameSearchTimer.current);
+    studentNameSearchTimer.current = setTimeout(async () => {
+      setStudentSuggestions(await searchStudentsByName(term));
+    }, 300);
   };
 
   const handleSubmit = async (e) => {
@@ -187,13 +216,32 @@ export default function LostFoundForm({ onClose }) {
 
               {formData.reportType === 'LOST' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
+                  <div className="relative">
                     <label className="block text-sm font-medium text-slate-700 mb-1.5">اسم الطالب</label>
-                    <input type="text" name="studentName" value={formData.studentName} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+                    <input
+                      type="text" name="studentName" value={formData.studentName} onChange={handleStudentNameChange}
+                      onBlur={() => setTimeout(() => setStudentSuggestions([]), 150)}
+                      autoComplete="off"
+                      className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm"
+                    />
+                    {studentSuggestions.length > 0 && (
+                      <ul className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                        {studentSuggestions.map((s) => (
+                          <li
+                            key={s.nationalId}
+                            onMouseDown={() => applyStudent(s)}
+                            className="px-4 py-2 text-sm hover:bg-slate-50 cursor-pointer flex items-center justify-between"
+                          >
+                            <span>{s.name}</span>
+                            <span className="text-xs text-slate-400" dir="ltr">{s.nationalId}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم هوية الطالب</label>
-                    <input type="text" name="studentId" value={formData.studentId} onChange={handleChange} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+                    <input type="text" name="studentId" value={formData.studentId} onChange={handleChange} onBlur={handleStudentIdBlur} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                   </div>
                 </div>
               )}

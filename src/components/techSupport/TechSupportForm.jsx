@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { X, Save, Loader2, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
@@ -7,6 +7,7 @@ import { useBranches } from '../../hooks/useOrgData';
 import { useUsers } from '../../hooks/useUsers';
 import { STAGES } from '../../config/complaintTypes';
 import { PROBLEM_TYPES, PLATFORMS, RELATIONS, generateTicketId } from '../../config/techSupport';
+import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 
 export default function TechSupportForm({ onClose }) {
   const { user } = useAuthStore();
@@ -36,6 +37,36 @@ export default function TechSupportForm({ onClose }) {
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const [studentSuggestions, setStudentSuggestions] = useState([]);
+  const studentNameSearchTimer = useRef(null);
+
+  const applyStudent = (student) => {
+    setFormData((prev) => ({
+      ...prev,
+      studentName: student.name || prev.studentName,
+      nationalId: student.nationalId || prev.nationalId,
+      branch: student.branch || prev.branch,
+      grade: [student.stageName, student.gradeName, student.className].filter(Boolean).join(' - ') || prev.grade,
+      parentPhone: student.mobile || prev.parentPhone,
+    }));
+    setStudentSuggestions([]);
+  };
+
+  const handleNationalIdBlur = async () => {
+    if (!formData.nationalId) return;
+    const student = await lookupStudentById(formData.nationalId);
+    if (student) applyStudent(student);
+  };
+
+  const handleStudentNameChange = (e) => {
+    handleChange(e);
+    const term = e.target.value;
+    clearTimeout(studentNameSearchTimer.current);
+    studentNameSearchTimer.current = setTimeout(async () => {
+      setStudentSuggestions(await searchStudentsByName(term));
+    }, 300);
   };
 
   const findItSpecialist = () => {
@@ -153,13 +184,32 @@ export default function TechSupportForm({ onClose }) {
             <div className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
               <h3 className="text-lg font-bold text-slate-900 border-b border-slate-200 pb-2">بيانات الطالب</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
+                <div className="relative">
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">اسم الطالب رباعياً <span className="text-red-500">*</span></label>
-                  <input type="text" name="studentName" value={formData.studentName} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+                  <input
+                    type="text" name="studentName" value={formData.studentName} onChange={handleStudentNameChange}
+                    onBlur={() => setTimeout(() => setStudentSuggestions([]), 150)}
+                    autoComplete="off" required
+                    className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm"
+                  />
+                  {studentSuggestions.length > 0 && (
+                    <ul className="absolute z-20 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+                      {studentSuggestions.map((s) => (
+                        <li
+                          key={s.nationalId}
+                          onMouseDown={() => applyStudent(s)}
+                          className="px-4 py-2 text-sm hover:bg-slate-50 cursor-pointer flex items-center justify-between"
+                        >
+                          <span>{s.name}</span>
+                          <span className="text-xs text-slate-400" dir="ltr">{s.nationalId}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم الهوية / السجل المدني <span className="text-red-500">*</span></label>
-                  <input type="text" name="nationalId" value={formData.nationalId} onChange={handleChange} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+                  <input type="text" name="nationalId" value={formData.nationalId} onChange={handleChange} onBlur={handleNationalIdBlur} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">الرقم الأكاديمي</label>
