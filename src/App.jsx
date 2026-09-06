@@ -10,6 +10,7 @@ import LostFound from './pages/LostFound';
 import TechSupport from './pages/TechSupport';
 import FlowMap from './pages/FlowMap';
 import Search from './pages/Search';
+import Reports from './pages/Reports';
 import ParentPortal from './pages/ParentPortal';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
@@ -39,6 +40,7 @@ function App() {
           <Route path="tech-support" element={<TechSupport />} />
           <Route path="flow-map" element={<FlowMap />} />
           <Route path="search" element={<Search />} />
+          <Route path="reports" element={<Reports />} />
           <Route path="users" element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN]} requirePerm="users">
               <Users />

@@ -18,3 +18,28 @@
     @apply bg-background text-text-main font-sans antialiased;
   }
 }
+
+/* Printable reports: only #report-print-area is rendered when printing,
+   full-bleed and without the shell chrome around it. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #report-print-area,
+  #report-print-area * {
+    visibility: visible;
+  }
+  #report-print-area {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  thead {
+    display: table-header-group;
+  }
+}

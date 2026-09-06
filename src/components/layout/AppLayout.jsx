@@ -1,7 +1,7 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
-import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench } from 'lucide-react';
+import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart } from 'lucide-react';
 import { useState } from 'react';
 import NotificationBell from './NotificationBell';
 import Watermark from '../common/Watermark';
@@ -28,6 +28,7 @@ export default function AppLayout() {
     { name: t('nav.techSupport'), path: '/tech-support', icon: Wrench },
     { name: t('nav.flowMap'), path: '/flow-map', icon: Map },
     { name: t('nav.advancedSearch'), path: '/search', icon: Search },
+    { name: t('nav.reports'), path: '/reports', icon: FileBarChart },
   ];
 
   if (role === 'ADMIN' || userData?.perms?.users) {

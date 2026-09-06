@@ -5,6 +5,7 @@ import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestor
 import { db } from '../config/firebase';
 import StatCard from '../components/dashboard/StatCard';
 import { TrendChart, BranchChart } from '../components/dashboard/Charts';
+import BranchIndicators from '../components/dashboard/BranchIndicators';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
 import { OPEN_TICKET_STATUSES } from '../config/techSupport';
@@ -353,6 +354,13 @@ export default function Dashboard() {
       <div>
         <BranchChart data={branchChartData} title={t('dashboard.byBranch')} />
       </div>
+
+      <BranchIndicators
+        branches={branches}
+        complaints={complaints}
+        techTickets={techTickets}
+        lostFoundItems={lostFoundItems}
+      />
 
       {/* Recent Activity Table */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
