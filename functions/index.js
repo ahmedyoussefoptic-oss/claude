@@ -257,6 +257,18 @@ exports.calculateInitialSLA = onDocumentCreated({ document: "complaints/{complai
     });
   }
 
+  // Urgent complaints also alert system admins and upper management right
+  // away, on top of whoever the complaint gets assigned to.
+  if (data.priority === 'URGENT') {
+    const escalationIds = await getUserIdsByRoles(["ADMIN", "UPPER_MANAGEMENT"]);
+    await notifyUsers(escalationIds, {
+      title: "ملاحظة عاجلة جديدة",
+      body: `الملاحظة رقم ${data.complaintId} (${data.studentName}) بأولوية عاجلة وتحتاج متابعة فورية.`,
+      complaintId: event.params.complaintId,
+      type: "URGENT_CREATED",
+    });
+  }
+
   if (data.dueDate) return; // Already has due date
 
   const priority = data.priority || 'NORMAL';
@@ -416,6 +428,18 @@ exports.handleSlaStatusChanges = onDocumentUpdated("complaints/{complaintId}", a
         slaStatus: 'ACTIVE'
       });
     }
+  }
+
+  // Notify the customer-service employee who originally logged the
+  // complaint once it's solved, so they can contact the parent and send
+  // the WhatsApp resolution message (see ComplaintDetails.jsx).
+  if (before.status !== 'SOLVED' && after.status === 'SOLVED' && after.receiver) {
+    await notifyUsers([after.receiver], {
+      title: "تم حل الملاحظة التي استلمتها",
+      body: `الملاحظة رقم ${after.complaintId} تم حلها — يرجى التواصل مع ولي الأمر وإرسال رسالة الواتساب.`,
+      complaintId,
+      type: "SOLVED_NOTIFY_RECEIVER",
+    });
   }
 
   // If closed or solved, clear slaStatus
