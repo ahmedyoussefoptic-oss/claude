@@ -6,7 +6,7 @@ import { db, app } from '../config/firebase';
 // Messaging tab → "Web Push certificates". It is a public key (safe to embed
 // client-side), but it can only be generated from that console screen, so it
 // is filled in once and kept here rather than passed in from an env var.
-const VAPID_KEY = '';
+const VAPID_KEY = 'BFYyKTYCHtA5wj1V9Ff1gXHRsQGDfZl6O6txJ0wDR8IWNjOBW4U1rCbMC2GCHDBpBxhwsg2Cek27ZAyiGNJ4Ejc';
 
 export function pushSupported() {
   return !!VAPID_KEY && typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator;
