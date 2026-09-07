@@ -10,6 +10,7 @@ import { waLink, buildReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { COMPLAINT_TYPES, SUB_TYPES, STAGES } from '../../config/complaintTypes';
+import AssigneeMultiSelect, { eligibleAssignees } from './AssigneeMultiSelect';
 
 const PRIORITIES = [
   { id: 'NORMAL', name: 'عادية (48 ساعة)' },
@@ -50,7 +51,7 @@ export default function ComplaintForm({ onClose }) {
     priority: 'NORMAL',
     source: 'CENTER_CALL',
     details: '',
-    assignedTo: '',
+    assignedTo: [],
   });
 
   const [files, setFiles] = useState([]);
@@ -63,13 +64,7 @@ export default function ComplaintForm({ onClose }) {
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
 
-  const eligibleAssignees = staff
-    .filter((u) => u.role === 'SPECIALIST' && u.active !== false && (u.access === 'all' || !formData.branch || u.branch === formData.branch))
-    .sort((a, b) => {
-      const aMatch = a.department === formData.complaintType ? 0 : 1;
-      const bMatch = b.department === formData.complaintType ? 0 : 1;
-      return aMatch - bMatch;
-    });
+  const assigneeOptions = eligibleAssignees(staff, { branch: formData.branch, complaintType: formData.complaintType });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -190,7 +185,7 @@ export default function ComplaintForm({ onClose }) {
       }
 
       const now = serverTimestamp();
-      const assignee = formData.assignedTo ? staff.find((u) => u.id === formData.assignedTo) : null;
+      const assignees = formData.assignedTo.map((id) => staff.find((u) => u.id === id)).filter(Boolean);
 
       const newComplaint = {
         ...formData,
@@ -200,8 +195,8 @@ export default function ComplaintForm({ onClose }) {
         attachments: uploadedAttachments,
         reopened: false,
         isOverdue: false,
-        assignedToName: assignee?.name || '',
-        assignedAt: assignee ? now : null,
+        assignedToNames: assignees.map((a) => a.name),
+        assignedAt: assignees.length ? now : null,
         createdAt: now,
         updatedAt: now,
       };
@@ -216,11 +211,11 @@ export default function ComplaintForm({ onClose }) {
         createdAt: now,
       });
 
-      if (assignee) {
+      if (assignees.length > 0) {
         await addDoc(collection(db, `complaints/${docRef.id}/activityLog`), {
           action: 'COMPLAINT_ASSIGNED',
           actorId: user.uid,
-          metadata: { toUserId: assignee.id, toUserName: assignee.name },
+          metadata: { toUserIds: assignees.map((a) => a.id), toUserNames: assignees.map((a) => a.name) },
           createdAt: now,
         });
       }
@@ -442,12 +437,14 @@ export default function ComplaintForm({ onClose }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">المسند إليه</label>
-                <select name="assignedTo" value={formData.assignedTo} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm">
-                  <option value="">بدون إسناد الآن (يمكن إسنادها لاحقاً)</option>
-                  {eligibleAssignees.map(u => <option key={u.id} value={u.id}>{u.name}{u.jobTitle ? ` — ${u.jobTitle}` : ''}</option>)}
-                </select>
-                <p className="text-xs text-slate-500 mt-1">يصل إشعار فوري للمختص المختار (داخل النظام وبالبريد الإلكتروني) بمجرد حفظ الملاحظة.</p>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">المسند إليهم</label>
+                <AssigneeMultiSelect
+                  options={assigneeOptions}
+                  selected={formData.assignedTo}
+                  onChange={(ids) => setFormData((prev) => ({ ...prev, assignedTo: ids }))}
+                  placeholder="بدون إسناد الآن (يمكن إسنادها لاحقاً)"
+                />
+                <p className="text-xs text-slate-500 mt-1">يمكن إسناد الملاحظة لأكثر من شخص في نفس الوقت — يصل إشعار فوري لكل من تختارهم (داخل النظام وبالبريد الإلكتروني) بمجرد حفظ الملاحظة.</p>
               </div>
 
               {/* Upload */}

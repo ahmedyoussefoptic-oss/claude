@@ -7,6 +7,7 @@ import { useUsers } from '../../hooks/useUsers';
 import { waLink, buildResolutionMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { ROLES } from '../../config/roles';
+import AssigneeMultiSelect, { eligibleAssignees } from './AssigneeMultiSelect';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 
@@ -76,7 +77,14 @@ export default function ComplaintDetails({ complaint, onClose }) {
   const [reply, setReply] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('history'); // 'history' | 'internal'
-  const [assigneeId, setAssigneeId] = useState('');
+  const [selectedAssignees, setSelectedAssignees] = useState(complaint.assignedTo || []);
+
+  // Resync when the user switches to a different complaint (not on every
+  // realtime update of the same one, so an in-progress edit isn't stomped).
+  useEffect(() => {
+    setSelectedAssignees(complaint.assignedTo || []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [complaint.id]);
 
   const isAdmin = userData?.role === ROLES.ADMIN;
   // Mirrors firestore.rules' canEditRecord/canDeleteRecord: a branch-scoped
@@ -137,18 +145,21 @@ export default function ComplaintDetails({ complaint, onClose }) {
       } else if (actionType === 'WAIT_PARENT') {
         await addLog('COMPLAINT_STATUS_CHANGED', { to: 'WAITING_PARENT_RESPONSE' }, 'WAITING_PARENT_RESPONSE');
       } else if (actionType === 'ASSIGN') {
-        if (!assigneeId) {
-          alert('يرجى اختيار المختص أولاً.');
+        const before = complaint.assignedTo || [];
+        const addedIds = selectedAssignees.filter((id) => !before.includes(id));
+        const removedIds = before.filter((id) => !selectedAssignees.includes(id));
+        if (addedIds.length === 0 && removedIds.length === 0) {
+          alert('لم يطرأ أي تغيير على الإسناد.');
           return;
         }
-        const assignee = users.find((u) => u.id === assigneeId);
-        const isReassign = !!complaint.assignedTo;
+        const selectedUsers = selectedAssignees.map((id) => users.find((u) => u.id === id)).filter(Boolean);
+        const addedNames = addedIds.map((id) => users.find((u) => u.id === id)?.name).filter(Boolean);
+        const removedNames = removedIds.map((id) => complaint.assignedToNames?.[before.indexOf(id)] || users.find((u) => u.id === id)?.name).filter(Boolean);
         await addLog(
-          isReassign ? 'COMPLAINT_TRANSFERRED' : 'COMPLAINT_ASSIGNED',
-          { fromUserId: complaint.assignedTo || null, fromUserName: complaint.assignedToName || null, toUserId: assigneeId, toUserName: assignee?.name },
-          { assignedTo: assigneeId, assignedToName: assignee?.name || '', assignedAt: serverTimestamp() }
+          before.length === 0 ? 'COMPLAINT_ASSIGNED' : 'COMPLAINT_TRANSFERRED',
+          { toUserNames: selectedUsers.map((u) => u.name), addedNames, removedNames },
+          { assignedTo: selectedAssignees, assignedToNames: selectedUsers.map((u) => u.name), assignedAt: serverTimestamp() }
         );
-        setAssigneeId('');
       } else if (actionType === 'REJECT') {
         if (!reply.trim()) {
           alert('يرجى كتابة سبب رفض الملاحظة في صندوق النص أدناه.');
@@ -350,32 +361,24 @@ export default function ComplaintDetails({ complaint, onClose }) {
             <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm print:hidden">
               <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-slate-400" />
-                {complaint.assignedTo ? 'تحويل الملاحظة لمختص آخر' : 'إسناد الملاحظة لمختص'}
+                {(complaint.assignedTo?.length ?? 0) > 0 ? 'تعديل إسناد الملاحظة' : 'إسناد الملاحظة'}
               </h3>
-              {complaint.assignedToName && (
-                <p className="text-sm text-slate-500 mb-3">المختص الحالي: <span className="font-medium text-slate-800">{complaint.assignedToName}</span></p>
+              {complaint.assignedToNames?.length > 0 && (
+                <p className="text-sm text-slate-500 mb-3">المسندة إليهم حالياً: <span className="font-medium text-slate-800">{complaint.assignedToNames.join('، ')}</span></p>
               )}
-              <div className="flex gap-3">
-                <select
-                  value={assigneeId}
-                  onChange={(e) => setAssigneeId(e.target.value)}
-                  className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+              <div className="space-y-3">
+                <AssigneeMultiSelect
+                  options={eligibleAssignees(users, { branch: complaint.branch, complaintType: complaint.complaintType })}
+                  selected={selectedAssignees}
+                  onChange={setSelectedAssignees}
+                  placeholder="اختر الموظفين..."
+                />
+                <button
+                  disabled={loading || (selectedAssignees.length === (complaint.assignedTo || []).length && selectedAssignees.every((id) => (complaint.assignedTo || []).includes(id)))}
+                  onClick={() => handleAction('ASSIGN')}
+                  className="px-5 py-2.5 bg-slate-800 text-white rounded-xl text-sm font-medium hover:bg-slate-900 transition-colors disabled:opacity-50"
                 >
-                  <option value="">اختر المختص...</option>
-                  {users
-                    .filter((u) => u.id !== complaint.assignedTo && u.role === 'SPECIALIST' && u.active !== false &&
-                      (u.access === 'all' || !complaint.branch || u.branch === complaint.branch))
-                    .sort((a, b) => {
-                      const aMatch = a.department === complaint.complaintType ? 0 : 1;
-                      const bMatch = b.department === complaint.complaintType ? 0 : 1;
-                      return aMatch - bMatch;
-                    })
-                    .map((u) => (
-                      <option key={u.id} value={u.id}>{u.name}{u.jobTitle ? ` — ${u.jobTitle}` : ''}</option>
-                    ))}
-                </select>
-                <button disabled={loading || !assigneeId} onClick={() => handleAction('ASSIGN')} className="px-5 py-2.5 bg-slate-800 text-white rounded-xl text-sm font-medium hover:bg-slate-900 transition-colors disabled:opacity-50">
-                  {complaint.assignedTo ? 'تحويل' : 'إسناد'}
+                  حفظ الإسناد
                 </button>
               </div>
             </div>
@@ -480,9 +483,11 @@ export default function ComplaintDetails({ complaint, onClose }) {
                           <strong>السبب:</strong> {log.metadata.reason}
                         </div>
                       )}
-                      {log.metadata?.toUserName && (
-                        <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200">
-                          إلى: <strong>{log.metadata.toUserName}</strong>
+                      {log.metadata?.toUserNames?.length > 0 && (
+                        <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200 space-y-1">
+                          <p>المسندة إليهم: <strong>{log.metadata.toUserNames.join('، ')}</strong></p>
+                          {log.metadata.addedNames?.length > 0 && <p className="text-emerald-700">أُضيف: {log.metadata.addedNames.join('، ')}</p>}
+                          {log.metadata.removedNames?.length > 0 && <p className="text-red-700">أُزيل: {log.metadata.removedNames.join('، ')}</p>}
                         </div>
                       )}
                     </div>

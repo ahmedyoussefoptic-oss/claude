@@ -83,7 +83,7 @@ export default function Reports() {
       setSpecialists(
         snapshot.docs
           .map((d) => ({ id: d.id, ...d.data() }))
-          .filter((u) => u.role === 'SPECIALIST' && u.active !== false)
+          .filter((u) => ['SPECIALIST', 'UPPER_MANAGEMENT', 'ADMIN'].includes(u.role) && u.active !== false)
       );
     });
     return () => unsubscribe();
@@ -101,7 +101,7 @@ export default function Reports() {
       if (filters.branch && c.branch !== filters.branch) return false;
       if (filters.complaintType && c.complaintType !== filters.complaintType) return false;
       if (filters.subType && c.subType !== filters.subType) return false;
-      if (filters.assignedTo && c.assignedTo !== filters.assignedTo) return false;
+      if (filters.assignedTo && !c.assignedTo?.includes(filters.assignedTo)) return false;
       if (filters.from) {
         const createdAt = c.createdAt?.toDate?.();
         if (!createdAt || createdAt < new Date(filters.from)) return false;
@@ -192,9 +192,11 @@ export default function Reports() {
   const satisfactionByEmployee = useMemo(() => {
     const map = {};
     surveyed.forEach((c) => {
-      const name = c.assignedToName || 'غير مسند';
-      if (!map[name]) map[name] = [];
-      map[name].push(c);
+      const names = c.assignedToNames?.length ? c.assignedToNames : ['غير مسند'];
+      names.forEach((name) => {
+        if (!map[name]) map[name] = [];
+        map[name].push(c);
+      });
     });
     return Object.entries(map)
       .map(([name, list]) => ({ name, count: list.length, avg: average(list, (c) => c.satisfactionRate) }))
@@ -451,7 +453,7 @@ export default function Reports() {
                     <td className="py-2 text-slate-600">{branchName(c.branch)}</td>
                     <td className="py-2 text-slate-600">{typeName(c.complaintType)}</td>
                     <td className="py-2 text-slate-600">{c.subType || '—'}</td>
-                    <td className="py-2 text-slate-600">{c.assignedToName || '—'}</td>
+                    <td className="py-2 text-slate-600">{c.assignedToNames?.join('، ') || '—'}</td>
                     <td className="py-2 text-slate-600">{STATUS_NAME[c.status] || c.status}</td>
                     <td className="py-2 text-slate-600">{c.solvedAt && c.createdAt ? formatDuration(c.solvedAt.toMillis() - c.createdAt.toMillis()) : '—'}</td>
                   </tr>
@@ -602,7 +604,7 @@ export default function Reports() {
                     <td className="py-2 text-slate-800" dir="ltr">{c.complaintId}</td>
                     <td className="py-2 text-slate-600" dir="ltr">{c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd') : '—'}</td>
                     <td className="py-2 text-slate-600">{branchName(c.branch)}</td>
-                    <td className="py-2 text-slate-600">{c.assignedToName || '—'}</td>
+                    <td className="py-2 text-slate-600">{c.assignedToNames?.join('، ') || '—'}</td>
                     <td className="py-2"><Stars value={c.satisfactionRate} /></td>
                     {Object.keys(RATING_LABELS).map((key) => (
                       <td key={key} className="py-2 text-slate-600 tabular-nums">{c.satisfactionDetails?.[key] ?? '—'}</td>
@@ -633,7 +635,7 @@ export default function Reports() {
                     <tr key={c.id} className="border-b border-slate-100">
                       <td className="py-2 text-slate-800" dir="ltr">{c.complaintId}</td>
                       <td className="py-2 text-slate-600">{branchName(c.branch)}</td>
-                      <td className="py-2 text-slate-600">{c.assignedToName || '—'}</td>
+                      <td className="py-2 text-slate-600">{c.assignedToNames?.join('، ') || '—'}</td>
                       <td className="py-2 text-slate-600">{c.parentFeedback}</td>
                     </tr>
                   ))}

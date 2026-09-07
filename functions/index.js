@@ -77,7 +77,7 @@ exports.deleteStaffUser = onCall(async (request) => {
 
   const openCount = (
     await db.collection("complaints")
-      .where("assignedTo", "==", uid)
+      .where("assignedTo", "array-contains", uid)
       .where("status", "in", OPEN_STATUSES)
       .get()
   ).size;
@@ -246,10 +246,10 @@ exports.calculateInitialSLA = onDocumentCreated({ document: "complaints/{complai
     );
   }
 
-  // If the complaint was created with an assignee already chosen, notify
-  // them immediately — later reassignments are handled in handleSlaStatusChanges.
-  if (data.assignedTo) {
-    await notifyUsers([data.assignedTo], {
+  // If the complaint was created with assignees already chosen, notify them
+  // immediately — later reassignments are handled in handleSlaStatusChanges.
+  if (data.assignedTo?.length) {
+    await notifyUsers(data.assignedTo, {
       title: "تم إسناد ملاحظة لك",
       body: `الملاحظة رقم ${data.complaintId} تم إسنادها إليك للمعالجة.`,
       complaintId: event.params.complaintId,
@@ -382,9 +382,12 @@ exports.handleSlaStatusChanges = onDocumentUpdated("complaints/{complaintId}", a
   const after = event.data.after.data();
   const complaintId = event.params.complaintId;
 
-  // Notify the specialist when a complaint is (re)assigned to them
-  if (after.assignedTo && after.assignedTo !== before.assignedTo) {
-    await notifyUsers([after.assignedTo], {
+  // Notify anyone newly added to the assignment — a multi-person edit that
+  // keeps some existing assignees shouldn't re-notify them.
+  const beforeAssigned = new Set(before.assignedTo || []);
+  const newlyAssigned = (after.assignedTo || []).filter((uid) => !beforeAssigned.has(uid));
+  if (newlyAssigned.length > 0) {
+    await notifyUsers(newlyAssigned, {
       title: "تم إسناد ملاحظة لك",
       body: `الملاحظة رقم ${after.complaintId} تم إسنادها إليك للمعالجة.`,
       complaintId,
@@ -501,9 +504,9 @@ exports.scheduledSlaEngine = onSchedule("every 1 hours", async (event) => {
         // Due within the next 2 hours: notify first, then mark as sent —
         // if notifyUsers throws, reminderSent stays false and the next
         // hourly run retries it instead of losing the reminder forever.
-        const recipient = data.assignedTo || data.receiver;
-        if (recipient) {
-          await notifyUsers([recipient], {
+        const recipients = data.assignedTo?.length ? data.assignedTo : [data.receiver].filter(Boolean);
+        if (recipients.length) {
+          await notifyUsers(recipients, {
             title: "تذكير: اقتراب موعد استحقاق الملاحظة",
             body: `الملاحظة رقم ${data.complaintId} تستحق الحل خلال ساعتين تقريباً.`,
             complaintId: doc.id,

@@ -28,7 +28,7 @@
       "collectionGroup": "complaints",
       "queryScope": "COLLECTION",
       "fields": [
-        { "fieldPath": "assignedTo", "order": "ASCENDING" },
+        { "fieldPath": "assignedTo", "arrayConfig": "CONTAINS" },
         { "fieldPath": "status", "order": "ASCENDING" }
       ]
     },
