@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bell } from 'lucide-react';
+import { Bell, BellRing, BellOff } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNotifications } from '../../hooks/useNotifications';
+import useAuthStore from '../../stores/useAuthStore';
+import { enablePushNotifications, pushSupported } from '../../utils/push';
 import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -31,8 +33,11 @@ function playChime() {
 export default function NotificationBell() {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
+  const { user } = useAuthStore();
   const notifications = useNotifications();
   const [open, setOpen] = useState(false);
+  const [pushPermission, setPushPermission] = useState(() => (pushSupported() ? Notification.permission : 'unsupported'));
+  const [enablingPush, setEnablingPush] = useState(false);
   const ref = useRef(null);
   const knownIds = useRef(new Set());
   const isFirstLoad = useRef(true);
@@ -46,6 +51,26 @@ export default function NotificationBell() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // If the browser already granted permission in a past session, silently
+  // (re-)register the device token — tokens can rotate, and arrayUnion on
+  // the write side means re-registering the same token is a no-op.
+  useEffect(() => {
+    if (!user || pushPermission !== 'granted') return;
+    enablePushNotifications(user.uid);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, pushPermission]);
+
+  const handleEnablePush = async () => {
+    if (!user || enablingPush) return;
+    setEnablingPush(true);
+    const result = await enablePushNotifications(user.uid);
+    setEnablingPush(false);
+    setPushPermission(pushSupported() ? Notification.permission : 'unsupported');
+    if (!result.ok) {
+      console.warn('Push notifications not enabled:', result.reason);
+    }
+  };
 
   // Play a short chime for notifications that arrive after the initial load,
   // so staff notice new assignments/reminders/escalations without watching
@@ -86,8 +111,24 @@ export default function NotificationBell() {
 
       {open && (
         <div className="absolute left-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-50">
-          <div className="px-4 py-3 border-b border-slate-100 font-bold text-sm text-slate-900">
-            {t('notifications.title')}
+          <div className="px-4 py-3 border-b border-slate-100">
+            <p className="font-bold text-sm text-slate-900">{t('notifications.title')}</p>
+            {pushPermission === 'default' && (
+              <button
+                onClick={handleEnablePush}
+                disabled={enablingPush}
+                className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors disabled:opacity-60"
+              >
+                <BellRing className="w-3.5 h-3.5" />
+                {enablingPush ? '...' : 'تفعيل التنبيهات الفورية على هذا الجهاز'}
+              </button>
+            )}
+            {pushPermission === 'denied' && (
+              <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
+                <BellOff className="w-3.5 h-3.5 shrink-0" />
+                التنبيهات الفورية محظورة من إعدادات المتصفح لهذا الموقع
+              </p>
+            )}
           </div>
           {notifications.length === 0 ? (
             <p className="text-sm text-slate-500 text-center py-8">{t('notifications.empty')}</p>

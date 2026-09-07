@@ -7,7 +7,7 @@ import { COMPLAINT_TYPES, SUB_TYPES } from '../config/complaintTypes';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import logo from '../assets/logo.png';
-import { Printer, RotateCcw } from 'lucide-react';
+import { Printer, RotateCcw, Star } from 'lucide-react';
 
 const STATUS_NAME = {
   RECEIVED: 'مستلمة',
@@ -18,6 +18,32 @@ const STATUS_NAME = {
   REJECTED: 'مرفوضة',
   ESCALATED: 'مصعدة',
 };
+
+const RATING_LABELS = {
+  resolutionSpeed: 'سرعة حل الملاحظة',
+  solutionQuality: 'جودة الحل',
+  staffProfessionalism: 'احترافية الموظفين',
+};
+
+const REPORT_TYPES = [
+  { id: 'COMPLAINTS', name: 'تقرير الملاحظات' },
+  { id: 'SURVEY', name: 'تقرير استبيان رضا أولياء الأمور' },
+];
+
+function average(list, getValue) {
+  const values = list.map(getValue).filter((v) => typeof v === 'number');
+  return values.length ? values.reduce((s, v) => s + v, 0) / values.length : null;
+}
+
+function Stars({ value }) {
+  return (
+    <span className="inline-flex items-center gap-0.5" dir="ltr">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <Star key={n} className={`w-3.5 h-3.5 ${n <= Math.round(value) ? 'fill-amber-400 text-amber-400' : 'text-slate-200'}`} />
+      ))}
+    </span>
+  );
+}
 
 function formatDuration(ms) {
   if (ms == null) return '—';
@@ -37,6 +63,7 @@ export default function Reports() {
   const [complaints, setComplaints] = useState([]);
   const [specialists, setSpecialists] = useState([]);
   const [filters, setFilters] = useState(emptyFilters);
+  const [reportType, setReportType] = useState('COMPLAINTS');
 
   useEffect(() => {
     if (!userData) return;
@@ -125,6 +152,55 @@ export default function Reports() {
       .sort((a, b) => b.count - a.count);
   }, [results, branches]);
 
+  // Survey report data — anything rated, or reopened by a parent who left
+  // feedback without a star rating (still worth surfacing as a signal).
+  const surveyed = useMemo(() => results.filter((c) => typeof c.satisfactionRate === 'number'), [results]);
+  const reopenedWithoutRating = useMemo(
+    () => results.filter((c) => c.parentFeedback && typeof c.satisfactionRate !== 'number'),
+    [results]
+  );
+
+  const surveyStats = useMemo(() => {
+    const resolvedCount = results.filter((c) => c.status === 'SOLVED' || c.status === 'CLOSED').length;
+    const distribution = [5, 4, 3, 2, 1].map((star) => ({
+      star,
+      count: surveyed.filter((c) => Math.round(c.satisfactionRate) === star).length,
+    }));
+    const detailAverages = Object.fromEntries(
+      Object.keys(RATING_LABELS).map((key) => [key, average(surveyed, (c) => c.satisfactionDetails?.[key])])
+    );
+    return {
+      count: surveyed.length,
+      average: average(surveyed, (c) => c.satisfactionRate),
+      responseRate: resolvedCount ? Math.round((surveyed.length / resolvedCount) * 100) : null,
+      distribution,
+      detailAverages,
+      reopenedWithoutRatingCount: reopenedWithoutRating.length,
+    };
+  }, [results, surveyed, reopenedWithoutRating]);
+
+  const satisfactionByBranch = useMemo(() => {
+    return branches
+      .map((b) => {
+        const list = surveyed.filter((c) => c.branch === b.id);
+        return { name: b.name, count: list.length, avg: average(list, (c) => c.satisfactionRate) };
+      })
+      .filter((b) => b.count > 0)
+      .sort((a, b) => b.avg - a.avg);
+  }, [surveyed, branches]);
+
+  const satisfactionByEmployee = useMemo(() => {
+    const map = {};
+    surveyed.forEach((c) => {
+      const name = c.assignedToName || 'غير مسند';
+      if (!map[name]) map[name] = [];
+      map[name].push(c);
+    });
+    return Object.entries(map)
+      .map(([name, list]) => ({ name, count: list.length, avg: average(list, (c) => c.satisfactionRate) }))
+      .sort((a, b) => b.avg - a.avg);
+  }, [surveyed]);
+
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
   const typeName = (id) => COMPLAINT_TYPES.find((t) => t.id === id)?.name || id;
 
@@ -152,6 +228,23 @@ export default function Reports() {
           <Printer className="w-4 h-4" />
           طباعة / حفظ PDF
         </button>
+      </div>
+
+      {/* Report type */}
+      <div className="flex flex-wrap gap-2 no-print">
+        {REPORT_TYPES.map((rt) => (
+          <button
+            key={rt.id}
+            onClick={() => setReportType(rt.id)}
+            className={`px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
+              reportType === rt.id
+                ? 'bg-primary text-white border-primary shadow-sm'
+                : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            {rt.name}
+          </button>
+        ))}
       </div>
 
       {/* Filters */}
@@ -210,7 +303,7 @@ export default function Reports() {
             <img src={logo} alt="مدارس المكتشف العالمية" className="h-14 w-auto" />
             <div>
               <h2 className="text-xl font-bold text-slate-900">مدارس المكتشف العالمية</h2>
-              <p className="text-sm text-slate-500">تقرير الملاحظات</p>
+              <p className="text-sm text-slate-500">{REPORT_TYPES.find((rt) => rt.id === reportType)?.name}</p>
             </div>
           </div>
           <div className="text-left">
@@ -227,6 +320,8 @@ export default function Reports() {
           </div>
         )}
 
+        {reportType === 'COMPLAINTS' && (
+        <>
         {/* Summary */}
         <div>
           <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">الملخص العام</h3>
@@ -365,6 +460,190 @@ export default function Reports() {
             </table>
           )}
         </div>
+        </>
+        )}
+
+        {reportType === 'SURVEY' && (
+        <>
+        {/* Survey summary */}
+        <div>
+          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">الملخص العام</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="rounded-xl border border-slate-200 p-4 text-center">
+              <p className="text-2xl font-bold text-slate-900">{surveyStats.count}</p>
+              <p className="text-xs text-slate-500 mt-1">عدد المستبينين</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-4 text-center">
+              <p className="text-2xl font-bold text-amber-500">{surveyStats.average != null ? `${surveyStats.average.toFixed(1)} / 5` : '—'}</p>
+              <p className="text-xs text-slate-500 mt-1">متوسط الرضا العام</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-4 text-center">
+              <p className="text-2xl font-bold text-slate-900">{surveyStats.responseRate != null ? `${surveyStats.responseRate}%` : '—'}</p>
+              <p className="text-xs text-slate-500 mt-1">معدل الاستجابة للاستبيان</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-4 text-center">
+              <p className="text-2xl font-bold text-red-500">{surveyStats.reopenedWithoutRatingCount}</p>
+              <p className="text-xs text-slate-500 mt-1">إعادة فتح دون تقييم</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Detail metric averages */}
+        {surveyStats.count > 0 && (
+          <div>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">متوسط معايير التقييم</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {Object.entries(RATING_LABELS).map(([key, label]) => (
+                <div key={key} className="rounded-xl border border-slate-200 p-4 text-center">
+                  <p className="text-2xl font-bold text-slate-900">{surveyStats.detailAverages[key] != null ? surveyStats.detailAverages[key].toFixed(1) : '—'}</p>
+                  <p className="text-xs text-slate-500 mt-1">{label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Star distribution */}
+        {surveyStats.count > 0 && (
+          <div>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">توزيع التقييمات</h3>
+            <div className="space-y-2">
+              {surveyStats.distribution.map(({ star, count }) => (
+                <div key={star} className="flex items-center gap-3">
+                  <span className="flex items-center gap-1 w-16 shrink-0 text-sm text-slate-600" dir="ltr">
+                    {star} <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
+                  </span>
+                  <div className="flex-1 h-2.5 rounded-full bg-slate-100 overflow-hidden">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-amber-400 to-orange-500"
+                      style={{ width: `${surveyStats.count ? Math.round((count / surveyStats.count) * 100) : 0}%` }}
+                    />
+                  </div>
+                  <span className="w-8 shrink-0 text-sm text-slate-800 tabular-nums text-left">{count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* By branch */}
+        {!filters.branch && satisfactionByBranch.length > 0 && (
+          <div>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">متوسط الرضا حسب الفرع</h3>
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500">
+                  <th className="text-right py-2 font-medium">الفرع</th>
+                  <th className="text-right py-2 font-medium">عدد المستبينين</th>
+                  <th className="text-right py-2 font-medium">متوسط الرضا</th>
+                </tr>
+              </thead>
+              <tbody>
+                {satisfactionByBranch.map((b) => (
+                  <tr key={b.name} className="border-b border-slate-100">
+                    <td className="py-2 text-slate-800">{b.name}</td>
+                    <td className="py-2 text-slate-600 tabular-nums">{b.count}</td>
+                    <td className="py-2 text-slate-800"><Stars value={b.avg} /> <span className="tabular-nums text-slate-500">({b.avg.toFixed(1)})</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* By employee */}
+        {!filters.assignedTo && satisfactionByEmployee.length > 0 && (
+          <div>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">متوسط الرضا حسب الموظف المختص</h3>
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500">
+                  <th className="text-right py-2 font-medium">الموظف</th>
+                  <th className="text-right py-2 font-medium">عدد المستبينين</th>
+                  <th className="text-right py-2 font-medium">متوسط الرضا</th>
+                </tr>
+              </thead>
+              <tbody>
+                {satisfactionByEmployee.map((e) => (
+                  <tr key={e.name} className="border-b border-slate-100">
+                    <td className="py-2 text-slate-800">{e.name}</td>
+                    <td className="py-2 text-slate-600 tabular-nums">{e.count}</td>
+                    <td className="py-2 text-slate-800"><Stars value={e.avg} /> <span className="tabular-nums text-slate-500">({e.avg.toFixed(1)})</span></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Detailed listing */}
+        <div>
+          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">تفاصيل الاستبيانات ({surveyed.length})</h3>
+          {surveyed.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-8">لا توجد استبيانات مطابقة لمعايير التقرير</p>
+          ) : (
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500">
+                  <th className="text-right py-2 font-medium">رقم الملاحظة</th>
+                  <th className="text-right py-2 font-medium">التاريخ</th>
+                  <th className="text-right py-2 font-medium">الفرع</th>
+                  <th className="text-right py-2 font-medium">المختص</th>
+                  <th className="text-right py-2 font-medium">التقييم العام</th>
+                  {Object.values(RATING_LABELS).map((label) => (
+                    <th key={label} className="text-right py-2 font-medium">{label}</th>
+                  ))}
+                  <th className="text-right py-2 font-medium">ملاحظة ولي الأمر</th>
+                </tr>
+              </thead>
+              <tbody>
+                {surveyed.map((c) => (
+                  <tr key={c.id} className="border-b border-slate-100">
+                    <td className="py-2 text-slate-800" dir="ltr">{c.complaintId}</td>
+                    <td className="py-2 text-slate-600" dir="ltr">{c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd') : '—'}</td>
+                    <td className="py-2 text-slate-600">{branchName(c.branch)}</td>
+                    <td className="py-2 text-slate-600">{c.assignedToName || '—'}</td>
+                    <td className="py-2"><Stars value={c.satisfactionRate} /></td>
+                    {Object.keys(RATING_LABELS).map((key) => (
+                      <td key={key} className="py-2 text-slate-600 tabular-nums">{c.satisfactionDetails?.[key] ?? '—'}</td>
+                    ))}
+                    <td className="py-2 text-slate-600 max-w-xs truncate">{c.parentFeedback || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {reopenedWithoutRating.length > 0 && (
+            <div className="mt-6">
+              <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">
+                إعادة فتح دون تقييم ({reopenedWithoutRating.length})
+              </h3>
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500">
+                    <th className="text-right py-2 font-medium">رقم الملاحظة</th>
+                    <th className="text-right py-2 font-medium">الفرع</th>
+                    <th className="text-right py-2 font-medium">المختص</th>
+                    <th className="text-right py-2 font-medium">ملاحظة ولي الأمر</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reopenedWithoutRating.map((c) => (
+                    <tr key={c.id} className="border-b border-slate-100">
+                      <td className="py-2 text-slate-800" dir="ltr">{c.complaintId}</td>
+                      <td className="py-2 text-slate-600">{branchName(c.branch)}</td>
+                      <td className="py-2 text-slate-600">{c.assignedToName || '—'}</td>
+                      <td className="py-2 text-slate-600">{c.parentFeedback}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+        </>
+        )}
       </div>
     </div>
   );

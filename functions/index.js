@@ -3,13 +3,22 @@ const { onDocumentUpdated, onDocumentCreated } = require("firebase-functions/v2/
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
-const { getFirestore, Timestamp } = require("firebase-admin/firestore");
+const { getFirestore, Timestamp, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
+const { getMessaging } = require("firebase-admin/messaging");
 const nodemailer = require("nodemailer");
 
 initializeApp();
 const db = getFirestore();
 const auth = getAuth();
+const messaging = getMessaging();
+
+// Tokens FCM reports as gone (browser data cleared, notifications revoked,
+// device unregistered) — safe to drop from a user's fcmTokens right away.
+const STALE_TOKEN_ERRORS = new Set([
+  "messaging/registration-token-not-registered",
+  "messaging/invalid-registration-token",
+]);
 
 const GMAIL_USER = defineSecret("GMAIL_USER");
 const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
@@ -325,6 +334,34 @@ exports.emailOnNotification = onDocumentCreated({ document: "notifications/{noti
   if (!email) return;
 
   await sendEmail(email, data.title, `${data.body}\n\nhttps://mis-complaints.web.app/complaints`);
+});
+
+// Pushes a Web Push notification to a staff member's registered devices so
+// they're reached even with the tab closed (src/utils/push.js registers the
+// tokens; public/firebase-messaging-sw.js shows the notification when the
+// app isn't focused). Same trigger point as emailOnNotification above.
+exports.pushOnNotification = onDocumentCreated("notifications/{notificationId}", async (event) => {
+  const data = event.data?.data();
+  if (!data) return;
+
+  const userRef = db.collection("users").doc(data.userId);
+  const userDoc = await userRef.get();
+  const tokens = userDoc.exists ? (userDoc.data().fcmTokens || []) : [];
+  if (tokens.length === 0) return;
+
+  const response = await messaging.sendEachForMulticast({
+    tokens,
+    notification: { title: data.title, body: data.body },
+    data: { complaintId: data.complaintId || "", type: data.type || "" },
+    webpush: { fcmOptions: { link: "https://mis-complaints.web.app/complaints" } },
+  });
+
+  const staleTokens = response.responses
+    .map((r, i) => (!r.success && STALE_TOKEN_ERRORS.has(r.error?.code) ? tokens[i] : null))
+    .filter(Boolean);
+  if (staleTokens.length > 0) {
+    await userRef.update({ fcmTokens: FieldValue.arrayRemove(...staleTokens) });
+  }
 });
 
 // 2. Handle SLA Pause/Resume on Status Change, plus assignment/escalation notifications
