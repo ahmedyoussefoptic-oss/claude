@@ -9,6 +9,7 @@ import BranchIndicators from '../components/dashboard/BranchIndicators';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
 import { OPEN_TICKET_STATUSES } from '../config/techSupport';
+import { COMPLAINT_TYPES } from '../config/complaintTypes';
 import ComplaintForm from '../components/complaints/ComplaintForm';
 
 // Generic branch-scoped live-count hook shared by the tech-support and
@@ -189,6 +190,9 @@ export default function Dashboard() {
     }
   };
 
+  const typeName = (id) => COMPLAINT_TYPES.find((t) => t.id === id)?.name || id;
+  const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
+
   const getStatusName = (status) => {
     switch (status) {
       case 'RECEIVED': return 'مستلمة';
@@ -234,21 +238,21 @@ export default function Dashboard() {
           value={stats.inProgress.toString()}
           icon={Clock}
           gradient="from-amber-400 to-orange-500"
-          to="/complaints"
+          to="/complaints?filter=IN_PROGRESS"
         />
         <StatCard
           title={t('dashboard.overdue')}
           value={stats.overdue.toString()}
           icon={AlertTriangle}
           gradient="from-red-500 to-rose-600"
-          to="/complaints"
+          to="/complaints?filter=OVERDUE"
         />
         <StatCard
           title={t('dashboard.solved')}
           value={stats.solved.toString()}
           icon={CheckCircle2}
           gradient="from-emerald-500 to-teal-600"
-          to="/complaints"
+          to="/complaints?filter=CLOSED"
         />
       </div>
 
@@ -283,7 +287,7 @@ export default function Dashboard() {
           sub={t('dashboard.reopenedSub')}
           icon={Repeat}
           gradient="from-orange-500 to-red-500"
-          to="/complaints"
+          to="/complaints?filter=REOPENED"
         />
       </div>
 
@@ -295,21 +299,21 @@ export default function Dashboard() {
             value={stats.academic.toString()}
             icon={GraduationCap}
             gradient="from-indigo-500 to-violet-600"
-            to="/complaints"
+            to="/complaints?type=ACADEMIC"
           />
           <StatCard
             title="ملاحظات إدارية"
             value={stats.administrative.toString()}
             icon={Briefcase}
             gradient="from-cyan-500 to-teal-600"
-            to="/complaints"
+            to="/complaints?type=ADMINISTRATIVE"
           />
           <StatCard
             title="ملاحظات سلوكية"
             value={stats.behavioral.toString()}
             icon={AlertOctagon}
             gradient="from-rose-500 to-pink-600"
-            to="/complaints"
+            to="/complaints?type=BEHAVIORAL"
           />
         </div>
       </div>
@@ -322,28 +326,28 @@ export default function Dashboard() {
             value={techStats.open.toString()}
             icon={Wrench}
             gradient="from-violet-500 to-purple-600"
-            to="/tech-support"
+            to="/tech-support?filter=OPEN"
           />
           <StatCard
             title="بلاغات دعم فني متأخرة"
             value={techStats.overdue.toString()}
             icon={ShieldAlert}
             gradient="from-fuchsia-500 to-pink-600"
-            to="/tech-support"
+            to="/tech-support?filter=OVERDUE"
           />
           <StatCard
             title="مفقودات بانتظار المطالبة"
             value={lostFoundStats.unclaimed.toString()}
             icon={PackageSearch}
             gradient="from-teal-500 to-cyan-600"
-            to="/lost-found"
+            to="/lost-found?filter=UNCLAIMED"
           />
           <StatCard
             title="مفقودات تم تسليمها"
             value={lostFoundStats.returned.toString()}
             icon={PackageCheck}
             gradient="from-lime-500 to-green-600"
-            to="/lost-found"
+            to="/lost-found?filter=RETURNED"
           />
         </div>
       </div>
@@ -383,8 +387,8 @@ export default function Dashboard() {
                 <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 font-medium text-slate-900" dir="ltr">{c.complaintId}</td>
                   <td className="px-6 py-4 text-slate-600">{c.parentName}</td>
-                  <td className="px-6 py-4 text-slate-600">{c.complaintType}</td>
-                  <td className="px-6 py-4 text-slate-600">{c.branch}</td>
+                  <td className="px-6 py-4 text-slate-600">{typeName(c.complaintType)}</td>
+                  <td className="px-6 py-4 text-slate-600">{branchName(c.branch)}</td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadge(c.status)}`}>
                       {getStatusName(c.status)}

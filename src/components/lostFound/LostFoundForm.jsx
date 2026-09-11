@@ -1,17 +1,21 @@
 import { useState, useRef } from 'react';
-import { X, Upload, Save, Loader2 } from 'lucide-react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { X, Upload, Save, Loader2, CheckCircle2, MessageCircle } from 'lucide-react';
+import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches } from '../../hooks/useOrgData';
 import { ITEM_CATEGORIES, REPORT_TYPES, generateItemCode } from '../../config/lostFound';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
+import { waLink, buildLostFoundReceiptMessage } from '../../utils/whatsapp';
+import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 
 export default function LostFoundForm({ onClose }) {
   const { user } = useAuthStore();
   const branches = useBranches();
+  const templates = useMessageTemplates();
   const fileInputRef = useRef(null);
+  const [savedItem, setSavedItem] = useState(null);
 
   const [formData, setFormData] = useState({
     reportType: 'FOUND',
@@ -99,7 +103,13 @@ export default function LostFoundForm({ onClose }) {
         createdAt: now,
       });
 
-      onClose();
+      setSavedItem({
+        id: docRef.id,
+        itemCode,
+        itemName: formData.itemName,
+        reporterName: formData.reporterName,
+        reporterPhone: formData.reporterPhone,
+      });
     } catch (err) {
       console.error(err);
       setError('حدث خطأ أثناء حفظ السجل. يرجى المحاولة مرة أخرى.');
@@ -107,6 +117,39 @@ export default function LostFoundForm({ onClose }) {
       setLoading(false);
     }
   };
+
+  if (savedItem) {
+    return (
+      <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 md:p-6">
+        <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden p-6 text-center">
+          <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <CheckCircle2 className="w-7 h-7" />
+          </div>
+          <h2 className="text-lg font-bold text-slate-900 mb-1">تم حفظ السجل بنجاح</h2>
+          <p className="text-sm text-slate-500 mb-6">رقم السجل: <span className="font-mono font-bold text-slate-900" dir="ltr">{savedItem.itemCode}</span></p>
+
+          {savedItem.reporterPhone && (
+            <a
+              href={waLink(savedItem.reporterPhone, buildLostFoundReceiptMessage(savedItem, templates.lostFoundReceipt))}
+              target="_blank"
+              rel="noreferrer"
+              onClick={() => updateDoc(doc(db, 'lostFoundItems', savedItem.id), { receiptMessageSentAt: serverTimestamp() })}
+              className="w-full px-4 py-2.5 bg-[#25D366] text-white rounded-xl text-sm font-medium hover:brightness-95 transition-all flex items-center justify-center gap-2 mb-3"
+            >
+              <MessageCircle className="w-4 h-4" />
+              إرسال رسالة الاستلام عبر واتساب
+            </a>
+          )}
+          <button
+            onClick={onClose}
+            className="w-full px-4 py-2.5 text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 font-medium text-sm transition-colors"
+          >
+            إغلاق
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 md:p-6">
@@ -248,16 +291,22 @@ export default function LostFoundForm({ onClose }) {
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">صورة الغرض</label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-200 border-dashed rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group">
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (e.dataTransfer.files?.[0]) setPhoto(e.dataTransfer.files[0]);
+                  }}
+                  className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-200 border-dashed rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group"
+                >
                   <div className="space-y-2 text-center">
                     <div className="w-12 h-12 mx-auto bg-white rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                       <Upload className="w-6 h-6 text-slate-400 group-hover:text-primary transition-colors" />
                     </div>
                     <div className="text-sm text-slate-600">
-                      <label htmlFor="photo-upload" className="relative cursor-pointer rounded-md font-medium text-primary hover:text-primary-dark">
-                        <span>اضغط لرفع صورة</span>
-                        <input id="photo-upload" name="photo-upload" type="file" accept="image/*" className="sr-only" onChange={(e) => setPhoto(e.target.files?.[0] || null)} ref={fileInputRef} />
-                      </label>
+                      <span className="font-medium text-primary">اضغط لرفع صورة</span>
+                      <input id="photo-upload" name="photo-upload" type="file" accept="image/*" className="sr-only" onChange={(e) => setPhoto(e.target.files?.[0] || null)} ref={fileInputRef} />
                     </div>
                     {photo && <p className="text-xs text-slate-500" dir="ltr">{photo.name}</p>}
                   </div>

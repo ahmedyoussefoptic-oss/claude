@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Upload, Save, Loader2, CheckCircle2, MessageCircle, Mic, Square } from 'lucide-react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
@@ -221,6 +221,7 @@ export default function ComplaintForm({ onClose }) {
       }
 
       setSavedComplaint({
+        id: docRef.id,
         complaintId,
         parentName: formData.parentName,
         studentName: formData.studentName,
@@ -249,6 +250,7 @@ export default function ComplaintForm({ onClose }) {
               href={waLink(savedComplaint.parentPhone, buildReceiptMessage(savedComplaint, templates.receipt))}
               target="_blank"
               rel="noreferrer"
+              onClick={() => updateDoc(doc(db, 'complaints', savedComplaint.id), { receiptMessageSentAt: serverTimestamp() })}
               className="w-full px-4 py-2.5 bg-[#25D366] text-white rounded-xl text-sm font-medium hover:brightness-95 transition-all flex items-center justify-center gap-2 mb-3"
             >
               <MessageCircle className="w-4 h-4" />
@@ -450,16 +452,24 @@ export default function ComplaintForm({ onClose }) {
               {/* Upload */}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">المرفقات</label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-200 border-dashed rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group">
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (e.dataTransfer.files?.length) {
+                      setFiles((prev) => [...prev, ...Array.from(e.dataTransfer.files)]);
+                    }
+                  }}
+                  className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-slate-200 border-dashed rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer group"
+                >
                   <div className="space-y-2 text-center">
                     <div className="w-12 h-12 mx-auto bg-white rounded-full flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
                       <Upload className="w-6 h-6 text-slate-400 group-hover:text-primary transition-colors" />
                     </div>
                     <div className="text-sm text-slate-600">
-                      <label htmlFor="file-upload" className="relative cursor-pointer rounded-md font-medium text-primary hover:text-primary-dark">
-                        <span>اضغط لرفع ملف</span>
-                        <input id="file-upload" name="file-upload" type="file" className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef} />
-                      </label>
+                      <span className="font-medium text-primary">اضغط لرفع ملف</span>
+                      <input id="file-upload" name="file-upload" type="file" className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef} />
                       <p className="pl-1">أو اسحب الملفات وأفلتها هنا</p>
                     </div>
                     <p className="text-xs text-slate-500">تم اختيار {files.length} ملفات</p>

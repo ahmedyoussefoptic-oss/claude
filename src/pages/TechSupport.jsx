@@ -1,11 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Search, Plus, ChevronLeft, Loader2, Wrench } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import useAuthStore from '../stores/useAuthStore';
+import { useBranches } from '../hooks/useOrgData';
 import TechSupportDetails from '../components/techSupport/TechSupportDetails';
 import TechSupportForm from '../components/techSupport/TechSupportForm';
-import { PROBLEM_TYPES, TICKET_STATUS_LABELS, TICKET_STATUS_BADGE } from '../config/techSupport';
+import { PROBLEM_TYPES, TICKET_STATUS_LABELS, TICKET_STATUS_BADGE, OPEN_TICKET_STATUSES } from '../config/techSupport';
+import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 
@@ -19,12 +22,22 @@ const FILTERS = [
 
 export default function TechSupport() {
   const { userData } = useAuthStore();
+  const branches = useBranches();
+  const location = useLocation();
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Dashboard KPI cards deep-link here with ?filter=OPEN / ?filter=OVERDUE
+  // (combined states not covered by the visible tabs above).
+  useEffect(() => {
+    const filter = new URLSearchParams(location.search).get('filter');
+    if (filter) setStatusFilter(filter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   useEffect(() => {
     if (!userData) return;
@@ -42,7 +55,9 @@ export default function TechSupport() {
 
   const filteredTickets = useMemo(() => {
     return tickets.filter((t) => {
-      if (statusFilter !== 'ALL' && t.status !== statusFilter) return false;
+      if (statusFilter === 'OPEN' && !OPEN_TICKET_STATUSES.includes(t.status)) return false;
+      if (statusFilter === 'OVERDUE' && !t.isOverdue) return false;
+      if (!['ALL', 'OPEN', 'OVERDUE'].includes(statusFilter) && t.status !== statusFilter) return false;
       if (search) {
         const term = search.toLowerCase();
         const haystack = `${t.ticketId} ${t.studentName || ''} ${t.parentName || ''} ${t.nationalId || ''}`.toLowerCase();
@@ -53,6 +68,7 @@ export default function TechSupport() {
   }, [tickets, search, statusFilter, userData]);
 
   const problemTypeName = (id) => PROBLEM_TYPES.find((t) => t.id === id)?.name || id;
+  const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -110,6 +126,7 @@ export default function TechSupport() {
                   <th className="px-6 py-4 font-medium whitespace-nowrap">المختص</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">التاريخ</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">الحالة</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">رسائل ولي الأمر</th>
                   <th className="px-6 py-4"></th>
                 </tr>
               </thead>
@@ -125,7 +142,7 @@ export default function TechSupport() {
                       <Wrench className="w-4 h-4 text-slate-400" />
                       {problemTypeName(t.problemType)}
                     </td>
-                    <td className="px-6 py-4 text-slate-600">{t.branch}</td>
+                    <td className="px-6 py-4 text-slate-600">{branchName(t.branch)}</td>
                     <td className="px-6 py-4 text-slate-600">{t.assignedToName || '—'}</td>
                     <td className="px-6 py-4 text-slate-600" dir="ltr">
                       {t.createdAt ? format(t.createdAt.toDate(), 'PP p', { locale: ar }) : ''}
@@ -134,6 +151,13 @@ export default function TechSupport() {
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${TICKET_STATUS_BADGE[t.status]}`}>
                         {TICKET_STATUS_LABELS[t.status]}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <MessageStatusIndicators
+                        receiptSentAt={t.receiptMessageSentAt}
+                        resolutionSentAt={t.resolutionMessageSentAt}
+                        showResolution={['WAITING_CONFIRMATION', 'CLOSED', 'REOPENED'].includes(t.status)}
+                      />
                     </td>
                     <td className="px-6 py-4 text-left">
                       <div className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors mr-auto">
@@ -144,7 +168,7 @@ export default function TechSupport() {
                 ))}
                 {filteredTickets.length === 0 && (
                   <tr>
-                    <td colSpan="8" className="px-6 py-12 text-center text-slate-500">لا يوجد بلاغات مطابقة</td>
+                    <td colSpan="9" className="px-6 py-12 text-center text-slate-500">لا يوجد بلاغات مطابقة</td>
                   </tr>
                 )}
               </tbody>

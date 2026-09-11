@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react';
-import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2 } from 'lucide-react';
+import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
-import { ITEM_STATUS_LABELS, ITEM_STATUS_BADGE, REPORT_TYPES } from '../../config/lostFound';
+import { useBranches } from '../../hooks/useOrgData';
+import { ITEM_STATUS_LABELS, ITEM_STATUS_BADGE, REPORT_TYPES, ITEM_CATEGORIES } from '../../config/lostFound';
 import { ROLES } from '../../config/roles';
+import { waLink, buildLostFoundResolutionMessage } from '../../utils/whatsapp';
+import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 
@@ -21,6 +24,8 @@ const getActionName = (action) => {
 
 export default function LostFoundDetails({ item, onClose }) {
   const { user, userData } = useAuthStore();
+  const branches = useBranches();
+  const templates = useMessageTemplates();
   const [logs, setLogs] = useState([]);
   const [note, setNote] = useState('');
   const [returnedTo, setReturnedTo] = useState('');
@@ -87,6 +92,8 @@ export default function LostFoundDetails({ item, onClose }) {
   };
 
   const reportTypeName = REPORT_TYPES.find((t) => t.id === item.reportType)?.name || item.reportType;
+  const categoryName = ITEM_CATEGORIES.find((c) => c.id === item.category)?.name || item.category;
+  const branchName = branches.find((b) => b.id === item.branch)?.name || item.branch;
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex justify-end">
@@ -123,6 +130,18 @@ export default function LostFoundDetails({ item, onClose }) {
                 إغلاق بدون تسليم
               </button>
             )}
+            {item.status === 'RETURNED' && item.reporterPhone && (
+              <a
+                href={waLink(item.reporterPhone, buildLostFoundResolutionMessage(item, templates.lostFoundResolution))}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => updateDoc(doc(db, 'lostFoundItems', item.id), { resolutionMessageSentAt: serverTimestamp() })}
+                className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4" />
+                إرسال رسالة التسليم عبر واتساب
+              </a>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -133,7 +152,7 @@ export default function LostFoundDetails({ item, onClose }) {
               <div>
                 <p className="text-xs text-slate-500 mb-0.5">{reportTypeName}</p>
                 <p className="font-medium text-slate-900">{item.itemName}</p>
-                <p className="text-sm text-slate-500 mt-1">{item.category}</p>
+                <p className="text-sm text-slate-500 mt-1">{categoryName}</p>
               </div>
             </div>
 
@@ -143,7 +162,7 @@ export default function LostFoundDetails({ item, onClose }) {
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-0.5">الفرع / المكان</p>
-                <p className="font-medium text-slate-900">{item.branch}</p>
+                <p className="font-medium text-slate-900">{branchName}</p>
                 <p className="text-sm text-slate-500 mt-1">{item.location}</p>
               </div>
             </div>

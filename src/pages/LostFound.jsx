@@ -1,11 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Search, Plus, ChevronLeft, Loader2, Package } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import LostFoundDetails from '../components/lostFound/LostFoundDetails';
 import LostFoundForm from '../components/lostFound/LostFoundForm';
 import useAuthStore from '../stores/useAuthStore';
-import { ITEM_STATUS_LABELS, ITEM_STATUS_BADGE, REPORT_TYPES } from '../config/lostFound';
+import { useBranches } from '../hooks/useOrgData';
+import { ITEM_STATUS_LABELS, ITEM_STATUS_BADGE, REPORT_TYPES, ITEM_CATEGORIES } from '../config/lostFound';
+import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 
@@ -18,12 +21,21 @@ const FILTERS = [
 
 export default function LostFound() {
   const { userData } = useAuthStore();
+  const branches = useBranches();
+  const location = useLocation();
   const [selectedItem, setSelectedItem] = useState(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Dashboard KPI cards deep-link here with ?filter=UNCLAIMED / ?filter=RETURNED.
+  useEffect(() => {
+    const filter = new URLSearchParams(location.search).get('filter');
+    if (filter) setStatusFilter(filter);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   useEffect(() => {
     if (!userData) return;
@@ -52,6 +64,8 @@ export default function LostFound() {
   }, [items, search, statusFilter, userData]);
 
   const reportTypeName = (id) => REPORT_TYPES.find((t) => t.id === id)?.name || id;
+  const categoryName = (id) => ITEM_CATEGORIES.find((c) => c.id === id)?.name || id;
+  const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -114,6 +128,7 @@ export default function LostFound() {
                   <th className="px-6 py-4 font-medium whitespace-nowrap">الفرع</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">التاريخ</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">الحالة</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">رسائل ولي الأمر</th>
                   <th className="px-6 py-4"></th>
                 </tr>
               </thead>
@@ -127,9 +142,9 @@ export default function LostFound() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-medium text-slate-900">{item.itemName}</div>
-                      <div className="text-slate-500 text-xs mt-0.5">{item.category}</div>
+                      <div className="text-slate-500 text-xs mt-0.5">{categoryName(item.category)}</div>
                     </td>
-                    <td className="px-6 py-4 text-slate-600">{item.branch}</td>
+                    <td className="px-6 py-4 text-slate-600">{branchName(item.branch)}</td>
                     <td className="px-6 py-4 text-slate-600" dir="ltr">
                       {item.createdAt ? format(item.createdAt.toDate(), 'PP p', { locale: ar }) : ''}
                     </td>
@@ -137,6 +152,13 @@ export default function LostFound() {
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${ITEM_STATUS_BADGE[item.status]}`}>
                         {ITEM_STATUS_LABELS[item.status]}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <MessageStatusIndicators
+                        receiptSentAt={item.receiptMessageSentAt}
+                        resolutionSentAt={item.resolutionMessageSentAt}
+                        showResolution={item.status === 'RETURNED'}
+                      />
                     </td>
                     <td className="px-6 py-4 text-left">
                       <div className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors mr-auto">
@@ -147,7 +169,7 @@ export default function LostFound() {
                 ))}
                 {filteredItems.length === 0 && (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-slate-500">
+                    <td colSpan="8" className="px-6 py-12 text-center text-slate-500">
                       لا يوجد سجلات مطابقة
                     </td>
                   </tr>

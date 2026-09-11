@@ -4,6 +4,7 @@ import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, u
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useUsers } from '../../hooks/useUsers';
+import { useBranches } from '../../hooks/useOrgData';
 import { ROLES } from '../../config/roles';
 import { PROBLEM_TYPES, PLATFORMS, TICKET_STATUS_LABELS, TICKET_STATUS_BADGE } from '../../config/techSupport';
 import { waLink, buildCredentialMessage, toWhatsAppNumber } from '../../utils/whatsapp';
@@ -30,6 +31,7 @@ const getActionName = (action) => {
 export default function TechSupportDetails({ ticket, onClose }) {
   const { user, userData } = useAuthStore();
   const users = useUsers();
+  const branches = useBranches();
   const templates = useMessageTemplates();
   const [logs, setLogs] = useState([]);
   const [note, setNote] = useState('');
@@ -110,7 +112,7 @@ export default function TechSupportDetails({ ticket, onClose }) {
       // NOTE: the temp password is deliberately never written to Firestore —
       // only the fact that credentials were sent, when, by whom, and to which
       // registered number is kept, per the module's audit requirements.
-      await addLog('CREDENTIALS_SENT', { sentToPhone: ticket.parentPhone, usernameSent: username }, { status: 'WAITING_CONFIRMATION' });
+      await addLog('CREDENTIALS_SENT', { sentToPhone: ticket.parentPhone, usernameSent: username }, { status: 'WAITING_CONFIRMATION', resolutionMessageSentAt: serverTimestamp() });
       setShowCredsForm(false);
       setUsername('');
       setTempPassword('');
@@ -176,6 +178,7 @@ export default function TechSupportDetails({ ticket, onClose }) {
 
   const problemTypeName = PROBLEM_TYPES.find((t) => t.id === ticket.problemType)?.name || ticket.problemType;
   const platformName = PLATFORMS.find((p) => p.id === ticket.platform)?.name || ticket.platform;
+  const branchName = branches.find((b) => b.id === ticket.branch)?.name || ticket.branch;
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex justify-end">
@@ -311,7 +314,7 @@ export default function TechSupportDetails({ ticket, onClose }) {
               <div>
                 <p className="text-xs text-slate-500 mb-0.5">الطالب</p>
                 <p className="font-medium text-slate-900">{ticket.studentName}</p>
-                <p className="text-sm text-slate-500 mt-1">{ticket.branch} - {ticket.stage} {ticket.grade}</p>
+                <p className="text-sm text-slate-500 mt-1">{branchName} - {ticket.stage} {ticket.grade}</p>
               </div>
             </div>
           </div>

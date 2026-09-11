@@ -56,6 +56,18 @@ service cloud.firestore {
         affected.hasOnly(['satisfactionRate', 'satisfactionDetails', 'parentFeedback', 'status', 'closedAt', 'reopened', 'updatedAt']);
     }
 
+    // Same narrow shape as isParentPortalUpdate() above, generalized for the
+    // lost & found / tech-support satisfaction surveys — each only reachable
+    // from its own "awaiting the parent" status, into one of a small allowed
+    // set of next statuses, touching only survey fields.
+    function isParentSurveyUpdate(fromStatus, toStatuses, allowedFields) {
+      let incoming = request.resource.data;
+      let affected = incoming.diff(resource.data).affectedKeys();
+      return resource.data.status == fromStatus &&
+        incoming.status in toStatuses &&
+        affected.hasOnly(allowedFields);
+    }
+
     // A non-admin holding the "manage users" permission may never grant (to
     // anyone, including themselves) admin-equivalent power: the ADMIN role,
     // org-wide 'all' access, or the users-management permission itself.
@@ -145,7 +157,8 @@ service cloud.firestore {
       allow get: if true;
       allow list: if isAuthenticated() && (isAdmin() || inMyScope(resource.data.branch));
       allow create: if true;
-      allow update: if isAuthenticated() && canEditRecord(resource.data.branch);
+      allow update: if (isAuthenticated() && canEditRecord(resource.data.branch)) ||
+        isParentSurveyUpdate('RETURNED', ['CLOSED'], ['satisfactionRate', 'satisfactionDetails', 'parentFeedback', 'status', 'closedAt', 'updatedAt']);
       allow delete: if isAuthenticated() && canDeleteRecord(resource.data.branch);
 
       match /activityLog/{logId} {
@@ -160,6 +173,12 @@ service cloud.firestore {
     // never publicly readable or creatable; staff must be signed in for
     // every operation, not just write.
     match /techSupportTickets/{ticketId} {
+      // Deliberately never publicly readable/writable (holds national IDs
+      // and account credentials) — even the parent's satisfaction survey
+      // goes through the submitTechSupportSurvey Cloud Function (Admin SDK)
+      // instead of a narrow anonymous update rule like the other two
+      // collections get, so this stays "staff must be signed in, no
+      // exceptions" end to end.
       allow get: if isAuthenticated() && (isAdmin() || inMyScope(resource.data.branch));
       allow list: if isAuthenticated() && (isAdmin() || inMyScope(resource.data.branch));
       allow create: if isAuthenticated();

@@ -297,7 +297,7 @@ export default function Users() {
             </div>
             {form.role === ROLES.SPECIALIST && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">القسم المسؤول عن الملاحظة</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">القسم / التخصص</label>
                 <select
                   value={form.department}
                   onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))}
@@ -306,7 +306,9 @@ export default function Users() {
                   <option value="">اختر القسم...</option>
                   {DEPARTMENTS.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                 </select>
-                <p className="text-xs text-slate-500 mt-1">يحدد نوع الملاحظات (إدارية/أكاديمية/سلوكية) التي يختص بمعالجتها.</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  للملاحظات الإدارية/الأكاديمية/السلوكية يحدد نوع الملاحظات التي يختص بمعالجتها. اختر "تقنية المعلومات" لموظفي فريق الدعم الفني — بدون موظف بهذا القسم لن تُسند بلاغات الدعم الفني لأحد تلقائياً.
+                </p>
               </div>
             )}
             <div>

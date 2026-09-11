@@ -1,10 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Search, Plus, ChevronLeft, Download, Loader2 } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import ComplaintForm from '../components/complaints/ComplaintForm';
 import useAuthStore from '../stores/useAuthStore';
+import { useBranches } from '../hooks/useOrgData';
+import { COMPLAINT_TYPES } from '../config/complaintTypes';
+import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 
@@ -15,14 +19,34 @@ const QUICK_FILTERS = [
   { id: 'CLOSED', name: 'مغلقة' },
 ];
 
+// Recognized but not shown as a tab — only reachable via a dashboard KPI
+// link (?filter=IN_PROGRESS / ?filter=REOPENED), same list underneath.
+const LINK_ONLY_FILTERS = ['IN_PROGRESS', 'REOPENED'];
+
 export default function ComplaintsList() {
   const { userData } = useAuthStore();
+  const branches = useBranches();
+  const location = useLocation();
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [showNewForm, setShowNewForm] = useState(false);
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [quickFilter, setQuickFilter] = useState('ALL');
+  const [typeFilter, setTypeFilter] = useState('');
+
+  // Dashboard KPI cards deep-link here with ?filter=... and/or ?type=... so
+  // each card lands on the slice of the list it actually represents.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const filter = params.get('filter');
+    const type = params.get('type');
+    if (filter && ([...QUICK_FILTERS.map((f) => f.id), ...LINK_ONLY_FILTERS].includes(filter))) {
+      setQuickFilter(filter);
+    }
+    if (type) setTypeFilter(type);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   useEffect(() => {
     // Wait for the caller's own profile to load before scoping the query —
@@ -73,11 +97,17 @@ export default function ComplaintsList() {
     }
   };
 
+  const typeName = (id) => COMPLAINT_TYPES.find((t) => t.id === id)?.name || id;
+  const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
+
   const filteredComplaints = useMemo(() => {
     return complaints.filter((c) => {
       if (quickFilter === 'OPEN' && ['SOLVED', 'CLOSED', 'REJECTED'].includes(c.status)) return false;
       if (quickFilter === 'OVERDUE' && !c.isOverdue) return false;
       if (quickFilter === 'CLOSED' && !['SOLVED', 'CLOSED'].includes(c.status)) return false;
+      if (quickFilter === 'IN_PROGRESS' && !['IN_PROGRESS', 'RECEIVED'].includes(c.status)) return false;
+      if (quickFilter === 'REOPENED' && !c.reopened) return false;
+      if (typeFilter && c.complaintType !== typeFilter) return false;
       if (search) {
         const term = search.toLowerCase();
         const haystack = `${c.complaintId || ''} ${c.studentName || ''} ${c.parentName || ''} ${c.studentId || ''}`.toLowerCase();
@@ -85,7 +115,7 @@ export default function ComplaintsList() {
       }
       return true;
     });
-  }, [complaints, search, quickFilter, userData]);
+  }, [complaints, search, quickFilter, typeFilter, userData]);
 
   const handleExportCSV = () => {
     if (filteredComplaints.length === 0) return;
@@ -146,12 +176,18 @@ export default function ComplaintsList() {
             {QUICK_FILTERS.map(f => (
               <button
                 key={f.id}
-                onClick={() => setQuickFilter(f.id)}
+                onClick={() => { setQuickFilter(f.id); if (f.id === 'ALL') setTypeFilter(''); }}
                 className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${quickFilter === f.id ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
               >
                 {f.name}
               </button>
             ))}
+            {typeFilter && (
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap bg-primary/10 text-primary font-medium">
+                {typeName(typeFilter)}
+                <button onClick={() => setTypeFilter('')} className="hover:text-primary-dark">✕</button>
+              </span>
+            )}
           </div>
         </div>
 
@@ -171,6 +207,7 @@ export default function ComplaintsList() {
                   <th className="px-6 py-4 font-medium whitespace-nowrap">الفرع</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">التاريخ</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">الحالة</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">رسائل ولي الأمر</th>
                   <th className="px-6 py-4"></th>
                 </tr>
               </thead>
@@ -182,8 +219,8 @@ export default function ComplaintsList() {
                       <div className="font-medium text-slate-900">{c.studentName}</div>
                       <div className="text-slate-500 text-xs mt-0.5">{c.parentName}</div>
                     </td>
-                    <td className="px-6 py-4 text-slate-600">{c.complaintType}</td>
-                    <td className="px-6 py-4 text-slate-600">{c.branch}</td>
+                    <td className="px-6 py-4 text-slate-600">{typeName(c.complaintType)}</td>
+                    <td className="px-6 py-4 text-slate-600">{branchName(c.branch)}</td>
                     <td className="px-6 py-4 text-slate-600" dir="ltr">
                       {c.createdAt ? format(c.createdAt.toDate(), 'PP p', { locale: ar }) : ''}
                     </td>
@@ -191,6 +228,13 @@ export default function ComplaintsList() {
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${getStatusBadge(c.status)}`}>
                         {getStatusName(c.status)}
                       </span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <MessageStatusIndicators
+                        receiptSentAt={c.receiptMessageSentAt}
+                        resolutionSentAt={c.resolutionMessageSentAt}
+                        showResolution={['SOLVED', 'CLOSED'].includes(c.status)}
+                      />
                     </td>
                     <td className="px-6 py-4 text-left">
                       <div className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors mr-auto">
@@ -201,7 +245,7 @@ export default function ComplaintsList() {
                 ))}
                 {filteredComplaints.length === 0 && (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-slate-500">
+                    <td colSpan="8" className="px-6 py-12 text-center text-slate-500">
                       لا يوجد ملاحظات مطابقة
                     </td>
                   </tr>

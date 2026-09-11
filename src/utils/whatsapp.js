@@ -56,6 +56,34 @@ export const DEFAULT_TEMPLATES = {
     '',
     'يُرجى تغيير الرمز السري فور أول دخول. الرمز صالح لمدة 24 ساعة.',
     'لأي استفسار: مركز خدمة العملاء',
+    '',
+    'يرجى تأكيد نجاح الدخول أو تقييم الخدمة عبر الرابط التالي: {{trackingLink}}',
+  ].join('\n'),
+  lostFoundReceipt: [
+    'مرحباً {{reporterName}}،',
+    'شكراً لتواصلكم مع مدارس مكتشف العالمية.',
+    'تم تسجيل بلاغكم رقم {{itemCode}} ({{itemName}}) وسيتم التواصل معكم عند وجود مستجدات.',
+    '',
+    'يمكنكم متابعة حالة البلاغ عبر الرابط التالي: {{trackingLink}}',
+    '',
+    'مدارس مكتشف العالمية',
+  ].join('\n'),
+  lostFoundResolution: [
+    'مرحباً {{reporterName}}،',
+    'تم تسليم الغرض الخاص ببلاغكم رقم {{itemCode}} ({{itemName}}).',
+    '',
+    'يمكنكم تقييم الخدمة عبر الرابط التالي: {{trackingLink}}',
+    '',
+    'مدارس مكتشف العالمية',
+  ].join('\n'),
+  techSupportReceipt: [
+    'مرحباً {{parentName}}،',
+    'شكراً لتواصلكم مع مدارس مكتشف العالمية.',
+    'تم استلام بلاغكم التقني رقم {{ticketId}} الخاص بالطالب/ة {{studentName}} وسيتم التواصل معكم قريباً.',
+    '',
+    'يمكنكم متابعة حالة البلاغ عبر الرابط التالي: {{trackingLink}}',
+    '',
+    'مدارس مكتشف العالمية',
   ].join('\n'),
 };
 
@@ -64,7 +92,10 @@ export const DEFAULT_TEMPLATES = {
 export const TEMPLATE_PLACEHOLDERS = {
   receipt: ['parentName', 'complaintId', 'studentName', 'trackingLink'],
   resolution: ['parentName', 'complaintId', 'studentName', 'solutionDetails', 'trackingLink'],
-  credential: ['studentName', 'ticketId', 'platformName', 'platformLink', 'username', 'tempPassword'],
+  credential: ['studentName', 'ticketId', 'platformName', 'platformLink', 'username', 'tempPassword', 'trackingLink'],
+  lostFoundReceipt: ['reporterName', 'itemCode', 'itemName', 'trackingLink'],
+  lostFoundResolution: ['reporterName', 'itemCode', 'itemName', 'trackingLink'],
+  techSupportReceipt: ['parentName', 'ticketId', 'studentName', 'trackingLink'],
 };
 
 function renderTemplate(template, vars) {
@@ -101,5 +132,33 @@ export function buildCredentialMessage({ ticketId, studentName, platformName, pl
     platformLink: platformLink || '—',
     username,
     tempPassword,
+    trackingLink: trackingLink(ticketId),
+  });
+}
+
+export function buildLostFoundReceiptMessage(item, template = DEFAULT_TEMPLATES.lostFoundReceipt) {
+  return renderTemplate(template, {
+    reporterName: item.reporterName,
+    itemCode: item.itemCode,
+    itemName: item.itemName,
+    trackingLink: trackingLink(item.itemCode),
+  });
+}
+
+export function buildLostFoundResolutionMessage(item, template = DEFAULT_TEMPLATES.lostFoundResolution) {
+  return renderTemplate(template, {
+    reporterName: item.reporterName,
+    itemCode: item.itemCode,
+    itemName: item.itemName,
+    trackingLink: trackingLink(item.itemCode),
+  });
+}
+
+export function buildTechSupportReceiptMessage(ticket, template = DEFAULT_TEMPLATES.techSupportReceipt) {
+  return renderTemplate(template, {
+    parentName: ticket.parentName,
+    ticketId: ticket.ticketId,
+    studentName: ticket.studentName,
+    trackingLink: trackingLink(ticket.ticketId),
   });
 }

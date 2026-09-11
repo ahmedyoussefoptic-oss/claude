@@ -573,42 +573,129 @@ exports.scheduledSlaEngine = onSchedule("every 1 hours", async (event) => {
   }
 });
 
-// Public parent-tracking lookup. The portal searches complaints by a
-// human-readable `complaintId` field (not the Firestore document ID), which
-// Firestore's security rules treat as a `list` operation — something an
-// anonymous visitor can never be granted without also exposing the whole
-// collection to enumeration. Doing the lookup here with the Admin SDK
-// (bypasses rules) and returning only a parent-safe field subset solves both
-// problems at once: the portal works, and no internal-only field ever
-// reaches an unauthenticated client.
+// Which collection/ID-field a tracking number belongs to, by its prefix
+// (see generateComplaintId/generateItemCode/generateTicketId in the
+// frontend config files — COM-/LF-/IT- respectively).
+const TRACKABLE_TYPES = [
+  { prefix: "COM-", type: "complaint", collection: "complaints", idField: "complaintId" },
+  { prefix: "LF-", type: "lostFound", collection: "lostFoundItems", idField: "itemCode" },
+  { prefix: "IT-", type: "techSupport", collection: "techSupportTickets", idField: "ticketId" },
+];
+
+// Only a small, per-type allowlist of log metadata ever reaches the public
+// portal — e.g. a tech ticket's CREDENTIALS_SENT log carries a username,
+// which parents don't need surfaced back and shouldn't be re-exposed here.
+function publicLogMetadata(log) {
+  if (log.metadata?.solutionDetails) return { solutionDetails: log.metadata.solutionDetails };
+  if (log.metadata?.returnedTo) return { returnedTo: log.metadata.returnedTo };
+  return undefined;
+}
+
+// Public parent-tracking lookup. The portal searches by a human-readable
+// tracking number (not the Firestore document ID), which Firestore's
+// security rules treat as a `list` operation — something an anonymous
+// visitor can never be granted without also exposing the whole collection
+// to enumeration. Doing the lookup here with the Admin SDK (bypasses rules)
+// and returning only a parent-safe field subset solves both problems at
+// once: the portal works, and no internal-only field ever reaches an
+// unauthenticated client. Covers all three trackable record types.
 exports.trackComplaint = onCall(async (request) => {
-  const complaintId = (request.data?.complaintId || "").trim();
-  if (!complaintId) {
-    throw new HttpsError("invalid-argument", "رقم الملاحظة مطلوب.");
+  const trackingId = (request.data?.complaintId || "").trim().toUpperCase();
+  if (!trackingId) {
+    throw new HttpsError("invalid-argument", "رقم المتابعة مطلوب.");
   }
 
-  const snapshot = await db.collection("complaints").where("complaintId", "==", complaintId).limit(1).get();
+  const match = TRACKABLE_TYPES.find((t) => trackingId.startsWith(t.prefix));
+  if (!match) {
+    throw new HttpsError("not-found", "عفواً، لم يتم العثور على سجل بهذا الرقم.");
+  }
+
+  const snapshot = await db.collection(match.collection).where(match.idField, "==", trackingId).limit(1).get();
   if (snapshot.empty) {
-    throw new HttpsError("not-found", "عفواً، لم يتم العثور على ملاحظة بهذا الرقم.");
+    throw new HttpsError("not-found", "عفواً، لم يتم العثور على سجل بهذا الرقم.");
   }
 
   const doc = snapshot.docs[0];
   const data = doc.data();
 
-  const logsSnapshot = await db.collection(`complaints/${doc.id}/activityLog`).orderBy("createdAt", "desc").get();
+  const logsSnapshot = await db.collection(`${match.collection}/${doc.id}/activityLog`).orderBy("createdAt", "desc").get();
   const history = logsSnapshot.docs
     .map((d) => d.data())
-    .filter((l) => l.action !== "INTERNAL_COMMENT_ADDED")
+    .filter((l) => l.action !== "INTERNAL_COMMENT_ADDED" && l.action !== "NOTE_ADDED")
     .map((l) => ({
       action: l.action,
       createdAtMillis: l.createdAt?.toMillis?.() ?? null,
-      metadata: l.metadata?.solutionDetails ? { solutionDetails: l.metadata.solutionDetails } : undefined,
+      metadata: publicLogMetadata(l),
     }));
 
   return {
     id: doc.id,
-    complaintId: data.complaintId,
+    type: match.type,
+    complaintId: data[match.idField],
     status: data.status,
+    studentName: data.studentName || null,
+    itemName: data.itemName || null,
     history,
   };
+});
+
+// Submits the tech-support satisfaction survey / reopen. techSupportTickets
+// is deliberately never publicly writable (holds national IDs and account
+// credentials) — see firestore.rules — so unlike the complaint/lost-found
+// surveys (a narrow anonymous update rule), this goes through the Admin SDK
+// instead, validating the exact same shape that rule would have enforced.
+exports.submitTechSupportSurvey = onCall(async (request) => {
+  const ticketId = (request.data?.ticketId || "").trim().toUpperCase();
+  const { wantsReopen, ratings, comment } = request.data || {};
+  if (!ticketId) {
+    throw new HttpsError("invalid-argument", "رقم البلاغ مطلوب.");
+  }
+
+  const snapshot = await db.collection("techSupportTickets").where("ticketId", "==", ticketId).limit(1).get();
+  if (snapshot.empty) {
+    throw new HttpsError("not-found", "عفواً، لم يتم العثور على بلاغ بهذا الرقم.");
+  }
+  const ticketDoc = snapshot.docs[0];
+  const ticket = ticketDoc.data();
+  if (ticket.status !== "WAITING_CONFIRMATION") {
+    throw new HttpsError("failed-precondition", "لا يمكن إرسال التقييم في هذه الحالة.");
+  }
+
+  const now = Timestamp.now();
+  if (wantsReopen) {
+    await ticketDoc.ref.update({
+      status: "REOPENED",
+      reopened: true,
+      parentFeedback: comment || null,
+      reopenCount: (ticket.reopenCount || 0) + 1,
+      updatedAt: now,
+    });
+    await db.collection(`techSupportTickets/${ticketDoc.id}/activityLog`).add({
+      action: "TICKET_REOPENED",
+      actorId: "PARENT",
+      actorName: "ولي الأمر",
+      metadata: { reason: comment || null },
+      createdAt: now,
+    });
+  } else {
+    const values = Object.values(ratings || {});
+    const satisfactionRate = values.length ? Math.round(values.reduce((s, v) => s + v, 0) / values.length) : null;
+    await ticketDoc.ref.update({
+      status: "CLOSED",
+      satisfactionRate,
+      satisfactionDetails: ratings || null,
+      parentFeedback: comment || null,
+      closedAt: now,
+      updatedAt: now,
+    });
+    await db.collection(`techSupportTickets/${ticketDoc.id}/activityLog`).add({
+      action: "SURVEY_SUBMITTED",
+      actorId: "PARENT",
+      actorName: "ولي الأمر",
+      metadata: { rating: satisfactionRate, ...ratings },
+      createdAt: now,
+    });
+  }
+
+  return { ok: true };
 });

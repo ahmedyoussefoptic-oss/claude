@@ -11,6 +11,9 @@ const TEMPLATE_LABELS = {
   receipt: 'رسالة استلام الملاحظة',
   resolution: 'رسالة حل الملاحظة',
   credential: 'رسالة بيانات الدخول (الدعم الفني)',
+  lostFoundReceipt: 'رسالة استلام بلاغ مفقودات',
+  lostFoundResolution: 'رسالة تسليم المفقودات',
+  techSupportReceipt: 'رسالة استلام بلاغ تقني',
 };
 
 function MessageTemplatesEditor() {

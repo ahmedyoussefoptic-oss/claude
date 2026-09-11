@@ -277,6 +277,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
                 href={waLink(complaint.parentPhone, buildResolutionMessage(complaint, complaint.solutionDetails, templates.resolution))}
                 target="_blank"
                 rel="noreferrer"
+                onClick={() => updateDoc(doc(db, 'complaints', complaint.id), { resolutionMessageSentAt: serverTimestamp() })}
                 className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
               >
                 <MessageCircle className="w-4 h-4" />
