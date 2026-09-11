@@ -4,12 +4,12 @@ import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/fi
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
-import { useBranches, useDepartments } from '../../hooks/useOrgData';
+import { useBranches, useDepartments, useComplaintTypes, useSubTypes } from '../../hooks/useOrgData';
 import { useUsers } from '../../hooks/useUsers';
 import { waLink, buildReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
-import { COMPLAINT_TYPES, SUB_TYPES, STAGES } from '../../config/complaintTypes';
+import { STAGES } from '../../config/complaintTypes';
 import AssigneeMultiSelect, { eligibleAssignees } from './AssigneeMultiSelect';
 
 const PRIORITIES = [
@@ -32,6 +32,8 @@ export default function ComplaintForm({ onClose }) {
   const fileInputRef = useRef(null);
   const branches = useBranches();
   const departments = useDepartments();
+  const complaintTypes = useComplaintTypes();
+  const subTypes = useSubTypes();
   const staff = useUsers();
   const templates = useMessageTemplates();
 
@@ -388,14 +390,14 @@ export default function ComplaintForm({ onClose }) {
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">التصنيف <span className="text-red-500">*</span></label>
                   <select name="complaintType" value={formData.complaintType} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm">
                     <option value="">اختر التصنيف...</option>
-                    {COMPLAINT_TYPES.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {complaintTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">التصنيف الفرعي</label>
                   <select name="subType" value={formData.subType} onChange={handleChange} disabled={!formData.complaintType} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm disabled:text-slate-400">
                     <option value="">اختر...</option>
-                    {(SUB_TYPES[formData.complaintType] || []).map(s => <option key={s} value={s}>{s}</option>)}
+                    {subTypes.filter(s => s.parentType === formData.complaintType).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                   </select>
                 </div>
                 <div>

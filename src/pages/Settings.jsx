@@ -1,11 +1,38 @@
 import { useRef, useState } from 'react';
 import { doc, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { useBranches, useDepartments } from '../hooks/useOrgData';
+import {
+  useBranches,
+  useDepartments,
+  useComplaintTypes,
+  useSubTypes,
+  useProblemTypes,
+  usePlatforms,
+  useItemCategories,
+} from '../hooks/useOrgData';
 import { useMessageTemplates } from '../hooks/useMessageTemplates';
 import { parseStudentRows, upsertStudents } from '../utils/students';
 import { DEFAULT_TEMPLATES, TEMPLATE_PLACEHOLDERS } from '../utils/whatsapp';
-import { Settings as SettingsIcon, Pencil, Check, X, Plus, Trash2, Building2, GraduationCap, Upload, Users as UsersIcon, Loader2, MessageCircle, RotateCcw } from 'lucide-react';
+import {
+  Settings as SettingsIcon,
+  Pencil,
+  Check,
+  X,
+  Plus,
+  Trash2,
+  Building2,
+  GraduationCap,
+  Upload,
+  Users as UsersIcon,
+  Loader2,
+  MessageCircle,
+  RotateCcw,
+  Tag,
+  Tags,
+  Wrench,
+  Monitor,
+  Package,
+} from 'lucide-react';
 
 const TEMPLATE_LABELS = {
   receipt: 'رسالة استلام الملاحظة',
@@ -340,9 +367,152 @@ function EditableList({ title, icon: Icon, items, collectionName }) {
   );
 }
 
+function SubTypesEditor({ complaintTypes, subTypes }) {
+  const [activeType, setActiveType] = useState(complaintTypes[0]?.id || '');
+  const [editingId, setEditingId] = useState(null);
+  const [draftName, setDraftName] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [error, setError] = useState(null);
+
+  const filtered = subTypes.filter((s) => s.parentType === activeType);
+
+  const startEdit = (item) => {
+    setEditingId(item.id);
+    setDraftName(item.name);
+    setError(null);
+  };
+
+  const saveEdit = async (id) => {
+    if (!draftName.trim()) return;
+    try {
+      await updateDoc(doc(db, 'complaintSubTypes', id), { name: draftName.trim() });
+      setEditingId(null);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleAdd = async () => {
+    if (!newName.trim()) {
+      setError('اسم التصنيف الفرعي مطلوب.');
+      return;
+    }
+    try {
+      const id = `${activeType}_${Date.now()}`;
+      await setDoc(doc(db, 'complaintSubTypes', id), {
+        name: newName.trim(),
+        parentType: activeType,
+        order: filtered.length + 1,
+        active: true,
+      });
+      setAdding(false);
+      setNewName('');
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeactivate = async (item) => {
+    if (!confirm(`إخفاء "${item.name}" من قوائم النظام؟ (لن تُحذف بياناته القديمة)`)) return;
+    try {
+      await updateDoc(doc(db, 'complaintSubTypes', item.id), { active: false });
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-bold text-slate-900 flex items-center gap-2">
+          <Tags className="w-5 h-5 text-primary" />
+          التصنيفات الفرعية
+        </h3>
+        <button onClick={() => setAdding((v) => !v)} className="text-sm text-primary hover:text-primary-dark font-medium flex items-center gap-1">
+          <Plus className="w-4 h-4" />
+          إضافة
+        </button>
+      </div>
+
+      <p className="text-sm text-slate-500 mb-4">اختر التصنيف الرئيسي أولاً، ثم أضف أو عدّل التصنيفات الفرعية الخاصة به.</p>
+
+      <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+        {complaintTypes.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => { setActiveType(t.id); setAdding(false); setEditingId(null); }}
+            className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${activeType === t.id ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
+          >
+            {t.name}
+          </button>
+        ))}
+      </div>
+
+      {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{error}</div>}
+
+      {adding && (
+        <div className="flex flex-wrap gap-2 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
+          <input
+            type="text"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder="اسم التصنيف الفرعي"
+            className="flex-1 min-w-[200px] border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
+          />
+          <button onClick={handleAdd} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark">حفظ</button>
+        </div>
+      )}
+
+      <ul className="divide-y divide-slate-100">
+        {filtered.map((item) => (
+          <li key={item.id} className="py-3 flex items-center gap-3">
+            {editingId === item.id ? (
+              <>
+                <input
+                  type="text"
+                  value={draftName}
+                  onChange={(e) => setDraftName(e.target.value)}
+                  autoFocus
+                  className="flex-1 border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:border-primary"
+                />
+                <button onClick={() => saveEdit(item.id)} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg">
+                  <Check className="w-4 h-4" />
+                </button>
+                <button onClick={() => setEditingId(null)} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-lg">
+                  <X className="w-4 h-4" />
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="flex-1 text-sm text-slate-800">{item.name}</span>
+                <button onClick={() => startEdit(item)} className="p-1.5 text-slate-500 hover:text-primary hover:bg-primary/10 rounded-lg" title="تعديل الاسم">
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button onClick={() => handleDeactivate(item)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg" title="إخفاء">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </>
+            )}
+          </li>
+        ))}
+        {filtered.length === 0 && (
+          <li className="py-6 text-center text-sm text-slate-400">لا توجد تصنيفات فرعية لهذا النوع بعد</li>
+        )}
+      </ul>
+    </div>
+  );
+}
+
 export default function Settings() {
   const branches = useBranches();
   const departments = useDepartments();
+  const complaintTypes = useComplaintTypes();
+  const subTypes = useSubTypes();
+  const problemTypes = useProblemTypes();
+  const platforms = usePlatforms();
+  const itemCategories = useItemCategories();
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -351,11 +521,16 @@ export default function Settings() {
           <SettingsIcon className="w-6 h-6 text-primary" />
           الإعدادات
         </h1>
-        <p className="text-slate-500 mt-1">تعديل أسماء الفروع والأقسام المستخدمة في كل قوائم النظام</p>
+        <p className="text-slate-500 mt-1">تعديل الفروع والأقسام والتصنيفات المستخدمة في كل قوائم النظام</p>
       </div>
 
       <EditableList title="الفروع" icon={Building2} items={branches} collectionName="branches" />
       <EditableList title="الأقسام (المناهج)" icon={GraduationCap} items={departments} collectionName="departments" />
+      <EditableList title="تصنيفات الملاحظات" icon={Tag} items={complaintTypes} collectionName="complaintTypes" />
+      <SubTypesEditor complaintTypes={complaintTypes} subTypes={subTypes} />
+      <EditableList title="أنواع المشكلات التقنية" icon={Wrench} items={problemTypes} collectionName="problemTypes" />
+      <EditableList title="المنصات التعليمية" icon={Monitor} items={platforms} collectionName="platforms" />
+      <EditableList title="فئات المفقودات" icon={Package} items={itemCategories} collectionName="itemCategories" />
       <StudentImport />
       <MessageTemplatesEditor />
     </div>

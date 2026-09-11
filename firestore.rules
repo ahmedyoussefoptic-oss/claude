@@ -113,6 +113,31 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Editable classification lists (complaint types/sub-types, tech-support
+    // problem types/platforms, lost&found item categories) — same posture as
+    // branches/departments above: public read (used by parent-facing forms),
+    // admin-only write.
+    match /complaintTypes/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /complaintSubTypes/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /problemTypes/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /platforms/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /itemCategories/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
     // Misc system settings (e.g. editable WhatsApp message templates) —
     // staff need to read them to build outgoing messages, only an admin may
     // edit the wording.

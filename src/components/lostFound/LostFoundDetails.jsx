@@ -3,8 +3,8 @@ import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle 
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
-import { useBranches } from '../../hooks/useOrgData';
-import { ITEM_STATUS_LABELS, ITEM_STATUS_BADGE, REPORT_TYPES, ITEM_CATEGORIES } from '../../config/lostFound';
+import { useBranches, useItemCategories } from '../../hooks/useOrgData';
+import { ITEM_STATUS_LABELS, ITEM_STATUS_BADGE, REPORT_TYPES } from '../../config/lostFound';
 import { ROLES } from '../../config/roles';
 import { waLink, buildLostFoundResolutionMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
@@ -25,6 +25,7 @@ const getActionName = (action) => {
 export default function LostFoundDetails({ item, onClose }) {
   const { user, userData } = useAuthStore();
   const branches = useBranches();
+  const itemCategories = useItemCategories();
   const templates = useMessageTemplates();
   const [logs, setLogs] = useState([]);
   const [note, setNote] = useState('');
@@ -92,7 +93,7 @@ export default function LostFoundDetails({ item, onClose }) {
   };
 
   const reportTypeName = REPORT_TYPES.find((t) => t.id === item.reportType)?.name || item.reportType;
-  const categoryName = ITEM_CATEGORIES.find((c) => c.id === item.category)?.name || item.category;
+  const categoryName = itemCategories.find((c) => c.id === item.category)?.name || item.category;
   const branchName = branches.find((b) => b.id === item.branch)?.name || item.branch;
 
   return (

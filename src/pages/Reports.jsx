@@ -1,9 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { useBranches } from '../hooks/useOrgData';
+import { useBranches, useComplaintTypes, useSubTypes } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
-import { COMPLAINT_TYPES, SUB_TYPES } from '../config/complaintTypes';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import logo from '../assets/logo.png';
@@ -60,6 +59,8 @@ const emptyFilters = { from: '', to: '', complaintType: '', subType: '', branch:
 export default function Reports() {
   const { userData } = useAuthStore();
   const branches = useBranches();
+  const complaintTypes = useComplaintTypes();
+  const subTypes = useSubTypes();
   const [complaints, setComplaints] = useState([]);
   const [specialists, setSpecialists] = useState([]);
   const [filters, setFilters] = useState(emptyFilters);
@@ -132,8 +133,8 @@ export default function Reports() {
   }, [results]);
 
   const byType = useMemo(
-    () => COMPLAINT_TYPES.map((t) => ({ ...t, count: results.filter((c) => c.complaintType === t.id).length })).filter((t) => t.count > 0),
-    [results]
+    () => complaintTypes.map((t) => ({ ...t, count: results.filter((c) => c.complaintType === t.id).length })).filter((t) => t.count > 0),
+    [results, complaintTypes]
   );
 
   const bySubType = useMemo(() => {
@@ -204,7 +205,7 @@ export default function Reports() {
   }, [surveyed]);
 
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
-  const typeName = (id) => COMPLAINT_TYPES.find((t) => t.id === id)?.name || id;
+  const typeName = (id) => complaintTypes.find((t) => t.id === id)?.name || id;
 
   const activeFilterLabels = [];
   if (filters.from) activeFilterLabels.push(`من ${filters.from}`);
@@ -271,14 +272,14 @@ export default function Reports() {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">نوع الملاحظة</label>
             <select name="complaintType" value={filters.complaintType} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
               <option value="">كل الأنواع</option>
-              {COMPLAINT_TYPES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              {complaintTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">التصنيف الفرعي</label>
             <select name="subType" value={filters.subType} onChange={handleChange} disabled={!filters.complaintType} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white disabled:text-slate-400 disabled:bg-slate-50">
               <option value="">الكل</option>
-              {(SUB_TYPES[filters.complaintType] || []).map((s) => <option key={s} value={s}>{s}</option>)}
+              {subTypes.filter((s) => s.parentType === filters.complaintType).map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
           </div>
           <div>

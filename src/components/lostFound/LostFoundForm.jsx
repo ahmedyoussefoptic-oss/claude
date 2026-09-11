@@ -4,8 +4,8 @@ import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/fi
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
-import { useBranches } from '../../hooks/useOrgData';
-import { ITEM_CATEGORIES, REPORT_TYPES, generateItemCode } from '../../config/lostFound';
+import { useBranches, useItemCategories } from '../../hooks/useOrgData';
+import { REPORT_TYPES, generateItemCode } from '../../config/lostFound';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { waLink, buildLostFoundReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
@@ -13,6 +13,7 @@ import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 export default function LostFoundForm({ onClose }) {
   const { user } = useAuthStore();
   const branches = useBranches();
+  const itemCategories = useItemCategories();
   const templates = useMessageTemplates();
   const fileInputRef = useRef(null);
   const [savedItem, setSavedItem] = useState(null);
@@ -203,7 +204,7 @@ export default function LostFoundForm({ onClose }) {
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">التصنيف <span className="text-red-500">*</span></label>
                   <select name="category" value={formData.category} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
                     <option value="">اختر التصنيف...</option>
-                    {ITEM_CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    {itemCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>

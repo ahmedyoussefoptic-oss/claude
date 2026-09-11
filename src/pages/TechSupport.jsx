@@ -4,10 +4,10 @@ import { Search, Plus, ChevronLeft, Loader2, Wrench } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import useAuthStore from '../stores/useAuthStore';
-import { useBranches } from '../hooks/useOrgData';
+import { useBranches, useProblemTypes } from '../hooks/useOrgData';
 import TechSupportDetails from '../components/techSupport/TechSupportDetails';
 import TechSupportForm from '../components/techSupport/TechSupportForm';
-import { PROBLEM_TYPES, TICKET_STATUS_LABELS, TICKET_STATUS_BADGE, OPEN_TICKET_STATUSES } from '../config/techSupport';
+import { TICKET_STATUS_LABELS, TICKET_STATUS_BADGE, OPEN_TICKET_STATUSES } from '../config/techSupport';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -23,6 +23,7 @@ const FILTERS = [
 export default function TechSupport() {
   const { userData } = useAuthStore();
   const branches = useBranches();
+  const problemTypes = useProblemTypes();
   const location = useLocation();
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [showNewForm, setShowNewForm] = useState(false);
@@ -67,7 +68,7 @@ export default function TechSupport() {
     });
   }, [tickets, search, statusFilter, userData]);
 
-  const problemTypeName = (id) => PROBLEM_TYPES.find((t) => t.id === id)?.name || id;
+  const problemTypeName = (id) => problemTypes.find((t) => t.id === id)?.name || id;
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
 
   return (

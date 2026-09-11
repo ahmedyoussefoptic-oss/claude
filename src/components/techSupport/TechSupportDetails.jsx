@@ -4,9 +4,9 @@ import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, u
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useUsers } from '../../hooks/useUsers';
-import { useBranches } from '../../hooks/useOrgData';
+import { useBranches, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
 import { ROLES } from '../../config/roles';
-import { PROBLEM_TYPES, PLATFORMS, TICKET_STATUS_LABELS, TICKET_STATUS_BADGE } from '../../config/techSupport';
+import { TICKET_STATUS_LABELS, TICKET_STATUS_BADGE } from '../../config/techSupport';
 import { waLink, buildCredentialMessage, toWhatsAppNumber } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { format } from 'date-fns';
@@ -32,6 +32,8 @@ export default function TechSupportDetails({ ticket, onClose }) {
   const { user, userData } = useAuthStore();
   const users = useUsers();
   const branches = useBranches();
+  const problemTypes = useProblemTypes();
+  const platforms = usePlatforms();
   const templates = useMessageTemplates();
   const [logs, setLogs] = useState([]);
   const [note, setNote] = useState('');
@@ -101,7 +103,7 @@ export default function TechSupportDetails({ ticket, onClose }) {
     const message = buildCredentialMessage({
       ticketId: ticket.ticketId,
       studentName: ticket.studentName,
-      platformName: PLATFORMS.find((p) => p.id === ticket.platform)?.name,
+      platformName: platforms.find((p) => p.id === ticket.platform)?.name,
       platformLink: ticket.platformLink,
       username,
       tempPassword,
@@ -176,8 +178,8 @@ export default function TechSupportDetails({ ticket, onClose }) {
     }
   };
 
-  const problemTypeName = PROBLEM_TYPES.find((t) => t.id === ticket.problemType)?.name || ticket.problemType;
-  const platformName = PLATFORMS.find((p) => p.id === ticket.platform)?.name || ticket.platform;
+  const problemTypeName = problemTypes.find((t) => t.id === ticket.problemType)?.name || ticket.problemType;
+  const platformName = platforms.find((p) => p.id === ticket.platform)?.name || ticket.platform;
   const branchName = branches.find((b) => b.id === ticket.branch)?.name || ticket.branch;
 
   return (

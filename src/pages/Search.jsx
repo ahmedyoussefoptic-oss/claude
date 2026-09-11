@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Search as SearchIcon, Loader2, ChevronLeft, Download, Star } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { useBranches } from '../hooks/useOrgData';
+import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import { format } from 'date-fns';
@@ -26,13 +26,6 @@ const PRIORITIES = [
   { id: 'URGENT', name: 'عاجلة' },
 ];
 
-const COMPLAINT_TYPES = [
-  { id: '', name: 'كل الأنواع' },
-  { id: 'ACADEMIC', name: 'أكاديمية' },
-  { id: 'ADMINISTRATIVE', name: 'إدارية' },
-  { id: 'BEHAVIORAL', name: 'سلوكية' },
-];
-
 const getStatusBadge = (status) => {
   switch (status) {
     case 'RECEIVED': return 'bg-blue-100 text-blue-800 border-blue-200';
@@ -51,6 +44,7 @@ const STATUS_NAME = Object.fromEntries(STATUSES.filter(s => s.id).map(s => [s.id
 export default function Search() {
   const { userData } = useAuthStore();
   const branches = useBranches();
+  const complaintTypes = useComplaintTypes();
   const [complaints, setComplaints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedComplaint, setSelectedComplaint] = useState(null);
@@ -177,7 +171,8 @@ export default function Search() {
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">التصنيف</label>
             <select name="complaintType" value={filters.complaintType} onChange={handleFilterChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
-              {COMPLAINT_TYPES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              <option value="">كل الأنواع</option>
+              {complaintTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </div>
           <div>

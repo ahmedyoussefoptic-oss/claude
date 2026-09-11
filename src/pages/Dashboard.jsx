@@ -7,9 +7,8 @@ import StatCard from '../components/dashboard/StatCard';
 import { TrendChart, BranchChart } from '../components/dashboard/Charts';
 import BranchIndicators from '../components/dashboard/BranchIndicators';
 import useAuthStore from '../stores/useAuthStore';
-import { useBranches } from '../hooks/useOrgData';
+import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
 import { OPEN_TICKET_STATUSES } from '../config/techSupport';
-import { COMPLAINT_TYPES } from '../config/complaintTypes';
 import ComplaintForm from '../components/complaints/ComplaintForm';
 
 // Generic branch-scoped live-count hook shared by the tech-support and
@@ -55,6 +54,7 @@ export default function Dashboard() {
   const { t, i18n } = useTranslation();
   const { userData } = useAuthStore();
   const branches = useBranches();
+  const complaintTypes = useComplaintTypes();
   const techTickets = useBranchScopedCollection('techSupportTickets', userData);
   const lostFoundItems = useBranchScopedCollection('lostFoundItems', userData);
   const techStats = useMemo(() => ({
@@ -190,7 +190,7 @@ export default function Dashboard() {
     }
   };
 
-  const typeName = (id) => COMPLAINT_TYPES.find((t) => t.id === id)?.name || id;
+  const typeName = (id) => complaintTypes.find((t) => t.id === id)?.name || id;
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
 
   const getStatusName = (status) => {

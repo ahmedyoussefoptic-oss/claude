@@ -3,10 +3,10 @@ import { X, Save, Loader2, CheckCircle2, ShieldCheck, MessageCircle } from 'luci
 import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
-import { useBranches } from '../../hooks/useOrgData';
+import { useBranches, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
 import { useUsers } from '../../hooks/useUsers';
 import { STAGES } from '../../config/complaintTypes';
-import { PROBLEM_TYPES, PLATFORMS, RELATIONS, generateTicketId } from '../../config/techSupport';
+import { RELATIONS, generateTicketId } from '../../config/techSupport';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { waLink, buildTechSupportReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
@@ -14,6 +14,8 @@ import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 export default function TechSupportForm({ onClose }) {
   const { user } = useAuthStore();
   const branches = useBranches();
+  const problemTypes = useProblemTypes();
+  const platforms = usePlatforms();
   const staff = useUsers();
   const templates = useMessageTemplates();
 
@@ -287,14 +289,14 @@ export default function TechSupportForm({ onClose }) {
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">نوع المشكلة <span className="text-red-500">*</span></label>
                   <select name="problemType" value={formData.problemType} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm">
                     <option value="">اختر نوع المشكلة...</option>
-                    {PROBLEM_TYPES.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    {problemTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">اسم المنصة <span className="text-red-500">*</span></label>
                   <select name="platform" value={formData.platform} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm">
                     <option value="">اختر المنصة...</option>
-                    {PLATFORMS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {platforms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                   </select>
                 </div>
               </div>

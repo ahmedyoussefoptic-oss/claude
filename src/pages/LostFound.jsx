@@ -6,8 +6,8 @@ import { db } from '../config/firebase';
 import LostFoundDetails from '../components/lostFound/LostFoundDetails';
 import LostFoundForm from '../components/lostFound/LostFoundForm';
 import useAuthStore from '../stores/useAuthStore';
-import { useBranches } from '../hooks/useOrgData';
-import { ITEM_STATUS_LABELS, ITEM_STATUS_BADGE, REPORT_TYPES, ITEM_CATEGORIES } from '../config/lostFound';
+import { useBranches, useItemCategories } from '../hooks/useOrgData';
+import { ITEM_STATUS_LABELS, ITEM_STATUS_BADGE, REPORT_TYPES } from '../config/lostFound';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -22,6 +22,7 @@ const FILTERS = [
 export default function LostFound() {
   const { userData } = useAuthStore();
   const branches = useBranches();
+  const itemCategories = useItemCategories();
   const location = useLocation();
   const [selectedItem, setSelectedItem] = useState(null);
   const [showNewForm, setShowNewForm] = useState(false);
@@ -64,7 +65,7 @@ export default function LostFound() {
   }, [items, search, statusFilter, userData]);
 
   const reportTypeName = (id) => REPORT_TYPES.find((t) => t.id === id)?.name || id;
-  const categoryName = (id) => ITEM_CATEGORIES.find((c) => c.id === id)?.name || id;
+  const categoryName = (id) => itemCategories.find((c) => c.id === id)?.name || id;
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
 
   return (

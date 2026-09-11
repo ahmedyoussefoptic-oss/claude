@@ -1,13 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Plus, ChevronLeft, Download, Loader2 } from 'lucide-react';
+import { Search, Plus, ChevronLeft, Download, Loader2, SlidersHorizontal, RotateCcw } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import ComplaintForm from '../components/complaints/ComplaintForm';
 import useAuthStore from '../stores/useAuthStore';
-import { useBranches } from '../hooks/useOrgData';
-import { COMPLAINT_TYPES } from '../config/complaintTypes';
+import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -26,6 +25,7 @@ const LINK_ONLY_FILTERS = ['IN_PROGRESS', 'REOPENED'];
 export default function ComplaintsList() {
   const { userData } = useAuthStore();
   const branches = useBranches();
+  const complaintTypes = useComplaintTypes();
   const location = useLocation();
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [showNewForm, setShowNewForm] = useState(false);
@@ -34,6 +34,9 @@ export default function ComplaintsList() {
   const [search, setSearch] = useState('');
   const [quickFilter, setQuickFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState('');
+  const [branchFilter, setBranchFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   // Dashboard KPI cards deep-link here with ?filter=... and/or ?type=... so
   // each card lands on the slice of the list it actually represents.
@@ -97,7 +100,7 @@ export default function ComplaintsList() {
     }
   };
 
-  const typeName = (id) => COMPLAINT_TYPES.find((t) => t.id === id)?.name || id;
+  const typeName = (id) => complaintTypes.find((t) => t.id === id)?.name || id;
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
 
   const filteredComplaints = useMemo(() => {
@@ -108,6 +111,17 @@ export default function ComplaintsList() {
       if (quickFilter === 'IN_PROGRESS' && !['IN_PROGRESS', 'RECEIVED'].includes(c.status)) return false;
       if (quickFilter === 'REOPENED' && !c.reopened) return false;
       if (typeFilter && c.complaintType !== typeFilter) return false;
+      if (branchFilter && c.branch !== branchFilter) return false;
+      if (dateFrom) {
+        const createdAt = c.createdAt?.toDate?.();
+        if (!createdAt || createdAt < new Date(dateFrom)) return false;
+      }
+      if (dateTo) {
+        const createdAt = c.createdAt?.toDate?.();
+        const to = new Date(dateTo);
+        to.setHours(23, 59, 59, 999);
+        if (!createdAt || createdAt > to) return false;
+      }
       if (search) {
         const term = search.toLowerCase();
         const haystack = `${c.complaintId || ''} ${c.studentName || ''} ${c.parentName || ''} ${c.studentId || ''}`.toLowerCase();
@@ -115,7 +129,15 @@ export default function ComplaintsList() {
       }
       return true;
     });
-  }, [complaints, search, quickFilter, typeFilter, userData]);
+  }, [complaints, search, quickFilter, typeFilter, branchFilter, dateFrom, dateTo, userData]);
+
+  const advancedFiltersActive = typeFilter || branchFilter || dateFrom || dateTo;
+  const resetAdvancedFilters = () => {
+    setTypeFilter('');
+    setBranchFilter('');
+    setDateFrom('');
+    setDateTo('');
+  };
 
   const handleExportCSV = () => {
     if (filteredComplaints.length === 0) return;
@@ -189,6 +211,65 @@ export default function ComplaintsList() {
               </span>
             )}
           </div>
+        </div>
+
+        {/* Advanced filters: branch / type / date range */}
+        <div className="p-4 border-b border-slate-100 flex flex-wrap gap-3 items-end bg-white">
+          <div className="w-full sm:w-auto flex items-center gap-1.5 text-xs font-medium text-slate-400 sm:pb-2.5">
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            فلاتر إضافية
+          </div>
+          <div className="w-full sm:w-44">
+            <label className="block text-xs text-slate-500 mb-1">الفرع</label>
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+            >
+              <option value="">كل الفروع</option>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+          <div className="w-full sm:w-44">
+            <label className="block text-xs text-slate-500 mb-1">التصنيف</label>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+            >
+              <option value="">كل التصنيفات</option>
+              {complaintTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
+          <div className="w-full sm:w-40">
+            <label className="block text-xs text-slate-500 mb-1">من تاريخ</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              dir="ltr"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+          </div>
+          <div className="w-full sm:w-40">
+            <label className="block text-xs text-slate-500 mb-1">إلى تاريخ</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              dir="ltr"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+            />
+          </div>
+          {advancedFiltersActive && (
+            <button
+              onClick={resetAdvancedFilters}
+              className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              إعادة تعيين
+            </button>
+          )}
         </div>
 
         {/* Table */}
