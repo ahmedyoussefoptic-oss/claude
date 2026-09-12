@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Clock, CheckCircle2, User, Phone, MapPin, Loader2, Trash2, UserPlus, MessageCircle, ShieldCheck } from 'lucide-react';
+import { X, Clock, CheckCircle2, User, Phone, MapPin, Loader2, Trash2, UserPlus, MessageCircle, ShieldCheck, Link2, AlertTriangle } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
@@ -7,7 +7,7 @@ import { useUsers } from '../../hooks/useUsers';
 import { useBranches, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
 import { ROLES } from '../../config/roles';
 import { TICKET_STATUS_LABELS, TICKET_STATUS_BADGE } from '../../config/techSupport';
-import { waLink, buildCredentialMessage, toWhatsAppNumber } from '../../utils/whatsapp';
+import { waLink, buildCredentialMessage, buildTechSupportReceiptMessage, toWhatsAppNumber } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -84,6 +84,15 @@ export default function TechSupportDetails({ ticket, onClose }) {
         { assignedTo: assigneeId, assignedToName: assignee?.name || '', assignedAt: serverTimestamp(), status: ticket.status === 'NEW' ? 'ASSIGNED' : ticket.status }
       );
       setAssigneeId('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVerifyIdentity = async () => {
+    setLoading(true);
+    try {
+      await addLog('IDENTITY_VERIFIED', { phone: ticket.parentPhone, verifiedManually: true }, { identityVerified: true, identityVerifiedBy: user.uid });
     } finally {
       setLoading(false);
     }
@@ -193,6 +202,12 @@ export default function TechSupportDetails({ ticket, onClose }) {
               <span className={`px-2.5 py-1 rounded-md text-xs font-medium border ${TICKET_STATUS_BADGE[ticket.status]}`}>
                 {TICKET_STATUS_LABELS[ticket.status]}
               </span>
+              {ticket.source === 'PARENT_PORTAL' && (
+                <span className="px-2.5 py-1 rounded-md text-xs font-medium border bg-primary/10 text-primary border-primary/20 flex items-center gap-1">
+                  <Link2 className="w-3 h-3" />
+                  عبر الرابط العام
+                </span>
+              )}
             </div>
             <p className="text-sm text-slate-500 flex items-center gap-2">
               <Clock className="w-4 h-4" />
@@ -212,13 +227,39 @@ export default function TechSupportDetails({ ticket, onClose }) {
             </div>
           )}
 
+          {!ticket.identityVerified && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-xl p-3 flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p>لم يتم التحقق من هوية مقدّم البلاغ بعد — تحقّق من مطابقة رقم الجوال مع سجل الطالب قبل إرسال أي بيانات دخول.</p>
+                {canEdit && (
+                  <button disabled={loading} onClick={handleVerifyIdentity} className="mt-2 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 transition-colors">
+                    تأكيد مطابقة الهوية
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2">
+            {!ticket.receiptMessageSentAt && ticket.parentPhone && (
+              <a
+                href={waLink(ticket.parentPhone, buildTechSupportReceiptMessage(ticket, templates.techSupportReceipt))}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => updateDoc(doc(db, 'techSupportTickets', ticket.id), { receiptMessageSentAt: serverTimestamp() })}
+                className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4" />
+                إرسال رسالة الاستلام عبر واتساب
+              </a>
+            )}
             {canEdit && ticket.status === 'ASSIGNED' && (
               <button disabled={loading} onClick={handleStart} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
                 بدء المعالجة
               </button>
             )}
-            {canEdit && ticket.status === 'IN_PROGRESS' && (
+            {canEdit && ticket.status === 'IN_PROGRESS' && ticket.identityVerified && (
               <button disabled={loading} onClick={() => setShowCredsForm(true)} className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2">
                 <MessageCircle className="w-4 h-4" />
                 إرسال بيانات الدخول عبر واتساب

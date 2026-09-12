@@ -709,6 +709,50 @@ const PUBLIC_COMPLAINT_REQUIRED_FIELDS = [
   "branch", "stage", "complaintType", "subject", "details",
 ];
 
+// Shared by all three /report submission functions: uploads one attachment
+// with the Admin SDK (Storage rejects anonymous writes, so this is the only
+// way an unauthenticated parent's file reaches the bucket) and returns it in
+// the same shape the staff-facing forms already produce via getDownloadURL,
+// so existing attachment-rendering code (ComplaintDetails, LostFoundDetails)
+// needs no changes.
+async function uploadPublicAttachment(bucket, pathPrefix, att) {
+  if (!att?.fileName || !att?.mimeType || !att?.base64Data) {
+    throw new HttpsError("invalid-argument", "بيانات المرفق غير مكتملة.");
+  }
+  const buffer = Buffer.from(att.base64Data, "base64");
+  if (buffer.length > MAX_PUBLIC_ATTACHMENT_BYTES) {
+    throw new HttpsError("invalid-argument", "الحد الأقصى لحجم كل ملف هو 4 ميجابايت.");
+  }
+  const safeName = att.fileName.replace(/[/\\]/g, "_");
+  const filePath = `${pathPrefix}/${Date.now()}_${safeName}`;
+  const token = crypto.randomUUID();
+  const file = bucket.file(filePath);
+  await file.save(buffer, {
+    metadata: {
+      contentType: att.mimeType,
+      metadata: { firebaseStorageDownloadTokens: token },
+    },
+  });
+  return {
+    fileName: safeName,
+    fileUrl: `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(filePath)}?alt=media&token=${token}`,
+    mimeType: att.mimeType,
+    size: buffer.length,
+  };
+}
+
+// Finds the same eligible IT specialist TechSupportForm.jsx's client-side
+// findItSpecialist() would (branch-specific preferred over all-branch),
+// server-side — used only by submitPublicTechSupportTicket below.
+async function findEligibleItSpecialist(branch) {
+  const snapshot = await db.collection("users").where("role", "==", "SPECIALIST").where("department", "==", "IT").get();
+  const candidates = snapshot.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((u) => u.active !== false && (u.access === "all" || u.branch === branch));
+  candidates.sort((a, b) => (a.access === "all" ? 1 : 0) - (b.access === "all" ? 1 : 0));
+  return candidates[0] || null;
+}
+
 // Public complaint submission (the /report link shared with parents).
 // complaints already allows an anonymous client-side `create` (see
 // firestore.rules), but Storage does not allow anonymous writes — rather
@@ -735,31 +779,8 @@ exports.submitPublicComplaint = onCall(async (request) => {
 
   const attachments = [];
   for (const att of attachmentsInput) {
-    if (!att?.fileName || !att?.mimeType || !att?.base64Data) {
-      throw new HttpsError("invalid-argument", "بيانات أحد المرفقات غير مكتملة.");
-    }
-    const buffer = Buffer.from(att.base64Data, "base64");
-    if (buffer.length > MAX_PUBLIC_ATTACHMENT_BYTES) {
-      throw new HttpsError("invalid-argument", "الحد الأقصى لحجم كل ملف هو 4 ميجابايت.");
-    }
-    const safeName = att.fileName.replace(/[/\\]/g, "_");
-    const filePath = `complaints/${complaintId}/${Date.now()}_${safeName}`;
-    const token = crypto.randomUUID();
-    const file = bucket.file(filePath);
-    await file.save(buffer, {
-      metadata: {
-        contentType: att.mimeType,
-        metadata: { firebaseStorageDownloadTokens: token },
-      },
-    });
-    attachments.push({
-      fileName: safeName,
-      fileUrl: `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(filePath)}?alt=media&token=${token}`,
-      mimeType: att.mimeType,
-      size: buffer.length,
-      uploadedBy: null,
-      createdAt: new Date().toISOString(),
-    });
+    const uploaded = await uploadPublicAttachment(bucket, `complaints/${complaintId}`, att);
+    attachments.push({ ...uploaded, uploadedBy: null, createdAt: new Date().toISOString() });
   }
 
   const now = Timestamp.now();
@@ -800,4 +821,142 @@ exports.submitPublicComplaint = onCall(async (request) => {
   });
 
   return { complaintId };
+});
+
+const PUBLIC_LOST_FOUND_REQUIRED_FIELDS = ["itemName", "category", "branch"];
+
+// Public lost & found submission. lostFoundItems already allows an
+// anonymous client-side `create` (see firestore.rules), but — same reasoning
+// as submitPublicComplaint above — the optional item photo still needs the
+// Admin SDK, so the whole record is created here for the same atomicity.
+exports.submitPublicLostFoundItem = onCall(async (request) => {
+  const data = request.data || {};
+  const reportType = data.reportType === "LOST" ? "LOST" : "FOUND";
+  for (const field of PUBLIC_LOST_FOUND_REQUIRED_FIELDS) {
+    if (!data[field] || typeof data[field] !== "string" || !data[field].trim()) {
+      throw new HttpsError("invalid-argument", "يرجى تعبئة جميع الحقول المطلوبة.");
+    }
+  }
+  if (reportType === "LOST" && (!data.reporterName?.trim() || !data.reporterPhone?.trim())) {
+    throw new HttpsError("invalid-argument", "يرجى إدخال اسم ورقم جوال المُبلّغ عن الفقدان.");
+  }
+
+  const year = new Date().getFullYear();
+  const itemCode = `LF-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const bucket = getStorage().bucket();
+
+  let photoUrl = null;
+  if (data.photo) {
+    const uploaded = await uploadPublicAttachment(bucket, `lostFoundItems/${itemCode}`, data.photo);
+    photoUrl = uploaded.fileUrl;
+  }
+
+  const now = Timestamp.now();
+  const docRef = await db.collection("lostFoundItems").add({
+    itemCode,
+    reportType,
+    category: data.category,
+    itemName: data.itemName.trim(),
+    description: (data.description || "").trim(),
+    color: (data.color || "").trim(),
+    branch: data.branch,
+    location: (data.location || "").trim(),
+    reporterName: (data.reporterName || "").trim(),
+    reporterPhone: (data.reporterPhone || "").trim(),
+    studentName: (data.studentName || "").trim(),
+    studentId: (data.studentId || "").trim(),
+    photoUrl,
+    status: "UNCLAIMED",
+    receiver: null,
+    source: "PARENT_PORTAL",
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await db.collection(`lostFoundItems/${docRef.id}/activityLog`).add({
+    action: "ITEM_REGISTERED",
+    actorId: null,
+    actorName: "ولي الأمر (نموذج إلكتروني)",
+    createdAt: now,
+  });
+
+  return { itemCode };
+});
+
+const PUBLIC_TECH_SUPPORT_REQUIRED_FIELDS = [
+  "studentName", "nationalId", "branch", "stage", "grade",
+  "parentName", "parentPhone", "problemType", "platform",
+];
+
+// Public tech-support ticket submission. Unlike complaints/lostFoundItems,
+// techSupportTickets stays `allow create: if isAuthenticated()` in
+// firestore.rules — completely unchanged — because this collection holds
+// national IDs and is the entry point to an eventual account-credential
+// reset. The staff-facing form requires a human to tick an "I confirmed this
+// phone number matches our records" box before a ticket is even created; a
+// public submitter obviously can't do that, so tickets created here always
+// get identityVerified: false. TechSupportDetails.jsx gates the "send
+// credentials" action on that flag — a specialist must explicitly confirm
+// identity (by checking the student record themselves) before anything
+// sensitive can be sent, regardless of how the ticket originated. Only that
+// confirmation gate changes; auto-assignment to a specialist is unaffected
+// since routing the ticket to the right person leaks nothing.
+exports.submitPublicTechSupportTicket = onCall(async (request) => {
+  const data = request.data || {};
+  for (const field of PUBLIC_TECH_SUPPORT_REQUIRED_FIELDS) {
+    if (!data[field] || typeof data[field] !== "string" || !data[field].trim()) {
+      throw new HttpsError("invalid-argument", "يرجى تعبئة جميع الحقول المطلوبة.");
+    }
+  }
+
+  const ticketId = `IT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const assignee = await findEligibleItSpecialist(data.branch);
+  const now = Timestamp.now();
+
+  const docRef = await db.collection("techSupportTickets").add({
+    studentName: data.studentName.trim(),
+    nationalId: data.nationalId.trim(),
+    academicId: (data.academicId || "").trim(),
+    branch: data.branch,
+    stage: data.stage,
+    grade: data.grade.trim(),
+    parentName: data.parentName.trim(),
+    relation: data.relation || "الأب",
+    parentPhone: data.parentPhone.trim(),
+    problemType: data.problemType,
+    platform: data.platform,
+    platformLink: (data.platformLink || "").trim(),
+    details: (data.details || "").trim(),
+    ticketId,
+    receiver: null,
+    identityVerified: false,
+    identityVerifiedBy: null,
+    source: "PARENT_PORTAL",
+    status: assignee ? "ASSIGNED" : "NEW",
+    assignedTo: assignee?.id || null,
+    assignedToName: assignee?.name || "",
+    assignedAt: assignee ? now : null,
+    isOverdue: false,
+    reopenCount: 0,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await db.collection(`techSupportTickets/${docRef.id}/activityLog`).add({
+    action: "TICKET_CREATED",
+    actorId: null,
+    actorName: "ولي الأمر (نموذج إلكتروني)",
+    createdAt: now,
+  });
+  if (assignee) {
+    await db.collection(`techSupportTickets/${docRef.id}/activityLog`).add({
+      action: "TICKET_ASSIGNED",
+      actorId: null,
+      actorName: "ولي الأمر (نموذج إلكتروني)",
+      metadata: { toUserId: assignee.id, toUserName: assignee.name },
+      createdAt: now,
+    });
+  }
+
+  return { ticketId };
 });

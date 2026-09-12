@@ -12,7 +12,7 @@ import FlowMap from './pages/FlowMap';
 import Search from './pages/Search';
 import Reports from './pages/Reports';
 import ParentPortal from './pages/ParentPortal';
-import PublicComplaintForm from './pages/PublicComplaintForm';
+import PublicReportForm from './pages/PublicReportForm';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
 import { ROLES } from './config/roles';
@@ -30,7 +30,7 @@ function App() {
       <Routes>
         {/* Public Routes */}
         <Route path="/track" element={<ParentPortal />} />
-        <Route path="/report" element={<PublicComplaintForm />} />
+        <Route path="/report" element={<PublicReportForm />} />
         <Route path="/login" element={<Login />} />
         
         {/* Protected Routes */}

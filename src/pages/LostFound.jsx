@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Plus, ChevronLeft, Loader2, Package } from 'lucide-react';
+import { Search, Plus, ChevronLeft, Loader2, Package, Link2 } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import LostFoundDetails from '../components/lostFound/LostFoundDetails';
@@ -30,6 +30,7 @@ export default function LostFound() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [publicLinkOnly, setPublicLinkOnly] = useState(false);
 
   // Dashboard KPI cards deep-link here with ?filter=UNCLAIMED / ?filter=RETURNED.
   useEffect(() => {
@@ -55,6 +56,7 @@ export default function LostFound() {
   const filteredItems = useMemo(() => {
     return items.filter((item) => {
       if (statusFilter !== 'ALL' && item.status !== statusFilter) return false;
+      if (publicLinkOnly && item.source !== 'PARENT_PORTAL') return false;
       if (search) {
         const term = search.toLowerCase();
         const haystack = `${item.itemCode} ${item.itemName} ${item.reporterName || ''} ${item.studentName || ''}`.toLowerCase();
@@ -62,7 +64,7 @@ export default function LostFound() {
       }
       return true;
     });
-  }, [items, search, statusFilter, userData]);
+  }, [items, search, statusFilter, publicLinkOnly, userData]);
 
   const reportTypeName = (id) => REPORT_TYPES.find((t) => t.id === id)?.name || id;
   const categoryName = (id) => itemCategories.find((c) => c.id === id)?.name || id;
@@ -111,6 +113,16 @@ export default function LostFound() {
                 {f.name}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => setPublicLinkOnly((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors border ${
+                publicLinkOnly ? 'bg-primary text-white border-primary font-medium' : 'text-slate-600 border-transparent hover:bg-slate-100'
+              }`}
+            >
+              <Link2 className="w-3.5 h-3.5" />
+              عبر الرابط العام فقط
+            </button>
           </div>
         </div>
 
@@ -136,7 +148,16 @@ export default function LostFound() {
               <tbody className="divide-y divide-slate-100 text-sm">
                 {filteredItems.map((item) => (
                   <tr key={item.id} className="hover:bg-slate-50/80 transition-colors cursor-pointer group" onClick={() => setSelectedItem(item)}>
-                    <td className="px-6 py-4 font-medium text-slate-900" dir="ltr">{item.itemCode}</td>
+                    <td className="px-6 py-4 font-medium text-slate-900" dir="ltr">
+                      <div className="flex items-center gap-2">
+                        {item.itemCode}
+                        {item.source === 'PARENT_PORTAL' && (
+                          <span title="مُقدَّم عبر الرابط العام" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary shrink-0">
+                            <Link2 className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-slate-600 flex items-center gap-2">
                       <Package className="w-4 h-4 text-slate-400" />
                       {reportTypeName(item.reportType)}

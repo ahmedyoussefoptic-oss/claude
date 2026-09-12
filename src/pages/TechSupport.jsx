@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Plus, ChevronLeft, Loader2, Wrench } from 'lucide-react';
+import { Search, Plus, ChevronLeft, Loader2, Wrench, Link2 } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import useAuthStore from '../stores/useAuthStore';
@@ -31,6 +31,7 @@ export default function TechSupport() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [publicLinkOnly, setPublicLinkOnly] = useState(false);
 
   // Dashboard KPI cards deep-link here with ?filter=OPEN / ?filter=OVERDUE
   // (combined states not covered by the visible tabs above).
@@ -59,6 +60,7 @@ export default function TechSupport() {
       if (statusFilter === 'OPEN' && !OPEN_TICKET_STATUSES.includes(t.status)) return false;
       if (statusFilter === 'OVERDUE' && !t.isOverdue) return false;
       if (!['ALL', 'OPEN', 'OVERDUE'].includes(statusFilter) && t.status !== statusFilter) return false;
+      if (publicLinkOnly && t.source !== 'PARENT_PORTAL') return false;
       if (search) {
         const term = search.toLowerCase();
         const haystack = `${t.ticketId} ${t.studentName || ''} ${t.parentName || ''} ${t.nationalId || ''}`.toLowerCase();
@@ -66,7 +68,7 @@ export default function TechSupport() {
       }
       return true;
     });
-  }, [tickets, search, statusFilter, userData]);
+  }, [tickets, search, statusFilter, publicLinkOnly, userData]);
 
   const problemTypeName = (id) => problemTypes.find((t) => t.id === id)?.name || id;
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
@@ -108,6 +110,16 @@ export default function TechSupport() {
                 {f.name}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={() => setPublicLinkOnly((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors border ${
+                publicLinkOnly ? 'bg-primary text-white border-primary font-medium' : 'text-slate-600 border-transparent hover:bg-slate-100'
+              }`}
+            >
+              <Link2 className="w-3.5 h-3.5" />
+              عبر الرابط العام فقط
+            </button>
           </div>
         </div>
 
@@ -134,7 +146,16 @@ export default function TechSupport() {
               <tbody className="divide-y divide-slate-100 text-sm">
                 {filteredTickets.map((t) => (
                   <tr key={t.id} className="hover:bg-slate-50/80 transition-colors cursor-pointer group" onClick={() => setSelectedTicket(t)}>
-                    <td className="px-6 py-4 font-medium text-slate-900" dir="ltr">{t.ticketId}</td>
+                    <td className="px-6 py-4 font-medium text-slate-900" dir="ltr">
+                      <div className="flex items-center gap-2">
+                        {t.ticketId}
+                        {t.source === 'PARENT_PORTAL' && (
+                          <span title="مُقدَّم عبر الرابط العام" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary shrink-0">
+                            <Link2 className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-6 py-4">
                       <div className="font-medium text-slate-900">{t.studentName}</div>
                       <div className="text-slate-500 text-xs mt-0.5">{t.parentName}</div>
