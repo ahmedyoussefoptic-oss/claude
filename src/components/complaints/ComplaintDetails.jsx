@@ -4,7 +4,7 @@ import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, u
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useUsers } from '../../hooks/useUsers';
-import { waLink, buildResolutionMessage } from '../../utils/whatsapp';
+import { waLink, buildReceiptMessage, buildResolutionMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { ROLES } from '../../config/roles';
 import AssigneeMultiSelect, { eligibleAssignees } from './AssigneeMultiSelect';
@@ -271,6 +271,18 @@ export default function ComplaintDetails({ complaint, onClose }) {
               <button disabled={loading} onClick={() => handleAction('REJECT')} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
                 رفض الملاحظة
               </button>
+            )}
+            {!complaint.receiptMessageSentAt && complaint.parentPhone && (
+              <a
+                href={waLink(complaint.parentPhone, buildReceiptMessage(complaint, templates.receipt))}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => updateDoc(doc(db, 'complaints', complaint.id), { receiptMessageSentAt: serverTimestamp() })}
+                className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4" />
+                إرسال رسالة الاستلام عبر واتساب
+              </a>
             )}
             {['SOLVED', 'CLOSED'].includes(complaint.status) && complaint.solutionDetails && complaint.parentPhone && (
               <a
