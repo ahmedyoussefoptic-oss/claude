@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FileText, Clock, AlertTriangle, CheckCircle2, Download, Plus, Star, Gauge, Repeat, Wrench, ShieldAlert, PackageSearch, PackageCheck, GraduationCap, Briefcase, AlertOctagon } from 'lucide-react';
+import { FileText, Clock, AlertTriangle, CheckCircle2, Download, Plus, Star, Gauge, Repeat, Wrench, ShieldAlert, PackageSearch, PackageCheck, GraduationCap, Briefcase, AlertOctagon, Link2 } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import StatCard from '../components/dashboard/StatCard';
@@ -10,6 +10,7 @@ import useAuthStore from '../stores/useAuthStore';
 import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
 import { OPEN_TICKET_STATUSES } from '../config/techSupport';
 import ComplaintForm from '../components/complaints/ComplaintForm';
+import PublicLinkModal from '../components/common/PublicLinkModal';
 
 // Generic branch-scoped live-count hook shared by the tech-support and
 // lost-found KPI cards below — same scoping rule as the complaints query.
@@ -66,6 +67,7 @@ export default function Dashboard() {
     returned: lostFoundItems.filter((i) => i.status === 'RETURNED').length,
   }), [lostFoundItems]);
   const [showNewForm, setShowNewForm] = useState(false);
+  const [showLinkModal, setShowLinkModal] = useState(false);
   const [complaints, setComplaints] = useState([]);
   const [stats, setStats] = useState({
     total: 0,
@@ -214,6 +216,10 @@ export default function Dashboard() {
           <p className="text-slate-500 mt-1">{t('dashboard.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
+          <button onClick={() => setShowLinkModal(true)} className="px-4 py-2.5 flex items-center gap-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm">
+            <Link2 className="w-4 h-4" />
+            رابط تقديم بلاغ
+          </button>
           <button onClick={handleExportCSV} className="px-4 py-2.5 flex items-center gap-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm">
             <Download className="w-4 h-4" />
             {t('dashboard.exportReport')}
@@ -410,6 +416,9 @@ export default function Dashboard() {
 
       {showNewForm && (
         <ComplaintForm onClose={() => setShowNewForm(false)} />
+      )}
+      {showLinkModal && (
+        <PublicLinkModal onClose={() => setShowLinkModal(false)} />
       )}
     </div>
   );
