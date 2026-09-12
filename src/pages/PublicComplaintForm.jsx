@@ -1,14 +1,26 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { CheckCircle2, Loader2, Copy, Check } from 'lucide-react';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { CheckCircle2, Loader2, Copy, Check, Upload, X } from 'lucide-react';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../config/firebase';
 import { useBranches, useDepartments, useComplaintTypes, useSubTypes } from '../hooks/useOrgData';
 import { STAGES } from '../config/complaintTypes';
 import { trackingLink } from '../utils/whatsapp';
 import logo from '../assets/logo.png';
 import Watermark from '../components/common/Watermark';
 import SystemCredit from '../components/common/SystemCredit';
+
+const MAX_FILES = 3;
+const MAX_FILE_BYTES = 4 * 1024 * 1024;
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 const emptyForm = {
   parentName: '',
@@ -34,6 +46,8 @@ export default function PublicComplaintForm() {
   const subTypes = useSubTypes();
 
   const [formData, setFormData] = useState({ ...emptyForm, branch: searchParams.get('branch') || '' });
+  const [files, setFiles] = useState([]);
+  const fileInputRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(null); // { complaintId }
@@ -48,43 +62,56 @@ export default function PublicComplaintForm() {
     }));
   };
 
+  const handleFileChange = (e) => {
+    if (!e.target.files?.length) return;
+    addFiles(Array.from(e.target.files));
+    e.target.value = '';
+  };
+
+  const addFiles = (newFiles) => {
+    setError(null);
+    const oversized = newFiles.find((f) => f.size > MAX_FILE_BYTES);
+    if (oversized) {
+      setError(`حجم الملف "${oversized.name}" أكبر من 4 ميجابايت.`);
+      return;
+    }
+    setFiles((prev) => {
+      const combined = [...prev, ...newFiles];
+      if (combined.length > MAX_FILES) {
+        setError(`يمكن إرفاق ${MAX_FILES} ملفات كحد أقصى.`);
+        return prev;
+      }
+      return combined;
+    });
+  };
+
+  const removeFile = (index) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     try {
-      const year = new Date().getFullYear();
-      const complaintId = `COM-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
-      const now = serverTimestamp();
+      const attachments = await Promise.all(
+        files.map(async (file) => ({
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          base64Data: await fileToBase64(file),
+        }))
+      );
 
-      const docRef = await addDoc(collection(db, 'complaints'), {
-        ...formData,
-        complaintId,
-        priority: 'NORMAL',
-        source: 'PARENT_PORTAL',
-        receiver: null,
-        status: 'RECEIVED',
-        attachments: [],
-        assignedTo: [],
-        assignedToNames: [],
-        assignedAt: null,
-        reopened: false,
-        isOverdue: false,
-        createdAt: now,
-        updatedAt: now,
-      });
+      const submitPublicComplaint = httpsCallable(functions, 'submitPublicComplaint');
+      const result = await submitPublicComplaint({ ...formData, attachments });
 
-      await addDoc(collection(db, `complaints/${docRef.id}/activityLog`), {
-        action: 'COMPLAINT_CREATED',
-        actorId: null,
-        actorName: 'ولي الأمر (نموذج إلكتروني)',
-        createdAt: now,
-      });
-
-      setSaved({ complaintId });
+      setSaved({ complaintId: result.data.complaintId });
+      setFiles([]);
     } catch (err) {
       console.error(err);
-      setError('حدث خطأ أثناء إرسال الملاحظة. يرجى المحاولة مرة أخرى.');
+      setError(err.message?.includes('4 ميجابايت') || err.message?.includes('ملفات كحد أقصى')
+        ? err.message
+        : 'حدث خطأ أثناء إرسال الملاحظة. يرجى المحاولة مرة أخرى.');
     } finally {
       setLoading(false);
     }
@@ -267,6 +294,44 @@ export default function PublicComplaintForm() {
                     placeholder="اكتب تفاصيل الملاحظة هنا..."
                     className="w-full border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm resize-none"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">مرفقات (اختياري)</label>
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (e.dataTransfer.files?.length) addFiles(Array.from(e.dataTransfer.files));
+                    }}
+                    className="flex justify-center px-6 py-5 border-2 border-slate-200 border-dashed rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors cursor-pointer"
+                  >
+                    <div className="space-y-1.5 text-center">
+                      <Upload className="w-6 h-6 mx-auto text-slate-400" />
+                      <p className="text-sm text-slate-600">
+                        <span className="font-medium text-primary">اضغط لرفع صورة أو ملف</span>
+                        <input ref={fileInputRef} type="file" className="sr-only" multiple onChange={handleFileChange} accept="image/*,.pdf,.doc,.docx" />
+                        {' '}أو اسحبه وأفلته هنا
+                      </p>
+                      <p className="text-xs text-slate-400">حتى {MAX_FILES} ملفات، بحد أقصى 4 ميجابايت لكل ملف</p>
+                    </div>
+                  </div>
+                  {files.length > 0 && (
+                    <ul className="mt-2 space-y-1">
+                      {files.map((file, i) => (
+                        <li key={i} className="text-xs text-slate-600 bg-slate-100 px-3 py-1.5 rounded-lg flex items-center justify-between">
+                          <span dir="ltr" className="truncate">{file.name}</span>
+                          <span className="flex items-center gap-2 shrink-0">
+                            {(file.size / 1024 / 1024).toFixed(2)} MB
+                            <button type="button" onClick={() => removeFile(i)} className="text-slate-400 hover:text-red-600">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </div>
 

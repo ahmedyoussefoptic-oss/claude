@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Search, Plus, ChevronLeft, Download, Loader2, SlidersHorizontal, RotateCcw } from 'lucide-react';
+import { Search, Plus, ChevronLeft, Download, Loader2, SlidersHorizontal, RotateCcw, Link2 } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
@@ -37,6 +37,7 @@ export default function ComplaintsList() {
   const [branchFilter, setBranchFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [publicLinkOnly, setPublicLinkOnly] = useState(false);
 
   // Dashboard KPI cards deep-link here with ?filter=... and/or ?type=... so
   // each card lands on the slice of the list it actually represents.
@@ -112,6 +113,7 @@ export default function ComplaintsList() {
       if (quickFilter === 'REOPENED' && !c.reopened) return false;
       if (typeFilter && c.complaintType !== typeFilter) return false;
       if (branchFilter && c.branch !== branchFilter) return false;
+      if (publicLinkOnly && c.source !== 'PARENT_PORTAL') return false;
       if (dateFrom) {
         const createdAt = c.createdAt?.toDate?.();
         if (!createdAt || createdAt < new Date(dateFrom)) return false;
@@ -129,14 +131,15 @@ export default function ComplaintsList() {
       }
       return true;
     });
-  }, [complaints, search, quickFilter, typeFilter, branchFilter, dateFrom, dateTo, userData]);
+  }, [complaints, search, quickFilter, typeFilter, branchFilter, dateFrom, dateTo, publicLinkOnly, userData]);
 
-  const advancedFiltersActive = typeFilter || branchFilter || dateFrom || dateTo;
+  const advancedFiltersActive = typeFilter || branchFilter || dateFrom || dateTo || publicLinkOnly;
   const resetAdvancedFilters = () => {
     setTypeFilter('');
     setBranchFilter('');
     setDateFrom('');
     setDateTo('');
+    setPublicLinkOnly(false);
   };
 
   const handleExportCSV = () => {
@@ -261,6 +264,19 @@ export default function ComplaintsList() {
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
             />
           </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">&nbsp;</label>
+            <button
+              type="button"
+              onClick={() => setPublicLinkOnly((v) => !v)}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm whitespace-nowrap transition-colors border ${
+                publicLinkOnly ? 'bg-primary text-white border-primary font-medium' : 'text-slate-600 border-slate-200 hover:bg-slate-100'
+              }`}
+            >
+              <Link2 className="w-3.5 h-3.5" />
+              عبر الرابط العام فقط
+            </button>
+          </div>
           {advancedFiltersActive && (
             <button
               onClick={resetAdvancedFilters}
@@ -295,7 +311,16 @@ export default function ComplaintsList() {
               <tbody className="divide-y divide-slate-100 text-sm">
                 {filteredComplaints.map((c) => (
                   <tr key={c.id} className="hover:bg-slate-50/80 transition-colors cursor-pointer group" onClick={() => setSelectedComplaint(c)}>
-                    <td className="px-6 py-4 font-medium text-slate-900" dir="ltr">{c.complaintId}</td>
+                    <td className="px-6 py-4 font-medium text-slate-900" dir="ltr">
+                      <div className="flex items-center gap-2">
+                        {c.complaintId}
+                        {c.source === 'PARENT_PORTAL' && (
+                          <span title="مُقدَّمة عبر الرابط العام" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary shrink-0">
+                            <Link2 className="w-3 h-3" />
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-6 py-4">
                       <div className="font-medium text-slate-900">{c.studentName}</div>
                       <div className="text-slate-500 text-xs mt-0.5">{c.parentName}</div>

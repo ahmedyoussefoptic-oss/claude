@@ -6,6 +6,8 @@ const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, Timestamp, FieldValue } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const { getMessaging } = require("firebase-admin/messaging");
+const { getStorage } = require("firebase-admin/storage");
+const crypto = require("crypto");
 const nodemailer = require("nodemailer");
 
 initializeApp();
@@ -698,4 +700,104 @@ exports.submitTechSupportSurvey = onCall(async (request) => {
   }
 
   return { ok: true };
+});
+
+const MAX_PUBLIC_ATTACHMENTS = 3;
+const MAX_PUBLIC_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+const PUBLIC_COMPLAINT_REQUIRED_FIELDS = [
+  "parentName", "parentPhone", "studentName", "studentId",
+  "branch", "stage", "complaintType", "subject", "details",
+];
+
+// Public complaint submission (the /report link shared with parents).
+// complaints already allows an anonymous client-side `create` (see
+// firestore.rules), but Storage does not allow anonymous writes — rather
+// than loosen Storage's security rules (a shared, harder-to-scope-safely
+// surface), attachments are uploaded here with the Admin SDK, and the
+// complaint doc is created in the same call so a record is never left
+// without its attachments due to a partial client-side failure.
+exports.submitPublicComplaint = onCall(async (request) => {
+  const data = request.data || {};
+  for (const field of PUBLIC_COMPLAINT_REQUIRED_FIELDS) {
+    if (!data[field] || typeof data[field] !== "string" || !data[field].trim()) {
+      throw new HttpsError("invalid-argument", "يرجى تعبئة جميع الحقول المطلوبة.");
+    }
+  }
+
+  const attachmentsInput = Array.isArray(data.attachments) ? data.attachments : [];
+  if (attachmentsInput.length > MAX_PUBLIC_ATTACHMENTS) {
+    throw new HttpsError("invalid-argument", `يمكن إرفاق ${MAX_PUBLIC_ATTACHMENTS} ملفات كحد أقصى.`);
+  }
+
+  const year = new Date().getFullYear();
+  const complaintId = `COM-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const bucket = getStorage().bucket();
+
+  const attachments = [];
+  for (const att of attachmentsInput) {
+    if (!att?.fileName || !att?.mimeType || !att?.base64Data) {
+      throw new HttpsError("invalid-argument", "بيانات أحد المرفقات غير مكتملة.");
+    }
+    const buffer = Buffer.from(att.base64Data, "base64");
+    if (buffer.length > MAX_PUBLIC_ATTACHMENT_BYTES) {
+      throw new HttpsError("invalid-argument", "الحد الأقصى لحجم كل ملف هو 4 ميجابايت.");
+    }
+    const safeName = att.fileName.replace(/[/\\]/g, "_");
+    const filePath = `complaints/${complaintId}/${Date.now()}_${safeName}`;
+    const token = crypto.randomUUID();
+    const file = bucket.file(filePath);
+    await file.save(buffer, {
+      metadata: {
+        contentType: att.mimeType,
+        metadata: { firebaseStorageDownloadTokens: token },
+      },
+    });
+    attachments.push({
+      fileName: safeName,
+      fileUrl: `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(filePath)}?alt=media&token=${token}`,
+      mimeType: att.mimeType,
+      size: buffer.length,
+      uploadedBy: null,
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  const now = Timestamp.now();
+  const docRef = await db.collection("complaints").add({
+    parentName: data.parentName.trim(),
+    parentPhone: data.parentPhone.trim(),
+    parentEmail: (data.parentEmail || "").trim(),
+    studentName: data.studentName.trim(),
+    studentId: data.studentId.trim(),
+    branch: data.branch,
+    department: data.department || "",
+    stage: data.stage,
+    grade: data.grade || "",
+    complaintType: data.complaintType,
+    subType: data.subType || "",
+    subject: data.subject.trim(),
+    details: data.details.trim(),
+    complaintId,
+    priority: "NORMAL",
+    source: "PARENT_PORTAL",
+    receiver: null,
+    status: "RECEIVED",
+    attachments,
+    assignedTo: [],
+    assignedToNames: [],
+    assignedAt: null,
+    reopened: false,
+    isOverdue: false,
+    createdAt: now,
+    updatedAt: now,
+  });
+
+  await db.collection(`complaints/${docRef.id}/activityLog`).add({
+    action: "COMPLAINT_CREATED",
+    actorId: null,
+    actorName: "ولي الأمر (نموذج إلكتروني)",
+    createdAt: now,
+  });
+
+  return { complaintId };
 });

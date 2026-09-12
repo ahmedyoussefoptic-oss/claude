@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, Trash2, Star } from 'lucide-react';
+import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, Trash2, Star, Link2 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
@@ -214,6 +214,12 @@ export default function ComplaintDetails({ complaint, onClose }) {
               <span className={`px-2.5 py-1 rounded-md text-xs font-medium border ${getStatusBadge(complaint.status)}`}>
                 {getStatusName(complaint.status)}
               </span>
+              {complaint.source === 'PARENT_PORTAL' && (
+                <span className="px-2.5 py-1 rounded-md text-xs font-medium border bg-primary/10 text-primary border-primary/20 flex items-center gap-1">
+                  <Link2 className="w-3 h-3" />
+                  عبر الرابط العام
+                </span>
+              )}
             </div>
             <p className="text-sm text-slate-500 flex items-center gap-2">
               <Clock className="w-4 h-4" /> 
