@@ -3,6 +3,7 @@ import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestor
 import { db } from '../config/firebase';
 import { useBranches, useComplaintTypes, useSubTypes } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
+import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import logo from '../assets/logo.png';
@@ -65,6 +66,7 @@ export default function Reports() {
   const [specialists, setSpecialists] = useState([]);
   const [filters, setFilters] = useState(emptyFilters);
   const [reportType, setReportType] = useState('COMPLAINTS');
+  const [selectedComplaint, setSelectedComplaint] = useState(null);
 
   useEffect(() => {
     if (!userData) return;
@@ -448,7 +450,7 @@ export default function Reports() {
               </thead>
               <tbody>
                 {results.map((c) => (
-                  <tr key={c.id} className="border-b border-slate-100">
+                  <tr key={c.id} onClick={() => setSelectedComplaint(c)} className="border-b border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors">
                     <td className="py-2 text-slate-800" dir="ltr">{c.complaintId}</td>
                     <td className="py-2 text-slate-600" dir="ltr">{c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd') : '—'}</td>
                     <td className="py-2 text-slate-600">{branchName(c.branch)}</td>
@@ -601,7 +603,7 @@ export default function Reports() {
               </thead>
               <tbody>
                 {surveyed.map((c) => (
-                  <tr key={c.id} className="border-b border-slate-100">
+                  <tr key={c.id} onClick={() => setSelectedComplaint(c)} className="border-b border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors">
                     <td className="py-2 text-slate-800" dir="ltr">{c.complaintId}</td>
                     <td className="py-2 text-slate-600" dir="ltr">{c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd') : '—'}</td>
                     <td className="py-2 text-slate-600">{branchName(c.branch)}</td>
@@ -633,7 +635,7 @@ export default function Reports() {
                 </thead>
                 <tbody>
                   {reopenedWithoutRating.map((c) => (
-                    <tr key={c.id} className="border-b border-slate-100">
+                    <tr key={c.id} onClick={() => setSelectedComplaint(c)} className="border-b border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors">
                       <td className="py-2 text-slate-800" dir="ltr">{c.complaintId}</td>
                       <td className="py-2 text-slate-600">{branchName(c.branch)}</td>
                       <td className="py-2 text-slate-600">{c.assignedToNames?.join('، ') || '—'}</td>
@@ -648,6 +650,10 @@ export default function Reports() {
         </>
         )}
       </div>
+
+      {selectedComplaint && (
+        <ComplaintDetails complaint={selectedComplaint} onClose={() => setSelectedComplaint(null)} />
+      )}
     </div>
   );
 }

@@ -15,6 +15,7 @@ const QUICK_FILTERS = [
   { id: 'ALL', name: 'الكل' },
   { id: 'OPEN', name: 'مفتوحة' },
   { id: 'OVERDUE', name: 'متأخرة' },
+  { id: 'ESCALATED', name: 'مصعدة' },
   { id: 'CLOSED', name: 'مغلقة' },
 ];
 
@@ -109,6 +110,7 @@ export default function ComplaintsList() {
       if (quickFilter === 'OPEN' && ['SOLVED', 'CLOSED', 'REJECTED'].includes(c.status)) return false;
       if (quickFilter === 'OVERDUE' && !c.isOverdue) return false;
       if (quickFilter === 'CLOSED' && !['SOLVED', 'CLOSED'].includes(c.status)) return false;
+      if (quickFilter === 'ESCALATED' && c.status !== 'ESCALATED') return false;
       if (quickFilter === 'IN_PROGRESS' && !['IN_PROGRESS', 'RECEIVED'].includes(c.status)) return false;
       if (quickFilter === 'REOPENED' && !c.reopened) return false;
       if (typeFilter && c.complaintType !== typeFilter) return false;
