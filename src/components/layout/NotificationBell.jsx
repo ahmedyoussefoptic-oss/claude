@@ -120,13 +120,13 @@ export default function NotificationBell() {
                 className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors disabled:opacity-60"
               >
                 <BellRing className="w-3.5 h-3.5" />
-                {enablingPush ? '...' : 'تفعيل التنبيهات الفورية على هذا الجهاز'}
+                {enablingPush ? '...' : t('notifications.enablePush')}
               </button>
             )}
             {pushPermission === 'denied' && (
               <p className="mt-2 flex items-center gap-1.5 text-xs text-slate-400">
                 <BellOff className="w-3.5 h-3.5 shrink-0" />
-                التنبيهات الفورية محظورة من إعدادات المتصفح لهذا الموقع
+                {t('notifications.pushBlocked')}
               </p>
             )}
           </div>

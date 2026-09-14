@@ -65,11 +65,14 @@
     "email": "البريد الإلكتروني",
     "password": "كلمة المرور",
     "submit": "تسجيل الدخول",
-    "invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة."
+    "invalidCredentials": "البريد الإلكتروني أو كلمة المرور غير صحيحة.",
+    "accountSuspended": "تم إيقاف حسابك. يرجى مراجعة مدير النظام."
   },
   "notifications": {
     "title": "الإشعارات",
-    "empty": "لا توجد إشعارات"
+    "empty": "لا توجد إشعارات",
+    "enablePush": "تفعيل التنبيهات الفورية على هذا الجهاز",
+    "pushBlocked": "التنبيهات الفورية محظورة من إعدادات المتصفح لهذا الموقع"
   },
   "dashboard": {
     "greeting": "مرحباً {{name}} 👋",
@@ -107,7 +110,17 @@
     "openTechTickets": "بلاغات الدعم الفني المفتوحة",
     "overdueTechTickets": "بلاغات دعم فني متأخرة",
     "unclaimedItems": "مفقودات بانتظار المطالبة",
-    "returnedItems": "مفقودات تم تسليمها"
+    "returnedItems": "مفقودات تم تسليمها",
+    "branchIndicatorsTitle": "لوحة مؤشرات الفروع",
+    "branchIndicatorsSubtitle": "اضغط على أي فرع لعرض تفاصيل الملاحظات والمفقودات والدعم الفني الخاصة به",
+    "totalSuffix": "{{count}} إجمالاً",
+    "categories": {
+      "academic": "أكاديمية",
+      "administrative": "إدارية",
+      "behavioral": "سلوكية",
+      "lostFound": "المفقودات",
+      "techSupport": "الدعم الفني"
+    }
   },
   "statuses": {
     "complaint": {
@@ -509,6 +522,27 @@
     "specialist": "المختص",
     "submittedViaPublicLink": "مُقدَّم عبر الرابط العام",
     "noResults": "لا يوجد بلاغات مطابقة"
+  },
+  "charts": {
+    "weeklyComplaintRate": "معدل الملاحظات هذا الأسبوع",
+    "complaintsByBranch": "الملاحظات حسب الفرع",
+    "notEnoughData": "لا توجد بيانات كافية بعد",
+    "mostComplaints": "الأكثر ملاحظات",
+    "days": {
+      "sat": "السبت",
+      "sun": "الأحد",
+      "mon": "الإثنين",
+      "tue": "الثلاثاء",
+      "wed": "الأربعاء",
+      "thu": "الخميس",
+      "fri": "الجمعة"
+    },
+    "defaultBranches": {
+      "boysGeneral": "بنين عام",
+      "girlsGeneral": "بنات عام",
+      "boysInternational": "بنين دولي",
+      "girlsInternational": "بنات دولي"
+    }
   },
   "deletedComplaints": {
     "title": "أرشيف الملاحظات المحذوفة",

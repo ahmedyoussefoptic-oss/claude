@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../config/firebase';
+import i18n from '../i18n';
 
 const useAuthStore = create((set) => ({
   user: null,
@@ -40,7 +41,7 @@ const useAuthStore = create((set) => ({
 
             if (data.active === false) {
               await signOut(auth);
-              set({ user: null, role: null, userData: null, loading: false, error: 'تم إيقاف حسابك. يرجى مراجعة مدير النظام.' });
+              set({ user: null, role: null, userData: null, loading: false, error: i18n.t('login.accountSuspended') });
               return;
             }
 

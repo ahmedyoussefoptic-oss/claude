@@ -1,22 +1,18 @@
+import { useTranslation } from 'react-i18next';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
-const dummyData = [
-  { name: 'السبت', value: 12 },
-  { name: 'الأحد', value: 19 },
-  { name: 'الإثنين', value: 15 },
-  { name: 'الثلاثاء', value: 22 },
-  { name: 'الأربعاء', value: 18 },
-  { name: 'الخميس', value: 25 },
-  { name: 'الجمعة', value: 10 },
-];
+const DUMMY_DAY_KEYS = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'];
+const DUMMY_VALUES = [12, 19, 15, 22, 18, 25, 10];
 
-export function TrendChart({ data = dummyData, title = 'معدل الملاحظات هذا الأسبوع' }) {
+export function TrendChart({ data, title }) {
+  const { t } = useTranslation();
+  const dummyData = DUMMY_DAY_KEYS.map((key, i) => ({ name: t(`charts.days.${key}`), value: DUMMY_VALUES[i] }));
   return (
     <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-      <h3 className="text-lg font-bold text-slate-900 mb-6">{title}</h3>
+      <h3 className="text-lg font-bold text-slate-900 mb-6">{title ?? t('charts.weeklyComplaintRate')}</h3>
       <div className="h-72 w-full" dir="ltr">
         <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+          <AreaChart data={data ?? dummyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.3} />
@@ -46,12 +42,13 @@ const RANK_STYLES = [
 ];
 const DEFAULT_BAR = 'from-sky-400 to-blue-500';
 
-export function BranchChart({ data, title = 'الملاحظات حسب الفرع' }) {
+export function BranchChart({ data, title }) {
+  const { t } = useTranslation();
   const defaultData = [
-    { name: 'بنين عام', value: 45 },
-    { name: 'بنات عام', value: 30 },
-    { name: 'بنين دولي', value: 25 },
-    { name: 'بنات دولي', value: 20 },
+    { name: t('charts.defaultBranches.boysGeneral'), value: 45 },
+    { name: t('charts.defaultBranches.girlsGeneral'), value: 30 },
+    { name: t('charts.defaultBranches.boysInternational'), value: 25 },
+    { name: t('charts.defaultBranches.girlsInternational'), value: 20 },
   ];
   const rows = data && data.length ? data : defaultData;
   const total = rows.reduce((sum, r) => sum + r.value, 0);
@@ -61,12 +58,12 @@ export function BranchChart({ data, title = 'الملاحظات حسب الفر�
   return (
     <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
       <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-bold text-slate-900">{title}</h3>
-        {total > 0 && <span className="text-xs text-slate-400">{total} إجمالاً</span>}
+        <h3 className="text-lg font-bold text-slate-900">{title ?? t('charts.complaintsByBranch')}</h3>
+        {total > 0 && <span className="text-xs text-slate-400">{t('dashboard.totalSuffix', { count: total })}</span>}
       </div>
 
       {total === 0 ? (
-        <p className="text-sm text-slate-400 text-center py-10">لا توجد بيانات كافية بعد</p>
+        <p className="text-sm text-slate-400 text-center py-10">{t('charts.notEnoughData')}</p>
       ) : (
         <div className="space-y-3.5">
           {rows.map((row, i) => {
@@ -86,7 +83,7 @@ export function BranchChart({ data, title = 'الملاحظات حسب الفر�
                     <span className="text-sm font-medium text-slate-800 truncate">{row.name}</span>
                     {isTop && (
                       <span className="shrink-0 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 whitespace-nowrap">
-                        الأكثر ملاحظات
+                        {t('charts.mostComplaints')}
                       </span>
                     )}
                   </div>

@@ -65,11 +65,14 @@
     "email": "Email",
     "password": "Password",
     "submit": "Sign In",
-    "invalidCredentials": "Incorrect email or password."
+    "invalidCredentials": "Incorrect email or password.",
+    "accountSuspended": "Your account has been suspended. Please contact the system administrator."
   },
   "notifications": {
     "title": "Notifications",
-    "empty": "No notifications"
+    "empty": "No notifications",
+    "enablePush": "Enable push notifications on this device",
+    "pushBlocked": "Push notifications are blocked in this browser's site settings"
   },
   "dashboard": {
     "greeting": "Welcome {{name}} 👋",
@@ -107,7 +110,17 @@
     "openTechTickets": "Open Tech Support Tickets",
     "overdueTechTickets": "Overdue Tech Support Tickets",
     "unclaimedItems": "Items Awaiting Claim",
-    "returnedItems": "Items Returned"
+    "returnedItems": "Items Returned",
+    "branchIndicatorsTitle": "Branch Indicators",
+    "branchIndicatorsSubtitle": "Click any branch to see its complaint, lost & found, and tech support details",
+    "totalSuffix": "{{count}} total",
+    "categories": {
+      "academic": "Academic",
+      "administrative": "Administrative",
+      "behavioral": "Behavioral",
+      "lostFound": "Lost & Found",
+      "techSupport": "Tech Support"
+    }
   },
   "statuses": {
     "complaint": {
@@ -509,6 +522,27 @@
     "specialist": "Specialist",
     "submittedViaPublicLink": "Submitted via public link",
     "noResults": "No matching tickets"
+  },
+  "charts": {
+    "weeklyComplaintRate": "Complaint rate this week",
+    "complaintsByBranch": "Complaints by branch",
+    "notEnoughData": "Not enough data yet",
+    "mostComplaints": "Most complaints",
+    "days": {
+      "sat": "Sat",
+      "sun": "Sun",
+      "mon": "Mon",
+      "tue": "Tue",
+      "wed": "Wed",
+      "thu": "Thu",
+      "fri": "Fri"
+    },
+    "defaultBranches": {
+      "boysGeneral": "Boys General",
+      "girlsGeneral": "Girls General",
+      "boysInternational": "Boys International",
+      "girlsInternational": "Girls International"
+    }
   },
   "deletedComplaints": {
     "title": "Deleted Complaints Archive",

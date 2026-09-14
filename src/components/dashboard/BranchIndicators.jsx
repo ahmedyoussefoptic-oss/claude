@@ -1,12 +1,13 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, GraduationCap, Briefcase, AlertOctagon, PackageSearch, Wrench } from 'lucide-react';
 
 const CATEGORY_META = [
-  { key: 'academic', label: 'أكاديمية', icon: GraduationCap, color: 'text-indigo-600 bg-indigo-100' },
-  { key: 'administrative', label: 'إدارية', icon: Briefcase, color: 'text-cyan-600 bg-cyan-100' },
-  { key: 'behavioral', label: 'سلوكية', icon: AlertOctagon, color: 'text-rose-600 bg-rose-100' },
-  { key: 'lostFound', label: 'المفقودات', icon: PackageSearch, color: 'text-teal-600 bg-teal-100' },
-  { key: 'techSupport', label: 'الدعم الفني', icon: Wrench, color: 'text-violet-600 bg-violet-100' },
+  { key: 'academic', icon: GraduationCap, color: 'text-indigo-600 bg-indigo-100' },
+  { key: 'administrative', icon: Briefcase, color: 'text-cyan-600 bg-cyan-100' },
+  { key: 'behavioral', icon: AlertOctagon, color: 'text-rose-600 bg-rose-100' },
+  { key: 'lostFound', icon: PackageSearch, color: 'text-teal-600 bg-teal-100' },
+  { key: 'techSupport', icon: Wrench, color: 'text-violet-600 bg-violet-100' },
 ];
 
 // SOLVED/CLOSED count as resolved, ESCALATED as escalated, REJECTED is
@@ -33,6 +34,7 @@ function lostFoundBreakdown(list) {
 }
 
 export default function BranchIndicators({ branches, complaints, techTickets, lostFoundItems }) {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(null);
 
   const rows = branches
@@ -57,8 +59,8 @@ export default function BranchIndicators({ branches, complaints, techTickets, lo
   return (
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
       <div className="p-6 border-b border-slate-100">
-        <h3 className="text-lg font-bold text-slate-900">لوحة مؤشرات الفروع</h3>
-        <p className="text-sm text-slate-500 mt-1">اضغط على أي فرع لعرض تفاصيل الملاحظات والمفقودات والدعم الفني الخاصة به</p>
+        <h3 className="text-lg font-bold text-slate-900">{t('dashboard.branchIndicatorsTitle')}</h3>
+        <p className="text-sm text-slate-500 mt-1">{t('dashboard.branchIndicatorsSubtitle')}</p>
       </div>
       <div className="divide-y divide-slate-100">
         {rows.map((row) => {
@@ -73,11 +75,11 @@ export default function BranchIndicators({ branches, complaints, techTickets, lo
                   <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                   <span className="font-medium text-slate-800">{row.name}</span>
                 </div>
-                <span className="text-sm font-bold text-slate-900 tabular-nums">{row.total} إجمالاً</span>
+                <span className="text-sm font-bold text-slate-900 tabular-nums">{t('dashboard.totalSuffix', { count: row.total })}</span>
               </button>
               {isOpen && (
                 <div className="px-6 pb-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                  {CATEGORY_META.map(({ key, label, icon: Icon, color }) => {
+                  {CATEGORY_META.map(({ key, icon: Icon, color }) => {
                     const c = row.categories[key];
                     return (
                       <div key={key} className="rounded-xl border border-slate-100 p-3.5 bg-slate-50/60">
@@ -85,21 +87,21 @@ export default function BranchIndicators({ branches, complaints, techTickets, lo
                           <span className={`w-7 h-7 shrink-0 rounded-lg flex items-center justify-center ${color}`}>
                             <Icon className="w-3.5 h-3.5" />
                           </span>
-                          <span className="text-sm font-medium text-slate-700 truncate">{label}</span>
+                          <span className="text-sm font-medium text-slate-700 truncate">{t(`dashboard.categories.${key}`)}</span>
                           <span className="text-xs text-slate-400 mr-auto tabular-nums shrink-0">{c.total}</span>
                         </div>
                         <div className="grid grid-cols-3 gap-1.5 text-center">
                           <div>
                             <p className="text-sm font-bold text-emerald-600 tabular-nums">{c.resolved}</p>
-                            <p className="text-[10px] text-slate-400">تم الحل</p>
+                            <p className="text-[10px] text-slate-400">{t('reports.resolvedCount')}</p>
                           </div>
                           <div>
                             <p className="text-sm font-bold text-amber-600 tabular-nums">{c.inProgress}</p>
-                            <p className="text-[10px] text-slate-400">قيد المعالجة</p>
+                            <p className="text-[10px] text-slate-400">{t('statuses.complaint.IN_PROGRESS')}</p>
                           </div>
                           <div>
                             <p className="text-sm font-bold text-orange-600 tabular-nums">{c.escalated}</p>
-                            <p className="text-[10px] text-slate-400">مصعدة</p>
+                            <p className="text-[10px] text-slate-400">{t('statuses.complaint.ESCALATED')}</p>
                           </div>
                         </div>
                       </div>
