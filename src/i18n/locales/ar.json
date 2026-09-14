@@ -422,6 +422,76 @@
     "yourComplaint": "ملاحظتكم",
     "yourReport": "بلاغكم"
   },
+  "parentPortal": {
+    "typeConfig": {
+      "complaint": { "title": "ملاحظة", "label": "رقم الملاحظة" },
+      "lostFound": { "title": "بلاغ مفقودات", "label": "رقم البلاغ" },
+      "techSupport": { "title": "بلاغ تقني", "label": "رقم البلاغ" }
+    },
+    "statusNames": {
+      "complaint": {
+        "RECEIVED": "مستلمة", "IN_PROGRESS": "قيد المعالجة", "WAITING_PARENT_RESPONSE": "بانتظار ردكم",
+        "SOLVED": "تم الحل", "CLOSED": "مغلقة", "REJECTED": "مرفوضة", "ESCALATED": "تحت متابعة الإدارة"
+      },
+      "lostFound": {
+        "UNCLAIMED": "قيد البحث", "MATCHED": "تمت مطابقة الغرض", "RETURNED": "تم التسليم", "CLOSED": "مغلقة"
+      },
+      "techSupport": {
+        "NEW": "مستلم", "ASSIGNED": "قيد المعالجة", "IN_PROGRESS": "قيد المعالجة",
+        "WAITING_CONFIRMATION": "تم إرسال الحل — بانتظار تأكيدكم", "CLOSED": "تم الحل", "REOPENED": "أُعيد فتحه ويُتابَع"
+      }
+    },
+    "actionNames": {
+      "COMPLAINT_CREATED": "تم تسجيل الملاحظة",
+      "COMPLAINT_ASSIGNED": "جاري العمل عليها",
+      "COMPLAINT_TRANSFERRED": "جاري العمل عليها",
+      "COMPLAINT_ACKNOWLEDGED": "تم البدء في المعالجة",
+      "COMPLAINT_STATUS_CHANGED": "تحديث حالة الملاحظة",
+      "SOLUTION_ADDED": "تم تقديم حل",
+      "COMPLAINT_SOLVED": "تم إغلاق الملاحظة (محلولة)",
+      "COMPLAINT_ESCALATED": "تحت متابعة الإدارة العليا",
+      "COMPLAINT_REOPENED": "تم إعادة فتح الملاحظة بناءً على طلبكم",
+      "ITEM_REGISTERED": "تم تسجيل البلاغ",
+      "ITEM_MATCHED": "تمت مطابقة الغرض بصاحبه",
+      "ITEM_RETURNED": "تم تسليم الغرض",
+      "ITEM_CLOSED": "تم إغلاق السجل",
+      "TICKET_CREATED": "تم تسجيل البلاغ",
+      "IDENTITY_VERIFIED": "تم التحقق من الهوية",
+      "TICKET_ASSIGNED": "جاري العمل على البلاغ",
+      "TICKET_TRANSFERRED": "جاري العمل على البلاغ",
+      "PROCESSING_STARTED": "بدأ المختص المعالجة",
+      "CREDENTIALS_SENT": "تم إرسال الحل",
+      "CONFIRMED_CLOSED": "تم تأكيد الحل وإغلاق البلاغ",
+      "TICKET_REOPENED": "تم إعادة فتح البلاغ بناءً على طلبكم",
+      "TICKET_ESCALATED": "تحت متابعة الإدارة العليا",
+      "SURVEY_SUBMITTED": "تم استلام تقييمكم"
+    },
+    "pageTitle": "بوابة متابعة الملاحظات والبلاغات",
+    "pageSubtitle": "أدخل رقم الملاحظة أو البلاغ للاستعلام عن حالته الحالية.",
+    "searchBtn": "استعلام",
+    "notFoundError": "عفواً، لم يتم العثور على سجل بهذا الرقم.",
+    "systemError": "حدث خطأ في النظام.",
+    "solutionDetailsLabel": "تفاصيل الحل:",
+    "returnedToLabel": "تم التسليم إلى:",
+    "surveyTitle": "هل أنت راضٍ عن الحل المقدم؟",
+    "surveySubtitle": "يهمنا رأيك لتحسين خدماتنا.",
+    "satisfiedYes": "نعم، راضٍ عن الحل",
+    "satisfiedNo": "لا، أرغب بإعادة الفتح",
+    "reopenNotice": "سيتم إعادة فتحه وإرساله للمختص لمتابعته مجدداً. يرجى توضيح سبب عدم الرضا أدناه.",
+    "reopenReasonPlaceholder": "يرجى توضيح سبب عدم الرضا...",
+    "additionalCommentsPlaceholder": "ملاحظات إضافية (اختياري)...",
+    "reopenBtn": "إعادة الفتح",
+    "submitRatingBtn": "إرسال التقييم",
+    "surveyDoneTitle": "شكراً لتقييمك!",
+    "surveyDoneSubtitle": "تم إغلاق السجل بنجاح.",
+    "reopenDoneTitle": "تم إعادة الفتح",
+    "reopenDoneSubtitle": "سيتم متابعته من قبل فريقنا مجدداً.",
+    "allRightsReserved": "جميع الحقوق محفوظة.",
+    "reopenChoiceRequiredAlert": "يرجى تحديد ما إذا كنتم راضين عن الحل.",
+    "allRatingsRequiredAlert": "يرجى تقييم جميع العناصر قبل الإرسال.",
+    "surveySubmitError": "حدث خطأ أثناء إرسال التقييم",
+    "parentActor": "ولي الأمر"
+  },
   "actions": {
     "complaint": {
       "COMPLAINT_CREATED": "تم تسجيل الملاحظة",

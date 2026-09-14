@@ -422,6 +422,76 @@
     "yourComplaint": "feedback",
     "yourReport": "report"
   },
+  "parentPortal": {
+    "typeConfig": {
+      "complaint": { "title": "Feedback", "label": "Feedback #" },
+      "lostFound": { "title": "Lost & Found Report", "label": "Report #" },
+      "techSupport": { "title": "Tech Support Ticket", "label": "Ticket #" }
+    },
+    "statusNames": {
+      "complaint": {
+        "RECEIVED": "Received", "IN_PROGRESS": "In Progress", "WAITING_PARENT_RESPONSE": "Awaiting Your Reply",
+        "SOLVED": "Solved", "CLOSED": "Closed", "REJECTED": "Rejected", "ESCALATED": "Under Management Review"
+      },
+      "lostFound": {
+        "UNCLAIMED": "Being Searched For", "MATCHED": "Item Matched", "RETURNED": "Returned", "CLOSED": "Closed"
+      },
+      "techSupport": {
+        "NEW": "Received", "ASSIGNED": "In Progress", "IN_PROGRESS": "In Progress",
+        "WAITING_CONFIRMATION": "Solution Sent — Awaiting Your Confirmation", "CLOSED": "Resolved", "REOPENED": "Reopened and Being Followed Up"
+      }
+    },
+    "actionNames": {
+      "COMPLAINT_CREATED": "Feedback registered",
+      "COMPLAINT_ASSIGNED": "Being worked on",
+      "COMPLAINT_TRANSFERRED": "Being worked on",
+      "COMPLAINT_ACKNOWLEDGED": "Processing has started",
+      "COMPLAINT_STATUS_CHANGED": "Feedback status updated",
+      "SOLUTION_ADDED": "A solution was submitted",
+      "COMPLAINT_SOLVED": "Feedback closed (resolved)",
+      "COMPLAINT_ESCALATED": "Under senior management review",
+      "COMPLAINT_REOPENED": "Feedback reopened at your request",
+      "ITEM_REGISTERED": "Report registered",
+      "ITEM_MATCHED": "Item matched to its owner",
+      "ITEM_RETURNED": "Item returned",
+      "ITEM_CLOSED": "Record closed",
+      "TICKET_CREATED": "Ticket registered",
+      "IDENTITY_VERIFIED": "Identity verified",
+      "TICKET_ASSIGNED": "Ticket is being worked on",
+      "TICKET_TRANSFERRED": "Ticket is being worked on",
+      "PROCESSING_STARTED": "Specialist started processing",
+      "CREDENTIALS_SENT": "Solution sent",
+      "CONFIRMED_CLOSED": "Solution confirmed and ticket closed",
+      "TICKET_REOPENED": "Ticket reopened at your request",
+      "TICKET_ESCALATED": "Under senior management review",
+      "SURVEY_SUBMITTED": "Your rating was received"
+    },
+    "pageTitle": "Feedback & Reports Tracking Portal",
+    "pageSubtitle": "Enter your feedback or report number to check its current status.",
+    "searchBtn": "Search",
+    "notFoundError": "Sorry, no record was found with this number.",
+    "systemError": "A system error occurred.",
+    "solutionDetailsLabel": "Solution details:",
+    "returnedToLabel": "Returned to:",
+    "surveyTitle": "Are you satisfied with the solution provided?",
+    "surveySubtitle": "Your feedback helps us improve our services.",
+    "satisfiedYes": "Yes, satisfied with the solution",
+    "satisfiedNo": "No, I'd like to reopen it",
+    "reopenNotice": "It will be reopened and sent back to the specialist for further follow-up. Please explain the reason for your dissatisfaction below.",
+    "reopenReasonPlaceholder": "Please explain the reason for your dissatisfaction...",
+    "additionalCommentsPlaceholder": "Additional comments (optional)...",
+    "reopenBtn": "Reopen",
+    "submitRatingBtn": "Submit Rating",
+    "surveyDoneTitle": "Thank you for your rating!",
+    "surveyDoneSubtitle": "The record has been closed successfully.",
+    "reopenDoneTitle": "Reopened",
+    "reopenDoneSubtitle": "It will be followed up by our team again.",
+    "allRightsReserved": "All rights reserved.",
+    "reopenChoiceRequiredAlert": "Please indicate whether you are satisfied with the solution.",
+    "allRatingsRequiredAlert": "Please rate all items before submitting.",
+    "surveySubmitError": "An error occurred while submitting the rating",
+    "parentActor": "Parent"
+  },
   "actions": {
     "complaint": {
       "COMPLAINT_CREATED": "Feedback registered",

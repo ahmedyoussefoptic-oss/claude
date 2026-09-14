@@ -1,80 +1,47 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Search, Loader2, CheckCircle2, Star, Send } from 'lucide-react';
 import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../config/firebase';
 import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { ar, enUS } from 'date-fns/locale';
 import logo from '../assets/logo.png';
 import Watermark from '../components/common/Watermark';
 import SystemCredit from '../components/common/SystemCredit';
+import LanguageSwitcher from '../components/common/LanguageSwitcher';
 
 // Each trackable record type: which collection its survey update targets
 // (techSupport has none — that goes through the submitTechSupportSurvey
 // callable instead, see handleSubmitSurvey), the status it must be in for
-// the survey to show, and whether "غير راضٍ" reopens it (doesn't make sense
-// for a lost item already handed over, so lostFound skips straight to a
-// rating-only form).
+// the survey to show, and whether a "not satisfied" answer reopens it
+// (doesn't make sense for a lost item already handed over, so lostFound
+// skips straight to a rating-only form).
 const TYPE_CONFIG = {
-  complaint: { collection: 'complaints', surveyStatus: 'SOLVED', allowReopen: true, title: 'ملاحظة', label: 'رقم الملاحظة' },
-  lostFound: { collection: 'lostFoundItems', surveyStatus: 'RETURNED', allowReopen: false, title: 'بلاغ مفقودات', label: 'رقم البلاغ' },
-  techSupport: { collection: null, surveyStatus: 'WAITING_CONFIRMATION', allowReopen: true, title: 'بلاغ تقني', label: 'رقم البلاغ' },
+  complaint: { collection: 'complaints', surveyStatus: 'SOLVED', allowReopen: true },
+  lostFound: { collection: 'lostFoundItems', surveyStatus: 'RETURNED', allowReopen: false },
+  techSupport: { collection: null, surveyStatus: 'WAITING_CONFIRMATION', allowReopen: true },
 };
 
-const STATUS_NAMES = {
-  complaint: {
-    RECEIVED: 'مستلمة', IN_PROGRESS: 'قيد المعالجة', WAITING_PARENT_RESPONSE: 'بانتظار ردكم',
-    SOLVED: 'تم الحل', CLOSED: 'مغلقة', REJECTED: 'مرفوضة', ESCALATED: 'تحت متابعة الإدارة',
-  },
-  lostFound: {
-    UNCLAIMED: 'قيد البحث', MATCHED: 'تمت مطابقة الغرض', RETURNED: 'تم التسليم', CLOSED: 'مغلقة',
-  },
-  techSupport: {
-    NEW: 'مستلم', ASSIGNED: 'قيد المعالجة', IN_PROGRESS: 'قيد المعالجة',
-    WAITING_CONFIRMATION: 'تم إرسال الحل — بانتظار تأكيدكم', CLOSED: 'تم الحل', REOPENED: 'أُعيد فتحه ويُتابَع',
-  },
-};
-
-const ACTION_NAMES = {
-  COMPLAINT_CREATED: 'تم تسجيل الملاحظة',
-  COMPLAINT_ASSIGNED: 'جاري العمل عليها',
-  COMPLAINT_TRANSFERRED: 'جاري العمل عليها',
-  COMPLAINT_ACKNOWLEDGED: 'تم البدء في المعالجة',
-  COMPLAINT_STATUS_CHANGED: 'تحديث حالة الملاحظة',
-  SOLUTION_ADDED: 'تم تقديم حل',
-  COMPLAINT_SOLVED: 'تم إغلاق الملاحظة (محلولة)',
-  COMPLAINT_ESCALATED: 'تحت متابعة الإدارة العليا',
-  COMPLAINT_REOPENED: 'تم إعادة فتح الملاحظة بناءً على طلبكم',
-  ITEM_REGISTERED: 'تم تسجيل البلاغ',
-  ITEM_MATCHED: 'تمت مطابقة الغرض بصاحبه',
-  ITEM_RETURNED: 'تم تسليم الغرض',
-  ITEM_CLOSED: 'تم إغلاق السجل',
-  TICKET_CREATED: 'تم تسجيل البلاغ',
-  IDENTITY_VERIFIED: 'تم التحقق من الهوية',
-  TICKET_ASSIGNED: 'جاري العمل على البلاغ',
-  TICKET_TRANSFERRED: 'جاري العمل على البلاغ',
-  PROCESSING_STARTED: 'بدأ المختص المعالجة',
-  CREDENTIALS_SENT: 'تم إرسال الحل',
-  CONFIRMED_CLOSED: 'تم تأكيد الحل وإغلاق البلاغ',
-  TICKET_REOPENED: 'تم إعادة فتح البلاغ بناءً على طلبكم',
-  TICKET_ESCALATED: 'تحت متابعة الإدارة العليا',
-  SURVEY_SUBMITTED: 'تم استلام تقييمكم',
-};
-const getActionName = (action) => ACTION_NAMES[action] || action;
-
-const RATING_LABELS = {
-  resolutionSpeed: 'سرعة الاستجابة',
-  solutionQuality: 'جودة الحل',
-  staffProfessionalism: 'احترافية الموظفين',
-};
+const RATING_KEYS = ['resolutionSpeed', 'solutionQuality', 'staffProfessionalism'];
 
 export default function ParentPortal() {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'ar' ? ar : enUS;
+  const getActionName = (action) => t(`parentPortal.actionNames.${action}`, action);
   const [searchParams] = useSearchParams();
   const [ticketId, setTicketId] = useState(searchParams.get('id') || '');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+
+  // A staff-generated link can pin the page's language via ?lang=ar|en.
+  useEffect(() => {
+    const lang = searchParams.get('lang');
+    if (lang === 'ar' || lang === 'en') i18n.changeLanguage(lang);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Survey State
   const [ratings, setRatings] = useState({ resolutionSpeed: 0, solutionQuality: 0, staffProfessionalism: 0 });
@@ -111,7 +78,7 @@ export default function ParentPortal() {
       }
     } catch (err) {
       console.error(err);
-      setError(err.code === 'functions/not-found' ? 'عفواً، لم يتم العثور على سجل بهذا الرقم.' : 'حدث خطأ في النظام.');
+      setError(err.code === 'functions/not-found' ? t('parentPortal.notFoundError') : t('parentPortal.systemError'));
     } finally {
       setLoading(false);
     }
@@ -130,11 +97,11 @@ export default function ParentPortal() {
     e.preventDefault();
 
     if (config.allowReopen && wantsReopen === null) {
-      alert('يرجى تحديد ما إذا كنتم راضين عن الحل.');
+      alert(t('parentPortal.reopenChoiceRequiredAlert'));
       return;
     }
     if (wantsReopen !== true && Object.values(ratings).some((v) => v === 0)) {
-      alert('يرجى تقييم جميع العناصر قبل الإرسال.');
+      alert(t('parentPortal.allRatingsRequiredAlert'));
       return;
     }
 
@@ -159,7 +126,7 @@ export default function ParentPortal() {
         await addDoc(collection(db, `${config.collection}/${result.id}/activityLog`), {
           action: 'COMPLAINT_REOPENED',
           actorId: 'PARENT',
-          actorName: 'ولي الأمر',
+          actorName: t('parentPortal.parentActor'),
           metadata: { reason: surveyComment },
           createdAt: serverTimestamp(),
         });
@@ -177,7 +144,7 @@ export default function ParentPortal() {
         await addDoc(collection(db, `${config.collection}/${result.id}/activityLog`), {
           action: 'SURVEY_SUBMITTED',
           actorId: 'PARENT',
-          actorName: 'ولي الأمر',
+          actorName: t('parentPortal.parentActor'),
           metadata: { rating: satisfactionRate, ...ratings },
           createdAt: serverTimestamp(),
         });
@@ -192,7 +159,7 @@ export default function ParentPortal() {
       }
     } catch (err) {
       console.error(err);
-      alert('حدث خطأ أثناء إرسال التقييم');
+      alert(t('parentPortal.surveySubmitError'));
     } finally {
       setSurveySubmitting(false);
     }
@@ -205,17 +172,18 @@ export default function ParentPortal() {
       <header className="relative z-10 bg-white border-b border-slate-200 py-4 px-6 sticky top-0 shadow-sm">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2 text-primary">
-            <img src={logo} alt="مدارس مكتشف العالمية" className="h-8 w-auto" />
-            <span className="font-bold text-lg">مدارس المكتشف العالمية</span>
+            <img src={logo} alt={t('app.brand')} className="h-8 w-auto" />
+            <span className="font-bold text-lg">{t('app.brand')}</span>
           </div>
+          <LanguageSwitcher />
         </div>
       </header>
 
       <main className="relative z-10 flex-1 flex flex-col items-center p-6 mt-10">
 
         <div className="w-full max-w-xl mb-10 text-center">
-          <h1 className="text-3xl font-bold text-slate-900 mb-4">بوابة متابعة الملاحظات والبلاغات</h1>
-          <p className="text-slate-500">أدخل رقم الملاحظة أو البلاغ للاستعلام عن حالته الحالية.</p>
+          <h1 className="text-3xl font-bold text-slate-900 mb-4">{t('parentPortal.pageTitle')}</h1>
+          <p className="text-slate-500">{t('parentPortal.pageSubtitle')}</p>
         </div>
 
         {/* Search Box */}
@@ -238,7 +206,7 @@ export default function ParentPortal() {
                 disabled={loading || !ticketId}
                 className="absolute left-2 px-6 py-2.5 bg-primary text-white rounded-lg hover:bg-primary-dark font-medium transition-colors disabled:opacity-70 flex items-center justify-center w-[110px]"
               >
-                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'استعلام'}
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : t('parentPortal.searchBtn')}
               </button>
             </div>
           </form>
@@ -258,14 +226,14 @@ export default function ParentPortal() {
             <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
               <div className="flex items-center justify-between pb-6 border-b border-slate-100 mb-6">
                 <div>
-                  <p className="text-sm text-slate-500 mb-1">{config.label}</p>
+                  <p className="text-sm text-slate-500 mb-1">{t(`parentPortal.typeConfig.${result.type}.label`)}</p>
                   <h2 className="text-xl font-bold text-slate-900 font-mono">#{result.complaintId}</h2>
                   {(result.studentName || result.itemName) && (
                     <p className="text-sm text-slate-500 mt-1">{result.studentName || result.itemName}</p>
                   )}
                 </div>
                 <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-100 text-amber-800 border border-amber-200">
-                  {STATUS_NAMES[result.type][result.status] || result.status}
+                  {t(`parentPortal.statusNames.${result.type}.${result.status}`, result.status)}
                 </span>
               </div>
 
@@ -278,16 +246,16 @@ export default function ParentPortal() {
                     <div className="pt-1">
                       <p className="font-medium text-slate-900">{getActionName(log.action)}</p>
                       <p className="text-sm text-slate-400 mt-1" dir="ltr">
-                        {log.createdAtMillis ? format(new Date(log.createdAtMillis), 'PP p', { locale: ar }) : ''}
+                        {log.createdAtMillis ? format(new Date(log.createdAtMillis), 'PP p', { locale: dateLocale }) : ''}
                       </p>
                       {log.metadata?.solutionDetails && (
                         <div className="mt-2 p-3 bg-emerald-50 text-emerald-800 rounded-lg text-sm border border-emerald-100">
-                          <strong>تفاصيل الحل:</strong> {log.metadata.solutionDetails}
+                          <strong>{t('parentPortal.solutionDetailsLabel')}</strong> {log.metadata.solutionDetails}
                         </div>
                       )}
                       {log.metadata?.returnedTo && (
                         <div className="mt-2 p-3 bg-emerald-50 text-emerald-800 rounded-lg text-sm border border-emerald-100">
-                          <strong>تم التسليم إلى:</strong> {log.metadata.returnedTo}
+                          <strong>{t('parentPortal.returnedToLabel')}</strong> {log.metadata.returnedTo}
                         </div>
                       )}
                     </div>
@@ -299,8 +267,8 @@ export default function ParentPortal() {
             {/* Satisfaction Survey */}
             {result.status === config.surveyStatus && !surveyDone && !reopenDone && (
               <div className="bg-white p-6 rounded-2xl border border-primary shadow-sm shadow-primary/10">
-                <h3 className="text-lg font-bold text-slate-900 mb-2">هل أنت راضٍ عن الحل المقدم؟</h3>
-                <p className="text-sm text-slate-500 mb-6">يهمنا رأيك لتحسين خدماتنا.</p>
+                <h3 className="text-lg font-bold text-slate-900 mb-2">{t('parentPortal.surveyTitle')}</h3>
+                <p className="text-sm text-slate-500 mb-6">{t('parentPortal.surveySubtitle')}</p>
 
                 {config.allowReopen && (
                   <div className="grid grid-cols-2 gap-3 mb-6">
@@ -309,14 +277,14 @@ export default function ParentPortal() {
                       onClick={() => setWantsReopen(false)}
                       className={`py-3 rounded-xl border text-sm font-medium transition-colors ${wantsReopen === false ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                     >
-                      نعم، راضٍ عن الحل
+                      {t('parentPortal.satisfiedYes')}
                     </button>
                     <button
                       type="button"
                       onClick={() => setWantsReopen(true)}
                       className={`py-3 rounded-xl border text-sm font-medium transition-colors ${wantsReopen === true ? 'bg-red-600 text-white border-red-600' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}
                     >
-                      لا، أرغب بإعادة الفتح
+                      {t('parentPortal.satisfiedNo')}
                     </button>
                   </div>
                 )}
@@ -325,13 +293,13 @@ export default function ParentPortal() {
                   <form onSubmit={submitSurvey} className="space-y-4">
                     {wantsReopen === true ? (
                       <p className="text-sm text-slate-600 bg-red-50 border border-red-100 rounded-xl p-3">
-                        سيتم إعادة فتحه وإرساله للمختص لمتابعته مجدداً. يرجى توضيح سبب عدم الرضا أدناه.
+                        {t('parentPortal.reopenNotice')}
                       </p>
                     ) : (
                       <div className="space-y-4">
-                        {Object.entries(RATING_LABELS).map(([key, label]) => (
+                        {RATING_KEYS.map((key) => (
                           <div key={key}>
-                            <p className="text-sm font-medium text-slate-700 mb-1.5">{label}</p>
+                            <p className="text-sm font-medium text-slate-700 mb-1.5">{t(`ratings.${key}`)}</p>
                             <div className="flex items-center gap-1 justify-center">
                               {[1, 2, 3, 4, 5].map(star => (
                                 <button
@@ -352,7 +320,7 @@ export default function ParentPortal() {
                     <textarea
                       value={surveyComment}
                       onChange={(e) => setSurveyComment(e.target.value)}
-                      placeholder={wantsReopen ? "يرجى توضيح سبب عدم الرضا..." : "ملاحظات إضافية (اختياري)..."}
+                      placeholder={wantsReopen ? t('parentPortal.reopenReasonPlaceholder') : t('parentPortal.additionalCommentsPlaceholder')}
                       required={wantsReopen === true}
                       className="w-full border border-slate-200 rounded-xl p-4 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none text-sm resize-none"
                       rows={3}
@@ -364,7 +332,7 @@ export default function ParentPortal() {
                       className={`w-full py-3 text-white rounded-xl font-medium transition-colors disabled:opacity-70 flex items-center justify-center gap-2 ${wantsReopen ? 'bg-red-600 hover:bg-red-700' : 'bg-primary hover:bg-primary-dark'}`}
                     >
                       {surveySubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5 -scale-x-100" />}
-                      {wantsReopen ? 'إعادة الفتح' : 'إرسال التقييم'}
+                      {wantsReopen ? t('parentPortal.reopenBtn') : t('parentPortal.submitRatingBtn')}
                     </button>
                   </form>
                 )}
@@ -376,8 +344,8 @@ export default function ParentPortal() {
                 <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-3">
                   <CheckCircle2 className="w-6 h-6" />
                 </div>
-                <h3 className="font-bold text-emerald-900 mb-1">شكراً لتقييمك!</h3>
-                <p className="text-sm text-emerald-700">تم إغلاق السجل بنجاح.</p>
+                <h3 className="font-bold text-emerald-900 mb-1">{t('parentPortal.surveyDoneTitle')}</h3>
+                <p className="text-sm text-emerald-700">{t('parentPortal.surveyDoneSubtitle')}</p>
               </div>
             )}
 
@@ -386,8 +354,8 @@ export default function ParentPortal() {
                 <div className="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-3">
                   <CheckCircle2 className="w-6 h-6" />
                 </div>
-                <h3 className="font-bold text-amber-900 mb-1">تم إعادة الفتح</h3>
-                <p className="text-sm text-amber-700">سيتم متابعته من قبل فريقنا مجدداً.</p>
+                <h3 className="font-bold text-amber-900 mb-1">{t('parentPortal.reopenDoneTitle')}</h3>
+                <p className="text-sm text-amber-700">{t('parentPortal.reopenDoneSubtitle')}</p>
               </div>
             )}
 
@@ -398,7 +366,7 @@ export default function ParentPortal() {
 
       {/* Footer */}
       <footer className="relative z-10 py-6 text-center text-slate-500 text-sm border-t border-slate-200 mt-auto bg-white">
-        © {new Date().getFullYear()} مدارس المكتشف العالمية. جميع الحقوق محفوظة.
+        © {new Date().getFullYear()} {t('app.brand')}. {t('parentPortal.allRightsReserved')}
         <SystemCredit />
       </footer>
     </div>
