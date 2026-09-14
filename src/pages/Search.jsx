@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Search as SearchIcon, Loader2, ChevronLeft, Download, Star } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -6,25 +7,10 @@ import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { ar, enUS } from 'date-fns/locale';
 
-const STATUSES = [
-  { id: '', name: 'كل الحالات' },
-  { id: 'RECEIVED', name: 'مستلمة' },
-  { id: 'IN_PROGRESS', name: 'قيد المعالجة' },
-  { id: 'WAITING_PARENT_RESPONSE', name: 'بانتظار الرد' },
-  { id: 'SOLVED', name: 'تم الحل' },
-  { id: 'ESCALATED', name: 'مصعدة' },
-  { id: 'REJECTED', name: 'مرفوضة' },
-  { id: 'CLOSED', name: 'مغلقة' },
-];
-
-const PRIORITIES = [
-  { id: '', name: 'كل الأولويات' },
-  { id: 'NORMAL', name: 'عادية' },
-  { id: 'HIGH', name: 'عالية' },
-  { id: 'URGENT', name: 'عاجلة' },
-];
+const STATUS_IDS = ['', 'RECEIVED', 'IN_PROGRESS', 'WAITING_PARENT_RESPONSE', 'SOLVED', 'ESCALATED', 'REJECTED', 'CLOSED'];
+const PRIORITY_IDS = ['', 'NORMAL', 'HIGH', 'URGENT'];
 
 const getStatusBadge = (status) => {
   switch (status) {
@@ -39,9 +25,9 @@ const getStatusBadge = (status) => {
   }
 };
 
-const STATUS_NAME = Object.fromEntries(STATUSES.filter(s => s.id).map(s => [s.id, s.name]));
-
 export default function Search() {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'ar' ? ar : enUS;
   const { userData } = useAuthStore();
   const branches = useBranches();
   const complaintTypes = useComplaintTypes();
@@ -110,7 +96,10 @@ export default function Search() {
   const handleExportCSV = () => {
     if (results.length === 0) return;
     let csvContent = "data:text/csv;charset=utf-8,﻿";
-    csvContent += "رقم الملاحظة,الطالب,ولي الأمر,التصنيف,الأولوية,الفرع,الحالة,تاريخ الإنشاء\n";
+    csvContent += [
+      t('reports.complaintNumber'), t('common.student'), t('common.parent'), t('common.type'),
+      t('complaintForm.priorityLabel'), t('common.branch'), t('common.status'), t('search.createdDateCsv'),
+    ].join(',') + '\n';
     results.forEach((c) => {
       const createdAt = c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd HH:mm') : '';
       csvContent += `${c.complaintId},"${c.studentName || ''}","${c.parentName || ''}","${c.complaintType || ''}","${c.priority || ''}","${c.branch || ''}","${c.status || ''}","${createdAt}"\n`;
@@ -127,60 +116,60 @@ export default function Search() {
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">البحث المتقدم</h1>
-        <p className="text-slate-500 mt-1">ابحث عن الملاحظات باستخدام أي مجموعة من المعايير التالية</p>
+        <h1 className="text-2xl font-bold text-slate-900">{t('nav.advancedSearch')}</h1>
+        <p className="text-slate-500 mt-1">{t('search.pageSubtitle')}</p>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم الملاحظة</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('reports.complaintNumber')}</label>
             <input type="text" name="complaintId" value={filters.complaintId} onChange={handleFilterChange} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">اسم الطالب</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('search.studentNameLabel')}</label>
             <input type="text" name="studentName" value={filters.studentName} onChange={handleFilterChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم هوية الطالب</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('search.studentIdLabel')}</label>
             <input type="text" name="studentId" value={filters.studentId} onChange={handleFilterChange} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">اسم ولي الأمر</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('search.parentNameLabel')}</label>
             <input type="text" name="parentName" value={filters.parentName} onChange={handleFilterChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">الفرع</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')}</label>
             <select name="branch" value={filters.branch} onChange={handleFilterChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
-              <option value="">كل الفروع</option>
+              <option value="">{t('common.allBranches')}</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">الحالة</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.status')}</label>
             <select name="status" value={filters.status} onChange={handleFilterChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
-              {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              {STATUS_IDS.map((id) => <option key={id} value={id}>{id ? t(`statuses.complaint.${id}`, id) : t('search.allStatuses')}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">الأولوية</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.priorityLabel')}</label>
             <select name="priority" value={filters.priority} onChange={handleFilterChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
-              {PRIORITIES.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {PRIORITY_IDS.map((id) => <option key={id} value={id}>{id ? t(`complaintForm.priorities.${id}`, id) : t('search.allPriorities')}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">التصنيف</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.type')}</label>
             <select name="complaintType" value={filters.complaintType} onChange={handleFilterChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
-              <option value="">كل الأنواع</option>
-              {complaintTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              <option value="">{t('common.allTypes')}</option>
+              {complaintTypes.map((ct) => <option key={ct.id} value={ct.id}>{ct.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">من تاريخ</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.fromDate')}</label>
             <input type="date" name="from" value={filters.from} onChange={handleFilterChange} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">إلى تاريخ</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.toDate')}</label>
             <input type="date" name="to" value={filters.to} onChange={handleFilterChange} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
           </div>
         </div>
@@ -190,11 +179,11 @@ export default function Search() {
         <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
           <p className="text-sm text-slate-600 flex items-center gap-2">
             <SearchIcon className="w-4 h-4" />
-            {anyFilterActive ? `${results.length} نتيجة` : `${complaints.length} ملاحظة إجمالاً`}
+            {anyFilterActive ? t('search.resultsCount', { count: results.length }) : t('search.totalCount', { count: complaints.length })}
           </p>
           <button onClick={handleExportCSV} disabled={results.length === 0} className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50">
             <Download className="w-4 h-4" />
-            تصدير النتائج
+            {t('search.exportResults')}
           </button>
         </div>
 
@@ -207,12 +196,12 @@ export default function Search() {
             <table className="w-full text-right">
               <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-100">
                 <tr>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">رقم الملاحظة</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">الطالب / ولي الأمر</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">الفرع</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">التاريخ</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">الحالة</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">استبيان ولي الأمر</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('reports.complaintNumber')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('complaintsList.studentParent')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('common.branch')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('common.date')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('common.status')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('search.parentSurveyLabel')}</th>
                   <th className="px-6 py-4"></th>
                 </tr>
               </thead>
@@ -226,11 +215,11 @@ export default function Search() {
                     </td>
                     <td className="px-6 py-4 text-slate-600">{c.branch}</td>
                     <td className="px-6 py-4 text-slate-600" dir="ltr">
-                      {c.createdAt ? format(c.createdAt.toDate(), 'PP p', { locale: ar }) : ''}
+                      {c.createdAt ? format(c.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${getStatusBadge(c.status)}`}>
-                        {STATUS_NAME[c.status] || c.status}
+                        {t(`statuses.complaint.${c.status}`, c.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -240,9 +229,9 @@ export default function Search() {
                           {c.satisfactionRate.toFixed(1)} / 5
                         </span>
                       ) : c.reopened ? (
-                        <span className="text-xs text-red-500">أُعيد فتحها دون تقييم</span>
+                        <span className="text-xs text-red-500">{t('search.reopenedWithoutRatingShort')}</span>
                       ) : (
-                        <span className="text-xs text-slate-300">— لم يُستبيَن —</span>
+                        <span className="text-xs text-slate-300">{t('search.notSurveyed')}</span>
                       )}
                     </td>
                     <td className="px-6 py-4 text-left">
@@ -255,7 +244,7 @@ export default function Search() {
                 {results.length === 0 && (
                   <tr>
                     <td colSpan="7" className="px-6 py-12 text-center text-slate-500">
-                      لا توجد نتائج مطابقة
+                      {t('search.noResults')}
                     </td>
                   </tr>
                 )}

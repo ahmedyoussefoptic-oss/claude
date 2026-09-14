@@ -510,6 +510,22 @@
     "submittedViaPublicLink": "مُقدَّم عبر الرابط العام",
     "noResults": "لا يوجد بلاغات مطابقة"
   },
+  "search": {
+    "pageSubtitle": "ابحث عن الملاحظات باستخدام أي مجموعة من المعايير التالية",
+    "studentNameLabel": "اسم الطالب",
+    "studentIdLabel": "رقم هوية الطالب",
+    "parentNameLabel": "اسم ولي الأمر",
+    "allStatuses": "كل الحالات",
+    "allPriorities": "كل الأولويات",
+    "resultsCount": "{{count}} نتيجة",
+    "totalCount": "{{count}} ملاحظة إجمالاً",
+    "exportResults": "تصدير النتائج",
+    "parentSurveyLabel": "استبيان ولي الأمر",
+    "reopenedWithoutRatingShort": "أُعيد فتحها دون تقييم",
+    "notSurveyed": "— لم يُستبيَن —",
+    "noResults": "لا توجد نتائج مطابقة",
+    "createdDateCsv": "تاريخ الإنشاء"
+  },
   "reports": {
     "pageSubtitle": "حدد معايير التقرير ثم اطبعه أو احفظه كملف PDF",
     "printSavePdf": "طباعة / حفظ PDF",

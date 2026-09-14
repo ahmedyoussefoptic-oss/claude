@@ -510,6 +510,22 @@
     "submittedViaPublicLink": "Submitted via public link",
     "noResults": "No matching tickets"
   },
+  "search": {
+    "pageSubtitle": "Search complaints using any combination of the criteria below",
+    "studentNameLabel": "Student name",
+    "studentIdLabel": "Student ID number",
+    "parentNameLabel": "Parent name",
+    "allStatuses": "All statuses",
+    "allPriorities": "All priorities",
+    "resultsCount": "{{count}} results",
+    "totalCount": "{{count}} complaints total",
+    "exportResults": "Export results",
+    "parentSurveyLabel": "Parent survey",
+    "reopenedWithoutRatingShort": "Reopened without a rating",
+    "notSurveyed": "— Not surveyed —",
+    "noResults": "No matching results",
+    "createdDateCsv": "Created date"
+  },
   "reports": {
     "pageSubtitle": "Select the report criteria, then print it or save it as a PDF",
     "printSavePdf": "Print / Save PDF",
