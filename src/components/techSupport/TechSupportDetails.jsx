@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Clock, CheckCircle2, User, Phone, MapPin, Loader2, Trash2, UserPlus, MessageCircle, ShieldCheck, Link2, AlertTriangle } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
@@ -6,29 +7,16 @@ import useAuthStore from '../../stores/useAuthStore';
 import { useUsers } from '../../hooks/useUsers';
 import { useBranches, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
 import { ROLES } from '../../config/roles';
-import { TICKET_STATUS_LABELS, TICKET_STATUS_BADGE } from '../../config/techSupport';
+import { TICKET_STATUS_BADGE } from '../../config/techSupport';
 import { waLink, buildCredentialMessage, buildTechSupportReceiptMessage, toWhatsAppNumber } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
-
-const getActionName = (action) => {
-  switch (action) {
-    case 'TICKET_CREATED': return 'تم تسجيل البلاغ';
-    case 'IDENTITY_VERIFIED': return 'تم التحقق من هوية مقدّم البلاغ';
-    case 'TICKET_ASSIGNED': return 'تم إسناد البلاغ';
-    case 'TICKET_TRANSFERRED': return 'تم تحويل البلاغ لمختص آخر';
-    case 'PROCESSING_STARTED': return 'بدأ المختص المعالجة';
-    case 'CREDENTIALS_SENT': return 'تم إرسال بيانات الدخول';
-    case 'CONFIRMED_CLOSED': return 'تأكيد نجاح الدخول وإغلاق البلاغ';
-    case 'TICKET_REOPENED': return 'تم إعادة فتح البلاغ';
-    case 'TICKET_ESCALATED': return 'تم تصعيد البلاغ';
-    case 'NOTE_ADDED': return 'ملاحظة';
-    default: return action;
-  }
-};
+import { ar, enUS } from 'date-fns/locale';
 
 export default function TechSupportDetails({ ticket, onClose }) {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'ar' ? ar : enUS;
+  const getActionName = (action) => t(`actions.techSupport.${action}`, action);
   const { user, userData } = useAuthStore();
   const users = useUsers();
   const branches = useBranches();
@@ -63,7 +51,7 @@ export default function TechSupportDetails({ ticket, onClose }) {
     await addDoc(collection(db, `techSupportTickets/${ticket.id}/activityLog`), {
       action,
       actorId: user.uid,
-      actorName: userData?.name || 'مستخدم',
+      actorName: userData?.name || t('common.user'),
       metadata,
       createdAt: now,
     });
@@ -142,7 +130,7 @@ export default function TechSupportDetails({ ticket, onClose }) {
   };
 
   const handleReopen = async () => {
-    const reason = prompt('سبب إعادة فتح البلاغ (مثال: لم ينجح تسجيل الدخول):');
+    const reason = prompt(t('techSupportDetails.reopenPrompt'));
     if (!reason) return;
     setLoading(true);
     try {
@@ -164,7 +152,7 @@ export default function TechSupportDetails({ ticket, onClose }) {
   };
 
   const handleDelete = async () => {
-    const reason = prompt('اكتب سبب حذف البلاغ نهائياً (إلزامي):');
+    const reason = prompt(t('techSupportDetails.deletePrompt'));
     if (!reason) return;
     setLoading(true);
     try {
@@ -187,7 +175,7 @@ export default function TechSupportDetails({ ticket, onClose }) {
     }
   };
 
-  const problemTypeName = problemTypes.find((t) => t.id === ticket.problemType)?.name || ticket.problemType;
+  const problemTypeName = problemTypes.find((pt) => pt.id === ticket.problemType)?.name || ticket.problemType;
   const platformName = platforms.find((p) => p.id === ticket.platform)?.name || ticket.platform;
   const branchName = branches.find((b) => b.id === ticket.branch)?.name || ticket.branch;
 
@@ -200,18 +188,18 @@ export default function TechSupportDetails({ ticket, onClose }) {
             <div className="flex items-center gap-3 mb-1">
               <h2 className="text-xl font-bold text-slate-900">{ticket.ticketId}</h2>
               <span className={`px-2.5 py-1 rounded-md text-xs font-medium border ${TICKET_STATUS_BADGE[ticket.status]}`}>
-                {TICKET_STATUS_LABELS[ticket.status]}
+                {t(`statuses.techSupport.${ticket.status}`, ticket.status)}
               </span>
               {ticket.source === 'PARENT_PORTAL' && (
                 <span className="px-2.5 py-1 rounded-md text-xs font-medium border bg-primary/10 text-primary border-primary/20 flex items-center gap-1">
                   <Link2 className="w-3 h-3" />
-                  عبر الرابط العام
+                  {t('techSupportDetails.viaPublicLink')}
                 </span>
               )}
             </div>
             <p className="text-sm text-slate-500 flex items-center gap-2">
               <Clock className="w-4 h-4" />
-              {ticket.createdAt ? format(ticket.createdAt.toDate(), 'PP p', { locale: ar }) : ''}
+              {ticket.createdAt ? format(ticket.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}
             </p>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
@@ -223,7 +211,7 @@ export default function TechSupportDetails({ ticket, onClose }) {
 
           {!canEdit && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3">
-              صلاحيتك اطلاع فقط على هذا البلاغ — لا تملك صلاحية التعديل.
+              {t('techSupportDetails.readOnlyNotice')}
             </div>
           )}
 
@@ -231,10 +219,10 @@ export default function TechSupportDetails({ ticket, onClose }) {
             <div className="bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-xl p-3 flex items-start gap-2.5">
               <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p>لم يتم التحقق من هوية مقدّم البلاغ بعد — تحقّق من مطابقة رقم الجوال مع سجل الطالب قبل إرسال أي بيانات دخول.</p>
+                <p>{t('techSupportDetails.identityNotVerifiedNotice')}</p>
                 {canEdit && (
                   <button disabled={loading} onClick={handleVerifyIdentity} className="mt-2 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 transition-colors">
-                    تأكيد مطابقة الهوية
+                    {t('techSupportDetails.confirmIdentityBtn')}
                   </button>
                 )}
               </div>
@@ -251,39 +239,39 @@ export default function TechSupportDetails({ ticket, onClose }) {
                 className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
               >
                 <MessageCircle className="w-4 h-4" />
-                إرسال رسالة الاستلام عبر واتساب
+                {t('techSupportDetails.sendReceiptWhatsApp')}
               </a>
             )}
             {canEdit && ticket.status === 'ASSIGNED' && (
               <button disabled={loading} onClick={handleStart} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
-                بدء المعالجة
+                {t('techSupportDetails.startProcessing')}
               </button>
             )}
             {canEdit && ticket.status === 'IN_PROGRESS' && ticket.identityVerified && (
               <button disabled={loading} onClick={() => setShowCredsForm(true)} className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2">
                 <MessageCircle className="w-4 h-4" />
-                إرسال بيانات الدخول عبر واتساب
+                {t('techSupportDetails.sendCredentialsWhatsApp')}
               </button>
             )}
             {canEdit && ticket.status === 'WAITING_CONFIRMATION' && (
               <button disabled={loading} onClick={handleConfirmClose} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors">
-                تأكيد نجاح الدخول وإغلاق البلاغ
+                {t('techSupportDetails.confirmCloseBtn')}
               </button>
             )}
             {canEdit && ['CLOSED', 'WAITING_CONFIRMATION'].includes(ticket.status) && (
               <button disabled={loading} onClick={handleReopen} className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors">
-                إعادة فتح البلاغ
+                {t('techSupportDetails.reopenBtn')}
               </button>
             )}
             {canEdit && !['CLOSED'].includes(ticket.status) && (
               <button disabled={loading} onClick={handleEscalate} className="px-4 py-2 bg-white border border-orange-300 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-50 transition-colors">
-                تصعيد
+                {t('techSupportDetails.escalateBtn')}
               </button>
             )}
             {canDelete && (
               <button disabled={loading} onClick={handleDelete} className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors flex items-center gap-2 mr-auto">
                 <Trash2 className="w-4 h-4" />
-                حذف البلاغ نهائياً
+                {t('techSupportDetails.deleteBtn')}
               </button>
             )}
           </div>
@@ -292,24 +280,24 @@ export default function TechSupportDetails({ ticket, onClose }) {
             <div className="bg-white p-4 rounded-xl border border-emerald-200 shadow-sm space-y-3">
               <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                بيانات الدخول المؤقتة — لن تُحفظ هذه القيم في النظام
+                {t('techSupportDetails.credsFormTitle')}
               </h3>
               <input
                 type="text" value={username} onChange={(e) => setUsername(e.target.value)}
-                placeholder="اسم المستخدم" dir="ltr"
+                placeholder={t('techSupportDetails.usernamePlaceholder')} dir="ltr"
                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />
               <input
                 type="text" value={tempPassword} onChange={(e) => setTempPassword(e.target.value)}
-                placeholder="الرمز السري المؤقت" dir="ltr"
+                placeholder={t('techSupportDetails.tempPasswordPlaceholder')} dir="ltr"
                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />
-              <p className="text-xs text-slate-500">سيُرسل الرمز حصراً إلى الرقم المسجّل: <span dir="ltr" className="font-mono">{toWhatsAppNumber(ticket.parentPhone)}</span></p>
+              <p className="text-xs text-slate-500">{t('techSupportDetails.willSendToRegistered')} <span dir="ltr" className="font-mono">{toWhatsAppNumber(ticket.parentPhone)}</span></p>
               <div className="flex gap-2">
                 <button disabled={loading || !username.trim() || !tempPassword.trim()} onClick={handleSendCredentials} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
-                  فتح واتساب والإرسال
+                  {t('techSupportDetails.openWhatsAppSend')}
                 </button>
-                <button onClick={() => setShowCredsForm(false)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200">إلغاء</button>
+                <button onClick={() => setShowCredsForm(false)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200">{t('techSupportDetails.cancel')}</button>
               </div>
             </div>
           )}
@@ -318,20 +306,20 @@ export default function TechSupportDetails({ ticket, onClose }) {
             <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
               <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-slate-400" />
-                {ticket.assignedTo ? 'تحويل البلاغ لمختص آخر' : 'إسناد البلاغ لمختص تقنية معلومات'}
+                {ticket.assignedTo ? t('techSupportDetails.transferTitle') : t('techSupportDetails.assignTitle')}
               </h3>
               {ticket.assignedToName && (
-                <p className="text-sm text-slate-500 mb-3">المختص الحالي: <span className="font-medium text-slate-800">{ticket.assignedToName}</span></p>
+                <p className="text-sm text-slate-500 mb-3">{t('techSupportDetails.currentSpecialist')} <span className="font-medium text-slate-800">{ticket.assignedToName}</span></p>
               )}
               <div className="flex gap-3">
                 <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
-                  <option value="">اختر المختص...</option>
+                  <option value="">{t('techSupportDetails.selectSpecialist')}</option>
                   {users.filter((u) => u.id !== ticket.assignedTo && u.active !== false).map((u) => (
                     <option key={u.id} value={u.id}>{u.name} ({u.role}{u.department === 'IT' ? ' - IT' : ''})</option>
                   ))}
                 </select>
                 <button disabled={loading || !assigneeId} onClick={handleAssign} className="px-5 py-2.5 bg-slate-800 text-white rounded-xl text-sm font-medium hover:bg-slate-900 disabled:opacity-50">
-                  {ticket.assignedTo ? 'تحويل' : 'إسناد'}
+                  {ticket.assignedTo ? t('techSupportDetails.transferBtn') : t('techSupportDetails.assignBtn')}
                 </button>
               </div>
             </div>
@@ -343,7 +331,7 @@ export default function TechSupportDetails({ ticket, onClose }) {
                 <User className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-0.5">ولي الأمر ({ticket.relation})</p>
+                <p className="text-xs text-slate-500 mb-0.5">{t('techSupportDetails.parentGuardian')} ({t(`techSupportForm.relations.${ticket.relation}`, ticket.relation)})</p>
                 <p className="font-medium text-slate-900">{ticket.parentName}</p>
                 <p className="text-sm text-slate-500 mt-1 flex items-center gap-1" dir="ltr">
                   <Phone className="w-3.5 h-3.5" /> {ticket.parentPhone}
@@ -355,7 +343,7 @@ export default function TechSupportDetails({ ticket, onClose }) {
                 <MapPin className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-0.5">الطالب</p>
+                <p className="text-xs text-slate-500 mb-0.5">{t('techSupportDetails.student')}</p>
                 <p className="font-medium text-slate-900">{ticket.studentName}</p>
                 <p className="text-sm text-slate-500 mt-1">{branchName} - {ticket.stage} {ticket.grade}</p>
               </div>
@@ -369,13 +357,13 @@ export default function TechSupportDetails({ ticket, onClose }) {
             </div>
             {ticket.details && <p className="text-slate-600 leading-relaxed text-sm whitespace-pre-wrap">{ticket.details}</p>}
             <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500 space-y-1">
-              <p>رقم الهوية: <span dir="ltr">{ticket.nationalId}</span> {ticket.academicId && <>· الرقم الأكاديمي: <span dir="ltr">{ticket.academicId}</span></>}</p>
+              <p>{t('techSupportDetails.nationalIdLabel')} <span dir="ltr">{ticket.nationalId}</span> {ticket.academicId && <>· {t('techSupportDetails.academicIdLabel')} <span dir="ltr">{ticket.academicId}</span></>}</p>
               {ticket.platformLink && <p dir="ltr">{ticket.platformLink}</p>}
             </div>
           </div>
 
           <div>
-            <h3 className="font-bold text-slate-900 text-lg mb-4">سجل المتابعة (سجل التدقيق)</h3>
+            <h3 className="font-bold text-slate-900 text-lg mb-4">{t('techSupportDetails.activityLogTitle')}</h3>
             <div className="space-y-4 relative before:absolute before:inset-y-0 before:right-[15px] before:w-[2px] before:bg-slate-200">
               {logs.map((log) => (
                 <div key={log.id} className="relative flex gap-4">
@@ -385,19 +373,19 @@ export default function TechSupportDetails({ ticket, onClose }) {
                   <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm flex-1">
                     <div className="flex justify-between mb-2">
                       <p className="font-medium text-slate-900">{getActionName(log.action)}</p>
-                      <p className="text-xs text-slate-400" dir="ltr">{log.createdAt ? format(log.createdAt.toDate(), 'p', { locale: ar }) : ''}</p>
+                      <p className="text-xs text-slate-400" dir="ltr">{log.createdAt ? format(log.createdAt.toDate(), 'p', { locale: dateLocale }) : ''}</p>
                     </div>
-                    <p className="text-sm text-slate-600 mb-1">بواسطة: {log.actorName || 'النظام'}</p>
+                    <p className="text-sm text-slate-600 mb-1">{t('complaintDetails.by')} {log.actorName || t('complaintDetails.system')}</p>
                     {log.metadata?.sentToPhone && (
                       <div className="mt-2 p-3 bg-emerald-50 text-emerald-800 rounded-lg text-sm border border-emerald-100">
-                        أُرسلت بيانات الدخول إلى الرقم المسجّل <span dir="ltr">{log.metadata.sentToPhone}</span> — اسم المستخدم: <span dir="ltr">{log.metadata.usernameSent}</span> (الرمز السري غير مخزَّن).
+                        {t('techSupportDetails.credentialsSentDetail', { phone: log.metadata.sentToPhone, username: log.metadata.usernameSent })}
                       </div>
                     )}
                     {log.metadata?.reason && (
-                      <div className="mt-2 p-3 bg-red-50 text-red-800 rounded-lg text-sm border border-red-100"><strong>السبب:</strong> {log.metadata.reason}</div>
+                      <div className="mt-2 p-3 bg-red-50 text-red-800 rounded-lg text-sm border border-red-100"><strong>{t('techSupportDetails.reasonLabel')}</strong> {log.metadata.reason}</div>
                     )}
                     {log.metadata?.toUserName && (
-                      <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200">إلى: <strong>{log.metadata.toUserName}</strong></div>
+                      <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200">{t('techSupportDetails.toLabel')} <strong>{log.metadata.toUserName}</strong></div>
                     )}
                     {log.metadata?.note && <p className="text-sm text-slate-600 mt-1">{log.metadata.note}</p>}
                   </div>
@@ -412,12 +400,12 @@ export default function TechSupportDetails({ ticket, onClose }) {
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              placeholder="أضف ملاحظة متابعة..."
+              placeholder={t('techSupportDetails.addNotePlaceholder')}
               className="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none resize-none h-[52px]"
               rows={1}
             />
             <button disabled={loading} onClick={handleNote} className="px-6 h-[52px] bg-slate-800 text-white rounded-xl hover:bg-slate-900 font-medium transition-colors shadow-sm flex items-center gap-2">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'إضافة'}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('techSupportDetails.addBtn')}
             </button>
           </div>
         </div>

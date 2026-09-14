@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Search, Plus, ChevronLeft, Loader2, Wrench, Link2 } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -7,20 +8,16 @@ import useAuthStore from '../stores/useAuthStore';
 import { useBranches, useProblemTypes } from '../hooks/useOrgData';
 import TechSupportDetails from '../components/techSupport/TechSupportDetails';
 import TechSupportForm from '../components/techSupport/TechSupportForm';
-import { TICKET_STATUS_LABELS, TICKET_STATUS_BADGE, OPEN_TICKET_STATUSES } from '../config/techSupport';
+import { TICKET_STATUS_BADGE, OPEN_TICKET_STATUSES } from '../config/techSupport';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { ar, enUS } from 'date-fns/locale';
 
-const FILTERS = [
-  { id: 'ALL', name: 'الكل' },
-  { id: 'ASSIGNED', name: 'مُسندة' },
-  { id: 'IN_PROGRESS', name: 'قيد المعالجة' },
-  { id: 'WAITING_CONFIRMATION', name: 'بانتظار التأكيد' },
-  { id: 'CLOSED', name: 'مغلقة' },
-];
+const FILTER_IDS = ['ALL', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_CONFIRMATION', 'CLOSED'];
 
 export default function TechSupport() {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'ar' ? ar : enUS;
   const { userData } = useAuthStore();
   const branches = useBranches();
   const problemTypes = useProblemTypes();
@@ -56,33 +53,33 @@ export default function TechSupport() {
   }, [userData?.access, userData?.branch]);
 
   const filteredTickets = useMemo(() => {
-    return tickets.filter((t) => {
-      if (statusFilter === 'OPEN' && !OPEN_TICKET_STATUSES.includes(t.status)) return false;
-      if (statusFilter === 'OVERDUE' && !t.isOverdue) return false;
-      if (!['ALL', 'OPEN', 'OVERDUE'].includes(statusFilter) && t.status !== statusFilter) return false;
-      if (publicLinkOnly && t.source !== 'PARENT_PORTAL') return false;
+    return tickets.filter((tk) => {
+      if (statusFilter === 'OPEN' && !OPEN_TICKET_STATUSES.includes(tk.status)) return false;
+      if (statusFilter === 'OVERDUE' && !tk.isOverdue) return false;
+      if (!['ALL', 'OPEN', 'OVERDUE'].includes(statusFilter) && tk.status !== statusFilter) return false;
+      if (publicLinkOnly && tk.source !== 'PARENT_PORTAL') return false;
       if (search) {
         const term = search.toLowerCase();
-        const haystack = `${t.ticketId} ${t.studentName || ''} ${t.parentName || ''} ${t.nationalId || ''}`.toLowerCase();
+        const haystack = `${tk.ticketId} ${tk.studentName || ''} ${tk.parentName || ''} ${tk.nationalId || ''}`.toLowerCase();
         if (!haystack.includes(term)) return false;
       }
       return true;
     });
   }, [tickets, search, statusFilter, publicLinkOnly, userData]);
 
-  const problemTypeName = (id) => problemTypes.find((t) => t.id === id)?.name || id;
+  const problemTypeName = (id) => problemTypes.find((pt) => pt.id === id)?.name || id;
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
 
   return (
     <div className="max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">حل المشكلات التقنية</h1>
-          <p className="text-slate-500 mt-1">بلاغات تعذّر الوصول إلى المنصات التعليمية وحسابات الطلاب</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t('techSupportList.title')}</h1>
+          <p className="text-slate-500 mt-1">{t('techSupportList.subtitle')}</p>
         </div>
         <button onClick={() => setShowNewForm(true)} className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2">
           <Plus className="w-4 h-4" />
-          بلاغ تقني جديد
+          {t('techSupportList.newTicket')}
         </button>
       </div>
 
@@ -96,18 +93,18 @@ export default function TechSupport() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث برقم البلاغ، اسم الطالب، رقم الهوية..."
+              placeholder={t('techSupportList.searchPlaceholder')}
               className="block w-full pr-10 pl-3 py-2 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none text-sm"
             />
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-            {FILTERS.map((f) => (
+            {FILTER_IDS.map((id) => (
               <button
-                key={f.id}
-                onClick={() => setStatusFilter(f.id)}
-                className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${statusFilter === f.id ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
+                key={id}
+                onClick={() => setStatusFilter(id)}
+                className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${statusFilter === id ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
               >
-                {f.name}
+                {t(`techSupportList.filters.${id}`)}
               </button>
             ))}
             <button
@@ -118,7 +115,7 @@ export default function TechSupport() {
               }`}
             >
               <Link2 className="w-3.5 h-3.5" />
-              عبر الرابط العام فقط
+              {t('common.publicLinkOnly')}
             </button>
           </div>
         </div>
@@ -132,53 +129,53 @@ export default function TechSupport() {
             <table className="w-full text-right">
               <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-100">
                 <tr>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">رقم البلاغ</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">الطالب / ولي الأمر</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">نوع المشكلة</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">الفرع</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">المختص</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">التاريخ</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">الحالة</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">رسائل ولي الأمر</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('techSupportList.ticketNumber')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('complaintsList.studentParent')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('techSupportList.problemType')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('common.branch')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('techSupportList.specialist')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('common.date')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('common.status')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('complaintsList.parentMessages')}</th>
                   <th className="px-6 py-4"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
-                {filteredTickets.map((t) => (
-                  <tr key={t.id} className="hover:bg-slate-50/80 transition-colors cursor-pointer group" onClick={() => setSelectedTicket(t)}>
+                {filteredTickets.map((tk) => (
+                  <tr key={tk.id} className="hover:bg-slate-50/80 transition-colors cursor-pointer group" onClick={() => setSelectedTicket(tk)}>
                     <td className="px-6 py-4 font-medium text-slate-900" dir="ltr">
                       <div className="flex items-center gap-2">
-                        {t.ticketId}
-                        {t.source === 'PARENT_PORTAL' && (
-                          <span title="مُقدَّم عبر الرابط العام" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary shrink-0">
+                        {tk.ticketId}
+                        {tk.source === 'PARENT_PORTAL' && (
+                          <span title={t('techSupportList.submittedViaPublicLink')} className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary shrink-0">
                             <Link2 className="w-3 h-3" />
                           </span>
                         )}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="font-medium text-slate-900">{t.studentName}</div>
-                      <div className="text-slate-500 text-xs mt-0.5">{t.parentName}</div>
+                      <div className="font-medium text-slate-900">{tk.studentName}</div>
+                      <div className="text-slate-500 text-xs mt-0.5">{tk.parentName}</div>
                     </td>
                     <td className="px-6 py-4 text-slate-600 flex items-center gap-2">
                       <Wrench className="w-4 h-4 text-slate-400" />
-                      {problemTypeName(t.problemType)}
+                      {problemTypeName(tk.problemType)}
                     </td>
-                    <td className="px-6 py-4 text-slate-600">{branchName(t.branch)}</td>
-                    <td className="px-6 py-4 text-slate-600">{t.assignedToName || '—'}</td>
+                    <td className="px-6 py-4 text-slate-600">{branchName(tk.branch)}</td>
+                    <td className="px-6 py-4 text-slate-600">{tk.assignedToName || '—'}</td>
                     <td className="px-6 py-4 text-slate-600" dir="ltr">
-                      {t.createdAt ? format(t.createdAt.toDate(), 'PP p', { locale: ar }) : ''}
+                      {tk.createdAt ? format(tk.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${TICKET_STATUS_BADGE[t.status]}`}>
-                        {TICKET_STATUS_LABELS[t.status]}
+                      <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${TICKET_STATUS_BADGE[tk.status]}`}>
+                        {t(`statuses.techSupport.${tk.status}`, tk.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <MessageStatusIndicators
-                        receiptSentAt={t.receiptMessageSentAt}
-                        resolutionSentAt={t.resolutionMessageSentAt}
-                        showResolution={['WAITING_CONFIRMATION', 'CLOSED', 'REOPENED'].includes(t.status)}
+                        receiptSentAt={tk.receiptMessageSentAt}
+                        resolutionSentAt={tk.resolutionMessageSentAt}
+                        showResolution={['WAITING_CONFIRMATION', 'CLOSED', 'REOPENED'].includes(tk.status)}
                       />
                     </td>
                     <td className="px-6 py-4 text-left">
@@ -190,7 +187,7 @@ export default function TechSupport() {
                 ))}
                 {filteredTickets.length === 0 && (
                   <tr>
-                    <td colSpan="9" className="px-6 py-12 text-center text-slate-500">لا يوجد بلاغات مطابقة</td>
+                    <td colSpan="9" className="px-6 py-12 text-center text-slate-500">{t('techSupportList.noResults')}</td>
                   </tr>
                 )}
               </tbody>
