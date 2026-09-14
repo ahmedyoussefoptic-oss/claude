@@ -1,32 +1,18 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { Archive, Search, Loader2, ChevronLeft, X, Clock, CheckCircle2 } from 'lucide-react';
 import { db } from '../config/firebase';
 import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
 import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
-
-const getActionName = (action) => {
-  switch (action) {
-    case 'COMPLAINT_CREATED': return 'تم تسجيل الملاحظة';
-    case 'COMPLAINT_ASSIGNED': return 'تم إسناد الملاحظة لمختص';
-    case 'COMPLAINT_TRANSFERRED': return 'تم تحويل الملاحظة لمختص آخر';
-    case 'COMPLAINT_ACKNOWLEDGED': return 'تم تأكيد الاستلام';
-    case 'COMPLAINT_STATUS_CHANGED': return 'تم تغيير الحالة';
-    case 'SOLUTION_ADDED': return 'تم تقديم حل';
-    case 'COMPLAINT_ESCALATED': return 'تم تصعيد الملاحظة';
-    case 'COMPLAINT_REJECTED': return 'تم رفض الملاحظة';
-    case 'COMPLAINT_REOPENED': return 'تم إعادة فتح الملاحظة';
-    case 'SURVEY_SUBMITTED': return 'تم استلام تقييم ولي الأمر';
-    case 'INTERNAL_COMMENT_ADDED': return 'تعليق داخلي';
-    case 'COMPLAINT_DELETED': return 'تم حذف الملاحظة';
-    default: return action;
-  }
-};
+import { ar, enUS } from 'date-fns/locale';
 
 const asDate = (v) => (v?.toDate ? v.toDate() : v instanceof Date ? v : null);
 
 export default function DeletedComplaints() {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'ar' ? ar : enUS;
+  const getActionName = (action) => t(`actions.complaint.${action}`, action);
   const branches = useBranches();
   const complaintTypes = useComplaintTypes();
   const [entries, setEntries] = useState([]);
@@ -44,7 +30,7 @@ export default function DeletedComplaints() {
   }, []);
 
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
-  const typeName = (id) => complaintTypes.find((t) => t.id === id)?.name || id;
+  const typeName = (id) => complaintTypes.find((ct) => ct.id === id)?.name || id;
 
   const filtered = entries.filter((e) => {
     if (!search) return true;
@@ -59,9 +45,9 @@ export default function DeletedComplaints() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
           <Archive className="w-6 h-6 text-primary" />
-          أرشيف الملاحظات المحذوفة
+          {t('deletedComplaints.title')}
         </h1>
-        <p className="text-slate-500 mt-1">سجل كامل لكل ملاحظة حُذفت من النظام — متاح لمدير النظام فقط.</p>
+        <p className="text-slate-500 mt-1">{t('deletedComplaints.subtitle')}</p>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col min-h-[400px]">
@@ -74,7 +60,7 @@ export default function DeletedComplaints() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث برقم الملاحظة، اسم الطالب، من قام بالحذف..."
+              placeholder={t('deletedComplaints.searchPlaceholder')}
               className="block w-full pr-10 pl-3 py-2 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none text-sm"
             />
           </div>
@@ -89,12 +75,12 @@ export default function DeletedComplaints() {
             <table className="w-full text-right">
               <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-100">
                 <tr>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">رقم الملاحظة</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">الطالب / ولي الأمر</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">الفرع</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">تاريخ الحذف</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">القائم بالحذف</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">سبب الحذف</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('reports.complaintNumber')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('complaintsList.studentParent')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('common.branch')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('deletedComplaints.deletedAtHeader')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('deletedComplaints.deletedByHeader')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('deletedComplaints.deleteReasonHeader')}</th>
                   <th className="px-6 py-4"></th>
                 </tr>
               </thead>
@@ -110,7 +96,7 @@ export default function DeletedComplaints() {
                       </td>
                       <td className="px-6 py-4 text-slate-600">{branchName(c.branch)}</td>
                       <td className="px-6 py-4 text-slate-600" dir="ltr">
-                        {asDate(e.deletedAt) ? format(asDate(e.deletedAt), 'PP p', { locale: ar }) : ''}
+                        {asDate(e.deletedAt) ? format(asDate(e.deletedAt), 'PP p', { locale: dateLocale }) : ''}
                       </td>
                       <td className="px-6 py-4 text-slate-600">{e.deletedByName || '—'}</td>
                       <td className="px-6 py-4 text-slate-600 max-w-xs truncate">{e.reason || '—'}</td>
@@ -125,7 +111,7 @@ export default function DeletedComplaints() {
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan="7" className="px-6 py-12 text-center text-slate-500">
-                      لا يوجد ملاحظات محذوفة
+                      {t('deletedComplaints.noDeletedComplaints')}
                     </td>
                   </tr>
                 )}
@@ -140,10 +126,13 @@ export default function DeletedComplaints() {
           <div className="w-full max-w-2xl bg-slate-50 h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
             <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between sticky top-0 z-10">
               <div>
-                <h2 className="text-xl font-bold text-slate-900">ملاحظة #{selected.complaint?.complaintId}</h2>
+                <h2 className="text-xl font-bold text-slate-900">{t('deletedComplaints.complaintHash')}{selected.complaint?.complaintId}</h2>
                 <p className="text-sm text-slate-500 flex items-center gap-2 mt-1">
                   <Clock className="w-4 h-4" />
-                  حُذفت في {asDate(selected.deletedAt) ? format(asDate(selected.deletedAt), 'PP p', { locale: ar }) : ''} بواسطة {selected.deletedByName}
+                  {t('deletedComplaints.deletedAtBy', {
+                    date: asDate(selected.deletedAt) ? format(asDate(selected.deletedAt), 'PP p', { locale: dateLocale }) : '',
+                    name: selected.deletedByName,
+                  })}
                 </p>
               </div>
               <button onClick={() => setSelected(null)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
@@ -153,18 +142,18 @@ export default function DeletedComplaints() {
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
               <div className="bg-red-50 border border-red-100 text-red-800 rounded-xl p-4 text-sm">
-                <p className="font-bold mb-1">سبب الحذف</p>
+                <p className="font-bold mb-1">{t('deletedComplaints.deleteReasonHeader')}</p>
                 <p>{selected.reason}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                  <p className="text-xs text-slate-500 mb-0.5">ولي الأمر</p>
+                  <p className="text-xs text-slate-500 mb-0.5">{t('common.parent')}</p>
                   <p className="font-medium text-slate-900">{selected.complaint?.parentName}</p>
                   <p className="text-sm text-slate-500 mt-1" dir="ltr">{selected.complaint?.parentPhone}</p>
                 </div>
                 <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
-                  <p className="text-xs text-slate-500 mb-0.5">الفرع والطالب</p>
+                  <p className="text-xs text-slate-500 mb-0.5">{t('deletedComplaints.branchAndStudent')}</p>
                   <p className="font-medium text-slate-900">{selected.complaint?.studentName}</p>
                   <p className="text-sm text-slate-500 mt-1">{branchName(selected.complaint?.branch)} - {selected.complaint?.grade}</p>
                 </div>
@@ -172,14 +161,14 @@ export default function DeletedComplaints() {
 
               <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
                 <div className="flex items-center justify-between mb-3 gap-2">
-                  <h3 className="font-bold text-slate-900 text-lg">{selected.complaint?.subject || 'التفاصيل الأساسية'}</h3>
+                  <h3 className="font-bold text-slate-900 text-lg">{selected.complaint?.subject || t('deletedComplaints.basicDetails')}</h3>
                   <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded whitespace-nowrap">{typeName(selected.complaint?.complaintType)}</span>
                 </div>
                 <p className="text-slate-600 leading-relaxed text-sm whitespace-pre-wrap">{selected.complaint?.details}</p>
               </div>
 
               <div>
-                <h3 className="font-bold text-slate-900 text-lg mb-4">سجل المتابعة قبل الحذف</h3>
+                <h3 className="font-bold text-slate-900 text-lg mb-4">{t('deletedComplaints.activityLogBeforeDeletion')}</h3>
                 <div className="space-y-4 relative before:absolute before:inset-y-0 before:right-[15px] before:w-[2px] before:bg-slate-200">
                   {(selected.activityLog || []).map((log, i) => (
                     <div key={i} className="relative flex gap-4">
@@ -190,18 +179,18 @@ export default function DeletedComplaints() {
                         <div className="flex justify-between mb-2">
                           <p className="font-medium text-slate-900">{getActionName(log.action)}</p>
                           <p className="text-xs text-slate-400" dir="ltr">
-                            {asDate(log.createdAt) ? format(asDate(log.createdAt), 'p', { locale: ar }) : ''}
+                            {asDate(log.createdAt) ? format(asDate(log.createdAt), 'p', { locale: dateLocale }) : ''}
                           </p>
                         </div>
-                        <p className="text-sm text-slate-600 mb-1">بواسطة: {log.actorName || 'النظام'}</p>
+                        <p className="text-sm text-slate-600 mb-1">{t('complaintDetails.by')} {log.actorName || t('complaintDetails.system')}</p>
                         {log.metadata?.solutionDetails && (
                           <div className="mt-2 p-3 bg-emerald-50 text-emerald-800 rounded-lg text-sm border border-emerald-100">
-                            <strong>الحل:</strong> {log.metadata.solutionDetails}
+                            <strong>{t('deletedComplaints.solutionLabel')}</strong> {log.metadata.solutionDetails}
                           </div>
                         )}
                         {log.metadata?.reason && (
                           <div className="mt-2 p-3 bg-red-50 text-red-800 rounded-lg text-sm border border-red-100">
-                            <strong>السبب:</strong> {log.metadata.reason}
+                            <strong>{t('techSupportDetails.reasonLabel')}</strong> {log.metadata.reason}
                           </div>
                         )}
                       </div>

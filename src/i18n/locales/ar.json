@@ -510,6 +510,21 @@
     "submittedViaPublicLink": "مُقدَّم عبر الرابط العام",
     "noResults": "لا يوجد بلاغات مطابقة"
   },
+  "deletedComplaints": {
+    "title": "أرشيف الملاحظات المحذوفة",
+    "subtitle": "سجل كامل لكل ملاحظة حُذفت من النظام — متاح لمدير النظام فقط.",
+    "searchPlaceholder": "ابحث برقم الملاحظة، اسم الطالب، من قام بالحذف...",
+    "deletedAtHeader": "تاريخ الحذف",
+    "deletedByHeader": "القائم بالحذف",
+    "deleteReasonHeader": "سبب الحذف",
+    "noDeletedComplaints": "لا يوجد ملاحظات محذوفة",
+    "complaintHash": "ملاحظة #",
+    "deletedAtBy": "حُذفت في {{date}} بواسطة {{name}}",
+    "branchAndStudent": "الفرع والطالب",
+    "basicDetails": "التفاصيل الأساسية",
+    "activityLogBeforeDeletion": "سجل المتابعة قبل الحذف",
+    "solutionLabel": "الحل:"
+  },
   "roles": {
     "ADMIN": "مدير النظام",
     "UPPER_MANAGEMENT": "الإدارة العليا",

@@ -510,6 +510,21 @@
     "submittedViaPublicLink": "Submitted via public link",
     "noResults": "No matching tickets"
   },
+  "deletedComplaints": {
+    "title": "Deleted Complaints Archive",
+    "subtitle": "A complete log of every complaint deleted from the system — available to the system admin only.",
+    "searchPlaceholder": "Search by complaint number, student name, deleted by...",
+    "deletedAtHeader": "Deletion date",
+    "deletedByHeader": "Deleted by",
+    "deleteReasonHeader": "Deletion reason",
+    "noDeletedComplaints": "No deleted complaints",
+    "complaintHash": "Complaint #",
+    "deletedAtBy": "Deleted on {{date}} by {{name}}",
+    "branchAndStudent": "Branch and student",
+    "basicDetails": "Basic details",
+    "activityLogBeforeDeletion": "Follow-up log before deletion",
+    "solutionLabel": "Solution:"
+  },
   "roles": {
     "ADMIN": "System Admin",
     "UPPER_MANAGEMENT": "Upper Management",
