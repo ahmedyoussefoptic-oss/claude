@@ -510,6 +510,22 @@
     "submittedViaPublicLink": "Submitted via public link",
     "noResults": "No matching tickets"
   },
+  "flowMap": {
+    "title": "Complaint Flow Map",
+    "subtitle": "A live overview of complaint counts at each stage of processing",
+    "mainFlowTitle": "Main flow",
+    "who": {
+      "RECEIVED": "Customer service staff",
+      "IN_PROGRESS": "Assigned specialist",
+      "WAITING_PARENT_RESPONSE": "Parent response",
+      "SOLVED": "Awaiting closure",
+      "CLOSED": "Permanently closed"
+    },
+    "escalatedNote": "Exceeded the approved resolution time (SLA) — needs immediate follow-up",
+    "rejectedNote": "Complaints rejected for incomplete data",
+    "totalInScope": "Total complaints in current scope",
+    "filteredBy": "Filtered by:"
+  },
   "search": {
     "pageSubtitle": "Search complaints using any combination of the criteria below",
     "studentNameLabel": "Student name",
