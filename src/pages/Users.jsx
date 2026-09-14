@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../config/firebase';
@@ -7,12 +8,7 @@ import { useBranches } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
 import { Users as UsersIcon, Plus, Loader2, Mail, Lock, Phone, Briefcase, User as UserIcon, Pencil, Trash2, KeyRound, X, SlidersHorizontal, RotateCcw } from 'lucide-react';
 
-const DEPARTMENTS = [
-  { id: 'ADMINISTRATIVE', name: 'الشؤون الإدارية' },
-  { id: 'ACADEMIC', name: 'الشؤون الأكاديمية' },
-  { id: 'BEHAVIORAL', name: 'التوجيه والإرشاد الطلابي' },
-  { id: 'IT', name: 'تقنية المعلومات' },
-];
+const DEPARTMENT_IDS = ['ADMINISTRATIVE', 'ACADEMIC', 'BEHAVIORAL', 'IT'];
 
 const emptyForm = {
   name: '',
@@ -29,6 +25,9 @@ const emptyForm = {
 };
 
 export default function Users() {
+  const { t } = useTranslation();
+  const roleName = (r) => t(`roles.${r}`, ROLE_LABELS[r] || r);
+  const departmentName = (id) => t(`users.departments.${id}`, id);
   const { user: currentUser } = useAuthStore();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -140,10 +139,10 @@ export default function Users() {
 
   const handleDelete = async (u) => {
     if (u.id === currentUser?.uid) {
-      alert('لا يمكن حذف المستخدم الذي تعمل باسمه حالياً.');
+      alert(t('users.cannotDeleteSelf'));
       return;
     }
-    if (!confirm(`تأكيد حذف الموظف "${u.name}"؟ لا يمكن التراجع عن هذا الإجراء.`)) return;
+    if (!confirm(t('users.deleteConfirm', { name: u.name }))) return;
     try {
       const deleteStaffUser = httpsCallable(functions, 'deleteStaffUser');
       await deleteStaffUser({ uid: u.id });
@@ -161,7 +160,7 @@ export default function Users() {
   const handleResetPassword = async (e) => {
     e.preventDefault();
     if (newPassword.length < 6) {
-      setResetError('يجب ألا تقل كلمة المرور عن 6 أحرف.');
+      setResetError(t('users.passwordTooShort'));
       return;
     }
     setResetSubmitting(true);
@@ -193,26 +192,26 @@ export default function Users() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             <UsersIcon className="w-6 h-6 text-primary" />
-            إدارة المستخدمين
+            {t('users.pageTitle')}
           </h1>
-          <p className="text-slate-500 mt-1">إضافة وتعديل وحذف الموظفين وصلاحياتهم</p>
+          <p className="text-slate-500 mt-1">{t('users.pageSubtitle')}</p>
         </div>
         <button
           onClick={openAddForm}
           className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl hover:bg-primary-dark transition-colors"
         >
           <Plus className="w-5 h-5" />
-          إضافة مستخدم
+          {t('users.addUser')}
         </button>
       </div>
 
       {showForm && (
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8">
-          <h2 className="text-lg font-bold mb-4">{editingId ? 'تعديل بيانات الموظف' : 'إضافة مستخدم جديد'}</h2>
+          <h2 className="text-lg font-bold mb-4">{editingId ? t('users.editUserTitle') : t('users.addNewUserTitle')}</h2>
           {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{error}</div>}
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">الاسم</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.name')}</label>
               <div className="relative">
                 <UserIcon className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
                 <input
@@ -225,7 +224,7 @@ export default function Users() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">البريد الإلكتروني</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.emailLabel')}</label>
               <div className="relative">
                 <Mail className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
                 <input
@@ -241,7 +240,7 @@ export default function Users() {
             </div>
             {!editingId && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">كلمة المرور</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('users.passwordLabel')}</label>
                 <div className="relative">
                   <Lock className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
                   <input
@@ -256,7 +255,7 @@ export default function Users() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم جوال الموظف</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('users.staffPhoneLabel')}</label>
               <div className="relative">
                 <Phone className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
                 <input
@@ -270,72 +269,72 @@ export default function Users() {
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">المسمى الوظيفي</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('users.jobTitleLabel')}</label>
               <div className="relative">
                 <Briefcase className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
                 <input
                   type="text"
                   value={form.jobTitle}
                   onChange={(e) => setForm((p) => ({ ...p, jobTitle: e.target.value }))}
-                  placeholder="مثال: وكيل الشؤون التعليمية"
+                  placeholder={t('users.jobTitlePlaceholder')}
                   className="w-full pl-3 pr-10 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary"
                 />
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">الصلاحية (الدور)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('users.roleLabel')}</label>
               <select
                 value={form.role}
                 onChange={(e) => handleRoleChange(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary bg-white"
               >
                 {Object.values(ROLES).map((r) => (
-                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                  <option key={r} value={r}>{roleName(r)}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">الفرع</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')}</label>
               <select
                 value={form.branch}
                 onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))}
                 disabled={form.access === 'all'}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary bg-white disabled:bg-slate-50 disabled:text-slate-400"
               >
-                <option value="">اختر الفرع...</option>
+                <option value="">{t('complaintForm.selectBranch')}</option>
                 {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             {form.role === ROLES.SPECIALIST && (
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">القسم / التخصص</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('users.departmentSpecialtyLabel')}</label>
                 <select
                   value={form.department}
                   onChange={(e) => setForm((p) => ({ ...p, department: e.target.value }))}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary bg-white"
                 >
-                  <option value="">اختر القسم...</option>
-                  {DEPARTMENTS.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  <option value="">{t('users.selectDepartment')}</option>
+                  {DEPARTMENT_IDS.map((id) => <option key={id} value={id}>{departmentName(id)}</option>)}
                 </select>
                 <p className="text-xs text-slate-500 mt-1">
-                  للملاحظات الإدارية/الأكاديمية/السلوكية يحدد نوع الملاحظات التي يختص بمعالجتها. اختر "تقنية المعلومات" لموظفي فريق الدعم الفني — بدون موظف بهذا القسم لن تُسند بلاغات الدعم الفني لأحد تلقائياً.
+                  {t('users.departmentHint')}
                 </p>
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">الحالة</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.status')}</label>
               <select
                 value={form.active ? '1' : '0'}
                 onChange={(e) => setForm((p) => ({ ...p, active: e.target.value === '1' }))}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary bg-white"
               >
-                <option value="1">نشط</option>
-                <option value="0">موقوف</option>
+                <option value="1">{t('users.activeStatus')}</option>
+                <option value="0">{t('users.suspendedStatus')}</option>
               </select>
             </div>
 
             <div className="md:col-span-2 bg-slate-50 border border-slate-100 rounded-xl p-4">
-              <p className="text-sm font-bold text-slate-800 mb-3">نطاق الاطلاع والصلاحيات</p>
+              <p className="text-sm font-bold text-slate-800 mb-3">{t('users.accessPermsTitle')}</p>
               <div className="flex flex-wrap gap-x-6 gap-y-3">
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
@@ -344,7 +343,7 @@ export default function Users() {
                     disabled={isAdminRole}
                     onChange={(e) => setForm((p) => ({ ...p, access: e.target.checked ? 'all' : 'branch' }))}
                   />
-                  🌐 اطلاع على جميع الفروع
+                  🌐 {t('users.accessAllBranches')}
                 </label>
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
@@ -353,7 +352,7 @@ export default function Users() {
                     disabled={isAdminRole}
                     onChange={(e) => setForm((p) => ({ ...p, perms: { ...p.perms, edit: e.target.checked } }))}
                   />
-                  ✏️ تعديل الملاحظات
+                  ✏️ {t('users.permEditComplaints')}
                 </label>
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
@@ -362,7 +361,7 @@ export default function Users() {
                     disabled={isAdminRole}
                     onChange={(e) => setForm((p) => ({ ...p, perms: { ...p.perms, delete: e.target.checked } }))}
                   />
-                  🗑️ حذف الملاحظات
+                  🗑️ {t('users.permDeleteComplaints')}
                 </label>
                 <label className="flex items-center gap-2 text-sm text-slate-700">
                   <input
@@ -371,11 +370,11 @@ export default function Users() {
                     disabled={isAdminRole}
                     onChange={(e) => setForm((p) => ({ ...p, perms: { ...p.perms, users: e.target.checked } }))}
                   />
-                  👥 إدارة الموظفين
+                  👥 {t('users.permManageUsers')}
                 </label>
               </div>
               <p className="text-xs text-slate-500 mt-2">
-                بدون تفعيل "الاطلاع على جميع الفروع" لن يرى الموظف إلا ملاحظات فرعه فقط. "تعديل الملاحظات" يشمل الإسناد والحل والتصعيد؛ بدونه يكون الاطلاع للقراءة فقط.
+                {t('users.accessPermsHint')}
               </p>
             </div>
 
@@ -385,14 +384,14 @@ export default function Users() {
                 disabled={submitting}
                 className="flex-1 flex items-center justify-center py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-70"
               >
-                {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : (editingId ? 'حفظ التعديلات' : 'حفظ')}
+                {submitting ? <Loader2 className="w-5 h-5 animate-spin" /> : (editingId ? t('users.saveChanges') : t('common.save'))}
               </button>
               <button
                 type="button"
                 onClick={() => { setShowForm(false); setEditingId(null); }}
                 className="px-5 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors"
               >
-                إلغاء
+                {t('common.cancel')}
               </button>
             </div>
           </form>
@@ -408,28 +407,28 @@ export default function Users() {
           <div className="p-4 border-b border-slate-100 flex flex-wrap gap-3 items-end bg-slate-50/50">
             <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400 pb-2.5">
               <SlidersHorizontal className="w-3.5 h-3.5" />
-              فلاتر
+              {t('users.filtersLabel')}
             </div>
             <div className="w-44">
-              <label className="block text-xs text-slate-500 mb-1">الفرع</label>
+              <label className="block text-xs text-slate-500 mb-1">{t('common.branch')}</label>
               <select
                 value={branchFilter}
                 onChange={(e) => setBranchFilter(e.target.value)}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
               >
-                <option value="">كل الفروع</option>
+                <option value="">{t('common.allBranches')}</option>
                 {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             </div>
             <div className="w-52">
-              <label className="block text-xs text-slate-500 mb-1">المهام (الصلاحية)</label>
+              <label className="block text-xs text-slate-500 mb-1">{t('users.rolesFilterLabel')}</label>
               <select
                 value={roleFilter}
                 onChange={(e) => setRoleFilter(e.target.value)}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
               >
-                <option value="">كل المهام</option>
-                {Object.values(ROLES).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                <option value="">{t('users.allRoles')}</option>
+                {Object.values(ROLES).map((r) => <option key={r} value={r}>{roleName(r)}</option>)}
               </select>
             </div>
             {filtersActive && (
@@ -438,7 +437,7 @@ export default function Users() {
                 className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                إعادة تعيين
+                {t('common.reset')}
               </button>
             )}
           </div>
@@ -446,22 +445,22 @@ export default function Users() {
             <table className="w-full text-right">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
-                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">الاسم / المسمى الوظيفي</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">التواصل</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">الصلاحية</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">القسم</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">نطاق الاطلاع</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">تعديل</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">حذف الملاحظات</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">الحالة</th>
-                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">إجراءات</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">{t('users.nameJobTitleHeader')}</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">{t('users.contactHeader')}</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">{t('users.roleLabel')}</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">{t('users.departmentHeader')}</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">{t('users.accessScopeHeader')}</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">{t('common.edit')}</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">{t('users.deleteComplaintsHeader')}</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">{t('common.status')}</th>
+                  <th className="px-6 py-4 text-sm font-semibold text-slate-600">{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredUsers.map(u => (
                   <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-slate-900">
-                      {u.name}{u.id === currentUser?.uid && <span className="mr-2 text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">أنت</span>}
+                      {u.name}{u.id === currentUser?.uid && <span className="mr-2 text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">{t('users.youBadge')}</span>}
                       {u.jobTitle && <div className="text-xs text-slate-500 font-normal mt-0.5">{u.jobTitle}</div>}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500" dir="ltr">
@@ -470,30 +469,30 @@ export default function Users() {
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                        {ROLE_LABELS[u.role] || u.role}
+                        {roleName(u.role)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
-                      {DEPARTMENTS.find(d => d.id === u.department)?.name || '—'}
+                      {u.department ? departmentName(u.department) : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
-                      {u.access === 'all' ? '🌐 كل الفروع' : (branches.find(b => b.id === u.branch)?.name || '—')}
+                      {u.access === 'all' ? `🌐 ${t('common.allBranches')}` : (branches.find(b => b.id === u.branch)?.name || '—')}
                     </td>
                     <td className="px-6 py-4 text-sm">{u.perms?.edit ? '✔' : '—'}</td>
                     <td className="px-6 py-4 text-sm">{u.perms?.delete ? '✔' : '—'}</td>
                     <td className="px-6 py-4 text-sm">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${u.active === false ? 'bg-slate-100 text-slate-500' : 'bg-emerald-100 text-emerald-700'}`}>
-                        {u.active === false ? 'موقوف' : 'نشط'}
+                        {u.active === false ? t('users.suspendedStatus') : t('users.activeStatus')}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm whitespace-nowrap">
-                      <button onClick={() => openEditForm(u)} className="p-2 text-slate-500 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors" title="تعديل">
+                      <button onClick={() => openEditForm(u)} className="p-2 text-slate-500 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors" title={t('common.edit')}>
                         <Pencil className="w-4 h-4" />
                       </button>
-                      <button onClick={() => openResetPassword(u)} className="p-2 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title="إعادة تعيين كلمة المرور">
+                      <button onClick={() => openResetPassword(u)} className="p-2 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title={t('users.resetPasswordTitle')}>
                         <KeyRound className="w-4 h-4" />
                       </button>
-                      <button onClick={() => handleDelete(u)} className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="حذف">
+                      <button onClick={() => handleDelete(u)} className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={t('common.delete')}>
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </td>
@@ -502,7 +501,7 @@ export default function Users() {
                 {filteredUsers.length === 0 && (
                   <tr>
                     <td colSpan="9" className="px-6 py-8 text-center text-slate-500">
-                      {users.length === 0 ? 'لا يوجد مستخدمين مسجلين' : 'لا يوجد مستخدمين مطابقين للفلاتر المحددة'}
+                      {users.length === 0 ? t('users.noUsersRegistered') : t('users.noUsersMatchFilters')}
                     </td>
                   </tr>
                 )}
@@ -516,17 +515,17 @@ export default function Users() {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-slate-900">إعادة تعيين كلمة المرور</h2>
+              <h2 className="text-lg font-bold text-slate-900">{t('users.resetPasswordTitle')}</h2>
               <button onClick={() => setResetTarget(null)} className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <p className="text-sm text-slate-500 mb-4">
-              للموظف: <span className="font-medium text-slate-800">{resetTarget.name}</span>
+              {t('users.forStaff')} <span className="font-medium text-slate-800">{resetTarget.name}</span>
             </p>
             {resetError && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{resetError}</div>}
             <form onSubmit={handleResetPassword}>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">كلمة المرور الجديدة</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('users.newPasswordLabel')}</label>
               <div className="relative mb-4">
                 <Lock className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
                 <input
@@ -546,14 +545,14 @@ export default function Users() {
                   disabled={resetSubmitting}
                   className="flex-1 flex items-center justify-center py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark transition-colors disabled:opacity-70"
                 >
-                  {resetSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : 'حفظ كلمة المرور'}
+                  {resetSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : t('users.savePasswordBtn')}
                 </button>
                 <button
                   type="button"
                   onClick={() => setResetTarget(null)}
                   className="px-5 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors"
                 >
-                  إلغاء
+                  {t('common.cancel')}
                 </button>
               </div>
             </form>
