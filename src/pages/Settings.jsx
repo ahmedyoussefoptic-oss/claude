@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { doc, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import {
@@ -34,16 +35,9 @@ import {
   Package,
 } from 'lucide-react';
 
-const TEMPLATE_LABELS = {
-  receipt: 'رسالة استلام الملاحظة',
-  resolution: 'رسالة حل الملاحظة',
-  credential: 'رسالة بيانات الدخول (الدعم الفني)',
-  lostFoundReceipt: 'رسالة استلام بلاغ مفقودات',
-  lostFoundResolution: 'رسالة تسليم المفقودات',
-  techSupportReceipt: 'رسالة استلام بلاغ تقني',
-};
-
 function MessageTemplatesEditor() {
+  const { t, i18n } = useTranslation();
+  const listSep = i18n.language === 'ar' ? '، ' : ', ';
   const liveTemplates = useMessageTemplates();
   const [drafts, setDrafts] = useState(null); // null until first touched, then { receipt, resolution, credential }
   const [savingKey, setSavingKey] = useState(null);
@@ -79,11 +73,11 @@ function MessageTemplatesEditor() {
     <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
       <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-2">
         <MessageCircle className="w-5 h-5 text-primary" />
-        قوالب رسائل الواتساب
+        {t('settings.templatesTitle')}
       </h3>
       <p className="text-sm text-slate-500 mb-4">
-        عدّل نص الرسائل المرسلة تلقائياً لأولياء الأمور عبر واتساب. لا تحذف الرموز بين قوسين مزدوجين
-        (مثل <code dir="ltr" className="bg-slate-100 px-1 rounded">{'{{parentName}}'}</code>) فهي تُستبدل تلقائياً بالبيانات الفعلية عند الإرسال.
+        {t('settings.templatesDescriptionPre')}
+        (<code dir="ltr" className="bg-slate-100 px-1 rounded">{'{{parentName}}'}</code>) {t('settings.templatesDescriptionPost')}
       </p>
 
       {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{error}</div>}
@@ -92,14 +86,14 @@ function MessageTemplatesEditor() {
         {Object.keys(DEFAULT_TEMPLATES).map((key) => (
           <div key={key} className="border border-slate-100 rounded-xl p-4 bg-slate-50/50">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-sm font-bold text-slate-800">{TEMPLATE_LABELS[key]}</p>
+              <p className="text-sm font-bold text-slate-800">{t(`settings.templateLabels.${key}`)}</p>
               <button
                 onClick={() => handleReset(key)}
                 className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"
-                title="استعادة النص الافتراضي"
+                title={t('settings.restoreDefault')}
               >
                 <RotateCcw className="w-3 h-3" />
-                استعادة الافتراضي
+                {t('settings.restoreDefault')}
               </button>
             </div>
             <textarea
@@ -111,17 +105,17 @@ function MessageTemplatesEditor() {
             />
             <div className="flex items-center justify-between mt-2">
               <p className="text-xs text-slate-400">
-                المتغيرات المتاحة: {TEMPLATE_PLACEHOLDERS[key].map((p) => `{{${p}}}`).join('، ')}
+                {t('settings.availableVariables')} {TEMPLATE_PLACEHOLDERS[key].map((p) => `{{${p}}}`).join(listSep)}
               </p>
               <div className="flex items-center gap-2">
-                {savedKey === key && <span className="text-xs text-emerald-600">تم الحفظ ✓</span>}
+                {savedKey === key && <span className="text-xs text-emerald-600">{t('settings.savedCheck')}</span>}
                 <button
                   onClick={() => handleSave(key)}
                   disabled={savingKey === key}
                   className="px-4 py-1.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-60 flex items-center gap-2"
                 >
                   {savingKey === key && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  حفظ
+                  {t('common.save')}
                 </button>
               </div>
             </div>
@@ -133,6 +127,7 @@ function MessageTemplatesEditor() {
 }
 
 function StudentImport() {
+  const { t } = useTranslation();
   const branches = useBranches();
   const fileInputRef = useRef(null);
   const [parsed, setParsed] = useState(null); // { records, skipped, fileName }
@@ -153,8 +148,8 @@ function StudentImport() {
       const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
       const { records, skipped } = parseStudentRows(rows, branches);
       setParsed({ records, skipped, fileName: file.name });
-    } catch (err) {
-      setResult({ error: 'تعذّرت قراءة الملف — تأكد أنه بصيغة Excel صحيحة (.xlsx/.xls).' });
+    } catch {
+      setResult({ error: t('settings.fileReadError') });
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
@@ -181,12 +176,11 @@ function StudentImport() {
       <div className="flex items-center justify-between mb-2">
         <h3 className="font-bold text-slate-900 flex items-center gap-2">
           <UsersIcon className="w-5 h-5 text-primary" />
-          استيراد بيانات الطلاب
+          {t('settings.studentImportTitle')}
         </h3>
       </div>
       <p className="text-sm text-slate-500 mb-4">
-        ارفع ملف Excel يحتوي على أعمدة: id_num، name، branch_name، stage_name، grade_name، class_name، mobile.
-        يتم دمج البيانات مع الموجود مسبقاً حسب رقم الهوية — لا يُحذف أي طالب غير موجود في الملف الجديد.
+        {t('settings.studentImportDescription')}
       </p>
 
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" id="student-file-input" />
@@ -195,18 +189,17 @@ function StudentImport() {
         className="inline-flex items-center gap-2 px-4 py-2.5 border border-dashed border-slate-300 rounded-xl text-sm text-slate-600 hover:border-primary hover:text-primary cursor-pointer transition-colors"
       >
         <Upload className="w-4 h-4" />
-        اختر ملف Excel
+        {t('settings.chooseExcelFile')}
       </label>
 
       {parsed && (
         <div className="mt-4 bg-slate-50 border border-slate-100 rounded-xl p-4 text-sm">
           <p className="text-slate-700">
-            <span className="font-medium">{parsed.fileName}</span> — تم العثور على{' '}
-            <span className="font-bold text-primary">{parsed.records.length}</span> سجل طالب صالح للاستيراد.
+            <span className="font-medium">{parsed.fileName}</span> — {t('settings.foundRecords', { count: parsed.records.length })}
           </p>
           {parsed.skipped.length > 0 && (
             <p className="text-amber-600 mt-1">
-              تم تجاهل {parsed.skipped.length} صف بسبب نقص رقم الهوية أو الاسم (الصفوف: {parsed.skipped.slice(0, 10).join(', ')}{parsed.skipped.length > 10 ? '...' : ''}).
+              {t('settings.skippedRows', { count: parsed.skipped.length, rows: parsed.skipped.slice(0, 10).join(', ') + (parsed.skipped.length > 10 ? '...' : '') })}
             </p>
           )}
           <div className="flex gap-2 mt-3">
@@ -216,10 +209,10 @@ function StudentImport() {
               className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark disabled:opacity-60 flex items-center gap-2"
             >
               {importing && <Loader2 className="w-4 h-4 animate-spin" />}
-              {importing ? `جاري الاستيراد... ${progress ? `(${progress.done}/${progress.total})` : ''}` : 'تأكيد الاستيراد والدمج'}
+              {importing ? t('settings.importingProgress', { progress: progress ? `(${progress.done}/${progress.total})` : '' }) : t('settings.confirmImportMerge')}
             </button>
             <button onClick={() => setParsed(null)} disabled={importing} className="px-4 py-2 text-slate-500 text-sm hover:bg-slate-100 rounded-lg disabled:opacity-60">
-              إلغاء
+              {t('common.cancel')}
             </button>
           </div>
         </div>
@@ -227,7 +220,7 @@ function StudentImport() {
 
       {result?.count != null && (
         <div className="mt-4 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl p-3 text-sm">
-          تم استيراد/تحديث {result.count} سجل طالب بنجاح.
+          {t('settings.importSuccess', { count: result.count })}
         </div>
       )}
       {result?.error && (
@@ -238,6 +231,7 @@ function StudentImport() {
 }
 
 function EditableList({ title, icon: Icon, items, collectionName }) {
+  const { t } = useTranslation();
   const [editingId, setEditingId] = useState(null);
   const [draftName, setDraftName] = useState('');
   const [adding, setAdding] = useState(false);
@@ -263,7 +257,7 @@ function EditableList({ title, icon: Icon, items, collectionName }) {
 
   const handleAdd = async () => {
     if (!newId.trim() || !newName.trim()) {
-      setError('الرمز والاسم مطلوبان.');
+      setError(t('settings.codeAndNameRequired'));
       return;
     }
     try {
@@ -282,7 +276,7 @@ function EditableList({ title, icon: Icon, items, collectionName }) {
   };
 
   const handleDeactivate = async (item) => {
-    if (!confirm(`إخفاء "${item.name}" من قوائم النظام؟ (لن تُحذف بياناته القديمة)`)) return;
+    if (!confirm(t('settings.hideConfirm', { name: item.name }))) return;
     try {
       await updateDoc(doc(db, collectionName, item.id), { active: false });
     } catch (err) {
@@ -299,7 +293,7 @@ function EditableList({ title, icon: Icon, items, collectionName }) {
         </h3>
         <button onClick={() => setAdding((v) => !v)} className="text-sm text-primary hover:text-primary-dark font-medium flex items-center gap-1">
           <Plus className="w-4 h-4" />
-          إضافة
+          {t('common.add')}
         </button>
       </div>
 
@@ -311,7 +305,7 @@ function EditableList({ title, icon: Icon, items, collectionName }) {
             type="text"
             value={newId}
             onChange={(e) => setNewId(e.target.value)}
-            placeholder="الرمز (بالإنجليزية، مثال: AL_QUDS)"
+            placeholder={t('settings.codePlaceholder')}
             dir="ltr"
             className="flex-1 min-w-[160px] border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
           />
@@ -319,10 +313,10 @@ function EditableList({ title, icon: Icon, items, collectionName }) {
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="الاسم المعروض"
+            placeholder={t('settings.displayNamePlaceholder')}
             className="flex-1 min-w-[160px] border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
           />
-          <button onClick={handleAdd} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark">حفظ</button>
+          <button onClick={handleAdd} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark">{t('common.save')}</button>
         </div>
       )}
 
@@ -349,10 +343,10 @@ function EditableList({ title, icon: Icon, items, collectionName }) {
               <>
                 <span className="flex-1 text-sm text-slate-800">{item.name}</span>
                 <span className="text-xs text-slate-400 font-mono" dir="ltr">{item.id}</span>
-                <button onClick={() => startEdit(item)} className="p-1.5 text-slate-500 hover:text-primary hover:bg-primary/10 rounded-lg" title="تعديل الاسم">
+                <button onClick={() => startEdit(item)} className="p-1.5 text-slate-500 hover:text-primary hover:bg-primary/10 rounded-lg" title={t('settings.editNameTitle')}>
                   <Pencil className="w-4 h-4" />
                 </button>
-                <button onClick={() => handleDeactivate(item)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg" title="إخفاء">
+                <button onClick={() => handleDeactivate(item)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg" title={t('settings.hideTitle')}>
                   <Trash2 className="w-4 h-4" />
                 </button>
               </>
@@ -360,7 +354,7 @@ function EditableList({ title, icon: Icon, items, collectionName }) {
           </li>
         ))}
         {items.length === 0 && (
-          <li className="py-6 text-center text-sm text-slate-400">لا توجد عناصر</li>
+          <li className="py-6 text-center text-sm text-slate-400">{t('settings.noItems')}</li>
         )}
       </ul>
     </div>
@@ -368,6 +362,7 @@ function EditableList({ title, icon: Icon, items, collectionName }) {
 }
 
 function SubTypesEditor({ complaintTypes, subTypes }) {
+  const { t } = useTranslation();
   const [activeType, setActiveType] = useState(complaintTypes[0]?.id || '');
   const [editingId, setEditingId] = useState(null);
   const [draftName, setDraftName] = useState('');
@@ -395,7 +390,7 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
 
   const handleAdd = async () => {
     if (!newName.trim()) {
-      setError('اسم التصنيف الفرعي مطلوب.');
+      setError(t('settings.subTypeNameRequired'));
       return;
     }
     try {
@@ -415,7 +410,7 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
   };
 
   const handleDeactivate = async (item) => {
-    if (!confirm(`إخفاء "${item.name}" من قوائم النظام؟ (لن تُحذف بياناته القديمة)`)) return;
+    if (!confirm(t('settings.hideConfirm', { name: item.name }))) return;
     try {
       await updateDoc(doc(db, 'complaintSubTypes', item.id), { active: false });
     } catch (err) {
@@ -428,24 +423,24 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-bold text-slate-900 flex items-center gap-2">
           <Tags className="w-5 h-5 text-primary" />
-          التصنيفات الفرعية
+          {t('settings.subTypesTitle')}
         </h3>
         <button onClick={() => setAdding((v) => !v)} className="text-sm text-primary hover:text-primary-dark font-medium flex items-center gap-1">
           <Plus className="w-4 h-4" />
-          إضافة
+          {t('common.add')}
         </button>
       </div>
 
-      <p className="text-sm text-slate-500 mb-4">اختر التصنيف الرئيسي أولاً، ثم أضف أو عدّل التصنيفات الفرعية الخاصة به.</p>
+      <p className="text-sm text-slate-500 mb-4">{t('settings.subTypesHint')}</p>
 
       <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
-        {complaintTypes.map((t) => (
+        {complaintTypes.map((ct) => (
           <button
-            key={t.id}
-            onClick={() => { setActiveType(t.id); setAdding(false); setEditingId(null); }}
-            className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${activeType === t.id ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
+            key={ct.id}
+            onClick={() => { setActiveType(ct.id); setAdding(false); setEditingId(null); }}
+            className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${activeType === ct.id ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
           >
-            {t.name}
+            {ct.name}
           </button>
         ))}
       </div>
@@ -458,10 +453,10 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="اسم التصنيف الفرعي"
+            placeholder={t('settings.subTypeNamePlaceholder')}
             className="flex-1 min-w-[200px] border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:border-primary"
           />
-          <button onClick={handleAdd} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark">حفظ</button>
+          <button onClick={handleAdd} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark">{t('common.save')}</button>
         </div>
       )}
 
@@ -487,10 +482,10 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
             ) : (
               <>
                 <span className="flex-1 text-sm text-slate-800">{item.name}</span>
-                <button onClick={() => startEdit(item)} className="p-1.5 text-slate-500 hover:text-primary hover:bg-primary/10 rounded-lg" title="تعديل الاسم">
+                <button onClick={() => startEdit(item)} className="p-1.5 text-slate-500 hover:text-primary hover:bg-primary/10 rounded-lg" title={t('settings.editNameTitle')}>
                   <Pencil className="w-4 h-4" />
                 </button>
-                <button onClick={() => handleDeactivate(item)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg" title="إخفاء">
+                <button onClick={() => handleDeactivate(item)} className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg" title={t('settings.hideTitle')}>
                   <Trash2 className="w-4 h-4" />
                 </button>
               </>
@@ -498,7 +493,7 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
           </li>
         ))}
         {filtered.length === 0 && (
-          <li className="py-6 text-center text-sm text-slate-400">لا توجد تصنيفات فرعية لهذا النوع بعد</li>
+          <li className="py-6 text-center text-sm text-slate-400">{t('settings.noSubTypesYet')}</li>
         )}
       </ul>
     </div>
@@ -506,6 +501,7 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
 }
 
 export default function Settings() {
+  const { t } = useTranslation();
   const branches = useBranches();
   const departments = useDepartments();
   const complaintTypes = useComplaintTypes();
@@ -519,18 +515,18 @@ export default function Settings() {
       <div>
         <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
           <SettingsIcon className="w-6 h-6 text-primary" />
-          الإعدادات
+          {t('nav.settings')}
         </h1>
-        <p className="text-slate-500 mt-1">تعديل الفروع والأقسام والتصنيفات المستخدمة في كل قوائم النظام</p>
+        <p className="text-slate-500 mt-1">{t('settings.pageSubtitle')}</p>
       </div>
 
-      <EditableList title="الفروع" icon={Building2} items={branches} collectionName="branches" />
-      <EditableList title="الأقسام (المناهج)" icon={GraduationCap} items={departments} collectionName="departments" />
-      <EditableList title="تصنيفات الملاحظات" icon={Tag} items={complaintTypes} collectionName="complaintTypes" />
+      <EditableList title={t('settings.branchesTitle')} icon={Building2} items={branches} collectionName="branches" />
+      <EditableList title={t('settings.departmentsTitle')} icon={GraduationCap} items={departments} collectionName="departments" />
+      <EditableList title={t('settings.complaintTypesTitle')} icon={Tag} items={complaintTypes} collectionName="complaintTypes" />
       <SubTypesEditor complaintTypes={complaintTypes} subTypes={subTypes} />
-      <EditableList title="أنواع المشكلات التقنية" icon={Wrench} items={problemTypes} collectionName="problemTypes" />
-      <EditableList title="المنصات التعليمية" icon={Monitor} items={platforms} collectionName="platforms" />
-      <EditableList title="فئات المفقودات" icon={Package} items={itemCategories} collectionName="itemCategories" />
+      <EditableList title={t('settings.problemTypesTitle')} icon={Wrench} items={problemTypes} collectionName="problemTypes" />
+      <EditableList title={t('settings.platformsTitle')} icon={Monitor} items={platforms} collectionName="platforms" />
+      <EditableList title={t('settings.itemCategoriesTitle')} icon={Package} items={itemCategories} collectionName="itemCategories" />
       <StudentImport />
       <MessageTemplatesEditor />
     </div>
