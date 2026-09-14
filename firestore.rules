@@ -177,6 +177,20 @@ service cloud.firestore {
       }
     }
 
+    // Deleted-complaints archive — a full snapshot is written here the
+    // moment a complaint is deleted (see ComplaintDetails.jsx's handleDelete),
+    // so nothing is ever truly gone without a trace. Admin-only read, per the
+    // requirement that only the system admin can review what was deleted and
+    // by whom; write is gated by the exact same permission the underlying
+    // delete itself requires, so archiving never grants more than deleting
+    // already did. Immutable once written — even an admin cannot edit or
+    // remove an archive entry, matching the activityLog's append-only intent.
+    match /deletedComplaints/{archiveId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && canDeleteRecord(request.resource.data.complaint.branch);
+      allow update, delete: if false;
+    }
+
     // Lost & Found items collection
     match /lostFoundItems/{itemId} {
       allow get: if true;

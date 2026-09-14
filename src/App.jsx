@@ -15,6 +15,7 @@ import ParentPortal from './pages/ParentPortal';
 import PublicReportForm from './pages/PublicReportForm';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
+import DeletedComplaints from './pages/DeletedComplaints';
 import { ROLES } from './config/roles';
 
 function App() {
@@ -51,6 +52,11 @@ function App() {
           <Route path="settings" element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
               <Settings />
+            </ProtectedRoute>
+          } />
+          <Route path="deleted-complaints" element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN]}>
+              <DeletedComplaints />
             </ProtectedRoute>
           } />
         </Route>

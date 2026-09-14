@@ -180,7 +180,23 @@ export default function ComplaintDetails({ complaint, onClose }) {
     if (!reason) return;
     setLoading(true);
     try {
-      await addLog('COMPLAINT_DELETED', { reason });
+      // A full snapshot (complaint fields + its activity log, including this
+      // deletion itself) is archived before the real delete — the complaint's
+      // own activityLog subcollection would otherwise become orphaned and
+      // unreachable the moment its parent doc is gone. Kept out of
+      // firestore.rules' admin-only-read boundary until archived; see
+      // deletedComplaints there for who may read/write it.
+      await addDoc(collection(db, 'deletedComplaints'), {
+        complaint,
+        activityLog: [
+          ...logs,
+          { action: 'COMPLAINT_DELETED', actorId: user.uid, actorName: userData?.name || 'مستخدم', metadata: { reason }, createdAt: new Date() },
+        ],
+        reason,
+        deletedBy: user.uid,
+        deletedByName: userData?.name || 'مستخدم',
+        deletedAt: serverTimestamp(),
+      });
       await deleteDoc(doc(db, 'complaints', complaint.id));
       onClose();
     } catch (err) {

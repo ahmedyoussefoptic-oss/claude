@@ -5,7 +5,7 @@ import { db, functions } from '../config/firebase';
 import { ROLES, ROLE_LABELS } from '../config/roles';
 import { useBranches } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
-import { Users as UsersIcon, Plus, Loader2, Mail, Lock, Phone, Briefcase, User as UserIcon, Pencil, Trash2, KeyRound, X } from 'lucide-react';
+import { Users as UsersIcon, Plus, Loader2, Mail, Lock, Phone, Briefcase, User as UserIcon, Pencil, Trash2, KeyRound, X, SlidersHorizontal, RotateCcw } from 'lucide-react';
 
 const DEPARTMENTS = [
   { id: 'ADMINISTRATIVE', name: 'الشؤون الإدارية' },
@@ -44,6 +44,9 @@ export default function Users() {
   const [newPassword, setNewPassword] = useState('');
   const [resetSubmitting, setResetSubmitting] = useState(false);
   const [resetError, setResetError] = useState(null);
+
+  const [branchFilter, setBranchFilter] = useState('');
+  const [roleFilter, setRoleFilter] = useState('');
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -175,6 +178,14 @@ export default function Users() {
   };
 
   const isAdminRole = form.role === ROLES.ADMIN;
+
+  const filteredUsers = users.filter((u) => {
+    if (branchFilter && u.access !== 'all' && u.branch !== branchFilter) return false;
+    if (roleFilter && u.role !== roleFilter) return false;
+    return true;
+  });
+  const filtersActive = branchFilter || roleFilter;
+  const resetFilters = () => { setBranchFilter(''); setRoleFilter(''); };
 
   return (
     <div className="p-8">
@@ -394,6 +405,43 @@ export default function Users() {
         </div>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="p-4 border-b border-slate-100 flex flex-wrap gap-3 items-end bg-slate-50/50">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-400 pb-2.5">
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              فلاتر
+            </div>
+            <div className="w-44">
+              <label className="block text-xs text-slate-500 mb-1">الفرع</label>
+              <select
+                value={branchFilter}
+                onChange={(e) => setBranchFilter(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+              >
+                <option value="">كل الفروع</option>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
+            </div>
+            <div className="w-52">
+              <label className="block text-xs text-slate-500 mb-1">المهام (الصلاحية)</label>
+              <select
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+              >
+                <option value="">كل المهام</option>
+                {Object.values(ROLES).map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+              </select>
+            </div>
+            {filtersActive && (
+              <button
+                onClick={resetFilters}
+                className="flex items-center gap-1.5 px-3 py-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                إعادة تعيين
+              </button>
+            )}
+          </div>
           <div className="overflow-x-auto">
             <table className="w-full text-right">
               <thead className="bg-slate-50 border-b border-slate-100">
@@ -410,7 +458,7 @@ export default function Users() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {users.map(u => (
+                {filteredUsers.map(u => (
                   <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-6 py-4 text-sm font-medium text-slate-900">
                       {u.name}{u.id === currentUser?.uid && <span className="mr-2 text-xs bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full">أنت</span>}
@@ -451,10 +499,10 @@ export default function Users() {
                     </td>
                   </tr>
                 ))}
-                {users.length === 0 && (
+                {filteredUsers.length === 0 && (
                   <tr>
                     <td colSpan="9" className="px-6 py-8 text-center text-slate-500">
-                      لا يوجد مستخدمين مسجلين
+                      {users.length === 0 ? 'لا يوجد مستخدمين مسجلين' : 'لا يوجد مستخدمين مطابقين للفلاتر المحددة'}
                     </td>
                   </tr>
                 )}
