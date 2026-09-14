@@ -6,7 +6,7 @@ import useAuthStore from '../../stores/useAuthStore';
 import { useBranches, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
 import { useUsers } from '../../hooks/useUsers';
 import { STAGES } from '../../config/complaintTypes';
-import { RELATIONS, generateTicketId } from '../../config/techSupport';
+import { RELATIONS, generateTicketId, classOptionsForStage } from '../../config/techSupport';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { waLink, buildTechSupportReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
@@ -22,7 +22,6 @@ export default function TechSupportForm({ onClose }) {
   const [formData, setFormData] = useState({
     studentName: '',
     nationalId: '',
-    academicId: '',
     branch: '',
     stage: '',
     grade: '',
@@ -41,7 +40,11 @@ export default function TechSupportForm({ onClose }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'stage' ? { grade: '' } : {}),
+    }));
   };
 
   const [studentSuggestions, setStudentSuggestions] = useState([]);
@@ -53,7 +56,6 @@ export default function TechSupportForm({ onClose }) {
       studentName: student.name || prev.studentName,
       nationalId: student.nationalId || prev.nationalId,
       branch: student.branch || prev.branch,
-      grade: [student.stageName, student.gradeName, student.className].filter(Boolean).join(' - ') || prev.grade,
       parentPhone: student.mobile || prev.parentPhone,
     }));
     setStudentSuggestions([]);
@@ -200,7 +202,7 @@ export default function TechSupportForm({ onClose }) {
 
             <div className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
               <h3 className="text-lg font-bold text-slate-900 border-b border-slate-200 pb-2">بيانات الطالب</h3>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="relative">
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">اسم الطالب رباعياً <span className="text-red-500">*</span></label>
                   <input
@@ -228,10 +230,6 @@ export default function TechSupportForm({ onClose }) {
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم الهوية / السجل المدني <span className="text-red-500">*</span></label>
                   <input type="text" name="nationalId" value={formData.nationalId} onChange={handleChange} onBlur={handleNationalIdBlur} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">الرقم الأكاديمي</label>
-                  <input type="text" name="academicId" value={formData.academicId} onChange={handleChange} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
-                </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
@@ -250,13 +248,16 @@ export default function TechSupportForm({ onClose }) {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">الصف <span className="text-red-500">*</span></label>
-                  <input type="text" name="grade" value={formData.grade} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+                  <select name="grade" value={formData.grade} onChange={handleChange} required disabled={!formData.stage} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white disabled:text-slate-400 disabled:bg-slate-50">
+                    <option value="">اختر الصف...</option>
+                    {classOptionsForStage(formData.stage).map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
                 </div>
               </div>
             </div>
 
             <div className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-200 pb-2">بيانات ولي الأمر / مقدّم البلاغ</h3>
+              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-200 pb-2">بيانات ولي الأمر</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">الاسم <span className="text-red-500">*</span></label>

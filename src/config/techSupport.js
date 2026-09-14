@@ -12,7 +12,19 @@ export const PLATFORMS = [
   { id: 'OTHER', name: 'أخرى' },
 ];
 
-export const RELATIONS = ['الأب', 'الأم', 'ولي أمر بديل', 'الطالب نفسه'];
+export const RELATIONS = ['الأب', 'الأم', 'الطالب نفسه'];
+
+// Class/section options for the "الصف" dropdown, derived from the chosen
+// stage — e.g. G1 -> 1-1..1-6 and 1-A..1-E. KG stages keep their own code
+// as the prefix (KG1-1, KG1-A, ...) since they have no numeric grade digit.
+export function classOptionsForStage(stage) {
+  if (!stage) return [];
+  const match = stage.match(/^G(\d+)$/);
+  const prefix = match ? match[1] : stage;
+  const numeric = ['1', '2', '3', '4', '5', '6'].map((n) => `${prefix}-${n}`);
+  const alpha = ['A', 'B', 'C', 'D', 'E'].map((l) => `${prefix}-${l}`);
+  return [...numeric, ...alpha];
+}
 
 // Status flow: NEW -> ASSIGNED -> IN_PROGRESS -> WAITING_CONFIRMATION -> CLOSED / REOPENED
 export const TICKET_STATUS_LABELS = {

@@ -4,12 +4,11 @@ import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
 import { useBranches, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
 import { STAGES } from '../../config/complaintTypes';
-import { RELATIONS } from '../../config/techSupport';
+import { RELATIONS, classOptionsForStage } from '../../config/techSupport';
 
 const emptyForm = {
   studentName: '',
   nationalId: '',
-  academicId: '',
   branch: '',
   stage: '',
   grade: '',
@@ -33,7 +32,11 @@ export default function PublicTechSupportFields({ initialBranch, onSuccess }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'stage' ? { grade: '' } : {}),
+    }));
   };
 
   const handleSubmit = async (e) => {
@@ -73,18 +76,12 @@ export default function PublicTechSupportFields({ initialBranch, onSuccess }) {
             <input type="text" name="nationalId" value={formData.nationalId} onChange={handleChange} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
           </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">الرقم الأكاديمي</label>
-            <input type="text" name="academicId" value={formData.academicId} onChange={handleChange} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">الفرع <span className="text-red-500">*</span></label>
-            <select name="branch" value={formData.branch} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              <option value="">اختر الفرع...</option>
-              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-            </select>
-          </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">الفرع <span className="text-red-500">*</span></label>
+          <select name="branch" value={formData.branch} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
+            <option value="">اختر الفرع...</option>
+            {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -96,13 +93,16 @@ export default function PublicTechSupportFields({ initialBranch, onSuccess }) {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">الصف <span className="text-red-500">*</span></label>
-            <input type="text" name="grade" value={formData.grade} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+            <select name="grade" value={formData.grade} onChange={handleChange} required disabled={!formData.stage} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white disabled:text-slate-400 disabled:bg-slate-50">
+              <option value="">اختر الصف...</option>
+              {classOptionsForStage(formData.stage).map((g) => <option key={g} value={g}>{g}</option>)}
+            </select>
           </div>
         </div>
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-700">بيانات ولي الأمر / مقدّم البلاغ</h3>
+        <h3 className="text-sm font-bold text-slate-700">بيانات ولي الأمر</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">الاسم <span className="text-red-500">*</span></label>
