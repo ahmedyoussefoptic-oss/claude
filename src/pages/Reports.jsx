@@ -1,34 +1,17 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { useBranches, useComplaintTypes, useSubTypes } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { ar, enUS } from 'date-fns/locale';
 import logo from '../assets/logo.png';
 import { Printer, RotateCcw, Star } from 'lucide-react';
 
-const STATUS_NAME = {
-  RECEIVED: 'مستلمة',
-  IN_PROGRESS: 'قيد المعالجة',
-  WAITING_PARENT_RESPONSE: 'بانتظار الرد',
-  SOLVED: 'تم الحل',
-  CLOSED: 'مغلقة',
-  REJECTED: 'مرفوضة',
-  ESCALATED: 'مصعدة',
-};
-
-const RATING_LABELS = {
-  resolutionSpeed: 'سرعة حل الملاحظة',
-  solutionQuality: 'جودة الحل',
-  staffProfessionalism: 'احترافية الموظفين',
-};
-
-const REPORT_TYPES = [
-  { id: 'COMPLAINTS', name: 'تقرير الملاحظات' },
-  { id: 'SURVEY', name: 'تقرير استبيان رضا أولياء الأمور' },
-];
+const REPORT_TYPE_IDS = ['COMPLAINTS', 'SURVEY'];
+const RATING_KEYS = ['resolutionSpeed', 'solutionQuality', 'staffProfessionalism'];
 
 function average(list, getValue) {
   const values = list.map(getValue).filter((v) => typeof v === 'number');
@@ -45,19 +28,21 @@ function Stars({ value }) {
   );
 }
 
-function formatDuration(ms) {
-  if (ms == null) return '—';
-  const hours = Math.floor(ms / (1000 * 60 * 60));
-  if (hours < 1) return 'أقل من ساعة';
-  const days = Math.floor(hours / 24);
-  const remHours = hours % 24;
-  if (days > 0) return remHours > 0 ? `${days} يوم و${remHours} ساعة` : `${days} يوم`;
-  return `${hours} ساعة`;
-}
-
 const emptyFilters = { from: '', to: '', complaintType: '', subType: '', branch: '', assignedTo: '' };
 
 export default function Reports() {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'ar' ? ar : enUS;
+  const listSep = i18n.language === 'ar' ? '، ' : ', ';
+  const formatDuration = (ms) => {
+    if (ms == null) return '—';
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    if (hours < 1) return t('reports.lessThanHour');
+    const days = Math.floor(hours / 24);
+    const remHours = hours % 24;
+    if (days > 0) return remHours > 0 ? t('reports.daysAndHours', { days, hours: remHours }) : t('reports.daysOnly', { days });
+    return t('reports.hoursOnly', { hours });
+  };
   const { userData } = useAuthStore();
   const branches = useBranches();
   const complaintTypes = useComplaintTypes();
@@ -135,7 +120,7 @@ export default function Reports() {
   }, [results]);
 
   const byType = useMemo(
-    () => complaintTypes.map((t) => ({ ...t, count: results.filter((c) => c.complaintType === t.id).length })).filter((t) => t.count > 0),
+    () => complaintTypes.map((ct) => ({ ...ct, count: results.filter((c) => c.complaintType === ct.id).length })).filter((ct) => ct.count > 0),
     [results, complaintTypes]
   );
 
@@ -170,7 +155,7 @@ export default function Reports() {
       count: surveyed.filter((c) => Math.round(c.satisfactionRate) === star).length,
     }));
     const detailAverages = Object.fromEntries(
-      Object.keys(RATING_LABELS).map((key) => [key, average(surveyed, (c) => c.satisfactionDetails?.[key])])
+      RATING_KEYS.map((key) => [key, average(surveyed, (c) => c.satisfactionDetails?.[key])])
     );
     return {
       count: surveyed.length,
@@ -195,7 +180,7 @@ export default function Reports() {
   const satisfactionByEmployee = useMemo(() => {
     const map = {};
     surveyed.forEach((c) => {
-      const names = c.assignedToNames?.length ? c.assignedToNames : ['غير مسند'];
+      const names = c.assignedToNames?.length ? c.assignedToNames : [t('reports.unassigned')];
       names.forEach((name) => {
         if (!map[name]) map[name] = [];
         map[name].push(c);
@@ -204,18 +189,18 @@ export default function Reports() {
     return Object.entries(map)
       .map(([name, list]) => ({ name, count: list.length, avg: average(list, (c) => c.satisfactionRate) }))
       .sort((a, b) => b.avg - a.avg);
-  }, [surveyed]);
+  }, [surveyed, t]);
 
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
-  const typeName = (id) => complaintTypes.find((t) => t.id === id)?.name || id;
+  const typeName = (id) => complaintTypes.find((ct) => ct.id === id)?.name || id;
 
   const activeFilterLabels = [];
-  if (filters.from) activeFilterLabels.push(`من ${filters.from}`);
-  if (filters.to) activeFilterLabels.push(`إلى ${filters.to}`);
-  if (filters.complaintType) activeFilterLabels.push(`النوع: ${typeName(filters.complaintType)}`);
-  if (filters.subType) activeFilterLabels.push(`التصنيف الفرعي: ${filters.subType}`);
-  if (filters.branch) activeFilterLabels.push(`الفرع: ${branchName(filters.branch)}`);
-  if (filters.assignedTo) activeFilterLabels.push(`الموظف: ${specialists.find((s) => s.id === filters.assignedTo)?.name || ''}`);
+  if (filters.from) activeFilterLabels.push(`${t('reports.fromShort')} ${filters.from}`);
+  if (filters.to) activeFilterLabels.push(`${t('reports.toShort')} ${filters.to}`);
+  if (filters.complaintType) activeFilterLabels.push(`${t('reports.typeShort')} ${typeName(filters.complaintType)}`);
+  if (filters.subType) activeFilterLabels.push(`${t('complaintForm.subTypeLabel')}: ${filters.subType}`);
+  if (filters.branch) activeFilterLabels.push(`${t('reports.branchShort')} ${branchName(filters.branch)}`);
+  if (filters.assignedTo) activeFilterLabels.push(`${t('reports.employeeShort')} ${specialists.find((s) => s.id === filters.assignedTo)?.name || ''}`);
 
   const handlePrint = () => window.print();
 
@@ -223,31 +208,31 @@ export default function Reports() {
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">التقارير</h1>
-          <p className="text-slate-500 mt-1">حدد معايير التقرير ثم اطبعه أو احفظه كملف PDF</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t('nav.reports')}</h1>
+          <p className="text-slate-500 mt-1">{t('reports.pageSubtitle')}</p>
         </div>
         <button
           onClick={handlePrint}
           className="px-4 py-2.5 flex items-center gap-2 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm shrink-0"
         >
           <Printer className="w-4 h-4" />
-          طباعة / حفظ PDF
+          {t('reports.printSavePdf')}
         </button>
       </div>
 
       {/* Report type */}
       <div className="flex flex-wrap gap-2 no-print">
-        {REPORT_TYPES.map((rt) => (
+        {REPORT_TYPE_IDS.map((id) => (
           <button
-            key={rt.id}
-            onClick={() => setReportType(rt.id)}
+            key={id}
+            onClick={() => setReportType(id)}
             className={`px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
-              reportType === rt.id
+              reportType === id
                 ? 'bg-primary text-white border-primary shadow-sm'
                 : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
             }`}
           >
-            {rt.name}
+            {t(`reports.types.${id}`)}
           </button>
         ))}
       </div>
@@ -255,46 +240,46 @@ export default function Reports() {
       {/* Filters */}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 no-print">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-bold text-slate-700">معايير التقرير</h3>
+          <h3 className="text-sm font-bold text-slate-700">{t('reports.criteriaTitle')}</h3>
           <button onClick={resetFilters} className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1">
             <RotateCcw className="w-3.5 h-3.5" />
-            إعادة تعيين
+            {t('common.reset')}
           </button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">من تاريخ</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.fromDate')}</label>
             <input type="date" name="from" value={filters.from} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">إلى تاريخ</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.toDate')}</label>
             <input type="date" name="to" value={filters.to} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">نوع الملاحظة</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('reports.complaintTypeLabel')}</label>
             <select name="complaintType" value={filters.complaintType} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
-              <option value="">كل الأنواع</option>
-              {complaintTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              <option value="">{t('common.allTypes')}</option>
+              {complaintTypes.map((ct) => <option key={ct.id} value={ct.id}>{ct.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">التصنيف الفرعي</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.subTypeLabel')}</label>
             <select name="subType" value={filters.subType} onChange={handleChange} disabled={!filters.complaintType} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white disabled:text-slate-400 disabled:bg-slate-50">
-              <option value="">الكل</option>
+              <option value="">{t('reports.allSubTypes')}</option>
               {subTypes.filter((s) => s.parentType === filters.complaintType).map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">الفرع</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')}</label>
             <select name="branch" value={filters.branch} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
-              <option value="">كل الفروع</option>
+              <option value="">{t('common.allBranches')}</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">الموظف المختص</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('reports.specialistLabel')}</label>
             <select name="assignedTo" value={filters.assignedTo} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
-              <option value="">كل الموظفين</option>
+              <option value="">{t('reports.allSpecialists')}</option>
               {specialists.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
@@ -305,15 +290,15 @@ export default function Reports() {
       <div id="report-print-area" className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 space-y-8">
         <div className="flex items-center justify-between border-b border-slate-200 pb-6">
           <div className="flex items-center gap-4">
-            <img src={logo} alt="مدارس المكتشف العالمية" className="h-14 w-auto" />
+            <img src={logo} alt={t('reports.schoolFullName')} className="h-14 w-auto" />
             <div>
-              <h2 className="text-xl font-bold text-slate-900">مدارس المكتشف العالمية</h2>
-              <p className="text-sm text-slate-500">{REPORT_TYPES.find((rt) => rt.id === reportType)?.name}</p>
+              <h2 className="text-xl font-bold text-slate-900">{t('reports.schoolFullName')}</h2>
+              <p className="text-sm text-slate-500">{t(`reports.types.${reportType}`)}</p>
             </div>
           </div>
           <div className="text-left">
-            <p className="text-xs text-slate-400">تاريخ الإصدار</p>
-            <p className="text-sm font-medium text-slate-700" dir="ltr">{format(new Date(), 'yyyy-MM-dd HH:mm', { locale: ar })}</p>
+            <p className="text-xs text-slate-400">{t('reports.issueDate')}</p>
+            <p className="text-sm font-medium text-slate-700" dir="ltr">{format(new Date(), 'yyyy-MM-dd HH:mm', { locale: dateLocale })}</p>
           </div>
         </div>
 
@@ -329,31 +314,31 @@ export default function Reports() {
         <>
         {/* Summary */}
         <div>
-          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">الملخص العام</h3>
+          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.generalSummary')}</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="rounded-xl border border-slate-200 p-4 text-center">
               <p className="text-2xl font-bold text-slate-900">{summary.total}</p>
-              <p className="text-xs text-slate-500 mt-1">إجمالي الملاحظات</p>
+              <p className="text-xs text-slate-500 mt-1">{t('reports.totalComplaints')}</p>
             </div>
             <div className="rounded-xl border border-slate-200 p-4 text-center">
               <p className="text-2xl font-bold text-emerald-600">{summary.resolved}</p>
-              <p className="text-xs text-slate-500 mt-1">تم حلها</p>
+              <p className="text-xs text-slate-500 mt-1">{t('reports.resolvedCount')}</p>
             </div>
             <div className="rounded-xl border border-slate-200 p-4 text-center">
               <p className="text-2xl font-bold text-amber-600">{summary.inProgress}</p>
-              <p className="text-xs text-slate-500 mt-1">قيد المعالجة</p>
+              <p className="text-xs text-slate-500 mt-1">{t('statuses.complaint.IN_PROGRESS')}</p>
             </div>
             <div className="rounded-xl border border-slate-200 p-4 text-center">
               <p className="text-2xl font-bold text-orange-600">{summary.escalated}</p>
-              <p className="text-xs text-slate-500 mt-1">مصعدة</p>
+              <p className="text-xs text-slate-500 mt-1">{t('statuses.complaint.ESCALATED')}</p>
             </div>
             <div className="rounded-xl border border-slate-200 p-4 text-center">
               <p className="text-2xl font-bold text-slate-900">{formatDuration(summary.avgResolutionMs)}</p>
-              <p className="text-xs text-slate-500 mt-1">متوسط زمن الحل</p>
+              <p className="text-xs text-slate-500 mt-1">{t('reports.avgResolutionTime')}</p>
             </div>
             <div className="rounded-xl border border-slate-200 p-4 text-center">
               <p className="text-2xl font-bold text-slate-900">{summary.satisfaction != null ? `${summary.satisfaction.toFixed(1)} / 5` : '—'}</p>
-              <p className="text-xs text-slate-500 mt-1">متوسط رضا أولياء الأمور ({summary.satisfactionCount})</p>
+              <p className="text-xs text-slate-500 mt-1">{t('reports.avgSatisfaction', { count: summary.satisfactionCount })}</p>
             </div>
           </div>
         </div>
@@ -361,21 +346,21 @@ export default function Reports() {
         {/* By type */}
         {byType.length > 0 && (
           <div>
-            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">حسب نوع الملاحظة</h3>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.byComplaintType')}</h3>
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-500">
-                  <th className="text-right py-2 font-medium">النوع</th>
-                  <th className="text-right py-2 font-medium">العدد</th>
-                  <th className="text-right py-2 font-medium">النسبة</th>
+                  <th className="text-right py-2 font-medium">{t('common.type')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.countLabel')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.percentLabel')}</th>
                 </tr>
               </thead>
               <tbody>
-                {byType.map((t) => (
-                  <tr key={t.id} className="border-b border-slate-100">
-                    <td className="py-2 text-slate-800">{t.name}</td>
-                    <td className="py-2 text-slate-800 tabular-nums">{t.count}</td>
-                    <td className="py-2 text-slate-500 tabular-nums">{summary.total ? Math.round((t.count / summary.total) * 100) : 0}%</td>
+                {byType.map((ct) => (
+                  <tr key={ct.id} className="border-b border-slate-100">
+                    <td className="py-2 text-slate-800">{ct.name}</td>
+                    <td className="py-2 text-slate-800 tabular-nums">{ct.count}</td>
+                    <td className="py-2 text-slate-500 tabular-nums">{summary.total ? Math.round((ct.count / summary.total) * 100) : 0}%</td>
                   </tr>
                 ))}
               </tbody>
@@ -386,12 +371,12 @@ export default function Reports() {
         {/* By sub-type */}
         {bySubType.length > 0 && (
           <div>
-            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">حسب التصنيف الفرعي</h3>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.bySubType')}</h3>
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-500">
-                  <th className="text-right py-2 font-medium">التصنيف الفرعي</th>
-                  <th className="text-right py-2 font-medium">العدد</th>
+                  <th className="text-right py-2 font-medium">{t('complaintForm.subTypeLabel')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.countLabel')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -409,12 +394,12 @@ export default function Reports() {
         {/* By branch */}
         {!filters.branch && byBranch.length > 0 && (
           <div>
-            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">حسب الفرع</h3>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.byBranch')}</h3>
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-500">
-                  <th className="text-right py-2 font-medium">الفرع</th>
-                  <th className="text-right py-2 font-medium">العدد</th>
+                  <th className="text-right py-2 font-medium">{t('common.branch')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.countLabel')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -431,21 +416,21 @@ export default function Reports() {
 
         {/* Detailed listing */}
         <div>
-          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">التفاصيل ({results.length})</h3>
+          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.detailsLabel')} ({results.length})</h3>
           {results.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-8">لا توجد ملاحظات مطابقة لمعايير التقرير</p>
+            <p className="text-sm text-slate-400 text-center py-8">{t('reports.noMatchingComplaints')}</p>
           ) : (
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-500">
-                  <th className="text-right py-2 font-medium">رقم الملاحظة</th>
-                  <th className="text-right py-2 font-medium">التاريخ</th>
-                  <th className="text-right py-2 font-medium">الفرع</th>
-                  <th className="text-right py-2 font-medium">النوع</th>
-                  <th className="text-right py-2 font-medium">التصنيف الفرعي</th>
-                  <th className="text-right py-2 font-medium">المختص</th>
-                  <th className="text-right py-2 font-medium">الحالة</th>
-                  <th className="text-right py-2 font-medium">زمن الحل</th>
+                  <th className="text-right py-2 font-medium">{t('reports.complaintNumber')}</th>
+                  <th className="text-right py-2 font-medium">{t('common.date')}</th>
+                  <th className="text-right py-2 font-medium">{t('common.branch')}</th>
+                  <th className="text-right py-2 font-medium">{t('common.type')}</th>
+                  <th className="text-right py-2 font-medium">{t('complaintForm.subTypeLabel')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.specialistShort')}</th>
+                  <th className="text-right py-2 font-medium">{t('common.status')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.resolutionTime')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -456,8 +441,8 @@ export default function Reports() {
                     <td className="py-2 text-slate-600">{branchName(c.branch)}</td>
                     <td className="py-2 text-slate-600">{typeName(c.complaintType)}</td>
                     <td className="py-2 text-slate-600">{c.subType || '—'}</td>
-                    <td className="py-2 text-slate-600">{c.assignedToNames?.join('، ') || '—'}</td>
-                    <td className="py-2 text-slate-600">{STATUS_NAME[c.status] || c.status}</td>
+                    <td className="py-2 text-slate-600">{c.assignedToNames?.join(listSep) || '—'}</td>
+                    <td className="py-2 text-slate-600">{t(`statuses.complaint.${c.status}`, c.status)}</td>
                     <td className="py-2 text-slate-600">{c.solvedAt && c.createdAt ? formatDuration(c.solvedAt.toMillis() - c.createdAt.toMillis()) : '—'}</td>
                   </tr>
                 ))}
@@ -472,23 +457,23 @@ export default function Reports() {
         <>
         {/* Survey summary */}
         <div>
-          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">الملخص العام</h3>
+          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.generalSummary')}</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="rounded-xl border border-slate-200 p-4 text-center">
               <p className="text-2xl font-bold text-slate-900">{surveyStats.count}</p>
-              <p className="text-xs text-slate-500 mt-1">عدد المستبينين</p>
+              <p className="text-xs text-slate-500 mt-1">{t('reports.respondentCount')}</p>
             </div>
             <div className="rounded-xl border border-slate-200 p-4 text-center">
               <p className="text-2xl font-bold text-amber-500">{surveyStats.average != null ? `${surveyStats.average.toFixed(1)} / 5` : '—'}</p>
-              <p className="text-xs text-slate-500 mt-1">متوسط الرضا العام</p>
+              <p className="text-xs text-slate-500 mt-1">{t('reports.overallSatisfactionAvg')}</p>
             </div>
             <div className="rounded-xl border border-slate-200 p-4 text-center">
               <p className="text-2xl font-bold text-slate-900">{surveyStats.responseRate != null ? `${surveyStats.responseRate}%` : '—'}</p>
-              <p className="text-xs text-slate-500 mt-1">معدل الاستجابة للاستبيان</p>
+              <p className="text-xs text-slate-500 mt-1">{t('reports.surveyResponseRate')}</p>
             </div>
             <div className="rounded-xl border border-slate-200 p-4 text-center">
               <p className="text-2xl font-bold text-red-500">{surveyStats.reopenedWithoutRatingCount}</p>
-              <p className="text-xs text-slate-500 mt-1">إعادة فتح دون تقييم</p>
+              <p className="text-xs text-slate-500 mt-1">{t('reports.reopenedWithoutRating')}</p>
             </div>
           </div>
         </div>
@@ -496,12 +481,12 @@ export default function Reports() {
         {/* Detail metric averages */}
         {surveyStats.count > 0 && (
           <div>
-            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">متوسط معايير التقييم</h3>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.avgRatingCriteria')}</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {Object.entries(RATING_LABELS).map(([key, label]) => (
+              {RATING_KEYS.map((key) => (
                 <div key={key} className="rounded-xl border border-slate-200 p-4 text-center">
                   <p className="text-2xl font-bold text-slate-900">{surveyStats.detailAverages[key] != null ? surveyStats.detailAverages[key].toFixed(1) : '—'}</p>
-                  <p className="text-xs text-slate-500 mt-1">{label}</p>
+                  <p className="text-xs text-slate-500 mt-1">{t(`ratings.${key}`)}</p>
                 </div>
               ))}
             </div>
@@ -511,7 +496,7 @@ export default function Reports() {
         {/* Star distribution */}
         {surveyStats.count > 0 && (
           <div>
-            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">توزيع التقييمات</h3>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.ratingDistribution')}</h3>
             <div className="space-y-2">
               {surveyStats.distribution.map(({ star, count }) => (
                 <div key={star} className="flex items-center gap-3">
@@ -534,13 +519,13 @@ export default function Reports() {
         {/* By branch */}
         {!filters.branch && satisfactionByBranch.length > 0 && (
           <div>
-            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">متوسط الرضا حسب الفرع</h3>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.satisfactionByBranch')}</h3>
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-500">
-                  <th className="text-right py-2 font-medium">الفرع</th>
-                  <th className="text-right py-2 font-medium">عدد المستبينين</th>
-                  <th className="text-right py-2 font-medium">متوسط الرضا</th>
+                  <th className="text-right py-2 font-medium">{t('common.branch')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.respondentCount')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.satisfactionAvg')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -559,13 +544,13 @@ export default function Reports() {
         {/* By employee */}
         {!filters.assignedTo && satisfactionByEmployee.length > 0 && (
           <div>
-            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">متوسط الرضا حسب الموظف المختص</h3>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.satisfactionByEmployee')}</h3>
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-500">
-                  <th className="text-right py-2 font-medium">الموظف</th>
-                  <th className="text-right py-2 font-medium">عدد المستبينين</th>
-                  <th className="text-right py-2 font-medium">متوسط الرضا</th>
+                  <th className="text-right py-2 font-medium">{t('reports.employeeLabel')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.respondentCount')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.satisfactionAvg')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -583,22 +568,22 @@ export default function Reports() {
 
         {/* Detailed listing */}
         <div>
-          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">تفاصيل الاستبيانات ({surveyed.length})</h3>
+          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.surveyDetailsLabel')} ({surveyed.length})</h3>
           {surveyed.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-8">لا توجد استبيانات مطابقة لمعايير التقرير</p>
+            <p className="text-sm text-slate-400 text-center py-8">{t('reports.noMatchingSurveys')}</p>
           ) : (
             <table className="w-full text-sm border-collapse">
               <thead>
                 <tr className="border-b border-slate-200 text-slate-500">
-                  <th className="text-right py-2 font-medium">رقم الملاحظة</th>
-                  <th className="text-right py-2 font-medium">التاريخ</th>
-                  <th className="text-right py-2 font-medium">الفرع</th>
-                  <th className="text-right py-2 font-medium">المختص</th>
-                  <th className="text-right py-2 font-medium">التقييم العام</th>
-                  {Object.values(RATING_LABELS).map((label) => (
-                    <th key={label} className="text-right py-2 font-medium">{label}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.complaintNumber')}</th>
+                  <th className="text-right py-2 font-medium">{t('common.date')}</th>
+                  <th className="text-right py-2 font-medium">{t('common.branch')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.specialistShort')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.overallRating')}</th>
+                  {RATING_KEYS.map((key) => (
+                    <th key={key} className="text-right py-2 font-medium">{t(`ratings.${key}`)}</th>
                   ))}
-                  <th className="text-right py-2 font-medium">ملاحظة ولي الأمر</th>
+                  <th className="text-right py-2 font-medium">{t('reports.parentFeedbackLabel')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -607,9 +592,9 @@ export default function Reports() {
                     <td className="py-2 text-slate-800" dir="ltr">{c.complaintId}</td>
                     <td className="py-2 text-slate-600" dir="ltr">{c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd') : '—'}</td>
                     <td className="py-2 text-slate-600">{branchName(c.branch)}</td>
-                    <td className="py-2 text-slate-600">{c.assignedToNames?.join('، ') || '—'}</td>
+                    <td className="py-2 text-slate-600">{c.assignedToNames?.join(listSep) || '—'}</td>
                     <td className="py-2"><Stars value={c.satisfactionRate} /></td>
-                    {Object.keys(RATING_LABELS).map((key) => (
+                    {RATING_KEYS.map((key) => (
                       <td key={key} className="py-2 text-slate-600 tabular-nums">{c.satisfactionDetails?.[key] ?? '—'}</td>
                     ))}
                     <td className="py-2 text-slate-600 max-w-xs truncate">{c.parentFeedback || '—'}</td>
@@ -622,15 +607,15 @@ export default function Reports() {
           {reopenedWithoutRating.length > 0 && (
             <div className="mt-6">
               <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">
-                إعادة فتح دون تقييم ({reopenedWithoutRating.length})
+                {t('reports.reopenedWithoutRating')} ({reopenedWithoutRating.length})
               </h3>
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-500">
-                    <th className="text-right py-2 font-medium">رقم الملاحظة</th>
-                    <th className="text-right py-2 font-medium">الفرع</th>
-                    <th className="text-right py-2 font-medium">المختص</th>
-                    <th className="text-right py-2 font-medium">ملاحظة ولي الأمر</th>
+                    <th className="text-right py-2 font-medium">{t('reports.complaintNumber')}</th>
+                    <th className="text-right py-2 font-medium">{t('common.branch')}</th>
+                    <th className="text-right py-2 font-medium">{t('reports.specialistShort')}</th>
+                    <th className="text-right py-2 font-medium">{t('reports.parentFeedbackLabel')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -638,7 +623,7 @@ export default function Reports() {
                     <tr key={c.id} onClick={() => setSelectedComplaint(c)} className="border-b border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors">
                       <td className="py-2 text-slate-800" dir="ltr">{c.complaintId}</td>
                       <td className="py-2 text-slate-600">{branchName(c.branch)}</td>
-                      <td className="py-2 text-slate-600">{c.assignedToNames?.join('، ') || '—'}</td>
+                      <td className="py-2 text-slate-600">{c.assignedToNames?.join(listSep) || '—'}</td>
                       <td className="py-2 text-slate-600">{c.parentFeedback}</td>
                     </tr>
                   ))}
