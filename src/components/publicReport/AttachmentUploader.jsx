@@ -1,9 +1,12 @@
 import { useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Upload, X } from 'lucide-react';
 import { MAX_PUBLIC_FILES, MAX_PUBLIC_FILE_BYTES } from '../../utils/publicSubmission';
 
-export default function AttachmentUploader({ files, onAdd, onRemove, max = MAX_PUBLIC_FILES, label = 'مرفقات (اختياري)', accept = 'image/*,.pdf,.doc,.docx' }) {
+export default function AttachmentUploader({ files, onAdd, onRemove, max = MAX_PUBLIC_FILES, label, accept = 'image/*,.pdf,.doc,.docx' }) {
+  const { t } = useTranslation();
   const fileInputRef = useRef(null);
+  const maxMb = (MAX_PUBLIC_FILE_BYTES / 1024 / 1024).toFixed(0);
 
   const handleFiles = (newFiles) => {
     const withinLimit = max === 1 ? newFiles.slice(0, 1) : newFiles;
@@ -12,7 +15,7 @@ export default function AttachmentUploader({ files, onAdd, onRemove, max = MAX_P
 
   return (
     <div>
-      <label className="block text-sm font-medium text-slate-700 mb-1.5">{label}</label>
+      <label className="block text-sm font-medium text-slate-700 mb-1.5">{label ?? t('publicReport.attachmentsOptional')}</label>
       <div
         onClick={() => fileInputRef.current?.click()}
         onDragOver={(e) => e.preventDefault()}
@@ -25,7 +28,7 @@ export default function AttachmentUploader({ files, onAdd, onRemove, max = MAX_P
         <div className="space-y-1.5 text-center">
           <Upload className="w-6 h-6 mx-auto text-slate-400" />
           <p className="text-sm text-slate-600">
-            <span className="font-medium text-primary">اضغط لرفع {max === 1 ? 'صورة' : 'صورة أو ملف'}</span>
+            <span className="font-medium text-primary">{max === 1 ? t('publicReport.uploadClickSingle') : t('publicReport.uploadClickMulti')}</span>
             <input
               ref={fileInputRef}
               type="file"
@@ -37,10 +40,10 @@ export default function AttachmentUploader({ files, onAdd, onRemove, max = MAX_P
                 e.target.value = '';
               }}
             />
-            {' '}أو اسحبه وأفلته هنا
+            {' '}{t('publicReport.uploadDrop')}
           </p>
           <p className="text-xs text-slate-400">
-            {max === 1 ? 'ملف واحد' : `حتى ${max} ملفات`}، بحد أقصى {(MAX_PUBLIC_FILE_BYTES / 1024 / 1024).toFixed(0)} ميجابايت لكل ملف
+            {max === 1 ? t('publicReport.oneFile', { max: maxMb }) : t('publicReport.upToFiles', { count: max, max: maxMb })}
           </p>
         </div>
       </div>

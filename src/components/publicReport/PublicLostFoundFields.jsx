@@ -1,11 +1,13 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
 import { useBranches, useItemCategories } from '../../hooks/useOrgData';
-import { REPORT_TYPES } from '../../config/lostFound';
 import { MAX_PUBLIC_FILE_BYTES, fileToBase64 } from '../../utils/publicSubmission';
 import AttachmentUploader from './AttachmentUploader';
+
+const REPORT_TYPE_IDS = ['FOUND', 'LOST'];
 
 const emptyForm = {
   reportType: 'FOUND',
@@ -22,6 +24,7 @@ const emptyForm = {
 };
 
 export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
+  const { t } = useTranslation();
   const branches = useBranches();
   const itemCategories = useItemCategories();
 
@@ -29,6 +32,7 @@ export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
   const [photoFiles, setPhotoFiles] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const maxMb = (MAX_PUBLIC_FILE_BYTES / 1024 / 1024).toFixed(0);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -40,7 +44,7 @@ export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
     const file = newFiles[0];
     if (!file) return;
     if (file.size > MAX_PUBLIC_FILE_BYTES) {
-      setError(`حجم الصورة أكبر من ${(MAX_PUBLIC_FILE_BYTES / 1024 / 1024).toFixed(0)} ميجابايت.`);
+      setError(t('publicReport.fileSizeError', { name: file.name, max: maxMb }));
       return;
     }
     setPhotoFiles([file]);
@@ -51,7 +55,7 @@ export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (formData.reportType === 'LOST' && (!formData.reporterName.trim() || !formData.reporterPhone.trim())) {
-      setError('يرجى إدخال اسم ورقم جوال المُبلّغ عن الفقدان.');
+      setError(t('publicReport.reporterNameRequiredAlert'));
       return;
     }
     setLoading(true);
@@ -71,9 +75,9 @@ export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
       onSuccess(result.data.itemCode);
     } catch (err) {
       console.error(err);
-      setError(err.message?.includes('ميجابايت') || err.message?.includes('المُبلّغ')
+      setError(err.message?.includes('ميجابايت') || err.message?.includes('MB') || err.message === t('publicReport.reporterNameRequiredAlert')
         ? err.message
-        : 'حدث خطأ أثناء إرسال البلاغ. يرجى المحاولة مرة أخرى.');
+        : t('publicReport.genericSendError'));
     } finally {
       setLoading(false);
     }
@@ -84,62 +88,62 @@ export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
       {error && <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm border border-red-100">{error}</div>}
 
       <div className="grid grid-cols-2 gap-3">
-        {REPORT_TYPES.map((t) => (
+        {REPORT_TYPE_IDS.map((id) => (
           <button
-            key={t.id}
+            key={id}
             type="button"
-            onClick={() => setFormData((prev) => ({ ...prev, reportType: t.id }))}
+            onClick={() => setFormData((prev) => ({ ...prev, reportType: id }))}
             className={`px-4 py-3 rounded-xl border text-sm font-medium transition-colors ${
-              formData.reportType === t.id ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
+              formData.reportType === id ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
             }`}
           >
-            {t.name}
+            {t(`lostFoundCommon.reportTypes.${id}`)}
           </button>
         ))}
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-700">بيانات الغرض</h3>
+        <h3 className="text-sm font-bold text-slate-700">{t('lostFoundForm.itemSection')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">اسم الغرض <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('lostFoundForm.itemNameLabel')} <span className="text-red-500">*</span></label>
             <input type="text" name="itemName" value={formData.itemName} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">التصنيف <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.type')} <span className="text-red-500">*</span></label>
             <select name="category" value={formData.category} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              <option value="">اختر التصنيف...</option>
+              <option value="">{t('lostFoundForm.selectType')}</option>
               {itemCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">اللون</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('lostFoundForm.colorLabel')}</label>
             <input type="text" name="color" value={formData.color} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">الفرع <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')} <span className="text-red-500">*</span></label>
             <select name="branch" value={formData.branch} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              <option value="">اختر الفرع...</option>
+              <option value="">{t('complaintForm.selectBranch')}</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">
-            {formData.reportType === 'FOUND' ? 'مكان العثور عليه' : 'مكان/زمان الفقدان'}
+            {formData.reportType === 'FOUND' ? t('lostFoundForm.locationFound') : t('lostFoundForm.locationLost')}
           </label>
-          <input type="text" name="location" value={formData.location} onChange={handleChange} placeholder="مثال: الفناء، الفصل 4-ب..." className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+          <input type="text" name="location" value={formData.location} onChange={handleChange} placeholder={t('lostFoundForm.locationPlaceholder')} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">وصف إضافي</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('lostFoundForm.additionalDescription')}</label>
           <textarea
             name="description"
             value={formData.description}
             onChange={handleChange}
             rows={3}
-            placeholder="أي تفاصيل تساعد على التعرف على الغرض..."
+            placeholder={t('lostFoundForm.descriptionPlaceholder')}
             className="w-full border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm resize-none"
           />
         </div>
@@ -147,18 +151,18 @@ export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
 
       <div className="space-y-4">
         <h3 className="text-sm font-bold text-slate-700">
-          {formData.reportType === 'FOUND' ? 'بيانات من عثر على الغرض (اختياري)' : 'بيانات ولي الأمر / الطالب المُبلِّغ'}
+          {formData.reportType === 'FOUND' ? t('lostFoundForm.finderSection') : t('lostFoundForm.reporterSection')}
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              الاسم {formData.reportType === 'LOST' && <span className="text-red-500">*</span>}
+              {t('common.name')} {formData.reportType === 'LOST' && <span className="text-red-500">*</span>}
             </label>
             <input type="text" name="reporterName" value={formData.reporterName} onChange={handleChange} required={formData.reportType === 'LOST'} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">
-              رقم الجوال {formData.reportType === 'LOST' && <span className="text-red-500">*</span>}
+              {t('common.phone')} {formData.reportType === 'LOST' && <span className="text-red-500">*</span>}
             </label>
             <input type="tel" name="reporterPhone" value={formData.reporterPhone} onChange={handleChange} required={formData.reportType === 'LOST'} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
           </div>
@@ -167,17 +171,17 @@ export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
         {formData.reportType === 'LOST' && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">اسم الطالب</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('lostFoundForm.studentNameLabel')}</label>
               <input type="text" name="studentName" value={formData.studentName} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم هوية الطالب</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('lostFoundForm.studentIdLabel')}</label>
               <input type="text" name="studentId" value={formData.studentId} onChange={handleChange} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
             </div>
           </div>
         )}
 
-        <AttachmentUploader files={photoFiles} onAdd={addPhoto} onRemove={removePhoto} max={1} label="صورة الغرض (اختياري)" accept="image/*" />
+        <AttachmentUploader files={photoFiles} onAdd={addPhoto} onRemove={removePhoto} max={1} label={t('publicReport.itemPhotoOptional')} accept="image/*" />
       </div>
 
       <button
@@ -186,7 +190,7 @@ export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
         className="w-full px-4 py-3 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-70"
       >
         {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-        {loading ? 'جاري الإرسال...' : 'إرسال البلاغ'}
+        {loading ? t('publicReport.sending') : t('publicReport.submitReport')}
       </button>
     </form>
   );

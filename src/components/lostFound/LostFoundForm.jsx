@@ -1,16 +1,20 @@
 import { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Upload, Save, Loader2, CheckCircle2, MessageCircle } from 'lucide-react';
 import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches, useItemCategories } from '../../hooks/useOrgData';
-import { REPORT_TYPES, generateItemCode } from '../../config/lostFound';
+import { generateItemCode } from '../../config/lostFound';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { waLink, buildLostFoundReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 
+const REPORT_TYPE_IDS = ['FOUND', 'LOST'];
+
 export default function LostFoundForm({ onClose }) {
+  const { t } = useTranslation();
   const { user } = useAuthStore();
   const branches = useBranches();
   const itemCategories = useItemCategories();
@@ -113,7 +117,7 @@ export default function LostFoundForm({ onClose }) {
       });
     } catch (err) {
       console.error(err);
-      setError('حدث خطأ أثناء حفظ السجل. يرجى المحاولة مرة أخرى.');
+      setError(t('lostFoundForm.saveError'));
     } finally {
       setLoading(false);
     }
@@ -126,8 +130,8 @@ export default function LostFoundForm({ onClose }) {
           <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-7 h-7" />
           </div>
-          <h2 className="text-lg font-bold text-slate-900 mb-1">تم حفظ السجل بنجاح</h2>
-          <p className="text-sm text-slate-500 mb-6">رقم السجل: <span className="font-mono font-bold text-slate-900" dir="ltr">{savedItem.itemCode}</span></p>
+          <h2 className="text-lg font-bold text-slate-900 mb-1">{t('lostFoundForm.successTitle')}</h2>
+          <p className="text-sm text-slate-500 mb-6">{t('lostFoundForm.recordNumberLabel')} <span className="font-mono font-bold text-slate-900" dir="ltr">{savedItem.itemCode}</span></p>
 
           {savedItem.reporterPhone && (
             <a
@@ -138,14 +142,14 @@ export default function LostFoundForm({ onClose }) {
               className="w-full px-4 py-2.5 bg-[#25D366] text-white rounded-xl text-sm font-medium hover:brightness-95 transition-all flex items-center justify-center gap-2 mb-3"
             >
               <MessageCircle className="w-4 h-4" />
-              إرسال رسالة الاستلام عبر واتساب
+              {t('common.sendReceiptWhatsApp')}
             </a>
           )}
           <button
             onClick={onClose}
             className="w-full px-4 py-2.5 text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 font-medium text-sm transition-colors"
           >
-            إغلاق
+            {t('common.close')}
           </button>
         </div>
       </div>
@@ -158,8 +162,8 @@ export default function LostFoundForm({ onClose }) {
 
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">تسجيل مفقود / لقطة جديدة</h2>
-            <p className="text-sm text-slate-500 mt-1">يرجى تعبئة بيانات الغرض بدقة</p>
+            <h2 className="text-xl font-bold text-slate-900">{t('lostFoundForm.newTitle')}</h2>
+            <p className="text-sm text-slate-500 mt-1">{t('lostFoundForm.newSubtitle')}</p>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-xl transition-colors">
             <X className="w-6 h-6" />
@@ -176,84 +180,84 @@ export default function LostFoundForm({ onClose }) {
             )}
 
             <div className="grid grid-cols-2 gap-3">
-              {REPORT_TYPES.map((t) => (
+              {REPORT_TYPE_IDS.map((id) => (
                 <button
-                  key={t.id}
+                  key={id}
                   type="button"
-                  onClick={() => setFormData((prev) => ({ ...prev, reportType: t.id }))}
+                  onClick={() => setFormData((prev) => ({ ...prev, reportType: id }))}
                   className={`px-4 py-3 rounded-xl border text-sm font-medium transition-colors ${
-                    formData.reportType === t.id
+                    formData.reportType === id
                       ? 'bg-primary text-white border-primary'
                       : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                   }`}
                 >
-                  {t.name}
+                  {t(`lostFoundCommon.reportTypes.${id}`)}
                 </button>
               ))}
             </div>
 
             <div className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-200 pb-2">بيانات الغرض</h3>
+              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-200 pb-2">{t('lostFoundForm.itemSection')}</h3>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">اسم الغرض <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('lostFoundForm.itemNameLabel')} <span className="text-red-500">*</span></label>
                   <input type="text" name="itemName" value={formData.itemName} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">التصنيف <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.type')} <span className="text-red-500">*</span></label>
                   <select name="category" value={formData.category} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-                    <option value="">اختر التصنيف...</option>
+                    <option value="">{t('lostFoundForm.selectType')}</option>
                     {itemCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">اللون</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('lostFoundForm.colorLabel')}</label>
                   <input type="text" name="color" value={formData.color} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">الفرع <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')} <span className="text-red-500">*</span></label>
                   <select name="branch" value={formData.branch} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-                    <option value="">اختر الفرع...</option>
+                    <option value="">{t('complaintForm.selectBranch')}</option>
                     {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                    {formData.reportType === 'FOUND' ? 'مكان العثور عليه' : 'مكان/زمان الفقدان'}
+                    {formData.reportType === 'FOUND' ? t('lostFoundForm.locationFound') : t('lostFoundForm.locationLost')}
                   </label>
-                  <input type="text" name="location" value={formData.location} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" placeholder="مثال: الفناء، الفصل 4-ب..." />
+                  <input type="text" name="location" value={formData.location} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" placeholder={t('lostFoundForm.locationPlaceholder')} />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">وصف إضافي</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('lostFoundForm.additionalDescription')}</label>
                 <textarea
                   name="description"
                   value={formData.description}
                   onChange={handleChange}
                   rows={3}
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none text-sm resize-none"
-                  placeholder="أي تفاصيل تساعد على التعرف على الغرض..."
+                  placeholder={t('lostFoundForm.descriptionPlaceholder')}
                 />
               </div>
             </div>
 
             <div className="space-y-4">
               <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2">
-                {formData.reportType === 'FOUND' ? 'بيانات من عثر على الغرض (اختياري)' : 'بيانات ولي الأمر / الطالب المُبلِّغ'}
+                {formData.reportType === 'FOUND' ? t('lostFoundForm.finderSection') : t('lostFoundForm.reporterSection')}
               </h3>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">الاسم</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.name')}</label>
                   <input type="text" name="reporterName" value={formData.reporterName} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم الجوال</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.phone')}</label>
                   <input type="tel" name="reporterPhone" value={formData.reporterPhone} onChange={handleChange} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
               </div>
@@ -261,7 +265,7 @@ export default function LostFoundForm({ onClose }) {
               {formData.reportType === 'LOST' && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="relative">
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">اسم الطالب</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('lostFoundForm.studentNameLabel')}</label>
                     <input
                       type="text" name="studentName" value={formData.studentName} onChange={handleStudentNameChange}
                       onBlur={() => setTimeout(() => setStudentSuggestions([]), 150)}
@@ -284,14 +288,14 @@ export default function LostFoundForm({ onClose }) {
                     )}
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم هوية الطالب</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('lostFoundForm.studentIdLabel')}</label>
                     <input type="text" name="studentId" value={formData.studentId} onChange={handleChange} onBlur={handleStudentIdBlur} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                   </div>
                 </div>
               )}
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">صورة الغرض</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('lostFoundForm.photoLabel')}</label>
                 <div
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={(e) => e.preventDefault()}
@@ -306,7 +310,7 @@ export default function LostFoundForm({ onClose }) {
                       <Upload className="w-6 h-6 text-slate-400 group-hover:text-primary transition-colors" />
                     </div>
                     <div className="text-sm text-slate-600">
-                      <span className="font-medium text-primary">اضغط لرفع صورة</span>
+                      <span className="font-medium text-primary">{t('lostFoundForm.uploadPhotoClick')}</span>
                       <input id="photo-upload" name="photo-upload" type="file" accept="image/*" className="sr-only" onChange={(e) => setPhoto(e.target.files?.[0] || null)} ref={fileInputRef} />
                     </div>
                     {photo && <p className="text-xs text-slate-500" dir="ltr">{photo.name}</p>}
@@ -319,11 +323,11 @@ export default function LostFoundForm({ onClose }) {
 
         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-3">
           <button type="button" onClick={onClose} className="px-5 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm">
-            إلغاء
+            {t('common.cancel')}
           </button>
           <button type="submit" form="lost-found-form" disabled={loading} className="px-5 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2 disabled:opacity-70">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {loading ? 'جاري الحفظ...' : 'حفظ السجل'}
+            {loading ? t('lostFoundForm.saving') : t('lostFoundForm.saveBtn')}
           </button>
         </div>
 

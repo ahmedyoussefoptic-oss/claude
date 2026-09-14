@@ -1,28 +1,21 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle, Link2 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches, useItemCategories } from '../../hooks/useOrgData';
-import { ITEM_STATUS_LABELS, ITEM_STATUS_BADGE, REPORT_TYPES } from '../../config/lostFound';
+import { ITEM_STATUS_BADGE } from '../../config/lostFound';
 import { ROLES } from '../../config/roles';
 import { waLink, buildLostFoundReceiptMessage, buildLostFoundResolutionMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
-
-const getActionName = (action) => {
-  switch (action) {
-    case 'ITEM_REGISTERED': return 'تم تسجيل الغرض';
-    case 'ITEM_MATCHED': return 'تمت مطابقة الغرض بصاحبه';
-    case 'ITEM_RETURNED': return 'تم تسليم الغرض';
-    case 'ITEM_CLOSED': return 'تم إغلاق السجل';
-    case 'NOTE_ADDED': return 'ملاحظة';
-    default: return action;
-  }
-};
+import { ar, enUS } from 'date-fns/locale';
 
 export default function LostFoundDetails({ item, onClose }) {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'ar' ? ar : enUS;
+  const getActionName = (action) => t(`actions.lostFound.${action}`, action);
   const { user, userData } = useAuthStore();
   const branches = useBranches();
   const itemCategories = useItemCategories();
@@ -53,7 +46,7 @@ export default function LostFoundDetails({ item, onClose }) {
     await addDoc(collection(db, `lostFoundItems/${item.id}/activityLog`), {
       action,
       actorId: user.uid,
-      actorName: userData?.name || 'مستخدم',
+      actorName: userData?.name || t('common.user'),
       metadata,
       createdAt: now,
     });
@@ -73,7 +66,7 @@ export default function LostFoundDetails({ item, onClose }) {
         await addLog('ITEM_MATCHED', {}, { status: 'MATCHED' });
       } else if (actionType === 'RETURN') {
         if (!returnedTo.trim()) {
-          alert('يرجى كتابة اسم من تم تسليمه الغرض.');
+          alert(t('lostFoundDetails.returnedToNameRequiredAlert'));
           return;
         }
         await addLog('ITEM_RETURNED', { returnedTo }, { status: 'RETURNED', returnedTo });
@@ -92,7 +85,7 @@ export default function LostFoundDetails({ item, onClose }) {
     }
   };
 
-  const reportTypeName = REPORT_TYPES.find((t) => t.id === item.reportType)?.name || item.reportType;
+  const reportTypeName = t(`lostFoundCommon.reportTypes.${item.reportType}`, item.reportType);
   const categoryName = itemCategories.find((c) => c.id === item.category)?.name || item.category;
   const branchName = branches.find((b) => b.id === item.branch)?.name || item.branch;
 
@@ -105,18 +98,18 @@ export default function LostFoundDetails({ item, onClose }) {
             <div className="flex items-center gap-3 mb-1">
               <h2 className="text-xl font-bold text-slate-900">{item.itemCode}</h2>
               <span className={`px-2.5 py-1 rounded-md text-xs font-medium border ${ITEM_STATUS_BADGE[item.status]}`}>
-                {ITEM_STATUS_LABELS[item.status]}
+                {t(`statuses.lostFound.${item.status}`, item.status)}
               </span>
               {item.source === 'PARENT_PORTAL' && (
                 <span className="px-2.5 py-1 rounded-md text-xs font-medium border bg-primary/10 text-primary border-primary/20 flex items-center gap-1">
                   <Link2 className="w-3 h-3" />
-                  عبر الرابط العام
+                  {t('lostFoundDetails.viaPublicLink')}
                 </span>
               )}
             </div>
             <p className="text-sm text-slate-500 flex items-center gap-2">
               <Clock className="w-4 h-4" />
-              {item.createdAt ? format(item.createdAt.toDate(), 'PP p', { locale: ar }) : ''}
+              {item.createdAt ? format(item.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}
             </p>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors">
@@ -136,17 +129,17 @@ export default function LostFoundDetails({ item, onClose }) {
                 className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
               >
                 <MessageCircle className="w-4 h-4" />
-                إرسال رسالة الاستلام عبر واتساب
+                {t('common.sendReceiptWhatsApp')}
               </a>
             )}
             {canEdit && item.status === 'UNCLAIMED' && (
               <button disabled={loading} onClick={() => handleAction('MATCH')} className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors">
-                تمت مطابقة الغرض بصاحبه
+                {t('lostFoundDetails.confirmMatched')}
               </button>
             )}
             {canEdit && (item.status === 'UNCLAIMED' || item.status === 'MATCHED') && (
               <button disabled={loading} onClick={() => handleAction('CLOSE')} className="px-4 py-2 bg-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 transition-colors">
-                إغلاق بدون تسليم
+                {t('lostFoundDetails.closeWithoutReturn')}
               </button>
             )}
             {item.status === 'RETURNED' && item.reporterPhone && (
@@ -158,7 +151,7 @@ export default function LostFoundDetails({ item, onClose }) {
                 className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
               >
                 <MessageCircle className="w-4 h-4" />
-                إرسال رسالة التسليم عبر واتساب
+                {t('common.sendResolutionWhatsApp')}
               </a>
             )}
           </div>
@@ -180,7 +173,7 @@ export default function LostFoundDetails({ item, onClose }) {
                 <MapPin className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-0.5">الفرع / المكان</p>
+                <p className="text-xs text-slate-500 mb-0.5">{t('lostFoundDetails.branchLocation')}</p>
                 <p className="font-medium text-slate-900">{branchName}</p>
                 <p className="text-sm text-slate-500 mt-1">{item.location}</p>
               </div>
@@ -193,7 +186,7 @@ export default function LostFoundDetails({ item, onClose }) {
                 <Phone className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-0.5">جهة الاتصال</p>
+                <p className="text-xs text-slate-500 mb-0.5">{t('lostFoundDetails.contact')}</p>
                 <p className="font-medium text-slate-900">{item.reporterName}</p>
                 <p className="text-sm text-slate-500 mt-1" dir="ltr">{item.reporterPhone}</p>
               </div>
@@ -201,9 +194,9 @@ export default function LostFoundDetails({ item, onClose }) {
           )}
 
           <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
-            <h3 className="font-bold text-slate-900 text-lg mb-3">الوصف</h3>
+            <h3 className="font-bold text-slate-900 text-lg mb-3">{t('lostFoundDetails.description')}</h3>
             <p className="text-slate-600 leading-relaxed text-sm whitespace-pre-wrap">
-              {item.description || 'لا يوجد وصف إضافي'}
+              {item.description || t('lostFoundDetails.noDescription')}
             </p>
             {item.photoUrl && (
               <a href={item.photoUrl} target="_blank" rel="noreferrer" className="block mt-4">
@@ -214,24 +207,24 @@ export default function LostFoundDetails({ item, onClose }) {
 
           {item.status === 'MATCHED' && (
             <div className="bg-white p-5 rounded-xl border border-amber-200 shadow-sm">
-              <h3 className="font-bold text-slate-900 mb-3">تسليم الغرض</h3>
+              <h3 className="font-bold text-slate-900 mb-3">{t('lostFoundDetails.returnItem')}</h3>
               <div className="flex gap-3">
                 <input
                   type="text"
                   value={returnedTo}
                   onChange={(e) => setReturnedTo(e.target.value)}
-                  placeholder="اسم من تم تسليمه الغرض"
+                  placeholder={t('lostFoundDetails.returnedToPlaceholder')}
                   className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
                 <button disabled={loading} onClick={() => handleAction('RETURN')} className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors">
-                  تأكيد التسليم
+                  {t('lostFoundDetails.confirmReturn')}
                 </button>
               </div>
             </div>
           )}
 
           <div>
-            <h3 className="font-bold text-slate-900 text-lg mb-4">سجل المتابعة</h3>
+            <h3 className="font-bold text-slate-900 text-lg mb-4">{t('lostFoundDetails.followUpLog')}</h3>
             <div className="space-y-4 relative before:absolute before:inset-y-0 before:right-[15px] before:w-[2px] before:bg-slate-200">
               {logs.map((log) => (
                 <div key={log.id} className="relative flex gap-4">
@@ -242,13 +235,13 @@ export default function LostFoundDetails({ item, onClose }) {
                     <div className="flex justify-between mb-2">
                       <p className="font-medium text-slate-900">{getActionName(log.action)}</p>
                       <p className="text-xs text-slate-400" dir="ltr">
-                        {log.createdAt ? format(log.createdAt.toDate(), 'p', { locale: ar }) : ''}
+                        {log.createdAt ? format(log.createdAt.toDate(), 'p', { locale: dateLocale }) : ''}
                       </p>
                     </div>
-                    <p className="text-sm text-slate-600 mb-1">بواسطة: {log.actorName || 'النظام'}</p>
+                    <p className="text-sm text-slate-600 mb-1">{t('complaintDetails.by')} {log.actorName || t('complaintDetails.system')}</p>
                     {log.metadata?.returnedTo && (
                       <div className="mt-2 p-3 bg-emerald-50 text-emerald-800 rounded-lg text-sm border border-emerald-100">
-                        <strong>تم التسليم إلى:</strong> {log.metadata.returnedTo}
+                        <strong>{t('lostFoundDetails.returnedToLabel')}</strong> {log.metadata.returnedTo}
                       </div>
                     )}
                     {log.metadata?.note && (
@@ -267,13 +260,13 @@ export default function LostFoundDetails({ item, onClose }) {
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="أضف ملاحظة متابعة..."
+                placeholder={t('lostFoundDetails.followUpPlaceholder')}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none resize-none h-[52px]"
                 rows={1}
               />
             </div>
             <button disabled={loading} onClick={() => handleAction('NOTE')} className="px-6 h-[52px] bg-slate-800 text-white rounded-xl hover:bg-slate-900 font-medium transition-colors shadow-sm flex items-center gap-2">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'إضافة'}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('common.add')}
             </button>
           </div>
         </div>

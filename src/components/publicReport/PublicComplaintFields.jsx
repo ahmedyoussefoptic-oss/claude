@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
@@ -24,6 +25,7 @@ const emptyForm = {
 };
 
 export default function PublicComplaintFields({ initialBranch, onSuccess }) {
+  const { t } = useTranslation();
   const branches = useBranches();
   const departments = useDepartments();
   const complaintTypes = useComplaintTypes();
@@ -43,17 +45,19 @@ export default function PublicComplaintFields({ initialBranch, onSuccess }) {
     }));
   };
 
+  const maxMb = (MAX_PUBLIC_FILE_BYTES / 1024 / 1024).toFixed(0);
+
   const addFiles = (newFiles) => {
     setError(null);
     const oversized = newFiles.find((f) => f.size > MAX_PUBLIC_FILE_BYTES);
     if (oversized) {
-      setError(`حجم الملف "${oversized.name}" أكبر من ${(MAX_PUBLIC_FILE_BYTES / 1024 / 1024).toFixed(0)} ميجابايت.`);
+      setError(t('publicReport.fileSizeError', { name: oversized.name, max: maxMb }));
       return;
     }
     setFiles((prev) => {
       const combined = [...prev, ...newFiles];
       if (combined.length > MAX_PUBLIC_FILES) {
-        setError(`يمكن إرفاق ${MAX_PUBLIC_FILES} ملفات كحد أقصى.`);
+        setError(t('publicReport.maxFilesError', { count: MAX_PUBLIC_FILES }));
         return prev;
       }
       return combined;
@@ -80,9 +84,9 @@ export default function PublicComplaintFields({ initialBranch, onSuccess }) {
       onSuccess(result.data.complaintId);
     } catch (err) {
       console.error(err);
-      setError(err.message?.includes('ميجابايت') || err.message?.includes('ملفات كحد أقصى')
+      setError(err.message?.includes('ميجابايت') || err.message?.includes('MB') || err.message?.includes('ملفات كحد أقصى') || err.message?.includes('files')
         ? err.message
-        : 'حدث خطأ أثناء إرسال الملاحظة. يرجى المحاولة مرة أخرى.');
+        : t('publicReport.genericSendError'));
     } finally {
       setLoading(false);
     }
@@ -93,105 +97,105 @@ export default function PublicComplaintFields({ initialBranch, onSuccess }) {
       {error && <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm border border-red-100">{error}</div>}
 
       <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-700">بيانات ولي الأمر</h3>
+        <h3 className="text-sm font-bold text-slate-700">{t('complaintForm.parentSection')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">الاسم <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.name')} <span className="text-red-500">*</span></label>
             <input type="text" name="parentName" value={formData.parentName} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم الجوال (واتساب) <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('publicReport.parentPhoneWhatsApp')} <span className="text-red-500">*</span></label>
             <input type="tel" name="parentPhone" value={formData.parentPhone} onChange={handleChange} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">البريد الإلكتروني</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.emailLabel')}</label>
           <input type="email" name="parentEmail" value={formData.parentEmail} onChange={handleChange} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
         </div>
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-700">بيانات الطالب</h3>
+        <h3 className="text-sm font-bold text-slate-700">{t('complaintForm.studentSection')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">اسم الطالب <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.name')} <span className="text-red-500">*</span></label>
             <input type="text" name="studentName" value={formData.studentName} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم هوية الطالب <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.nationalIdLabel')} <span className="text-red-500">*</span></label>
             <input type="text" name="studentId" value={formData.studentId} onChange={handleChange} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">الفرع <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')} <span className="text-red-500">*</span></label>
             <select name="branch" value={formData.branch} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              <option value="">اختر الفرع...</option>
+              <option value="">{t('complaintForm.selectBranch')}</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">القسم</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.departmentLabel')}</label>
             <select name="department" value={formData.department} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              <option value="">اختر القسم...</option>
+              <option value="">{t('complaintForm.selectDepartment')}</option>
               {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
             </select>
           </div>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">المرحلة <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.stageLabel')} <span className="text-red-500">*</span></label>
             <select name="stage" value={formData.stage} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              <option value="">اختر المرحلة...</option>
+              <option value="">{t('complaintForm.selectStage')}</option>
               {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">الصف</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.gradeLabel')}</label>
             <input type="text" name="grade" value={formData.grade} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
           </div>
         </div>
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-700">تفاصيل الملاحظة</h3>
+        <h3 className="text-sm font-bold text-slate-700">{t('complaintForm.detailsSection')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">التصنيف <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.type')} <span className="text-red-500">*</span></label>
             <select name="complaintType" value={formData.complaintType} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              <option value="">اختر التصنيف...</option>
-              {complaintTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              <option value="">{t('complaintForm.selectType')}</option>
+              {complaintTypes.map((ct) => <option key={ct.id} value={ct.id}>{ct.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">التصنيف الفرعي</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.subTypeLabel')}</label>
             <select name="subType" value={formData.subType} onChange={handleChange} disabled={!formData.complaintType} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white disabled:text-slate-400 disabled:bg-slate-50">
-              <option value="">اختر...</option>
+              <option value="">{t('common.select')}</option>
               {subTypes.filter((s) => s.parentType === formData.complaintType).map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
             </select>
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">عنوان مختصر للملاحظة <span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.subjectLabel')} <span className="text-red-500">*</span></label>
           <input
             type="text"
             name="subject"
             value={formData.subject}
             onChange={handleChange}
             required
-            placeholder="مثال: تأخر إصدار شهادة الفصل الأول"
+            placeholder={t('complaintForm.subjectPlaceholder')}
             className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">نص الملاحظة <span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.detailsLabel')} <span className="text-red-500">*</span></label>
           <textarea
             name="details"
             value={formData.details}
             onChange={handleChange}
             required
             rows={4}
-            placeholder="اكتب تفاصيل الملاحظة هنا..."
+            placeholder={t('complaintForm.detailsPlaceholder')}
             className="w-full border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm resize-none"
           />
         </div>
@@ -205,7 +209,7 @@ export default function PublicComplaintFields({ initialBranch, onSuccess }) {
         className="w-full px-4 py-3 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-70"
       >
         {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-        {loading ? 'جاري الإرسال...' : 'إرسال الملاحظة'}
+        {loading ? t('publicReport.sending') : t('publicReport.submitComplaint')}
       </button>
     </form>
   );

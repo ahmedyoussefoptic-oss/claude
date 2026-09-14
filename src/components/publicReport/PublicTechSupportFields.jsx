@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Loader2, ShieldCheck } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
@@ -22,6 +23,7 @@ const emptyForm = {
 };
 
 export default function PublicTechSupportFields({ initialBranch, onSuccess }) {
+  const { t } = useTranslation();
   const branches = useBranches();
   const problemTypes = useProblemTypes();
   const platforms = usePlatforms();
@@ -49,7 +51,7 @@ export default function PublicTechSupportFields({ initialBranch, onSuccess }) {
       onSuccess(result.data.ticketId);
     } catch (err) {
       console.error(err);
-      setError('حدث خطأ أثناء إرسال البلاغ. يرجى المحاولة مرة أخرى.');
+      setError(t('publicReport.genericSendError'));
     } finally {
       setLoading(false);
     }
@@ -61,40 +63,40 @@ export default function PublicTechSupportFields({ initialBranch, onSuccess }) {
 
       <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3 flex items-start gap-2">
         <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
-        سيتحقق أحد مختصي تقنية المعلومات من مطابقة البيانات قبل إرسال أي بيانات دخول — يرجى تعبئة الرقم المسجّل لدى المدرسة بدقة.
+        {t('publicReport.identityNotice')}
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-700">بيانات الطالب</h3>
+        <h3 className="text-sm font-bold text-slate-700">{t('techSupportForm.studentSection')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">اسم الطالب رباعياً <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.studentNameFull')} <span className="text-red-500">*</span></label>
             <input type="text" name="studentName" value={formData.studentName} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم الهوية / السجل المدني <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.nationalCivilIdLabel')} <span className="text-red-500">*</span></label>
             <input type="text" name="nationalId" value={formData.nationalId} onChange={handleChange} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">الفرع <span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')} <span className="text-red-500">*</span></label>
           <select name="branch" value={formData.branch} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-            <option value="">اختر الفرع...</option>
+            <option value="">{t('complaintForm.selectBranch')}</option>
             {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">المرحلة <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.stageLabel')} <span className="text-red-500">*</span></label>
             <select name="stage" value={formData.stage} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              <option value="">اختر المرحلة...</option>
+              <option value="">{t('complaintForm.selectStage')}</option>
               {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">الصف <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.gradeLabel')} <span className="text-red-500">*</span></label>
             <select name="grade" value={formData.grade} onChange={handleChange} required disabled={!formData.stage} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white disabled:text-slate-400 disabled:bg-slate-50">
-              <option value="">اختر الصف...</option>
+              <option value="">{t('techSupportForm.selectClass')}</option>
               {classOptionsForStage(formData.stage).map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>
@@ -102,55 +104,55 @@ export default function PublicTechSupportFields({ initialBranch, onSuccess }) {
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-700">بيانات ولي الأمر</h3>
+        <h3 className="text-sm font-bold text-slate-700">{t('complaintForm.parentSection')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">الاسم <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.name')} <span className="text-red-500">*</span></label>
             <input type="text" name="parentName" value={formData.parentName} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">صلة القرابة</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.relationLabel')}</label>
             <select name="relation" value={formData.relation} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              {RELATIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+              {RELATIONS.map((r) => <option key={r} value={r}>{t(`techSupportForm.relations.${r}`, r)}</option>)}
             </select>
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم الجوال المسجّل في نظام المدرسة <span className="text-red-500">*</span></label>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.phoneRegisteredLabel')} <span className="text-red-500">*</span></label>
           <input type="tel" name="parentPhone" value={formData.parentPhone} onChange={handleChange} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
         </div>
       </div>
 
       <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-700">تفاصيل المشكلة</h3>
+        <h3 className="text-sm font-bold text-slate-700">{t('techSupportForm.problemDetailsSection')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">نوع المشكلة <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.problemTypeLabel')} <span className="text-red-500">*</span></label>
             <select name="problemType" value={formData.problemType} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              <option value="">اختر نوع المشكلة...</option>
-              {problemTypes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+              <option value="">{t('techSupportForm.selectProblemType')}</option>
+              {problemTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">اسم المنصة <span className="text-red-500">*</span></label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.platformLabel')} <span className="text-red-500">*</span></label>
             <select name="platform" value={formData.platform} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              <option value="">اختر المنصة...</option>
+              <option value="">{t('techSupportForm.selectPlatform')}</option>
               {platforms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">رابط المنصة (اختياري)</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.platformLinkLabel')}</label>
           <input type="text" name="platformLink" value={formData.platformLink} onChange={handleChange} dir="ltr" placeholder="https://..." className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">ملاحظات إضافية</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.additionalNotesLabel')}</label>
           <textarea
             name="details"
             value={formData.details}
             onChange={handleChange}
             rows={3}
-            placeholder="أي تفاصيل إضافية تساعد مختص تقنية المعلومات..."
+            placeholder={t('techSupportForm.additionalNotesPlaceholder')}
             className="w-full border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm resize-none"
           />
         </div>
@@ -162,7 +164,7 @@ export default function PublicTechSupportFields({ initialBranch, onSuccess }) {
         className="w-full px-4 py-3 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-70"
       >
         {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-        {loading ? 'جاري الإرسال...' : 'إرسال البلاغ'}
+        {loading ? t('publicReport.sending') : t('publicReport.submitReport')}
       </button>
     </form>
   );

@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Search, Plus, ChevronLeft, Loader2, Package, Link2 } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -7,19 +8,16 @@ import LostFoundDetails from '../components/lostFound/LostFoundDetails';
 import LostFoundForm from '../components/lostFound/LostFoundForm';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches, useItemCategories } from '../hooks/useOrgData';
-import { ITEM_STATUS_LABELS, ITEM_STATUS_BADGE, REPORT_TYPES } from '../config/lostFound';
+import { ITEM_STATUS_BADGE } from '../config/lostFound';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { ar, enUS } from 'date-fns/locale';
 
-const FILTERS = [
-  { id: 'ALL', name: 'الكل' },
-  { id: 'UNCLAIMED', name: 'بانتظار المطالبة' },
-  { id: 'MATCHED', name: 'تمت المطابقة' },
-  { id: 'RETURNED', name: 'تم التسليم' },
-];
+const FILTER_IDS = ['ALL', 'UNCLAIMED', 'MATCHED', 'RETURNED'];
 
 export default function LostFound() {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'ar' ? ar : enUS;
   const { userData } = useAuthStore();
   const branches = useBranches();
   const itemCategories = useItemCategories();
@@ -66,7 +64,7 @@ export default function LostFound() {
     });
   }, [items, search, statusFilter, publicLinkOnly, userData]);
 
-  const reportTypeName = (id) => REPORT_TYPES.find((t) => t.id === id)?.name || id;
+  const reportTypeName = (id) => t(`lostFoundCommon.reportTypes.${id}`, id);
   const categoryName = (id) => itemCategories.find((c) => c.id === id)?.name || id;
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
 
@@ -74,8 +72,8 @@ export default function LostFound() {
     <div className="max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">المفقودات</h1>
-          <p className="text-slate-500 mt-1">إدارة الأغراض المفقودة والمعثور عليها ومطابقتها بأصحابها</p>
+          <h1 className="text-2xl font-bold text-slate-900">{t('lostFound.title')}</h1>
+          <p className="text-slate-500 mt-1">{t('lostFound.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -83,7 +81,7 @@ export default function LostFound() {
             className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            تسجيل جديد
+            {t('lostFound.newRecord')}
           </button>
         </div>
       </div>
@@ -98,19 +96,19 @@ export default function LostFound() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="ابحث برقم السجل، اسم الغرض، اسم الطالب..."
+              placeholder={t('lostFound.searchPlaceholder')}
               className="block w-full pr-10 pl-3 py-2 border border-slate-200 rounded-xl bg-white text-slate-900 focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none text-sm"
             />
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
-            {FILTERS.map((f) => (
+            {FILTER_IDS.map((id) => (
               <button
-                key={f.id}
-                onClick={() => setStatusFilter(f.id)}
-                className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${statusFilter === f.id ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
+                key={id}
+                onClick={() => setStatusFilter(id)}
+                className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${statusFilter === id ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
               >
-                {f.name}
+                {t(`lostFound.filters.${id}`)}
               </button>
             ))}
             <button
@@ -121,7 +119,7 @@ export default function LostFound() {
               }`}
             >
               <Link2 className="w-3.5 h-3.5" />
-              عبر الرابط العام فقط
+              {t('common.publicLinkOnly')}
             </button>
           </div>
         </div>
@@ -135,13 +133,13 @@ export default function LostFound() {
             <table className="w-full text-right">
               <thead className="bg-slate-50 text-slate-500 text-sm border-b border-slate-100">
                 <tr>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">رقم السجل</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">النوع</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">الغرض</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">الفرع</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">التاريخ</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">الحالة</th>
-                  <th className="px-6 py-4 font-medium whitespace-nowrap">رسائل ولي الأمر</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('lostFound.recordNumber')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('lostFound.reportType')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('lostFound.item')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('common.branch')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('common.date')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('common.status')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('complaintsList.parentMessages')}</th>
                   <th className="px-6 py-4"></th>
                 </tr>
               </thead>
@@ -152,7 +150,7 @@ export default function LostFound() {
                       <div className="flex items-center gap-2">
                         {item.itemCode}
                         {item.source === 'PARENT_PORTAL' && (
-                          <span title="مُقدَّم عبر الرابط العام" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary shrink-0">
+                          <span title={t('lostFound.submittedViaPublicLink')} className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary/10 text-primary shrink-0">
                             <Link2 className="w-3 h-3" />
                           </span>
                         )}
@@ -168,11 +166,11 @@ export default function LostFound() {
                     </td>
                     <td className="px-6 py-4 text-slate-600">{branchName(item.branch)}</td>
                     <td className="px-6 py-4 text-slate-600" dir="ltr">
-                      {item.createdAt ? format(item.createdAt.toDate(), 'PP p', { locale: ar }) : ''}
+                      {item.createdAt ? format(item.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${ITEM_STATUS_BADGE[item.status]}`}>
-                        {ITEM_STATUS_LABELS[item.status]}
+                        {t(`statuses.lostFound.${item.status}`, item.status)}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -192,7 +190,7 @@ export default function LostFound() {
                 {filteredItems.length === 0 && (
                   <tr>
                     <td colSpan="8" className="px-6 py-12 text-center text-slate-500">
-                      لا يوجد سجلات مطابقة
+                      {t('lostFound.noResults')}
                     </td>
                   </tr>
                 )}
