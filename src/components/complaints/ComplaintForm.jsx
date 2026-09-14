@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Upload, Save, Loader2, CheckCircle2, MessageCircle, Mic, Square } from 'lucide-react';
 import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -12,11 +13,7 @@ import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { STAGES } from '../../config/complaintTypes';
 import AssigneeMultiSelect, { eligibleAssignees } from './AssigneeMultiSelect';
 
-const PRIORITIES = [
-  { id: 'NORMAL', name: 'عادية (48 ساعة)' },
-  { id: 'HIGH', name: 'عالية (24 ساعة)' },
-  { id: 'URGENT', name: 'عاجلة (6 ساعات)' },
-];
+const PRIORITY_IDS = ['NORMAL', 'HIGH', 'URGENT'];
 
 const SOURCES = [
   { id: 'CENTER_CALL', name: 'Center Call' },
@@ -28,6 +25,7 @@ const SOURCES = [
 ];
 
 export default function ComplaintForm({ onClose }) {
+  const { t } = useTranslation();
   const { user } = useAuthStore();
   const fileInputRef = useRef(null);
   const branches = useBranches();
@@ -142,7 +140,7 @@ export default function ComplaintForm({ onClose }) {
       };
       recorder.onstop = () => {
         const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
-        const file = new File([blob], `تسجيل_صوتي_${Date.now()}.webm`, { type: 'audio/webm' });
+        const file = new File([blob], `${t('complaintForm.recordingFilePrefix')}${Date.now()}.webm`, { type: 'audio/webm' });
         setFiles((prev) => [...prev, file]);
         stream.getTracks().forEach((t) => t.stop());
         setRecording(false);
@@ -152,7 +150,7 @@ export default function ComplaintForm({ onClose }) {
       setRecording(true);
     } catch (err) {
       console.error(err);
-      setRecordingError('تعذّر الوصول إلى الميكروفون — تأكد من السماح للمتصفح باستخدامه، أو أرفق ملفاً صوتياً بدلاً من ذلك.');
+      setRecordingError(t('complaintForm.micError'));
     }
   };
 
@@ -231,7 +229,7 @@ export default function ComplaintForm({ onClose }) {
       });
     } catch (err) {
       console.error(err);
-      setError('حدث خطأ أثناء حفظ الملاحظة. يرجى المحاولة مرة أخرى.');
+      setError(t('complaintForm.saveError'));
     } finally {
       setLoading(false);
     }
@@ -244,8 +242,8 @@ export default function ComplaintForm({ onClose }) {
           <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
             <CheckCircle2 className="w-7 h-7" />
           </div>
-          <h2 className="text-lg font-bold text-slate-900 mb-1">تم حفظ الملاحظة بنجاح</h2>
-          <p className="text-sm text-slate-500 mb-6">رقم الملاحظة: <span className="font-mono font-bold text-slate-900" dir="ltr">{savedComplaint.complaintId}</span></p>
+          <h2 className="text-lg font-bold text-slate-900 mb-1">{t('complaintForm.successTitle')}</h2>
+          <p className="text-sm text-slate-500 mb-6">{t('complaintForm.complaintNumberLabel')} <span className="font-mono font-bold text-slate-900" dir="ltr">{savedComplaint.complaintId}</span></p>
 
           {savedComplaint.parentPhone && (
             <a
@@ -256,14 +254,14 @@ export default function ComplaintForm({ onClose }) {
               className="w-full px-4 py-2.5 bg-[#25D366] text-white rounded-xl text-sm font-medium hover:brightness-95 transition-all flex items-center justify-center gap-2 mb-3"
             >
               <MessageCircle className="w-4 h-4" />
-              إرسال رسالة الاستلام عبر واتساب
+              {t('common.sendReceiptWhatsApp')}
             </a>
           )}
           <button
             onClick={onClose}
             className="w-full px-4 py-2.5 text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 font-medium text-sm transition-colors"
           >
-            إغلاق
+            {t('common.close')}
           </button>
         </div>
       </div>
@@ -277,8 +275,8 @@ export default function ComplaintForm({ onClose }) {
         {/* Header */}
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">تسجيل ملاحظة جديدة</h2>
-            <p className="text-sm text-slate-500 mt-1">يرجى تعبئة بيانات الملاحظة بدقة</p>
+            <h2 className="text-xl font-bold text-slate-900">{t('complaintForm.newTitle')}</h2>
+            <p className="text-sm text-slate-500 mt-1">{t('complaintForm.newSubtitle')}</p>
           </div>
           <button 
             onClick={onClose}
@@ -300,19 +298,19 @@ export default function ComplaintForm({ onClose }) {
 
             {/* Section 1 */}
             <div className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-200 pb-2">بيانات ولي الأمر</h3>
-              
+              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-200 pb-2">{t('complaintForm.parentSection')}</h3>
+
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">الاسم <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.name')} <span className="text-red-500">*</span></label>
                   <input type="text" name="parentName" value={formData.parentName} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم الجوال <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.phone')} <span className="text-red-500">*</span></label>
                   <input type="tel" name="parentPhone" value={formData.parentPhone} onChange={handleChange} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">البريد الإلكتروني</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.emailLabel')}</label>
                   <input type="email" name="parentEmail" value={formData.parentEmail} onChange={handleChange} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
               </div>
@@ -320,11 +318,11 @@ export default function ComplaintForm({ onClose }) {
 
             {/* Section 2 */}
             <div className="space-y-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
-              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-200 pb-2">بيانات الطالب</h3>
-              
+              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-200 pb-2">{t('complaintForm.studentSection')}</h3>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="relative">
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">الاسم <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.name')} <span className="text-red-500">*</span></label>
                   <input
                     type="text" name="studentName" value={formData.studentName} onChange={handleStudentNameChange}
                     onBlur={() => setTimeout(() => setStudentSuggestions([]), 150)}
@@ -347,35 +345,35 @@ export default function ComplaintForm({ onClose }) {
                   )}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">رقم الهوية <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.nationalIdLabel')} <span className="text-red-500">*</span></label>
                   <input type="text" name="studentId" value={formData.studentId} onChange={handleChange} onBlur={handleStudentIdBlur} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">الفرع <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')} <span className="text-red-500">*</span></label>
                   <select name="branch" value={formData.branch} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-                    <option value="">اختر الفرع...</option>
+                    <option value="">{t('complaintForm.selectBranch')}</option>
                     {branches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">القسم <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.departmentLabel')} <span className="text-red-500">*</span></label>
                   <select name="department" value={formData.department} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-                    <option value="">اختر القسم...</option>
+                    <option value="">{t('complaintForm.selectDepartment')}</option>
                     {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">المرحلة <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.stageLabel')} <span className="text-red-500">*</span></label>
                   <select name="stage" value={formData.stage} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-                    <option value="">اختر المرحلة...</option>
+                    <option value="">{t('complaintForm.selectStage')}</option>
                     {STAGES.map(s => <option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">الصف <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.gradeLabel')} <span className="text-red-500">*</span></label>
                   <input type="text" name="grade" value={formData.grade} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
               </div>
@@ -383,31 +381,31 @@ export default function ComplaintForm({ onClose }) {
 
             {/* Section 3 */}
             <div className="space-y-4">
-              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2 mt-6">تفاصيل الملاحظة</h3>
+              <h3 className="text-lg font-bold text-slate-900 border-b border-slate-100 pb-2 mt-6">{t('complaintForm.detailsSection')}</h3>
 
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">التصنيف <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.type')} <span className="text-red-500">*</span></label>
                   <select name="complaintType" value={formData.complaintType} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm">
-                    <option value="">اختر التصنيف...</option>
-                    {complaintTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    <option value="">{t('complaintForm.selectType')}</option>
+                    {complaintTypes.map(ct => <option key={ct.id} value={ct.id}>{ct.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">التصنيف الفرعي</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.subTypeLabel')}</label>
                   <select name="subType" value={formData.subType} onChange={handleChange} disabled={!formData.complaintType} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm disabled:text-slate-400">
-                    <option value="">اختر...</option>
+                    <option value="">{t('common.select')}</option>
                     {subTypes.filter(s => s.parentType === formData.complaintType).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">الأولوية <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.priorityLabel')} <span className="text-red-500">*</span></label>
                   <select name="priority" value={formData.priority} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm">
-                    {PRIORITIES.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {PRIORITY_IDS.map(id => <option key={id} value={id}>{t(`complaintForm.priorities.${id}`)}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">المصدر <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.sourceLabel')} <span className="text-red-500">*</span></label>
                   <select name="source" value={formData.source} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm">
                     {SOURCES.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
@@ -415,20 +413,20 @@ export default function ComplaintForm({ onClose }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">عنوان مختصر للملاحظة <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.subjectLabel')} <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   name="subject"
                   value={formData.subject}
                   onChange={handleChange}
                   required
-                  placeholder="مثال: تأخر إصدار شهادة الفصل الأول"
+                  placeholder={t('complaintForm.subjectPlaceholder')}
                   className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">نص الملاحظة <span className="text-red-500">*</span></label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.detailsLabel')} <span className="text-red-500">*</span></label>
                 <textarea
                   name="details"
                   value={formData.details}
@@ -436,24 +434,24 @@ export default function ComplaintForm({ onClose }) {
                   required
                   rows={4}
                   className="w-full border border-slate-200 rounded-xl px-4 py-3 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none text-sm resize-none"
-                  placeholder="اكتب تفاصيل المشكلة هنا..."
+                  placeholder={t('complaintForm.detailsPlaceholder')}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">المسند إليهم</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.assignedToLabel')}</label>
                 <AssigneeMultiSelect
                   options={assigneeOptions}
                   selected={formData.assignedTo}
                   onChange={(ids) => setFormData((prev) => ({ ...prev, assignedTo: ids }))}
-                  placeholder="بدون إسناد الآن (يمكن إسنادها لاحقاً)"
+                  placeholder={t('complaintForm.assignPlaceholder')}
                 />
-                <p className="text-xs text-slate-500 mt-1">يمكن إسناد الملاحظة لأكثر من شخص في نفس الوقت — يصل إشعار فوري لكل من تختارهم (داخل النظام وبالبريد الإلكتروني) بمجرد حفظ الملاحظة.</p>
+                <p className="text-xs text-slate-500 mt-1">{t('complaintForm.assignHint')}</p>
               </div>
 
               {/* Upload */}
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">المرفقات</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.attachmentsLabel')}</label>
                 <div
                   onClick={() => fileInputRef.current?.click()}
                   onDragOver={(e) => e.preventDefault()}
@@ -470,11 +468,11 @@ export default function ComplaintForm({ onClose }) {
                       <Upload className="w-6 h-6 text-slate-400 group-hover:text-primary transition-colors" />
                     </div>
                     <div className="text-sm text-slate-600">
-                      <span className="font-medium text-primary">اضغط لرفع ملف</span>
+                      <span className="font-medium text-primary">{t('complaintForm.uploadClick')}</span>
                       <input id="file-upload" name="file-upload" type="file" className="sr-only" multiple onChange={handleFileChange} ref={fileInputRef} />
-                      <p className="pl-1">أو اسحب الملفات وأفلتها هنا</p>
+                      <p className="pl-1">{t('complaintForm.uploadDrop')}</p>
                     </div>
-                    <p className="text-xs text-slate-500">تم اختيار {files.length} ملفات</p>
+                    <p className="text-xs text-slate-500">{t('complaintForm.filesSelected', { count: files.length })}</p>
                   </div>
                 </div>
 
@@ -487,9 +485,9 @@ export default function ComplaintForm({ onClose }) {
                     }`}
                   >
                     {recording ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                    {recording ? 'إيقاف التسجيل' : 'تسجيل صوتي مباشر'}
+                    {recording ? t('complaintForm.stopRecording') : t('complaintForm.startRecording')}
                   </button>
-                  {recording && <span className="text-xs text-red-600 animate-pulse">جارٍ التسجيل...</span>}
+                  {recording && <span className="text-xs text-red-600 animate-pulse">{t('complaintForm.recordingInProgress')}</span>}
                 </div>
                 {recordingError && <p className="text-xs text-red-600 mt-1">{recordingError}</p>}
 
@@ -521,16 +519,16 @@ export default function ComplaintForm({ onClose }) {
             onClick={onClose}
             className="px-5 py-2.5 text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm"
           >
-            إلغاء
+            {t('common.cancel')}
           </button>
-          <button 
+          <button
             type="submit"
             form="complaint-form"
             disabled={loading}
             className="px-5 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2 disabled:opacity-70"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {loading ? 'جاري الحفظ...' : 'حفظ الملاحظة'}
+            {loading ? t('complaintForm.saving') : t('complaintForm.saveBtn')}
           </button>
         </div>
 

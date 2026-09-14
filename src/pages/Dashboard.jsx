@@ -163,7 +163,7 @@ export default function Dashboard() {
     
     // CSV Header
     let csvContent = "data:text/csv;charset=utf-8,\uFEFF";
-    csvContent += "رقم التذكرة,ولي الأمر,الطالب,التصنيف,الفرع,الحالة\n";
+    csvContent += `${t('dashboard.ticketNumber')},${t('dashboard.parent')},${i18n.language === 'ar' ? 'الطالب' : 'Student'},${t('dashboard.classification')},${t('dashboard.branch')},${t('dashboard.status')}\n`;
     
     complaints.forEach(c => {
       const row = `${c.complaintId},"${c.parentName}","${c.studentName}","${c.complaintType}","${c.branch}","${c.status}"`;
@@ -194,19 +194,7 @@ export default function Dashboard() {
 
   const typeName = (id) => complaintTypes.find((t) => t.id === id)?.name || id;
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
-
-  const getStatusName = (status) => {
-    switch (status) {
-      case 'RECEIVED': return 'مستلمة';
-      case 'IN_PROGRESS': return 'قيد المعالجة';
-      case 'WAITING_PARENT_RESPONSE': return 'بانتظار الرد';
-      case 'SOLVED': return 'تم الحل';
-      case 'CLOSED': return 'مغلقة';
-      case 'REJECTED': return 'مرفوضة';
-      case 'ESCALATED': return 'مصعدة';
-      default: return status;
-    }
-  };
+  const getStatusName = (status) => t(`statuses.complaint.${status}`, status);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -218,7 +206,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-3">
           <button onClick={() => setShowLinkModal(true)} className="px-4 py-2.5 flex items-center gap-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm">
             <Link2 className="w-4 h-4" />
-            رابط تقديم بلاغ
+            {t('dashboard.reportLink')}
           </button>
           <button onClick={handleExportCSV} className="px-4 py-2.5 flex items-center gap-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm">
             <Download className="w-4 h-4" />
@@ -298,24 +286,24 @@ export default function Dashboard() {
       </div>
 
       <div>
-        <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">الملاحظات حسب التصنيف</h2>
+        <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">{t('dashboard.byType')}</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard
-            title="ملاحظات أكاديمية"
+            title={t('dashboard.academicComplaints')}
             value={stats.academic.toString()}
             icon={GraduationCap}
             gradient="from-indigo-500 to-violet-600"
             to="/complaints?type=ACADEMIC"
           />
           <StatCard
-            title="ملاحظات إدارية"
+            title={t('dashboard.administrativeComplaints')}
             value={stats.administrative.toString()}
             icon={Briefcase}
             gradient="from-cyan-500 to-teal-600"
             to="/complaints?type=ADMINISTRATIVE"
           />
           <StatCard
-            title="ملاحظات سلوكية"
+            title={t('dashboard.behavioralComplaints')}
             value={stats.behavioral.toString()}
             icon={AlertOctagon}
             gradient="from-rose-500 to-pink-600"
@@ -325,31 +313,31 @@ export default function Dashboard() {
       </div>
 
       <div>
-        <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">نظرة شاملة على النظام</h2>
+        <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">{t('dashboard.systemOverview')}</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
-            title="بلاغات الدعم الفني المفتوحة"
+            title={t('dashboard.openTechTickets')}
             value={techStats.open.toString()}
             icon={Wrench}
             gradient="from-violet-500 to-purple-600"
             to="/tech-support?filter=OPEN"
           />
           <StatCard
-            title="بلاغات دعم فني متأخرة"
+            title={t('dashboard.overdueTechTickets')}
             value={techStats.overdue.toString()}
             icon={ShieldAlert}
             gradient="from-fuchsia-500 to-pink-600"
             to="/tech-support?filter=OVERDUE"
           />
           <StatCard
-            title="مفقودات بانتظار المطالبة"
+            title={t('dashboard.unclaimedItems')}
             value={lostFoundStats.unclaimed.toString()}
             icon={PackageSearch}
             gradient="from-teal-500 to-cyan-600"
             to="/lost-found?filter=UNCLAIMED"
           />
           <StatCard
-            title="مفقودات تم تسليمها"
+            title={t('dashboard.returnedItems')}
             value={lostFoundStats.returned.toString()}
             icon={PackageCheck}
             gradient="from-lime-500 to-green-600"

@@ -1,10 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, X } from 'lucide-react';
-
-const ROLE_TAGS = {
-  ADMIN: 'مدير النظام',
-  UPPER_MANAGEMENT: 'إدارة عليا',
-};
 
 // Staff eligible to be assigned a complaint: specialists (the usual case),
 // plus upper management and the system admin so a complaint can be routed
@@ -27,7 +23,9 @@ export function eligibleAssignees(staff, { branch, complaintType } = {}) {
 // Checkbox-list multi-select with removable chips for the selected staff —
 // shared between ComplaintForm (initial assignment) and ComplaintDetails
 // (editing assignment later) so both stay in sync automatically.
-export default function AssigneeMultiSelect({ options, selected, onChange, placeholder = 'اختر...' }) {
+export default function AssigneeMultiSelect({ options, selected, onChange, placeholder }) {
+  const { t } = useTranslation();
+  const ROLE_TAGS = { ADMIN: t('assigneeSelect.roleTagAdmin'), UPPER_MANAGEMENT: t('assigneeSelect.roleTagUpperManagement') };
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -53,7 +51,7 @@ export default function AssigneeMultiSelect({ options, selected, onChange, place
         className="w-full flex items-center justify-between border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white text-right"
       >
         <span className={selected.length ? 'text-slate-800' : 'text-slate-400'}>
-          {selected.length === 0 ? placeholder : `${selected.length} ${selected.length === 1 ? 'شخص مختار' : 'أشخاص مختارون'}`}
+          {selected.length === 0 ? (placeholder ?? t('common.select')) : t('assigneeSelect.peopleSelected', { count: selected.length })}
         </span>
         <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform shrink-0 ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -61,7 +59,7 @@ export default function AssigneeMultiSelect({ options, selected, onChange, place
       {open && (
         <div className="absolute z-30 mt-1 w-full bg-white border border-slate-200 rounded-xl shadow-lg max-h-56 overflow-y-auto p-1.5">
           {options.length === 0 ? (
-            <p className="text-sm text-slate-400 text-center py-3">لا يوجد موظفون مؤهلون للإسناد</p>
+            <p className="text-sm text-slate-400 text-center py-3">{t('assigneeSelect.noEligibleStaff')}</p>
           ) : (
             options.map((o) => (
               <label key={o.id} className="flex items-center gap-2 px-2.5 py-2 rounded-lg hover:bg-slate-50 cursor-pointer text-sm">

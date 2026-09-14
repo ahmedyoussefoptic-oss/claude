@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, Trash2, Star, Link2 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
@@ -9,20 +10,14 @@ import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { ROLES } from '../../config/roles';
 import AssigneeMultiSelect, { eligibleAssignees } from './AssigneeMultiSelect';
 import { format } from 'date-fns';
-import { ar } from 'date-fns/locale';
+import { ar, enUS } from 'date-fns/locale';
 
-const RATING_LABELS = {
-  resolutionSpeed: 'سرعة حل الملاحظة',
-  solutionQuality: 'جودة الحل',
-  staffProfessionalism: 'احترافية الموظفين',
-};
-
-const FLOW_STEPS = [
-  { key: 'RECEIVED', label: 'استلام الملاحظة', match: () => true },
-  { key: 'ASSIGNED', label: 'الإسناد لمختص', match: (l) => ['COMPLAINT_ASSIGNED', 'COMPLAINT_TRANSFERRED'].includes(l.action) },
-  { key: 'IN_PROGRESS', label: 'قيد المعالجة', match: (l) => l.action === 'COMPLAINT_ACKNOWLEDGED' },
-  { key: 'SOLVED', label: 'تسجيل الحل', match: (l) => l.action === 'SOLUTION_ADDED' },
-  { key: 'CLOSED', label: 'الإغلاق', match: (l) => l.action === 'SURVEY_SUBMITTED' || l.action === 'COMPLAINT_CLOSED' },
+const FLOW_STEP_KEYS = [
+  { key: 'RECEIVED', match: () => true },
+  { key: 'ASSIGNED', match: (l) => ['COMPLAINT_ASSIGNED', 'COMPLAINT_TRANSFERRED'].includes(l.action) },
+  { key: 'IN_PROGRESS', match: (l) => l.action === 'COMPLAINT_ACKNOWLEDGED' },
+  { key: 'SOLVED', match: (l) => l.action === 'SOLUTION_ADDED' },
+  { key: 'CLOSED', match: (l) => l.action === 'SURVEY_SUBMITTED' || l.action === 'COMPLAINT_CLOSED' },
 ];
 
 const getStatusBadge = (status) => {
@@ -38,38 +33,14 @@ const getStatusBadge = (status) => {
   }
 };
 
-const getStatusName = (status) => {
-  switch (status) {
-    case 'RECEIVED': return 'مستلمة';
-    case 'IN_PROGRESS': return 'قيد المعالجة';
-    case 'WAITING_PARENT_RESPONSE': return 'بانتظار الرد';
-    case 'SOLVED': return 'تم الحل';
-    case 'CLOSED': return 'مغلقة';
-    case 'REJECTED': return 'مرفوضة';
-    case 'ESCALATED': return 'مصعدة';
-    default: return status;
-  }
-};
-
-const getActionName = (action) => {
-  switch (action) {
-    case 'COMPLAINT_CREATED': return 'تم تسجيل الملاحظة';
-    case 'COMPLAINT_ASSIGNED': return 'تم إسناد الملاحظة لمختص';
-    case 'COMPLAINT_TRANSFERRED': return 'تم تحويل الملاحظة لمختص آخر';
-    case 'COMPLAINT_ACKNOWLEDGED': return 'تم تأكيد الاستلام';
-    case 'COMPLAINT_STATUS_CHANGED': return 'تم تغيير الحالة';
-    case 'SOLUTION_ADDED': return 'تم تقديم حل';
-    case 'COMPLAINT_SOLVED': return 'تم إغلاق الملاحظة (محلولة)';
-    case 'COMPLAINT_ESCALATED': return 'تم تصعيد الملاحظة';
-    case 'COMPLAINT_REJECTED': return 'تم رفض الملاحظة';
-    case 'COMPLAINT_REOPENED': return 'تم إعادة فتح الملاحظة';
-    case 'SURVEY_SUBMITTED': return 'تم استلام تقييم ولي الأمر';
-    case 'INTERNAL_COMMENT_ADDED': return 'تعليق داخلي';
-    default: return action;
-  }
-};
-
 export default function ComplaintDetails({ complaint, onClose }) {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'ar' ? ar : enUS;
+  const getStatusName = (status) => t(`statuses.complaint.${status}`, status);
+  const getActionName = (action) => t(`actions.complaint.${action}`, action);
+  const RATING_LABELS = { resolutionSpeed: t('ratings.resolutionSpeed'), solutionQuality: t('ratings.solutionQuality'), staffProfessionalism: t('ratings.staffProfessionalism') };
+  const FLOW_STEPS = FLOW_STEP_KEYS.map((s) => ({ ...s, label: t(`complaintDetails.flowSteps.${s.key}`) }));
+  const listSep = i18n.language === 'ar' ? '، ' : ', ';
   const { user, userData } = useAuthStore();
   const users = useUsers();
   const templates = useMessageTemplates();
@@ -110,7 +81,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
     await addDoc(collection(db, `complaints/${complaint.id}/activityLog`), {
       action,
       actorId: user.uid,
-      actorName: userData?.name || 'مستخدم',
+      actorName: userData?.name || t('common.user'),
       metadata,
       createdAt: now
     });
@@ -133,7 +104,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
         await addLog('COMPLAINT_ESCALATED', {}, 'ESCALATED');
       } else if (actionType === 'SOLVE') {
         if (!reply.trim()) {
-          alert('يرجى كتابة تفاصيل الحل في صندوق النص أدناه قبل الإغلاق.');
+          alert(t('complaintDetails.solutionRequiredAlert'));
           return;
         }
         await addLog('SOLUTION_ADDED', { solutionDetails: reply }, { status: 'SOLVED', solutionDetails: reply, solvedAt: serverTimestamp() });
@@ -149,7 +120,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
         const addedIds = selectedAssignees.filter((id) => !before.includes(id));
         const removedIds = before.filter((id) => !selectedAssignees.includes(id));
         if (addedIds.length === 0 && removedIds.length === 0) {
-          alert('لم يطرأ أي تغيير على الإسناد.');
+          alert(t('complaintDetails.noAssignmentChangeAlert'));
           return;
         }
         const selectedUsers = selectedAssignees.map((id) => users.find((u) => u.id === id)).filter(Boolean);
@@ -162,7 +133,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
         );
       } else if (actionType === 'REJECT') {
         if (!reply.trim()) {
-          alert('يرجى كتابة سبب رفض الملاحظة في صندوق النص أدناه.');
+          alert(t('complaintDetails.rejectReasonRequiredAlert'));
           return;
         }
         await addLog('COMPLAINT_REJECTED', { reason: reply }, 'REJECTED');
@@ -176,7 +147,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
   };
 
   const handleDelete = async () => {
-    const reason = prompt('اكتب سبب حذف الملاحظة نهائياً (إلزامي):');
+    const reason = prompt(t('complaintDetails.deleteReasonPrompt'));
     if (!reason) return;
     setLoading(true);
     try {
@@ -190,11 +161,11 @@ export default function ComplaintDetails({ complaint, onClose }) {
         complaint,
         activityLog: [
           ...logs,
-          { action: 'COMPLAINT_DELETED', actorId: user.uid, actorName: userData?.name || 'مستخدم', metadata: { reason }, createdAt: new Date() },
+          { action: 'COMPLAINT_DELETED', actorId: user.uid, actorName: userData?.name || t('common.user'), metadata: { reason }, createdAt: new Date() },
         ],
         reason,
         deletedBy: user.uid,
-        deletedByName: userData?.name || 'مستخدم',
+        deletedByName: userData?.name || t('common.user'),
         deletedAt: serverTimestamp(),
       });
       await deleteDoc(doc(db, 'complaints', complaint.id));
@@ -226,27 +197,27 @@ export default function ComplaintDetails({ complaint, onClose }) {
         <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between sticky top-0 z-10">
           <div>
             <div className="flex items-center gap-3 mb-1">
-              <h2 className="text-xl font-bold text-slate-900">ملاحظة #{complaint.complaintId}</h2>
+              <h2 className="text-xl font-bold text-slate-900">{t('complaintDetails.titlePrefix')} #{complaint.complaintId}</h2>
               <span className={`px-2.5 py-1 rounded-md text-xs font-medium border ${getStatusBadge(complaint.status)}`}>
                 {getStatusName(complaint.status)}
               </span>
               {complaint.source === 'PARENT_PORTAL' && (
                 <span className="px-2.5 py-1 rounded-md text-xs font-medium border bg-primary/10 text-primary border-primary/20 flex items-center gap-1">
                   <Link2 className="w-3 h-3" />
-                  عبر الرابط العام
+                  {t('complaintDetails.viaPublicLink')}
                 </span>
               )}
             </div>
             <p className="text-sm text-slate-500 flex items-center gap-2">
-              <Clock className="w-4 h-4" /> 
-              {complaint.createdAt ? format(complaint.createdAt.toDate(), 'PP p', { locale: ar }) : ''}
+              <Clock className="w-4 h-4" />
+              {complaint.createdAt ? format(complaint.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}
             </p>
           </div>
           <div className="flex items-center gap-1">
             <button
               onClick={() => window.print()}
               className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-colors"
-              title="طباعة"
+              title={t('common.print')}
             >
               <Printer className="w-5 h-5" />
             </button>
@@ -265,33 +236,33 @@ export default function ComplaintDetails({ complaint, onClose }) {
           {/* Action Buttons for Staff */}
           {!canEdit && (
             <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3 print:hidden">
-              صلاحيتك اطلاع فقط على هذه الملاحظة — لا تملك صلاحية التعديل.
+              {t('complaintDetails.readOnlyNotice')}
             </div>
           )}
           <div className="flex flex-wrap gap-2 print:hidden">
             {canEdit && complaint.status === 'RECEIVED' && (
               <button disabled={loading} onClick={() => handleAction('ACKNOWLEDGE')} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
-                تأكيد الاستلام
+                {t('complaintDetails.acknowledge')}
               </button>
             )}
             {canEdit && (complaint.status === 'IN_PROGRESS' || complaint.status === 'RECEIVED') && (
               <>
                 <button disabled={loading} onClick={() => handleAction('WAIT_PARENT')} className="px-4 py-2 bg-purple-600 text-white rounded-lg text-sm font-medium hover:bg-purple-700 transition-colors">
-                  بانتظار ولي الأمر
+                  {t('complaintDetails.waitParent')}
                 </button>
                 <button disabled={loading} onClick={() => handleAction('SOLVE')} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors">
-                  حل الملاحظة
+                  {t('complaintDetails.solve')}
                 </button>
               </>
             )}
             {canEdit && complaint.status !== 'SOLVED' && complaint.status !== 'CLOSED' && (
               <button disabled={loading} onClick={() => handleAction('ESCALATE')} className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors">
-                تصعيد للإدارة
+                {t('complaintDetails.escalate')}
               </button>
             )}
             {canEdit && complaint.status === 'RECEIVED' && (
               <button disabled={loading} onClick={() => handleAction('REJECT')} className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 transition-colors">
-                رفض الملاحظة
+                {t('complaintDetails.reject')}
               </button>
             )}
             {!complaint.receiptMessageSentAt && complaint.parentPhone && (
@@ -303,7 +274,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
                 className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
               >
                 <MessageCircle className="w-4 h-4" />
-                إرسال رسالة الاستلام عبر واتساب
+                {t('common.sendReceiptWhatsApp')}
               </a>
             )}
             {['SOLVED', 'CLOSED'].includes(complaint.status) && complaint.solutionDetails && complaint.parentPhone && (
@@ -315,20 +286,20 @@ export default function ComplaintDetails({ complaint, onClose }) {
                 className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
               >
                 <MessageCircle className="w-4 h-4" />
-                إرسال رسالة الحل عبر واتساب
+                {t('common.sendResolutionWhatsApp')}
               </a>
             )}
             {canDelete && (
               <button disabled={loading} onClick={handleDelete} className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors flex items-center gap-2 mr-auto">
                 <Trash2 className="w-4 h-4" />
-                حذف الملاحظة نهائياً
+                {t('complaintDetails.deleteFinal')}
               </button>
             )}
           </div>
 
           {/* Flow map — where this complaint currently stands */}
           <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm print:hidden">
-            <h3 className="font-bold text-slate-900 text-sm mb-4">🗺️ مسار الملاحظة</h3>
+            <h3 className="font-bold text-slate-900 text-sm mb-4">{t('complaintDetails.flowMapTitle')}</h3>
             <div className="flex items-start">
               {stepStates.map((s, i) => {
                 const isCurrent = !s.done && i === firstPendingIndex;
@@ -341,7 +312,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
                         {s.done ? <CheckCircle2 className="w-4 h-4" /> : <Circle className="w-4 h-4" />}
                       </div>
                       <p className={`text-[11px] leading-tight ${s.done || isCurrent ? 'text-slate-800 font-medium' : 'text-slate-400'}`}>{s.label}</p>
-                      {s.at && <p className="text-[10px] text-slate-400" dir="ltr">{format(s.at.toDate(), 'P', { locale: ar })}</p>}
+                      {s.at && <p className="text-[10px] text-slate-400" dir="ltr">{format(s.at.toDate(), 'P', { locale: dateLocale })}</p>}
                     </div>
                     {i < stepStates.length - 1 && (
                       <div className={`h-0.5 flex-1 mx-1 ${stepStates[i + 1].done || s.done ? 'bg-emerald-400' : 'bg-slate-200'}`} />
@@ -359,7 +330,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
             <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm print:hidden">
               <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-2">
                 <Star className="w-4 h-4 text-amber-400" />
-                استبيان رضا ولي الأمر
+                {t('complaintDetails.surveyTitle')}
               </h3>
               {typeof complaint.satisfactionRate === 'number' ? (
                 <>
@@ -382,7 +353,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
                 </>
               ) : (
                 <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-3">
-                  لم يقتنع ولي الأمر بالحل وأعاد فتح الملاحظة دون تقييم.
+                  {t('complaintDetails.reopenedNoRating')}
                 </p>
               )}
               {complaint.parentFeedback && (
@@ -396,24 +367,24 @@ export default function ComplaintDetails({ complaint, onClose }) {
             <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm print:hidden">
               <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-slate-400" />
-                {(complaint.assignedTo?.length ?? 0) > 0 ? 'تعديل إسناد الملاحظة' : 'إسناد الملاحظة'}
+                {(complaint.assignedTo?.length ?? 0) > 0 ? t('complaintDetails.editAssignment') : t('complaintDetails.newAssignment')}
               </h3>
               {complaint.assignedToNames?.length > 0 && (
-                <p className="text-sm text-slate-500 mb-3">المسندة إليهم حالياً: <span className="font-medium text-slate-800">{complaint.assignedToNames.join('، ')}</span></p>
+                <p className="text-sm text-slate-500 mb-3">{t('complaintDetails.currentAssignees')} <span className="font-medium text-slate-800">{complaint.assignedToNames.join(listSep)}</span></p>
               )}
               <div className="space-y-3">
                 <AssigneeMultiSelect
                   options={eligibleAssignees(users, { branch: complaint.branch, complaintType: complaint.complaintType })}
                   selected={selectedAssignees}
                   onChange={setSelectedAssignees}
-                  placeholder="اختر الموظفين..."
+                  placeholder={t('complaintDetails.selectStaffPlaceholder')}
                 />
                 <button
                   disabled={loading || (selectedAssignees.length === (complaint.assignedTo || []).length && selectedAssignees.every((id) => (complaint.assignedTo || []).includes(id)))}
                   onClick={() => handleAction('ASSIGN')}
                   className="px-5 py-2.5 bg-slate-800 text-white rounded-xl text-sm font-medium hover:bg-slate-900 transition-colors disabled:opacity-50"
                 >
-                  حفظ الإسناد
+                  {t('complaintDetails.saveAssignment')}
                 </button>
               </div>
             </div>
@@ -426,7 +397,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
                 <User className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-0.5">ولي الأمر</p>
+                <p className="text-xs text-slate-500 mb-0.5">{t('common.parent')}</p>
                 <p className="font-medium text-slate-900">{complaint.parentName}</p>
                 <p className="text-sm text-slate-500 mt-1 flex items-center gap-1" dir="ltr">
                   <Phone className="w-3.5 h-3.5" /> {complaint.parentPhone}
@@ -439,7 +410,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
                 <MapPin className="w-5 h-5" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-0.5">الفرع والطالب</p>
+                <p className="text-xs text-slate-500 mb-0.5">{t('complaintDetails.branchAndStudent')}</p>
                 <p className="font-medium text-slate-900">{complaint.studentName}</p>
                 <p className="text-sm text-slate-500 mt-1">{complaint.branch} - {complaint.grade}</p>
               </div>
@@ -449,7 +420,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
           {/* Complaint Text */}
           <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
             <div className="flex items-center justify-between mb-3 gap-2">
-              <h3 className="font-bold text-slate-900 text-lg">{complaint.subject || 'التفاصيل الأساسية'}</h3>
+              <h3 className="font-bold text-slate-900 text-lg">{complaint.subject || t('complaintDetails.basicDetails')}</h3>
               <div className="flex gap-1.5 shrink-0">
                 <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded whitespace-nowrap">{complaint.complaintType}</span>
                 {complaint.subType && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded whitespace-nowrap">{complaint.subType}</span>}
@@ -462,7 +433,7 @@ export default function ComplaintDetails({ complaint, onClose }) {
             {/* Attachments */}
             {complaint.attachments && complaint.attachments.length > 0 && (
               <div className="mt-4 pt-4 border-t border-slate-100">
-                <h4 className="text-sm font-medium text-slate-700 mb-2">المرفقات:</h4>
+                <h4 className="text-sm font-medium text-slate-700 mb-2">{t('complaintDetails.attachmentsLabel')}</h4>
                 <div className="flex flex-wrap gap-2">
                   {complaint.attachments.map((file, i) => (
                     file.mimeType?.startsWith('audio/') ? (
@@ -486,10 +457,10 @@ export default function ComplaintDetails({ complaint, onClose }) {
           <div>
             <div className="flex gap-4 border-b border-slate-200 mb-4 px-1">
               <button onClick={() => setActiveTab('history')} className={`pb-2 font-medium text-sm transition-colors ${activeTab === 'history' ? 'border-b-2 border-primary text-primary' : 'text-slate-500 hover:text-slate-700'}`}>
-                سجل المتابعة
+                {t('complaintDetails.historyTab')}
               </button>
               <button onClick={() => setActiveTab('internal')} className={`pb-2 font-medium text-sm transition-colors ${activeTab === 'internal' ? 'border-b-2 border-primary text-primary' : 'text-slate-500 hover:text-slate-700'}`}>
-                التعليقات الداخلية
+                {t('complaintDetails.internalTab')}
               </button>
             </div>
 
@@ -504,25 +475,25 @@ export default function ComplaintDetails({ complaint, onClose }) {
                       <div className="flex justify-between mb-2">
                         <p className="font-medium text-slate-900">{getActionName(log.action)}</p>
                         <p className="text-xs text-slate-400" dir="ltr">
-                          {log.createdAt ? format(log.createdAt.toDate(), 'p', { locale: ar }) : ''}
+                          {log.createdAt ? format(log.createdAt.toDate(), 'p', { locale: dateLocale }) : ''}
                         </p>
                       </div>
-                      <p className="text-sm text-slate-600 mb-1">بواسطة: {log.actorName || 'النظام'}</p>
+                      <p className="text-sm text-slate-600 mb-1">{t('complaintDetails.by')} {log.actorName || t('complaintDetails.system')}</p>
                       {log.metadata?.solutionDetails && (
                         <div className="mt-2 p-3 bg-emerald-50 text-emerald-800 rounded-lg text-sm border border-emerald-100">
-                          <strong>الحل:</strong> {log.metadata.solutionDetails}
+                          <strong>{t('complaintDetails.solutionLabel')}</strong> {log.metadata.solutionDetails}
                         </div>
                       )}
                       {log.metadata?.reason && (
                         <div className="mt-2 p-3 bg-red-50 text-red-800 rounded-lg text-sm border border-red-100">
-                          <strong>السبب:</strong> {log.metadata.reason}
+                          <strong>{t('complaintDetails.reasonLabel')}</strong> {log.metadata.reason}
                         </div>
                       )}
                       {log.metadata?.toUserNames?.length > 0 && (
                         <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200 space-y-1">
-                          <p>المسندة إليهم: <strong>{log.metadata.toUserNames.join('، ')}</strong></p>
-                          {log.metadata.addedNames?.length > 0 && <p className="text-emerald-700">أُضيف: {log.metadata.addedNames.join('، ')}</p>}
-                          {log.metadata.removedNames?.length > 0 && <p className="text-red-700">أُزيل: {log.metadata.removedNames.join('، ')}</p>}
+                          <p>{t('complaintDetails.assignedToLabel')} <strong>{log.metadata.toUserNames.join(listSep)}</strong></p>
+                          {log.metadata.addedNames?.length > 0 && <p className="text-emerald-700">{t('complaintDetails.addedLabel')} {log.metadata.addedNames.join(listSep)}</p>}
+                          {log.metadata.removedNames?.length > 0 && <p className="text-red-700">{t('complaintDetails.removedLabel')} {log.metadata.removedNames.join(listSep)}</p>}
                         </div>
                       )}
                     </div>
@@ -532,14 +503,14 @@ export default function ComplaintDetails({ complaint, onClose }) {
             ) : (
               <div className="space-y-4 print:hidden">
                 {internalLogs.length === 0 ? (
-                  <p className="text-slate-500 text-sm text-center py-4">لا توجد تعليقات داخلية.</p>
+                  <p className="text-slate-500 text-sm text-center py-4">{t('complaintDetails.noInternalComments')}</p>
                 ) : (
                   internalLogs.map((log) => (
                     <div key={log.id} className="bg-amber-50 p-4 rounded-xl border border-amber-100">
                       <div className="flex justify-between mb-1">
                         <p className="font-medium text-amber-900 text-sm">{log.actorName}</p>
                         <p className="text-xs text-amber-600/70" dir="ltr">
-                          {log.createdAt ? format(log.createdAt.toDate(), 'PP p', { locale: ar }) : ''}
+                          {log.createdAt ? format(log.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}
                         </p>
                       </div>
                       <p className="text-sm text-amber-800 whitespace-pre-wrap">{log.metadata?.comment}</p>
@@ -558,19 +529,19 @@ export default function ComplaintDetails({ complaint, onClose }) {
               <textarea
                 value={reply}
                 onChange={(e) => setReply(e.target.value)}
-                placeholder={activeTab === 'internal' ? "اكتب تعليقاً داخلياً..." : "اكتب الحل هنا، أو سبب الرفض إن لزم..."}
+                placeholder={activeTab === 'internal' ? t('complaintDetails.internalCommentPlaceholder') : t('complaintDetails.solutionPlaceholder')}
                 className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary transition-colors outline-none resize-none h-[52px]"
                 rows={1}
               />
             </div>
             {activeTab === 'internal' ? (
               <button disabled={loading} onClick={() => handleAction('COMMENT')} className="px-6 h-[52px] bg-slate-800 text-white rounded-xl hover:bg-slate-900 font-medium transition-colors shadow-sm flex items-center gap-2">
-                تعليق
+                {t('complaintDetails.commentBtn')}
                 <Send className="w-4 h-4 -scale-x-100" />
               </button>
             ) : (
               <button disabled={loading || !canEdit} onClick={() => handleAction('SOLVE')} className="px-6 h-[52px] bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50">
-                حل
+                {t('complaintDetails.solveBtn')}
                 <CheckCircle2 className="w-4 h-4" />
               </button>
             )}
