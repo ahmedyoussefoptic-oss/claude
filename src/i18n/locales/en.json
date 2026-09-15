@@ -523,6 +523,79 @@
     "submittedViaPublicLink": "Submitted via public link",
     "noResults": "No matching tickets"
   },
+  "businessData": {
+    "branches": {
+      "DOWN_TOWN_BOYS": "Downtown Boys Branch",
+      "DOWN_TOWN_GIRLS": "Downtown Girls Branch",
+      "AL_SHATI": "Al Shati Branch",
+      "AL_MOHAMMADIA": "Al Mohammadia Branch",
+      "AL_SALAMA_GIRLS": "Al Salama Girls Branch",
+      "AL_SALAMA_BOYS": "Al Salama Boys Branch",
+      "AL_NAEEM": "Al Naeem Branch",
+      "AL_ZAHRA": "Al Zahra Branch"
+    },
+    "departments": {
+      "AMERICAN": "American Department",
+      "BRITISH": "British Department",
+      "SPECIAL_EDUCATION": "Special Education Department"
+    },
+    "complaintTypes": {
+      "ACADEMIC": "Academic",
+      "ADMINISTRATIVE": "Administrative",
+      "BEHAVIORAL": "Behavioral"
+    },
+    "subTypes": {
+      "ACADEMIC": {
+        "مستوى التحصيل الدراسي": "Academic achievement level",
+        "الاختبارات والدرجات": "Exams and grades",
+        "الواجبات والمنصات": "Homework and platforms",
+        "أداء معلم": "Teacher performance",
+        "الخطة الدراسية": "Study plan",
+        "صعوبات التعلم": "Learning difficulties",
+        "أخرى": "Other"
+      },
+      "ADMINISTRATIVE": {
+        "الرسوم والمدفوعات": "Fees and payments",
+        "النقل والحافلات": "Transportation and buses",
+        "الشهادات والوثائق": "Certificates and documents",
+        "التسجيل والقبول": "Registration and admission",
+        "الزي المدرسي": "School uniform",
+        "المقصف والتغذية": "Cafeteria and nutrition",
+        "المرافق والصيانة": "Facilities and maintenance",
+        "غياب خطأ": "Incorrect absence record",
+        "أخرى": "Other"
+      },
+      "BEHAVIORAL": {
+        "تنمّر": "Bullying",
+        "مشاجرة بين طلاب": "Fight between students",
+        "انضباط داخل الصف": "In-class discipline",
+        "الغياب والتأخر": "Absence and tardiness",
+        "السلامة والإشراف": "Safety and supervision",
+        "أخرى": "Other"
+      }
+    },
+    "problemTypes": {
+      "WRONG_USERNAME": "Incorrect username",
+      "FORGOT_PASSWORD": "Forgotten password",
+      "ACCOUNT_SUSPENDED": "Account suspended",
+      "ACCOUNT_NOT_CREATED": "Account not created"
+    },
+    "platforms": {
+      "LMS": "Learning Management System (LMS)",
+      "TEAMS": "Microsoft Teams",
+      "PORTAL": "Student Portal",
+      "OTHER": "Other"
+    },
+    "itemCategories": {
+      "CLOTHING": "Clothing",
+      "ELECTRONICS": "Electronics",
+      "BOOKS_STATIONERY": "Books and school supplies",
+      "ACCESSORIES": "Accessories",
+      "BAGS": "Bags",
+      "MONEY_VALUABLES": "Money and valuables",
+      "OTHER": "Other"
+    }
+  },
   "charts": {
     "weeklyComplaintRate": "Complaint rate this week",
     "complaintsByBranch": "Complaints by branch",

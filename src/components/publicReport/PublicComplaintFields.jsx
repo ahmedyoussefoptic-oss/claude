@@ -131,14 +131,14 @@ export default function PublicComplaintFields({ initialBranch, onSuccess }) {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')} <span className="text-red-500">*</span></label>
             <select name="branch" value={formData.branch} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
               <option value="">{t('complaintForm.selectBranch')}</option>
-              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              {branches.map((b) => <option key={b.id} value={b.id}>{t(`businessData.branches.${b.id}`, b.name)}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.departmentLabel')}</label>
             <select name="department" value={formData.department} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
               <option value="">{t('complaintForm.selectDepartment')}</option>
-              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              {departments.map((d) => <option key={d.id} value={d.id}>{t(`businessData.departments.${d.id}`, d.name)}</option>)}
             </select>
           </div>
         </div>
@@ -164,14 +164,16 @@ export default function PublicComplaintFields({ initialBranch, onSuccess }) {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.type')} <span className="text-red-500">*</span></label>
             <select name="complaintType" value={formData.complaintType} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
               <option value="">{t('complaintForm.selectType')}</option>
-              {complaintTypes.map((ct) => <option key={ct.id} value={ct.id}>{ct.name}</option>)}
+              {complaintTypes.map((ct) => <option key={ct.id} value={ct.id}>{t(`businessData.complaintTypes.${ct.id}`, ct.name)}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.subTypeLabel')}</label>
             <select name="subType" value={formData.subType} onChange={handleChange} disabled={!formData.complaintType} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white disabled:text-slate-400 disabled:bg-slate-50">
               <option value="">{t('common.select')}</option>
-              {subTypes.filter((s) => s.parentType === formData.complaintType).map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+              {subTypes.filter((s) => s.parentType === formData.complaintType).map((s) => (
+                <option key={s.id} value={s.name}>{t(`businessData.subTypes.${s.parentType}.${s.name}`, s.name)}</option>
+              ))}
             </select>
           </div>
         </div>

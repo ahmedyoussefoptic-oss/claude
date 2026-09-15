@@ -82,7 +82,7 @@ export default function PublicTechSupportFields({ initialBranch, onSuccess }) {
           <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')} <span className="text-red-500">*</span></label>
           <select name="branch" value={formData.branch} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
             <option value="">{t('complaintForm.selectBranch')}</option>
-            {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {branches.map((b) => <option key={b.id} value={b.id}>{t(`businessData.branches.${b.id}`, b.name)}</option>)}
           </select>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -130,14 +130,14 @@ export default function PublicTechSupportFields({ initialBranch, onSuccess }) {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.problemTypeLabel')} <span className="text-red-500">*</span></label>
             <select name="problemType" value={formData.problemType} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
               <option value="">{t('techSupportForm.selectProblemType')}</option>
-              {problemTypes.map((pt) => <option key={pt.id} value={pt.id}>{pt.name}</option>)}
+              {problemTypes.map((pt) => <option key={pt.id} value={pt.id}>{t(`businessData.problemTypes.${pt.id}`, pt.name)}</option>)}
             </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.platformLabel')} <span className="text-red-500">*</span></label>
             <select name="platform" value={formData.platform} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
               <option value="">{t('techSupportForm.selectPlatform')}</option>
-              {platforms.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+              {platforms.map((p) => <option key={p.id} value={p.id}>{t(`businessData.platforms.${p.id}`, p.name)}</option>)}
             </select>
           </div>
         </div>

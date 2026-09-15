@@ -106,7 +106,7 @@ export default function PublicLinkModal({ onClose }) {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('publicLinkModal.branchOptional')}</label>
             <select value={branch} onChange={(e) => setBranch(e.target.value)} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
               <option value="">{t('publicLinkModal.allBranchesNote')}</option>
-              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              {branches.map((b) => <option key={b.id} value={b.id}>{t(`businessData.branches.${b.id}`, b.name)}</option>)}
             </select>
           </div>
 

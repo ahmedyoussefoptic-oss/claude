@@ -113,7 +113,7 @@ export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.type')} <span className="text-red-500">*</span></label>
             <select name="category" value={formData.category} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
               <option value="">{t('lostFoundForm.selectType')}</option>
-              {itemCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              {itemCategories.map((c) => <option key={c.id} value={c.id}>{t(`businessData.itemCategories.${c.id}`, c.name)}</option>)}
             </select>
           </div>
         </div>
@@ -126,7 +126,7 @@ export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')} <span className="text-red-500">*</span></label>
             <select name="branch" value={formData.branch} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
               <option value="">{t('complaintForm.selectBranch')}</option>
-              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              {branches.map((b) => <option key={b.id} value={b.id}>{t(`businessData.branches.${b.id}`, b.name)}</option>)}
             </select>
           </div>
         </div>
