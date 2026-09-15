@@ -11,10 +11,19 @@ import { TICKET_STATUS_BADGE } from '../../config/techSupport';
 import { waLink, buildCredentialMessage, buildTechSupportReceiptMessage, toWhatsAppNumber } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
+import ErrorBoundary from '../common/ErrorBoundary';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
 export default function TechSupportDetails({ ticket, onClose }) {
+  return (
+    <ErrorBoundary key={ticket.id} onClose={onClose}>
+      <TechSupportDetailsInner ticket={ticket} onClose={onClose} />
+    </ErrorBoundary>
+  );
+}
+
+function TechSupportDetailsInner({ ticket, onClose }) {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
   const listSep = i18n.language === 'ar' ? '، ' : ', ';

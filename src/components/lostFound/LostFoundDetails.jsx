@@ -11,10 +11,19 @@ import { ROLES } from '../../config/roles';
 import { waLink, buildLostFoundReceiptMessage, buildLostFoundResolutionMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
+import ErrorBoundary from '../common/ErrorBoundary';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
 export default function LostFoundDetails({ item, onClose }) {
+  return (
+    <ErrorBoundary key={item.id} onClose={onClose}>
+      <LostFoundDetailsInner item={item} onClose={onClose} />
+    </ErrorBoundary>
+  );
+}
+
+function LostFoundDetailsInner({ item, onClose }) {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
   const listSep = i18n.language === 'ar' ? '، ' : ', ';

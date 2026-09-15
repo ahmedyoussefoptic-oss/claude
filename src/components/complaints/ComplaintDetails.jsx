@@ -9,6 +9,7 @@ import { waLink, buildReceiptMessage, buildResolutionMessage } from '../../utils
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { ROLES } from '../../config/roles';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
+import ErrorBoundary from '../common/ErrorBoundary';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -34,6 +35,14 @@ const getStatusBadge = (status) => {
 };
 
 export default function ComplaintDetails({ complaint, onClose }) {
+  return (
+    <ErrorBoundary key={complaint.id} onClose={onClose}>
+      <ComplaintDetailsInner complaint={complaint} onClose={onClose} />
+    </ErrorBoundary>
+  );
+}
+
+function ComplaintDetailsInner({ complaint, onClose }) {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
   const getStatusName = (status) => t(`statuses.complaint.${status}`, status);
