@@ -1,22 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle, Link2 } from 'lucide-react';
+import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle, Link2, UserPlus } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
+import { useUsers } from '../../hooks/useUsers';
 import { useBranches, useItemCategories } from '../../hooks/useOrgData';
 import { ITEM_STATUS_BADGE } from '../../config/lostFound';
 import { ROLES } from '../../config/roles';
 import { waLink, buildLostFoundReceiptMessage, buildLostFoundResolutionMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
+import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
 export default function LostFoundDetails({ item, onClose }) {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
+  const listSep = i18n.language === 'ar' ? '، ' : ', ';
   const getActionName = (action) => t(`actions.lostFound.${action}`, action);
   const { user, userData } = useAuthStore();
+  const users = useUsers();
   const branches = useBranches();
   const itemCategories = useItemCategories();
   const templates = useMessageTemplates();
@@ -24,6 +28,13 @@ export default function LostFoundDetails({ item, onClose }) {
   const [note, setNote] = useState('');
   const [returnedTo, setReturnedTo] = useState('');
   const [loading, setLoading] = useState(false);
+  const [selectedAssignees, setSelectedAssignees] = useState(item.assignedTo || []);
+
+  useEffect(() => {
+    setSelectedAssignees(item.assignedTo || []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.id]);
+
   const isAdmin = userData?.role === ROLES.ADMIN;
   // Mirrors firestore.rules' canEditRecord: a branch-scoped edit permission
   // only applies within that user's own branch.
@@ -77,6 +88,22 @@ export default function LostFoundDetails({ item, onClose }) {
         if (!note.trim()) return;
         await addLog('NOTE_ADDED', { note });
         setNote('');
+      } else if (actionType === 'ASSIGN') {
+        const before = item.assignedTo || [];
+        const addedIds = selectedAssignees.filter((id) => !before.includes(id));
+        const removedIds = before.filter((id) => !selectedAssignees.includes(id));
+        if (addedIds.length === 0 && removedIds.length === 0) {
+          alert(t('assigneeSelect.noChangeAlert'));
+          return;
+        }
+        const selectedUsers = selectedAssignees.map((id) => users.find((u) => u.id === id)).filter(Boolean);
+        const addedNames = addedIds.map((id) => users.find((u) => u.id === id)?.name).filter(Boolean);
+        const removedNames = removedIds.map((id) => item.assignedToNames?.[before.indexOf(id)] || users.find((u) => u.id === id)?.name).filter(Boolean);
+        await addLog(
+          before.length === 0 ? 'ITEM_ASSIGNED' : 'ITEM_TRANSFERRED',
+          { toUserNames: selectedUsers.map((u) => u.name), addedNames, removedNames },
+          { assignedTo: selectedAssignees, assignedToNames: selectedUsers.map((u) => u.name), assignedAt: serverTimestamp() }
+        );
       }
     } catch (err) {
       console.error(err);
@@ -155,6 +182,33 @@ export default function LostFoundDetails({ item, onClose }) {
               </a>
             )}
           </div>
+
+          {canEdit && item.status !== 'RETURNED' && item.status !== 'CLOSED' && (
+            <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
+              <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-slate-400" />
+                {(item.assignedTo?.length ?? 0) > 0 ? t('assigneeSelect.editAssignmentTitle') : t('assigneeSelect.newAssignmentTitle')}
+              </h3>
+              {item.assignedToNames?.length > 0 && (
+                <p className="text-sm text-slate-500 mb-3">{t('assigneeSelect.currentAssigneesLabel')} <span className="font-medium text-slate-800">{item.assignedToNames.join(listSep)}</span></p>
+              )}
+              <div className="space-y-3">
+                <AssigneeMultiSelect
+                  options={eligibleAssignees(users, { branch: item.branch })}
+                  selected={selectedAssignees}
+                  onChange={setSelectedAssignees}
+                  placeholder={t('assigneeSelect.selectStaffPlaceholder')}
+                />
+                <button
+                  disabled={loading || (selectedAssignees.length === (item.assignedTo || []).length && selectedAssignees.every((id) => (item.assignedTo || []).includes(id)))}
+                  onClick={() => handleAction('ASSIGN')}
+                  className="px-5 py-2.5 bg-slate-800 text-white rounded-xl text-sm font-medium hover:bg-slate-900 transition-colors disabled:opacity-50"
+                >
+                  {t('assigneeSelect.saveAssignmentBtn')}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="bg-white p-4 rounded-xl border border-slate-100 flex items-start gap-3 shadow-sm">
@@ -242,6 +296,13 @@ export default function LostFoundDetails({ item, onClose }) {
                     {log.metadata?.returnedTo && (
                       <div className="mt-2 p-3 bg-emerald-50 text-emerald-800 rounded-lg text-sm border border-emerald-100">
                         <strong>{t('lostFoundDetails.returnedToLabel')}</strong> {log.metadata.returnedTo}
+                      </div>
+                    )}
+                    {log.metadata?.toUserNames?.length > 0 && (
+                      <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200 space-y-1">
+                        <p>{t('assigneeSelect.assignedToLogLabel')} <strong>{log.metadata.toUserNames.join(listSep)}</strong></p>
+                        {log.metadata.addedNames?.length > 0 && <p className="text-emerald-700">{t('assigneeSelect.addedLogLabel')} {log.metadata.addedNames.join(listSep)}</p>}
+                        {log.metadata.removedNames?.length > 0 && <p className="text-red-700">{t('assigneeSelect.removedLogLabel')} {log.metadata.removedNames.join(listSep)}</p>}
                       </div>
                     )}
                     {log.metadata?.note && (

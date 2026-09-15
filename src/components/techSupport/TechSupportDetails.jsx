@@ -10,12 +10,14 @@ import { ROLES } from '../../config/roles';
 import { TICKET_STATUS_BADGE } from '../../config/techSupport';
 import { waLink, buildCredentialMessage, buildTechSupportReceiptMessage, toWhatsAppNumber } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
+import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
 export default function TechSupportDetails({ ticket, onClose }) {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
+  const listSep = i18n.language === 'ar' ? '، ' : ', ';
   const getActionName = (action) => t(`actions.techSupport.${action}`, action);
   const { user, userData } = useAuthStore();
   const users = useUsers();
@@ -26,10 +28,15 @@ export default function TechSupportDetails({ ticket, onClose }) {
   const [logs, setLogs] = useState([]);
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
-  const [assigneeId, setAssigneeId] = useState('');
+  const [selectedAssignees, setSelectedAssignees] = useState(ticket.assignedTo || []);
   const [showCredsForm, setShowCredsForm] = useState(false);
   const [username, setUsername] = useState('');
   const [tempPassword, setTempPassword] = useState('');
+
+  useEffect(() => {
+    setSelectedAssignees(ticket.assignedTo || []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ticket.id]);
 
   const isAdmin = userData?.role === ROLES.ADMIN;
   // Mirrors firestore.rules' canEditRecord/canDeleteRecord: a branch-scoped
@@ -61,17 +68,23 @@ export default function TechSupportDetails({ ticket, onClose }) {
   };
 
   const handleAssign = async () => {
-    if (!assigneeId) return;
-    const assignee = users.find((u) => u.id === assigneeId);
-    const isReassign = !!ticket.assignedTo;
+    const before = ticket.assignedTo || [];
+    const addedIds = selectedAssignees.filter((id) => !before.includes(id));
+    const removedIds = before.filter((id) => !selectedAssignees.includes(id));
+    if (addedIds.length === 0 && removedIds.length === 0) {
+      alert(t('assigneeSelect.noChangeAlert'));
+      return;
+    }
+    const selectedUsers = selectedAssignees.map((id) => users.find((u) => u.id === id)).filter(Boolean);
+    const addedNames = addedIds.map((id) => users.find((u) => u.id === id)?.name).filter(Boolean);
+    const removedNames = removedIds.map((id) => ticket.assignedToNames?.[before.indexOf(id)] || users.find((u) => u.id === id)?.name).filter(Boolean);
     setLoading(true);
     try {
       await addLog(
-        isReassign ? 'TICKET_TRANSFERRED' : 'TICKET_ASSIGNED',
-        { toUserId: assigneeId, toUserName: assignee?.name },
-        { assignedTo: assigneeId, assignedToName: assignee?.name || '', assignedAt: serverTimestamp(), status: ticket.status === 'NEW' ? 'ASSIGNED' : ticket.status }
+        before.length === 0 ? 'TICKET_ASSIGNED' : 'TICKET_TRANSFERRED',
+        { toUserNames: selectedUsers.map((u) => u.name), addedNames, removedNames },
+        { assignedTo: selectedAssignees, assignedToNames: selectedUsers.map((u) => u.name), assignedAt: serverTimestamp(), status: ticket.status === 'NEW' ? 'ASSIGNED' : ticket.status }
       );
-      setAssigneeId('');
     } finally {
       setLoading(false);
     }
@@ -306,20 +319,24 @@ export default function TechSupportDetails({ ticket, onClose }) {
             <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm">
               <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-slate-400" />
-                {ticket.assignedTo ? t('techSupportDetails.transferTitle') : t('techSupportDetails.assignTitle')}
+                {(ticket.assignedTo?.length ?? 0) > 0 ? t('assigneeSelect.editAssignmentTitle') : t('assigneeSelect.newAssignmentTitle')}
               </h3>
-              {ticket.assignedToName && (
-                <p className="text-sm text-slate-500 mb-3">{t('techSupportDetails.currentSpecialist')} <span className="font-medium text-slate-800">{ticket.assignedToName}</span></p>
+              {ticket.assignedToNames?.length > 0 && (
+                <p className="text-sm text-slate-500 mb-3">{t('assigneeSelect.currentAssigneesLabel')} <span className="font-medium text-slate-800">{ticket.assignedToNames.join(listSep)}</span></p>
               )}
-              <div className="flex gap-3">
-                <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)} className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
-                  <option value="">{t('techSupportDetails.selectSpecialist')}</option>
-                  {users.filter((u) => u.id !== ticket.assignedTo && u.active !== false).map((u) => (
-                    <option key={u.id} value={u.id}>{u.name} ({u.role}{u.department === 'IT' ? ' - IT' : ''})</option>
-                  ))}
-                </select>
-                <button disabled={loading || !assigneeId} onClick={handleAssign} className="px-5 py-2.5 bg-slate-800 text-white rounded-xl text-sm font-medium hover:bg-slate-900 disabled:opacity-50">
-                  {ticket.assignedTo ? t('techSupportDetails.transferBtn') : t('techSupportDetails.assignBtn')}
+              <div className="space-y-3">
+                <AssigneeMultiSelect
+                  options={eligibleAssignees(users, { branch: ticket.branch, complaintType: 'IT' })}
+                  selected={selectedAssignees}
+                  onChange={setSelectedAssignees}
+                  placeholder={t('assigneeSelect.selectStaffPlaceholder')}
+                />
+                <button
+                  disabled={loading || (selectedAssignees.length === (ticket.assignedTo || []).length && selectedAssignees.every((id) => (ticket.assignedTo || []).includes(id)))}
+                  onClick={handleAssign}
+                  className="px-5 py-2.5 bg-slate-800 text-white rounded-xl text-sm font-medium hover:bg-slate-900 transition-colors disabled:opacity-50"
+                >
+                  {t('assigneeSelect.saveAssignmentBtn')}
                 </button>
               </div>
             </div>
@@ -384,7 +401,14 @@ export default function TechSupportDetails({ ticket, onClose }) {
                     {log.metadata?.reason && (
                       <div className="mt-2 p-3 bg-red-50 text-red-800 rounded-lg text-sm border border-red-100"><strong>{t('techSupportDetails.reasonLabel')}</strong> {log.metadata.reason}</div>
                     )}
-                    {log.metadata?.toUserName && (
+                    {log.metadata?.toUserNames?.length > 0 && (
+                      <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200 space-y-1">
+                        <p>{t('assigneeSelect.assignedToLogLabel')} <strong>{log.metadata.toUserNames.join(listSep)}</strong></p>
+                        {log.metadata.addedNames?.length > 0 && <p className="text-emerald-700">{t('assigneeSelect.addedLogLabel')} {log.metadata.addedNames.join(listSep)}</p>}
+                        {log.metadata.removedNames?.length > 0 && <p className="text-red-700">{t('assigneeSelect.removedLogLabel')} {log.metadata.removedNames.join(listSep)}</p>}
+                      </div>
+                    )}
+                    {!log.metadata?.toUserNames && log.metadata?.toUserName && (
                       <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200">{t('techSupportDetails.toLabel')} <strong>{log.metadata.toUserName}</strong></div>
                     )}
                     {log.metadata?.note && <p className="text-sm text-slate-600 mt-1">{log.metadata.note}</p>}

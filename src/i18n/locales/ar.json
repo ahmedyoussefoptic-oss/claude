@@ -265,7 +265,16 @@
     "roleTagUpperManagement": "إدارة عليا",
     "noEligibleStaff": "لا يوجد موظفون مؤهلون للإسناد",
     "peopleSelected_one": "{{count}} شخص مختار",
-    "peopleSelected_other": "{{count}} أشخاص مختارون"
+    "peopleSelected_other": "{{count}} أشخاص مختارون",
+    "editAssignmentTitle": "تعديل الإسناد",
+    "newAssignmentTitle": "إسناد",
+    "currentAssigneesLabel": "المسندة إليهم حالياً:",
+    "selectStaffPlaceholder": "اختر الموظفين...",
+    "saveAssignmentBtn": "حفظ الإسناد",
+    "assignedToLogLabel": "المسندة إليهم:",
+    "addedLogLabel": "أُضيف:",
+    "removedLogLabel": "أُزيل:",
+    "noChangeAlert": "لم يطرأ أي تغيير على الإسناد."
   },
   "messageStatus": {
     "receiptSent": "أُرسلت رسالة الاستلام لولي الأمر",
@@ -334,7 +343,9 @@
     "uploadPhotoClick": "اضغط لرفع صورة",
     "saveError": "حدث خطأ أثناء حفظ السجل. يرجى المحاولة مرة أخرى.",
     "saving": "جاري الحفظ...",
-    "saveBtn": "حفظ السجل"
+    "saveBtn": "حفظ السجل",
+    "assignSectionTitle": "المسند إليهم (اختياري)",
+    "assignHint": "يمكن إسناد البلاغ لأكثر من موظف في نفس الوقت — يصل إشعار فوري لكل من تختارهم بمجرد حفظ البلاغ."
   },
   "publicReport": {
     "kinds": {
@@ -437,21 +448,42 @@
   },
   "parentPortal": {
     "typeConfig": {
-      "complaint": { "title": "ملاحظة", "label": "رقم الملاحظة" },
-      "lostFound": { "title": "بلاغ مفقودات", "label": "رقم البلاغ" },
-      "techSupport": { "title": "بلاغ تقني", "label": "رقم البلاغ" }
+      "complaint": {
+        "title": "ملاحظة",
+        "label": "رقم الملاحظة"
+      },
+      "lostFound": {
+        "title": "بلاغ مفقودات",
+        "label": "رقم البلاغ"
+      },
+      "techSupport": {
+        "title": "بلاغ تقني",
+        "label": "رقم البلاغ"
+      }
     },
     "statusNames": {
       "complaint": {
-        "RECEIVED": "مستلمة", "IN_PROGRESS": "قيد المعالجة", "WAITING_PARENT_RESPONSE": "بانتظار ردكم",
-        "SOLVED": "تم الحل", "CLOSED": "مغلقة", "REJECTED": "مرفوضة", "ESCALATED": "تحت متابعة الإدارة"
+        "RECEIVED": "مستلمة",
+        "IN_PROGRESS": "قيد المعالجة",
+        "WAITING_PARENT_RESPONSE": "بانتظار ردكم",
+        "SOLVED": "تم الحل",
+        "CLOSED": "مغلقة",
+        "REJECTED": "مرفوضة",
+        "ESCALATED": "تحت متابعة الإدارة"
       },
       "lostFound": {
-        "UNCLAIMED": "قيد البحث", "MATCHED": "تمت مطابقة الغرض", "RETURNED": "تم التسليم", "CLOSED": "مغلقة"
+        "UNCLAIMED": "قيد البحث",
+        "MATCHED": "تمت مطابقة الغرض",
+        "RETURNED": "تم التسليم",
+        "CLOSED": "مغلقة"
       },
       "techSupport": {
-        "NEW": "مستلم", "ASSIGNED": "قيد المعالجة", "IN_PROGRESS": "قيد المعالجة",
-        "WAITING_CONFIRMATION": "تم إرسال الحل — بانتظار تأكيدكم", "CLOSED": "تم الحل", "REOPENED": "أُعيد فتحه ويُتابَع"
+        "NEW": "مستلم",
+        "ASSIGNED": "قيد المعالجة",
+        "IN_PROGRESS": "قيد المعالجة",
+        "WAITING_CONFIRMATION": "تم إرسال الحل — بانتظار تأكيدكم",
+        "CLOSED": "تم الحل",
+        "REOPENED": "أُعيد فتحه ويُتابَع"
       }
     },
     "actionNames": {
@@ -837,12 +869,6 @@
     "willSendToRegistered": "سيُرسل الرمز حصراً إلى الرقم المسجّل:",
     "openWhatsAppSend": "فتح واتساب والإرسال",
     "cancel": "إلغاء",
-    "transferTitle": "تحويل البلاغ لمختص آخر",
-    "assignTitle": "إسناد البلاغ لمختص تقنية معلومات",
-    "currentSpecialist": "المختص الحالي:",
-    "selectSpecialist": "اختر المختص...",
-    "transferBtn": "تحويل",
-    "assignBtn": "إسناد",
     "parentGuardian": "ولي الأمر",
     "student": "الطالب",
     "nationalIdLabel": "رقم الهوية:",
@@ -872,6 +898,8 @@
     },
     "lostFound": {
       "ITEM_REGISTERED": "تم تسجيل الغرض",
+      "ITEM_ASSIGNED": "تم إسناد البلاغ",
+      "ITEM_TRANSFERRED": "تم تحويل إسناد البلاغ",
       "ITEM_MATCHED": "تمت مطابقة الغرض بصاحبه",
       "ITEM_RETURNED": "تم تسليم الغرض",
       "ITEM_CLOSED": "تم إغلاق السجل",

@@ -8,7 +8,7 @@ import { useUsers } from '../../hooks/useUsers';
 import { waLink, buildReceiptMessage, buildResolutionMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { ROLES } from '../../config/roles';
-import AssigneeMultiSelect, { eligibleAssignees } from './AssigneeMultiSelect';
+import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 

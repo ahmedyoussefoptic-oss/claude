@@ -18,6 +18,7 @@ const FILTER_IDS = ['ALL', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_CONFIRMATION', 'C
 export default function TechSupport() {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
+  const listSep = i18n.language === 'ar' ? '، ' : ', ';
   const { userData } = useAuthStore();
   const branches = useBranches();
   const problemTypes = useProblemTypes();
@@ -46,7 +47,15 @@ export default function TechSupport() {
     }
     const q = query(collection(db, 'techSupportTickets'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setTickets(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+      // Normalizes tickets created before assignedTo became an array
+      // (legacy docs stored a single scalar uid/name) so every consumer of
+      // `tickets` can treat assignedTo/assignedToNames as arrays uniformly.
+      setTickets(snapshot.docs.map((d) => {
+        const data = d.data();
+        const assignedTo = Array.isArray(data.assignedTo) ? data.assignedTo : (data.assignedTo ? [data.assignedTo] : []);
+        const assignedToNames = data.assignedToNames || (data.assignedToName ? [data.assignedToName] : []);
+        return { id: d.id, ...data, assignedTo, assignedToNames };
+      }));
       setLoading(false);
     });
     return () => unsubscribe();
@@ -162,7 +171,7 @@ export default function TechSupport() {
                       {problemTypeName(tk.problemType)}
                     </td>
                     <td className="px-6 py-4 text-slate-600">{branchName(tk.branch)}</td>
-                    <td className="px-6 py-4 text-slate-600">{tk.assignedToName || '—'}</td>
+                    <td className="px-6 py-4 text-slate-600">{tk.assignedToNames?.join(listSep) || '—'}</td>
                     <td className="px-6 py-4 text-slate-600" dir="ltr">
                       {tk.createdAt ? format(tk.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}
                     </td>

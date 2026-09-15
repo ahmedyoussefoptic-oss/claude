@@ -45,6 +45,8 @@ async function sendEmail(to, subject, text) {
 }
 
 const OPEN_STATUSES = ["RECEIVED", "IN_PROGRESS", "WAITING_PARENT_RESPONSE", "ESCALATED"];
+const OPEN_TICKET_STATUSES = ["NEW", "ASSIGNED", "IN_PROGRESS", "WAITING_CONFIRMATION", "REOPENED"];
+const OPEN_LOST_FOUND_STATUSES = ["UNCLAIMED", "MATCHED"];
 
 // Removes a staff account (Firebase Auth + Firestore profile) via the Admin
 // SDK. Only callers who are ADMIN or hold the `users` permission may call
@@ -77,14 +79,34 @@ exports.deleteStaffUser = onCall(async (request) => {
     }
   }
 
-  const openCount = (
+  const openComplaints = (
     await db.collection("complaints")
       .where("assignedTo", "array-contains", uid)
       .where("status", "in", OPEN_STATUSES)
       .get()
   ).size;
-  if (openCount > 0) {
-    throw new HttpsError("failed-precondition", `لا يمكن الحذف: لدى هذا الموظف ${openCount} ملاحظة مفتوحة — أعد إسنادها أولاً.`);
+  if (openComplaints > 0) {
+    throw new HttpsError("failed-precondition", `لا يمكن الحذف: لدى هذا الموظف ${openComplaints} ملاحظة مفتوحة — أعد إسنادها أولاً.`);
+  }
+
+  const openTickets = (
+    await db.collection("techSupportTickets")
+      .where("assignedTo", "array-contains", uid)
+      .where("status", "in", OPEN_TICKET_STATUSES)
+      .get()
+  ).size;
+  if (openTickets > 0) {
+    throw new HttpsError("failed-precondition", `لا يمكن الحذف: لدى هذا الموظف ${openTickets} بلاغ تقني مفتوح — أعد إسناده أولاً.`);
+  }
+
+  const openLostFound = (
+    await db.collection("lostFoundItems")
+      .where("assignedTo", "array-contains", uid)
+      .where("status", "in", OPEN_LOST_FOUND_STATUSES)
+      .get()
+  ).size;
+  if (openLostFound > 0) {
+    throw new HttpsError("failed-precondition", `لا يمكن الحذف: لدى هذا الموظف ${openLostFound} بلاغ مفقودات مفتوح — أعد إسناده أولاً.`);
   }
 
   await db.collection("users").doc(uid).delete();
@@ -293,8 +315,8 @@ exports.calculateItTicketSla = onDocumentCreated("techSupportTickets/{ticketId}"
   if (!snap) return;
   const data = snap.data();
 
-  if (data.assignedTo) {
-    await notifyUsers([data.assignedTo], {
+  if (data.assignedTo?.length) {
+    await notifyUsers(data.assignedTo, {
       title: "بلاغ تقني جديد أُسند إليك",
       body: `البلاغ رقم ${data.ticketId} (${data.problemType}) تم إسناده إليك.`,
       complaintId: event.params.ticketId,
@@ -307,15 +329,20 @@ exports.calculateItTicketSla = onDocumentCreated("techSupportTickets/{ticketId}"
   return snap.ref.update({ dueDate: Timestamp.fromDate(dueDate) });
 });
 
-// Notifies a (re)assigned IT specialist on later transfers — creation-time
-// assignment is handled by calculateItTicketSla above. Also notifies
-// managers/executives when a staff member manually escalates a ticket
-// (see TechSupportDetails.jsx's handleEscalate, which bumps `escalation`).
+// Notifies newly (re)assigned specialists on later transfers — creation-time
+// assignment is handled by calculateItTicketSla above. A multi-person edit
+// that keeps some existing assignees shouldn't re-notify them, same as
+// complaints. Also notifies managers/executives when a staff member manually
+// escalates a ticket (see TechSupportDetails.jsx's handleEscalate, which
+// bumps `escalation`).
 exports.handleItTicketAssignment = onDocumentUpdated("techSupportTickets/{ticketId}", async (event) => {
   const before = event.data.before.data();
   const after = event.data.after.data();
-  if (after.assignedTo && after.assignedTo !== before.assignedTo) {
-    await notifyUsers([after.assignedTo], {
+
+  const beforeAssigned = new Set(before.assignedTo || []);
+  const newlyAssigned = (after.assignedTo || []).filter((uid) => !beforeAssigned.has(uid));
+  if (newlyAssigned.length > 0) {
+    await notifyUsers(newlyAssigned, {
       title: "تم إسناد بلاغ تقني لك",
       body: `البلاغ رقم ${after.ticketId} تم إسناده إليك للمعالجة.`,
       complaintId: event.params.ticketId,
@@ -332,6 +359,40 @@ exports.handleItTicketAssignment = onDocumentUpdated("techSupportTickets/{ticket
       body: `البلاغ رقم ${after.ticketId} تم تصعيده ويحتاج متابعة.`,
       complaintId: event.params.ticketId,
       type: "IT_ESCALATED",
+    });
+  }
+});
+
+// Lost & found has no SLA/escalation concept (see lostFoundBreakdown in
+// BranchIndicators.jsx) — these two triggers only ever notify on assignment,
+// mirroring calculateItTicketSla/handleItTicketAssignment above but simpler.
+exports.notifyLostFoundAssignment = onDocumentCreated("lostFoundItems/{itemId}", async (event) => {
+  const snap = event.data;
+  if (!snap) return;
+  const data = snap.data();
+
+  if (data.assignedTo?.length) {
+    await notifyUsers(data.assignedTo, {
+      title: "تم إسناد بلاغ مفقودات لك",
+      body: `البلاغ رقم ${data.itemCode} (${data.itemName}) تم إسناده إليك.`,
+      complaintId: event.params.itemId,
+      type: "LF_ASSIGNED",
+    });
+  }
+});
+
+exports.handleLostFoundAssignment = onDocumentUpdated("lostFoundItems/{itemId}", async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
+
+  const beforeAssigned = new Set(before.assignedTo || []);
+  const newlyAssigned = (after.assignedTo || []).filter((uid) => !beforeAssigned.has(uid));
+  if (newlyAssigned.length > 0) {
+    await notifyUsers(newlyAssigned, {
+      title: "تم إسناد بلاغ مفقودات لك",
+      body: `البلاغ رقم ${after.itemCode} (${after.itemName}) تم إسناده إليك.`,
+      complaintId: event.params.itemId,
+      type: "LF_ASSIGNED",
     });
   }
 });
@@ -559,8 +620,8 @@ exports.scheduledSlaEngine = onSchedule("every 1 hours", async (event) => {
         });
       } else if (data.status === "ASSIGNED" && data.assignedAt && !data.startReminderSent) {
         const elapsed = now.toMillis() - data.assignedAt.toMillis();
-        if (elapsed >= 60 * 60 * 1000 && data.assignedTo) {
-          await notifyUsers([data.assignedTo], {
+        if (elapsed >= 60 * 60 * 1000 && data.assignedTo?.length) {
+          await notifyUsers(data.assignedTo, {
             title: "تذكير: لم تبدأ معالجة البلاغ التقني بعد",
             body: `البلاغ رقم ${data.ticketId} أُسند إليك منذ أكثر من ساعة ولم تبدأ معالجته.`,
             complaintId: doc.id,
@@ -933,8 +994,8 @@ exports.submitPublicTechSupportTicket = onCall(async (request) => {
     identityVerifiedBy: null,
     source: "PARENT_PORTAL",
     status: assignee ? "ASSIGNED" : "NEW",
-    assignedTo: assignee?.id || null,
-    assignedToName: assignee?.name || "",
+    assignedTo: assignee ? [assignee.id] : [],
+    assignedToNames: assignee ? [assignee.name] : [],
     assignedAt: assignee ? now : null,
     isOverdue: false,
     reopenCount: 0,
@@ -953,7 +1014,7 @@ exports.submitPublicTechSupportTicket = onCall(async (request) => {
       action: "TICKET_ASSIGNED",
       actorId: null,
       actorName: "ولي الأمر (نموذج إلكتروني)",
-      metadata: { toUserId: assignee.id, toUserName: assignee.name },
+      metadata: { toUserNames: [assignee.name], addedNames: [assignee.name] },
       createdAt: now,
     });
   }

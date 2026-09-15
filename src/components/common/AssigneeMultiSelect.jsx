@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, X } from 'lucide-react';
 
-// Staff eligible to be assigned a complaint: specialists (the usual case),
-// plus upper management and the system admin so a complaint can be routed
-// to them directly when it needs executive attention.
+// Staff eligible to be assigned a complaint/ticket/item: specialists (the
+// usual case), plus upper management and the system admin so a record can be
+// routed to them directly when it needs executive attention. `complaintType`
+// is optional and only affects sort priority (department match first) —
+// callers with no natural "type" concept (lost & found) can omit it.
 export function eligibleAssignees(staff, { branch, complaintType } = {}) {
   return staff
     .filter((u) =>
@@ -21,8 +23,8 @@ export function eligibleAssignees(staff, { branch, complaintType } = {}) {
 }
 
 // Checkbox-list multi-select with removable chips for the selected staff —
-// shared between ComplaintForm (initial assignment) and ComplaintDetails
-// (editing assignment later) so both stay in sync automatically.
+// shared across every module that assigns multiple people to a record
+// (complaints, tech support, lost & found) so they all stay in sync.
 export default function AssigneeMultiSelect({ options, selected, onChange, placeholder }) {
   const { t } = useTranslation();
   const ROLE_TAGS = { ADMIN: t('assigneeSelect.roleTagAdmin'), UPPER_MANAGEMENT: t('assigneeSelect.roleTagUpperManagement') };

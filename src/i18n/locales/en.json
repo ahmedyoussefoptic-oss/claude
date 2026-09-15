@@ -265,7 +265,16 @@
     "roleTagUpperManagement": "Upper Management",
     "noEligibleStaff": "No eligible staff to assign",
     "peopleSelected_one": "{{count}} person selected",
-    "peopleSelected_other": "{{count}} people selected"
+    "peopleSelected_other": "{{count}} people selected",
+    "editAssignmentTitle": "Edit assignment",
+    "newAssignmentTitle": "Assign",
+    "currentAssigneesLabel": "Currently assigned to:",
+    "selectStaffPlaceholder": "Select staff...",
+    "saveAssignmentBtn": "Save assignment",
+    "assignedToLogLabel": "Assigned to:",
+    "addedLogLabel": "Added:",
+    "removedLogLabel": "Removed:",
+    "noChangeAlert": "No change was made to the assignment."
   },
   "messageStatus": {
     "receiptSent": "Receipt message sent to parent",
@@ -334,7 +343,9 @@
     "uploadPhotoClick": "Click to upload a photo",
     "saveError": "An error occurred while saving the record. Please try again.",
     "saving": "Saving...",
-    "saveBtn": "Save Record"
+    "saveBtn": "Save Record",
+    "assignSectionTitle": "Assigned to (optional)",
+    "assignHint": "The report can be assigned to more than one staff member at once — everyone you choose gets an instant notification as soon as it's saved."
   },
   "publicReport": {
     "kinds": {
@@ -437,21 +448,42 @@
   },
   "parentPortal": {
     "typeConfig": {
-      "complaint": { "title": "Feedback", "label": "Feedback #" },
-      "lostFound": { "title": "Lost & Found Report", "label": "Report #" },
-      "techSupport": { "title": "Tech Support Ticket", "label": "Ticket #" }
+      "complaint": {
+        "title": "Feedback",
+        "label": "Feedback #"
+      },
+      "lostFound": {
+        "title": "Lost & Found Report",
+        "label": "Report #"
+      },
+      "techSupport": {
+        "title": "Tech Support Ticket",
+        "label": "Ticket #"
+      }
     },
     "statusNames": {
       "complaint": {
-        "RECEIVED": "Received", "IN_PROGRESS": "In Progress", "WAITING_PARENT_RESPONSE": "Awaiting Your Reply",
-        "SOLVED": "Solved", "CLOSED": "Closed", "REJECTED": "Rejected", "ESCALATED": "Under Management Review"
+        "RECEIVED": "Received",
+        "IN_PROGRESS": "In Progress",
+        "WAITING_PARENT_RESPONSE": "Awaiting Your Reply",
+        "SOLVED": "Solved",
+        "CLOSED": "Closed",
+        "REJECTED": "Rejected",
+        "ESCALATED": "Under Management Review"
       },
       "lostFound": {
-        "UNCLAIMED": "Being Searched For", "MATCHED": "Item Matched", "RETURNED": "Returned", "CLOSED": "Closed"
+        "UNCLAIMED": "Being Searched For",
+        "MATCHED": "Item Matched",
+        "RETURNED": "Returned",
+        "CLOSED": "Closed"
       },
       "techSupport": {
-        "NEW": "Received", "ASSIGNED": "In Progress", "IN_PROGRESS": "In Progress",
-        "WAITING_CONFIRMATION": "Solution Sent — Awaiting Your Confirmation", "CLOSED": "Resolved", "REOPENED": "Reopened and Being Followed Up"
+        "NEW": "Received",
+        "ASSIGNED": "In Progress",
+        "IN_PROGRESS": "In Progress",
+        "WAITING_CONFIRMATION": "Solution Sent — Awaiting Your Confirmation",
+        "CLOSED": "Resolved",
+        "REOPENED": "Reopened and Being Followed Up"
       }
     },
     "actionNames": {
@@ -837,12 +869,6 @@
     "willSendToRegistered": "The code will be sent only to the registered number:",
     "openWhatsAppSend": "Open WhatsApp and send",
     "cancel": "Cancel",
-    "transferTitle": "Transfer ticket to another specialist",
-    "assignTitle": "Assign ticket to an IT specialist",
-    "currentSpecialist": "Current specialist:",
-    "selectSpecialist": "Select specialist...",
-    "transferBtn": "Transfer",
-    "assignBtn": "Assign",
     "parentGuardian": "Parent/Guardian",
     "student": "Student",
     "nationalIdLabel": "National ID:",
@@ -872,6 +898,8 @@
     },
     "lostFound": {
       "ITEM_REGISTERED": "Item registered",
+      "ITEM_ASSIGNED": "Report assigned",
+      "ITEM_TRANSFERRED": "Report assignment transferred",
       "ITEM_MATCHED": "Item matched to owner",
       "ITEM_RETURNED": "Item returned",
       "ITEM_CLOSED": "Record closed",

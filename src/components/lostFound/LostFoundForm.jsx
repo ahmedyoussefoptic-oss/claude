@@ -5,17 +5,20 @@ import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/fi
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
+import { useUsers } from '../../hooks/useUsers';
 import { useBranches, useItemCategories } from '../../hooks/useOrgData';
 import { generateItemCode } from '../../config/lostFound';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { waLink, buildLostFoundReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
+import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 
 const REPORT_TYPE_IDS = ['FOUND', 'LOST'];
 
 export default function LostFoundForm({ onClose }) {
   const { t } = useTranslation();
   const { user } = useAuthStore();
+  const staff = useUsers();
   const branches = useBranches();
   const itemCategories = useItemCategories();
   const templates = useMessageTemplates();
@@ -34,7 +37,10 @@ export default function LostFoundForm({ onClose }) {
     reporterPhone: '',
     studentName: '',
     studentId: '',
+    assignedTo: [],
   });
+
+  const assigneeOptions = eligibleAssignees(staff, { branch: formData.branch });
 
   const [photo, setPhoto] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -89,6 +95,7 @@ export default function LostFoundForm({ onClose }) {
       }
 
       const now = serverTimestamp();
+      const assignees = formData.assignedTo.map((id) => staff.find((u) => u.id === id)).filter(Boolean);
 
       const newItem = {
         ...formData,
@@ -96,6 +103,8 @@ export default function LostFoundForm({ onClose }) {
         photoUrl,
         status: 'UNCLAIMED',
         receiver: user.uid,
+        assignedToNames: assignees.map((a) => a.name),
+        assignedAt: assignees.length ? now : null,
         createdAt: now,
         updatedAt: now,
       };
@@ -107,6 +116,15 @@ export default function LostFoundForm({ onClose }) {
         actorId: user.uid,
         createdAt: now,
       });
+
+      if (assignees.length > 0) {
+        await addDoc(collection(db, `lostFoundItems/${docRef.id}/activityLog`), {
+          action: 'ITEM_ASSIGNED',
+          actorId: user.uid,
+          metadata: { toUserIds: assignees.map((a) => a.id), toUserNames: assignees.map((a) => a.name) },
+          createdAt: now,
+        });
+      }
 
       setSavedItem({
         id: docRef.id,
@@ -316,6 +334,17 @@ export default function LostFoundForm({ onClose }) {
                     {photo && <p className="text-xs text-slate-500" dir="ltr">{photo.name}</p>}
                   </div>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('lostFoundForm.assignSectionTitle')}</label>
+                <AssigneeMultiSelect
+                  options={assigneeOptions}
+                  selected={formData.assignedTo}
+                  onChange={(ids) => setFormData((prev) => ({ ...prev, assignedTo: ids }))}
+                  placeholder={t('complaintForm.assignPlaceholder')}
+                />
+                <p className="text-xs text-slate-500 mt-1">{t('lostFoundForm.assignHint')}</p>
               </div>
             </div>
           </form>

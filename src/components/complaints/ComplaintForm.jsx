@@ -11,7 +11,7 @@ import { waLink, buildReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { STAGES } from '../../config/complaintTypes';
-import AssigneeMultiSelect, { eligibleAssignees } from './AssigneeMultiSelect';
+import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 
 const PRIORITY_IDS = ['NORMAL', 'HIGH', 'URGENT'];
 

@@ -109,8 +109,8 @@ export default function TechSupportForm({ onClose }) {
         identityVerified: true,
         identityVerifiedBy: user.uid,
         status: assignee ? 'ASSIGNED' : 'NEW',
-        assignedTo: assignee?.id || null,
-        assignedToName: assignee?.name || '',
+        assignedTo: assignee ? [assignee.id] : [],
+        assignedToNames: assignee ? [assignee.name] : [],
         assignedAt: assignee ? now : null,
         isOverdue: false,
         reopenCount: 0,
@@ -135,7 +135,7 @@ export default function TechSupportForm({ onClose }) {
         await addDoc(collection(db, `techSupportTickets/${docRef.id}/activityLog`), {
           action: 'TICKET_ASSIGNED',
           actorId: user.uid,
-          metadata: { toUserId: assignee.id, toUserName: assignee.name },
+          metadata: { toUserNames: [assignee.name], addedNames: [assignee.name] },
           createdAt: now,
         });
       }
