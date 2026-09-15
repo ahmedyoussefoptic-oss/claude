@@ -9,6 +9,7 @@ import ComplaintForm from '../components/complaints/ComplaintForm';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
+import { normalizeAssignees } from '../utils/assignees';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -63,10 +64,10 @@ export default function ComplaintsList() {
     }
     const q = query(collection(db, 'complaints'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
+      const docs = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return { id: doc.id, ...data, ...normalizeAssignees(data) };
+      });
       setComplaints(docs);
       setLoading(false);
     });

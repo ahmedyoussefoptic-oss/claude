@@ -57,12 +57,19 @@ function ComplaintDetailsInner({ complaint, onClose }) {
   const [reply, setReply] = useState('');
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('history'); // 'history' | 'internal'
-  const [selectedAssignees, setSelectedAssignees] = useState(complaint.assignedTo || []);
+  // Defensive: a handful of very old complaints still hold assignedTo as a
+  // pre-migration scalar uid instead of an array — callers (ComplaintsList,
+  // Reports, Search) normalize this on fetch, but re-normalize here too so
+  // this component can never crash on `.every`/`.includes` even if some
+  // future caller forgets to.
+  const normalizedAssignedTo = Array.isArray(complaint.assignedTo) ? complaint.assignedTo : (complaint.assignedTo ? [complaint.assignedTo] : []);
+  const normalizedAssignedToNames = Array.isArray(complaint.assignedToNames) ? complaint.assignedToNames : (complaint.assignedToNames ? [complaint.assignedToNames] : []);
+  const [selectedAssignees, setSelectedAssignees] = useState(normalizedAssignedTo);
 
   // Resync when the user switches to a different complaint (not on every
   // realtime update of the same one, so an in-progress edit isn't stomped).
   useEffect(() => {
-    setSelectedAssignees(complaint.assignedTo || []);
+    setSelectedAssignees(normalizedAssignedTo);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [complaint.id]);
 
@@ -125,7 +132,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
       } else if (actionType === 'WAIT_PARENT') {
         await addLog('COMPLAINT_STATUS_CHANGED', { to: 'WAITING_PARENT_RESPONSE' }, 'WAITING_PARENT_RESPONSE');
       } else if (actionType === 'ASSIGN') {
-        const before = complaint.assignedTo || [];
+        const before = normalizedAssignedTo;
         const addedIds = selectedAssignees.filter((id) => !before.includes(id));
         const removedIds = before.filter((id) => !selectedAssignees.includes(id));
         if (addedIds.length === 0 && removedIds.length === 0) {
@@ -134,7 +141,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
         }
         const selectedUsers = selectedAssignees.map((id) => users.find((u) => u.id === id)).filter(Boolean);
         const addedNames = addedIds.map((id) => users.find((u) => u.id === id)?.name).filter(Boolean);
-        const removedNames = removedIds.map((id) => complaint.assignedToNames?.[before.indexOf(id)] || users.find((u) => u.id === id)?.name).filter(Boolean);
+        const removedNames = removedIds.map((id) => normalizedAssignedToNames[before.indexOf(id)] || users.find((u) => u.id === id)?.name).filter(Boolean);
         await addLog(
           before.length === 0 ? 'COMPLAINT_ASSIGNED' : 'COMPLAINT_TRANSFERRED',
           { toUserNames: selectedUsers.map((u) => u.name), addedNames, removedNames },
@@ -376,10 +383,10 @@ function ComplaintDetailsInner({ complaint, onClose }) {
             <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm print:hidden">
               <h3 className="font-bold text-slate-900 text-sm mb-3 flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-slate-400" />
-                {(complaint.assignedTo?.length ?? 0) > 0 ? t('complaintDetails.editAssignment') : t('complaintDetails.newAssignment')}
+                {normalizedAssignedTo.length > 0 ? t('complaintDetails.editAssignment') : t('complaintDetails.newAssignment')}
               </h3>
-              {complaint.assignedToNames?.length > 0 && (
-                <p className="text-sm text-slate-500 mb-3">{t('complaintDetails.currentAssignees')} <span className="font-medium text-slate-800">{complaint.assignedToNames.join(listSep)}</span></p>
+              {normalizedAssignedToNames.length > 0 && (
+                <p className="text-sm text-slate-500 mb-3">{t('complaintDetails.currentAssignees')} <span className="font-medium text-slate-800">{normalizedAssignedToNames.join(listSep)}</span></p>
               )}
               <div className="space-y-3">
                 <AssigneeMultiSelect
@@ -389,7 +396,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
                   placeholder={t('complaintDetails.selectStaffPlaceholder')}
                 />
                 <button
-                  disabled={loading || (selectedAssignees.length === (complaint.assignedTo || []).length && selectedAssignees.every((id) => (complaint.assignedTo || []).includes(id)))}
+                  disabled={loading || (selectedAssignees.length === normalizedAssignedTo.length && selectedAssignees.every((id) => normalizedAssignedTo.includes(id)))}
                   onClick={() => handleAction('ASSIGN')}
                   className="px-5 py-2.5 bg-slate-800 text-white rounded-xl text-sm font-medium hover:bg-slate-900 transition-colors disabled:opacity-50"
                 >

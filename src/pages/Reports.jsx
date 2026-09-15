@@ -5,6 +5,7 @@ import { db } from '../config/firebase';
 import { useBranches, useComplaintTypes, useSubTypes } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
+import { normalizeAssignees } from '../utils/assignees';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import logo from '../assets/logo.png';
@@ -61,7 +62,10 @@ export default function Reports() {
     }
     const q = query(collection(db, 'complaints'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setComplaints(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+      setComplaints(snapshot.docs.map((d) => {
+        const data = d.data();
+        return { id: d.id, ...data, ...normalizeAssignees(data) };
+      }));
     });
     return () => unsubscribe();
   }, [userData?.access, userData?.branch]);
