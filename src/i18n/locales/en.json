@@ -213,7 +213,17 @@
     "deleteReasonPrompt": "Write the reason for permanently deleting this feedback (required):",
     "solutionRequiredAlert": "Please write the solution details in the text box below before closing.",
     "noAssignmentChangeAlert": "No change was made to the assignment.",
-    "rejectReasonRequiredAlert": "Please write the rejection reason in the text box below."
+    "rejectReasonRequiredAlert": "Please write the rejection reason in the text box below.",
+    "recordSolutionNote": "Record a voice note for the solution",
+    "stopRecording": "Stop recording",
+    "recordingInProgress": "Recording...",
+    "micError": "Couldn't access the microphone — make sure the browser is allowed to use it.",
+    "solutionRecordingPrefix": "solution_recording_",
+    "startDictation": "Dictate the solution by voice",
+    "stopDictation": "Stop dictation",
+    "dictationInProgress": "Listening...",
+    "dictationUnsupported": "Voice dictation is not supported in this browser.",
+    "dictationError": "Couldn't recognize the speech. Please try again."
   },
   "complaintForm": {
     "priorities": {

@@ -213,7 +213,17 @@
     "deleteReasonPrompt": "اكتب سبب حذف الملاحظة نهائياً (إلزامي):",
     "solutionRequiredAlert": "يرجى كتابة تفاصيل الحل في صندوق النص أدناه قبل الإغلاق.",
     "noAssignmentChangeAlert": "لم يطرأ أي تغيير على الإسناد.",
-    "rejectReasonRequiredAlert": "يرجى كتابة سبب رفض الملاحظة في صندوق النص أدناه."
+    "rejectReasonRequiredAlert": "يرجى كتابة سبب رفض الملاحظة في صندوق النص أدناه.",
+    "recordSolutionNote": "تسجيل ملاحظة صوتية للحل",
+    "stopRecording": "إيقاف التسجيل",
+    "recordingInProgress": "جارٍ التسجيل...",
+    "micError": "تعذّر الوصول إلى الميكروفون — تأكد من السماح للمتصفح باستخدامه.",
+    "solutionRecordingPrefix": "تسجيل_الحل_",
+    "startDictation": "إملاء الحل بالصوت",
+    "stopDictation": "إيقاف الإملاء",
+    "dictationInProgress": "جارٍ الاستماع...",
+    "dictationUnsupported": "الإملاء الصوتي غير مدعوم في هذا المتصفح.",
+    "dictationError": "تعذّر التعرف على الصوت. حاول مرة أخرى."
   },
   "complaintForm": {
     "priorities": {

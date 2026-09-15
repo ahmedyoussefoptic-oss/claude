@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, Trash2, Star, Link2 } from 'lucide-react';
+import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, Trash2, Star, Link2, Mic, Square } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useUsers } from '../../hooks/useUsers';
 import { waLink, buildReceiptMessage, buildResolutionMessage } from '../../utils/whatsapp';
@@ -66,6 +67,101 @@ function ComplaintDetailsInner({ complaint, onClose }) {
   const normalizedAssignedToNames = Array.isArray(complaint.assignedToNames) ? complaint.assignedToNames : (complaint.assignedToNames ? [complaint.assignedToNames] : []);
   const [selectedAssignees, setSelectedAssignees] = useState(normalizedAssignedTo);
 
+  // Voice solving: a short voice note can be attached to the solution (same
+  // record-then-upload pattern as ComplaintForm.jsx's attachment recorder),
+  // and/or the solution text itself can be dictated via the Web Speech API
+  // instead of typed.
+  const [recording, setRecording] = useState(false);
+  const [recordingError, setRecordingError] = useState(null);
+  const [pendingRecording, setPendingRecording] = useState(null);
+  const mediaRecorderRef = useRef(null);
+  const recordedChunksRef = useRef([]);
+
+  const [dictating, setDictating] = useState(false);
+  const [dictationError, setDictationError] = useState(null);
+  const recognitionRef = useRef(null);
+  const dictationBaseRef = useRef('');
+  const dictationFinalRef = useRef('');
+  const dictationSupported = typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+  // Stop any in-progress mic stream / speech recognition if the modal is
+  // closed mid-recording, so the browser's mic indicator doesn't stay lit.
+  useEffect(() => {
+    return () => {
+      mediaRecorderRef.current?.stream?.getTracks().forEach((t) => t.stop());
+      recognitionRef.current?.stop();
+    };
+  }, []);
+
+  const toggleRecording = async () => {
+    setRecordingError(null);
+    if (recording) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      recordedChunksRef.current = [];
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) recordedChunksRef.current.push(e.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(recordedChunksRef.current, { type: 'audio/webm' });
+        const file = new File([blob], `${t('complaintDetails.solutionRecordingPrefix')}${Date.now()}.webm`, { type: 'audio/webm' });
+        setPendingRecording(file);
+        stream.getTracks().forEach((t) => t.stop());
+        setRecording(false);
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setRecording(true);
+    } catch (err) {
+      console.error(err);
+      setRecordingError(t('complaintDetails.micError'));
+    }
+  };
+
+  const toggleDictation = () => {
+    setDictationError(null);
+    if (dictating) {
+      recognitionRef.current?.stop();
+      return;
+    }
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setDictationError(t('complaintDetails.dictationUnsupported'));
+      return;
+    }
+    const recognition = new SpeechRecognition();
+    recognition.lang = i18n.language === 'ar' ? 'ar-SA' : 'en-US';
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    dictationBaseRef.current = reply ? `${reply} ` : '';
+    dictationFinalRef.current = '';
+    recognition.onresult = (event) => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const transcript = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          dictationFinalRef.current += `${transcript} `;
+        } else {
+          interim += transcript;
+        }
+      }
+      setReply(dictationBaseRef.current + dictationFinalRef.current + interim);
+    };
+    recognition.onerror = (event) => {
+      if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        setDictationError(t('complaintDetails.dictationError'));
+      }
+    };
+    recognition.onend = () => setDictating(false);
+    recognitionRef.current = recognition;
+    recognition.start();
+    setDictating(true);
+  };
+
   // Resync when the user switches to a different complaint (not on every
   // realtime update of the same one, so an in-progress edit isn't stomped).
   useEffect(() => {
@@ -123,8 +219,26 @@ function ComplaintDetailsInner({ complaint, onClose }) {
           alert(t('complaintDetails.solutionRequiredAlert'));
           return;
         }
-        await addLog('SOLUTION_ADDED', { solutionDetails: reply }, { status: 'SOLVED', solutionDetails: reply, solvedAt: serverTimestamp() });
+        const updates = { status: 'SOLVED', solutionDetails: reply, solvedAt: serverTimestamp() };
+        if (pendingRecording) {
+          const fileRef = ref(storage, `complaints/${complaint.complaintId}/${pendingRecording.name}`);
+          await uploadBytes(fileRef, pendingRecording);
+          const url = await getDownloadURL(fileRef);
+          updates.attachments = [
+            ...(complaint.attachments || []),
+            {
+              fileName: pendingRecording.name,
+              fileUrl: url,
+              mimeType: pendingRecording.type,
+              size: pendingRecording.size,
+              uploadedBy: user.uid,
+              createdAt: new Date().toISOString(),
+            },
+          ];
+        }
+        await addLog('SOLUTION_ADDED', { solutionDetails: reply }, updates);
         setReply('');
+        setPendingRecording(null);
       } else if (actionType === 'COMMENT') {
         if (!reply.trim()) return;
         await addLog('INTERNAL_COMMENT_ADDED', { comment: reply });
@@ -540,6 +654,44 @@ function ComplaintDetailsInner({ complaint, onClose }) {
 
         {/* Action Bar */}
         <div className="bg-white border-t border-slate-200 p-4 print:hidden">
+          {activeTab === 'history' && canEdit && (
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <button
+                type="button"
+                onClick={toggleRecording}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                  recording ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                }`}
+              >
+                {recording ? <Square className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                {recording ? t('complaintDetails.stopRecording') : t('complaintDetails.recordSolutionNote')}
+              </button>
+              {dictationSupported && (
+                <button
+                  type="button"
+                  onClick={toggleDictation}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors ${
+                    dictating ? 'bg-primary text-white hover:bg-primary-dark' : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {dictating ? <Square className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                  {dictating ? t('complaintDetails.stopDictation') : t('complaintDetails.startDictation')}
+                </button>
+              )}
+              {pendingRecording && (
+                <span className="inline-flex items-center gap-1.5 text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
+                  <Mic className="w-3 h-3" />
+                  {pendingRecording.name}
+                  <button type="button" onClick={() => setPendingRecording(null)} className="hover:text-red-600">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {recording && <span className="text-xs text-red-600 animate-pulse">{t('complaintDetails.recordingInProgress')}</span>}
+              {dictating && <span className="text-xs text-primary animate-pulse">{t('complaintDetails.dictationInProgress')}</span>}
+              {(recordingError || dictationError) && <span className="text-xs text-red-600">{recordingError || dictationError}</span>}
+            </div>
+          )}
           <div className="flex items-end gap-3">
             <div className="flex-1 relative">
               <textarea
