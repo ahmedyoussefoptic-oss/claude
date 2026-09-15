@@ -14,19 +14,44 @@ function playChime() {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     if (!Ctx) return;
     const ctx = new Ctx();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    osc.frequency.value = 880;
-    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.4);
-    osc.onended = () => ctx.close();
+    const fire = () => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.4);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.4);
+      osc.onended = () => ctx.close();
+    };
+    // A freshly-created AudioContext can start "suspended" under the
+    // browser's autoplay policy when it isn't created in direct response to
+    // a user gesture (exactly the case here — a Firestore realtime update
+    // triggers this, not a click) — no error is thrown, it just silently
+    // produces no sound unless explicitly resumed first.
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(fire).catch(() => {});
+    } else {
+      fire();
+    }
   } catch {
-    // Web Audio unavailable or blocked by the browser's autoplay policy — silently skip.
+    // Web Audio unavailable — silently skip.
+  }
+}
+
+// Mirrors the unread count onto the installed PWA's home-screen icon badge
+// (Android/desktop Chrome & Edge; iOS Safari doesn't support this API yet
+// for home-screen web apps, so this is a no-op there).
+function setAppBadge(count) {
+  if (!('setAppBadge' in navigator)) return;
+  try {
+    if (count > 0) navigator.setAppBadge(count).catch(() => {});
+    else navigator.clearAppBadge?.().catch(() => {});
+  } catch {
+    // Badging API unavailable in this context — silently skip.
   }
 }
 
@@ -43,6 +68,10 @@ export default function NotificationBell() {
   const isFirstLoad = useRef(true);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  useEffect(() => {
+    setAppBadge(unreadCount);
+  }, [unreadCount]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {

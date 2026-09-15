@@ -223,7 +223,8 @@
     "stopDictation": "Stop dictation",
     "dictationInProgress": "Listening...",
     "dictationUnsupported": "Voice dictation is not supported in this browser.",
-    "dictationError": "Couldn't recognize the speech. Please try again."
+    "dictationError": "Couldn't recognize the speech. Please try again.",
+    "recordingUploadFailedAlert": "The solution was saved, but the voice recording failed to upload: {{message}}"
   },
   "complaintForm": {
     "priorities": {
@@ -268,7 +269,8 @@
     "saveError": "An error occurred while saving the feedback. Please try again.",
     "saving": "Saving...",
     "saveBtn": "Save Feedback",
-    "recordingFilePrefix": "Voice_Recording_"
+    "recordingFilePrefix": "Voice_Recording_",
+    "attachmentUploadFailedTitle": "The feedback was saved, but these attachments failed to upload:"
   },
   "assigneeSelect": {
     "roleTagAdmin": "System Admin",

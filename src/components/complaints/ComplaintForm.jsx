@@ -167,21 +167,30 @@ export default function ComplaintForm({ onClose }) {
     
     try {
       const complaintId = await generateComplaintId();
-      
-      // Upload files first
+
+      // Upload files first — one failed upload (e.g. a Storage rule
+      // rejecting a particular file) must not lose the whole complaint, so
+      // each file is tried independently and a failure is skipped (and
+      // reported afterward) rather than aborting the submission.
       const uploadedAttachments = [];
+      const failedFiles = [];
       for (const file of files) {
-        const fileRef = ref(storage, `complaints/${complaintId}/${file.name}`);
-        await uploadBytes(fileRef, file);
-        const url = await getDownloadURL(fileRef);
-        uploadedAttachments.push({
-          fileName: file.name,
-          fileUrl: url,
-          mimeType: file.type,
-          size: file.size,
-          uploadedBy: user.uid,
-          createdAt: new Date().toISOString(),
-        });
+        try {
+          const fileRef = ref(storage, `complaints/${complaintId}/${file.name}`);
+          await uploadBytes(fileRef, file);
+          const url = await getDownloadURL(fileRef);
+          uploadedAttachments.push({
+            fileName: file.name,
+            fileUrl: url,
+            mimeType: file.type,
+            size: file.size,
+            uploadedBy: user.uid,
+            createdAt: new Date().toISOString(),
+          });
+        } catch (uploadErr) {
+          console.error('Attachment upload failed:', file.name, uploadErr);
+          failedFiles.push({ name: file.name, message: uploadErr.message });
+        }
       }
 
       const now = serverTimestamp();
@@ -226,6 +235,7 @@ export default function ComplaintForm({ onClose }) {
         parentName: formData.parentName,
         studentName: formData.studentName,
         parentPhone: formData.parentPhone,
+        failedFiles,
       });
     } catch (err) {
       console.error(err);
@@ -244,6 +254,17 @@ export default function ComplaintForm({ onClose }) {
           </div>
           <h2 className="text-lg font-bold text-slate-900 mb-1">{t('complaintForm.successTitle')}</h2>
           <p className="text-sm text-slate-500 mb-6">{t('complaintForm.complaintNumberLabel')} <span className="font-mono font-bold text-slate-900" dir="ltr">{savedComplaint.complaintId}</span></p>
+
+          {savedComplaint.failedFiles?.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-800 text-xs rounded-xl p-3 mb-4 text-right">
+              <p className="font-medium mb-1">{t('complaintForm.attachmentUploadFailedTitle')}</p>
+              <ul className="list-disc pr-4 space-y-0.5">
+                {savedComplaint.failedFiles.map((f) => (
+                  <li key={f.name} dir="ltr" className="text-left">{f.name}{f.message ? ` — ${f.message}` : ''}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {savedComplaint.parentPhone && (
             <a

@@ -21,8 +21,19 @@ messaging.onBackgroundMessage((payload) => {
   if (!title) return;
   self.registration.showNotification(title, {
     body,
-    icon: '/favicon.svg',
+    icon: '/icons/icon-192.png',
     data: payload.data || {},
+  }).then(() => {
+    // Mirrors the count of still-pending OS notifications from this app
+    // onto the installed PWA's home-screen icon badge — an approximation
+    // (it can't see the app's actual unread count while it's closed), but
+    // NotificationBell.jsx corrects it to the real count as soon as the app
+    // is next opened. Unsupported on iOS Safari.
+    if ('setAppBadge' in self.navigator) {
+      self.registration.getNotifications().then((notifs) => {
+        self.navigator.setAppBadge(notifs.length).catch(() => {});
+      });
+    }
   });
 });
 

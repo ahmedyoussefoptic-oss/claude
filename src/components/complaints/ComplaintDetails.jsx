@@ -220,21 +220,29 @@ function ComplaintDetailsInner({ complaint, onClose }) {
           return;
         }
         const updates = { status: 'SOLVED', solutionDetails: reply, solvedAt: serverTimestamp() };
+        // A failed recording upload (e.g. a Storage rule rejecting the
+        // file) must not block marking the complaint solved — the solution
+        // text is what matters most; the recording is best-effort.
         if (pendingRecording) {
-          const fileRef = ref(storage, `complaints/${complaint.complaintId}/${pendingRecording.name}`);
-          await uploadBytes(fileRef, pendingRecording);
-          const url = await getDownloadURL(fileRef);
-          updates.attachments = [
-            ...(complaint.attachments || []),
-            {
-              fileName: pendingRecording.name,
-              fileUrl: url,
-              mimeType: pendingRecording.type,
-              size: pendingRecording.size,
-              uploadedBy: user.uid,
-              createdAt: new Date().toISOString(),
-            },
-          ];
+          try {
+            const fileRef = ref(storage, `complaints/${complaint.complaintId}/${pendingRecording.name}`);
+            await uploadBytes(fileRef, pendingRecording);
+            const url = await getDownloadURL(fileRef);
+            updates.attachments = [
+              ...(complaint.attachments || []),
+              {
+                fileName: pendingRecording.name,
+                fileUrl: url,
+                mimeType: pendingRecording.type,
+                size: pendingRecording.size,
+                uploadedBy: user.uid,
+                createdAt: new Date().toISOString(),
+              },
+            ];
+          } catch (uploadErr) {
+            console.error('Solution recording upload failed:', uploadErr);
+            alert(t('complaintDetails.recordingUploadFailedAlert', { message: uploadErr.message }));
+          }
         }
         await addLog('SOLUTION_ADDED', { solutionDetails: reply }, updates);
         setReply('');

@@ -223,7 +223,8 @@
     "stopDictation": "إيقاف الإملاء",
     "dictationInProgress": "جارٍ الاستماع...",
     "dictationUnsupported": "الإملاء الصوتي غير مدعوم في هذا المتصفح.",
-    "dictationError": "تعذّر التعرف على الصوت. حاول مرة أخرى."
+    "dictationError": "تعذّر التعرف على الصوت. حاول مرة أخرى.",
+    "recordingUploadFailedAlert": "تم حفظ الحل، لكن تعذّر رفع التسجيل الصوتي: {{message}}"
   },
   "complaintForm": {
     "priorities": {
@@ -268,7 +269,8 @@
     "saveError": "حدث خطأ أثناء حفظ الملاحظة. يرجى المحاولة مرة أخرى.",
     "saving": "جاري الحفظ...",
     "saveBtn": "حفظ الملاحظة",
-    "recordingFilePrefix": "تسجيل_صوتي_"
+    "recordingFilePrefix": "تسجيل_صوتي_",
+    "attachmentUploadFailedTitle": "تم حفظ الملاحظة، لكن تعذّر رفع المرفقات التالية:"
   },
   "assigneeSelect": {
     "roleTagAdmin": "مدير النظام",
