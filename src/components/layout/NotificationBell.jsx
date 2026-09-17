@@ -66,12 +66,26 @@ export default function NotificationBell() {
   const ref = useRef(null);
   const knownIds = useRef(new Set());
   const isFirstLoad = useRef(true);
+  const unreadCountRef = useRef(0);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+  unreadCountRef.current = unreadCount;
 
   useEffect(() => {
     setAppBadge(unreadCount);
   }, [unreadCount]);
+
+  // Repeats the chime every 5 minutes for as long as anything is still
+  // unread, so a notification left unopened doesn't just chime once and go
+  // silent — a single continuous timer (not reset on every notification
+  // change) reads the current count through a ref each time it fires, so
+  // new notifications arriving mid-cycle don't restart the 5-minute clock.
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (unreadCountRef.current > 0) playChime();
+    }, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
