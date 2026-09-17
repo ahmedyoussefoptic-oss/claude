@@ -10,6 +10,7 @@ import {
   useProblemTypes,
   usePlatforms,
   useItemCategories,
+  ensureSeeded,
 } from '../hooks/useOrgData';
 import { useMessageTemplates } from '../hooks/useMessageTemplates';
 import { parseStudentRows, upsertStudents } from '../utils/students';
@@ -261,6 +262,11 @@ function EditableList({ title, icon: Icon, items, collectionName }) {
       return;
     }
     try {
+      // Must run before the write below — see ensureSeeded()'s comment in
+      // useOrgData.js: adding the first-ever real document to a collection
+      // that's still showing the hardcoded fallback instantly hides every
+      // other fallback-only entry, since nothing backs them in Firestore.
+      await ensureSeeded(collectionName);
       await setDoc(doc(db, collectionName, newId.trim().toUpperCase().replace(/\s+/g, '_')), {
         name: newName.trim(),
         order: items.length + 1,
@@ -394,6 +400,10 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
       return;
     }
     try {
+      // See ensureSeeded()'s comment in useOrgData.js — must run before the
+      // write below, or the first real sub-type ever added hides every
+      // other fallback-only sub-type across all three parent types at once.
+      await ensureSeeded('complaintSubTypes');
       const id = `${activeType}_${Date.now()}`;
       await setDoc(doc(db, 'complaintSubTypes', id), {
         name: newName.trim(),

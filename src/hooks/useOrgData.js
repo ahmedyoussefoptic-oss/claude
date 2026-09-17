@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot, orderBy, query, writeBatch } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { BRANCHES, DEPARTMENTS } from '../config/orgData';
 import { COMPLAINT_TYPES, SUB_TYPES } from '../config/complaintTypes';
@@ -13,6 +13,58 @@ import { ITEM_CATEGORIES } from '../config/lostFound';
 const SUB_TYPES_FALLBACK = Object.entries(SUB_TYPES).flatMap(([parentType, names]) =>
   names.map((name, order) => ({ id: `${parentType}_${order}`, name, parentType, order }))
 );
+
+// Maps each Firestore collection to the hardcoded seed list useOrgCollection
+// falls back to while the collection is still empty — used by ensureSeeded()
+// below, called before any "add a new item" write.
+const FALLBACKS = {
+  branches: BRANCHES,
+  departments: DEPARTMENTS,
+  complaintTypes: COMPLAINT_TYPES,
+  complaintSubTypes: SUB_TYPES_FALLBACK,
+  problemTypes: PROBLEM_TYPES,
+  platforms: PLATFORMS,
+  itemCategories: ITEM_CATEGORIES,
+};
+
+// Writes the hardcoded fallback list into `collectionName` as real documents
+// for any entry not already represented there (matched by id for the
+// id-keyed lists, or by name+parentType for sub-types, since that's the
+// field actually persisted on complaint records). Settings.jsx calls this
+// before every "add" write.
+//
+// Why this exists: useOrgCollection() below shows the hardcoded fallback
+// list ONLY while its Firestore collection is completely empty — the
+// instant ANY real document exists there, it switches to showing only real
+// documents. So the very first item ever added to a still-unseeded
+// collection used to make every other (fallback-only, never actually
+// written to Firestore) entry vanish from the UI in the same instant —
+// indistinguishable from all of them having been deleted, because nothing
+// backed them but this hardcoded list. Seeding the rest of the fallback as
+// real documents in the same moment closes that gap for good.
+export async function ensureSeeded(collectionName) {
+  const fallback = FALLBACKS[collectionName];
+  if (!fallback?.length) return;
+
+  const existing = await getDocs(collection(db, collectionName));
+  const existingByKey = new Set(
+    existing.docs.map((d) => {
+      const data = d.data();
+      return collectionName === 'complaintSubTypes' ? `${data.parentType}::${data.name}` : d.id;
+    })
+  );
+
+  const batch = writeBatch(db);
+  let queued = 0;
+  fallback.forEach((item) => {
+    const key = collectionName === 'complaintSubTypes' ? `${item.parentType}::${item.name}` : item.id;
+    if (existingByKey.has(key)) return;
+    const { id, ...data } = item;
+    batch.set(doc(db, collectionName, id), { ...data, active: true });
+    queued++;
+  });
+  if (queued > 0) await batch.commit();
+}
 
 function useOrgCollection(collectionName, fallback) {
   const [items, setItems] = useState(fallback);
