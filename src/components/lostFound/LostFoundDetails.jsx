@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle, Link2, UserPlus } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle, Link2, UserPlus, Trash2 } from 'lucide-react';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useUsers } from '../../hooks/useUsers';
@@ -45,10 +45,11 @@ function LostFoundDetailsInner({ item, onClose }) {
   }, [item.id]);
 
   const isAdmin = userData?.role === ROLES.ADMIN;
-  // Mirrors firestore.rules' canEditRecord: a branch-scoped edit permission
-  // only applies within that user's own branch.
+  // Mirrors firestore.rules' canEditRecord/canDeleteRecord: a branch-scoped
+  // holder of the edit/delete permission only gets it for their own branch.
   const inScope = isAdmin || userData?.access === 'all' || userData?.branch === item.branch;
   const canEdit = isAdmin || (inScope && userData?.perms?.edit === true);
+  const canDelete = isAdmin || (inScope && userData?.perms?.delete === true);
 
   useEffect(() => {
     const q = query(
@@ -114,6 +115,34 @@ function LostFoundDetailsInner({ item, onClose }) {
           { assignedTo: selectedAssignees, assignedToNames: selectedUsers.map((u) => u.name), assignedAt: serverTimestamp() }
         );
       }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    const reason = prompt(t('lostFoundDetails.deleteReasonPrompt'));
+    if (!reason) return;
+    setLoading(true);
+    try {
+      // Archived before the real delete — the item's own activityLog
+      // subcollection would otherwise become orphaned and unreachable the
+      // moment its parent doc is gone (same reasoning as complaints' delete).
+      await addDoc(collection(db, 'deletedLostFoundItems'), {
+        item,
+        activityLog: [
+          ...logs,
+          { action: 'ITEM_DELETED', actorId: user.uid, actorName: userData?.name || t('common.user'), metadata: { reason }, createdAt: new Date() },
+        ],
+        reason,
+        deletedBy: user.uid,
+        deletedByName: userData?.name || t('common.user'),
+        deletedAt: serverTimestamp(),
+      });
+      await deleteDoc(doc(db, 'lostFoundItems', item.id));
+      onClose();
     } catch (err) {
       console.error(err);
     } finally {
@@ -189,6 +218,12 @@ function LostFoundDetailsInner({ item, onClose }) {
                 <MessageCircle className="w-4 h-4" />
                 {t('common.sendResolutionWhatsApp')}
               </a>
+            )}
+            {canDelete && (
+              <button disabled={loading} onClick={handleDelete} className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors flex items-center gap-2 mr-auto">
+                <Trash2 className="w-4 h-4" />
+                {t('lostFoundDetails.deleteFinal')}
+              </button>
             )}
           </div>
 

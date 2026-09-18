@@ -178,9 +178,24 @@ function TechSupportDetailsInner({ ticket, onClose }) {
     if (!reason) return;
     setLoading(true);
     try {
-      await addLog('TICKET_DELETED', { reason });
+      // Archived before the real delete — the ticket's own activityLog
+      // subcollection would otherwise become orphaned and unreachable the
+      // moment its parent doc is gone (same reasoning as complaints' delete).
+      await addDoc(collection(db, 'deletedTechSupportTickets'), {
+        ticket,
+        activityLog: [
+          ...logs,
+          { action: 'TICKET_DELETED', actorId: user.uid, actorName: userData?.name || t('common.user'), metadata: { reason }, createdAt: new Date() },
+        ],
+        reason,
+        deletedBy: user.uid,
+        deletedByName: userData?.name || t('common.user'),
+        deletedAt: serverTimestamp(),
+      });
       await deleteDoc(doc(db, 'techSupportTickets', ticket.id));
       onClose();
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }

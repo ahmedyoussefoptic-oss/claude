@@ -331,7 +331,9 @@
     "returnedToNameRequiredAlert": "يرجى كتابة اسم من تم تسليمه الغرض.",
     "returnedToLabel": "تم التسليم إلى:",
     "followUpPlaceholder": "أضف ملاحظة متابعة...",
-    "followUpLog": "سجل المتابعة"
+    "followUpLog": "سجل المتابعة",
+    "deleteFinal": "حذف البلاغ نهائياً",
+    "deleteReasonPrompt": "اكتب سبب حذف البلاغ نهائياً (إلزامي):"
   },
   "lostFoundForm": {
     "successTitle": "تم حفظ السجل بنجاح",
@@ -662,19 +664,26 @@
     }
   },
   "deletedComplaints": {
-    "title": "أرشيف الملاحظات المحذوفة",
-    "subtitle": "سجل كامل لكل ملاحظة حُذفت من النظام — متاح لمدير النظام فقط.",
-    "searchPlaceholder": "ابحث برقم الملاحظة، اسم الطالب، من قام بالحذف...",
+    "title": "أرشيف السجلات المحذوفة",
+    "subtitle": "سجل كامل لكل ملاحظة أو بلاغ مفقودات أو بلاغ دعم فني حُذف من النظام — متاح لمدير النظام فقط.",
+    "searchPlaceholder": "ابحث برقم السجل، الاسم، من قام بالحذف...",
     "deletedAtHeader": "تاريخ الحذف",
     "deletedByHeader": "القائم بالحذف",
     "deleteReasonHeader": "سبب الحذف",
-    "noDeletedComplaints": "لا يوجد ملاحظات محذوفة",
-    "complaintHash": "ملاحظة #",
+    "noDeletedComplaints": "لا يوجد سجلات محذوفة",
+    "complaintHash": "#",
     "deletedAtBy": "حُذفت في {{date}} بواسطة {{name}}",
     "branchAndStudent": "الفرع والطالب",
     "basicDetails": "التفاصيل الأساسية",
     "activityLogBeforeDeletion": "سجل المتابعة قبل الحذف",
-    "solutionLabel": "الحل:"
+    "solutionLabel": "الحل:",
+    "types": {
+      "ALL": "الكل",
+      "ALL_HEADER": "النوع",
+      "COMPLAINT": "ملاحظة",
+      "LOST_FOUND": "مفقودات",
+      "TECH_SUPPORT": "دعم فني"
+    }
   },
   "roles": {
     "ADMIN": "مدير النظام",
@@ -915,7 +924,8 @@
       "ITEM_MATCHED": "تمت مطابقة الغرض بصاحبه",
       "ITEM_RETURNED": "تم تسليم الغرض",
       "ITEM_CLOSED": "تم إغلاق السجل",
-      "NOTE_ADDED": "ملاحظة"
+      "NOTE_ADDED": "ملاحظة",
+      "ITEM_DELETED": "تم حذف البلاغ"
     },
     "techSupport": {
       "TICKET_CREATED": "تم تسجيل البلاغ",

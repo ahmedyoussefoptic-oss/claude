@@ -331,7 +331,9 @@
     "returnedToNameRequiredAlert": "Please enter the name of the person the item was given to.",
     "returnedToLabel": "Returned to:",
     "followUpPlaceholder": "Add a follow-up note...",
-    "followUpLog": "Activity Log"
+    "followUpLog": "Activity Log",
+    "deleteFinal": "Delete Report Permanently",
+    "deleteReasonPrompt": "Write the reason for permanently deleting this report (required):"
   },
   "lostFoundForm": {
     "successTitle": "Record saved successfully",
@@ -662,19 +664,26 @@
     }
   },
   "deletedComplaints": {
-    "title": "Deleted Complaints Archive",
-    "subtitle": "A complete log of every complaint deleted from the system — available to the system admin only.",
-    "searchPlaceholder": "Search by complaint number, student name, deleted by...",
+    "title": "Deleted Records Archive",
+    "subtitle": "A complete log of every complaint, lost & found report, or tech support ticket deleted from the system — available to the system admin only.",
+    "searchPlaceholder": "Search by record number, name, deleted by...",
     "deletedAtHeader": "Deletion date",
     "deletedByHeader": "Deleted by",
     "deleteReasonHeader": "Deletion reason",
-    "noDeletedComplaints": "No deleted complaints",
-    "complaintHash": "Complaint #",
+    "noDeletedComplaints": "No deleted records",
+    "complaintHash": "#",
     "deletedAtBy": "Deleted on {{date}} by {{name}}",
     "branchAndStudent": "Branch and student",
     "basicDetails": "Basic details",
     "activityLogBeforeDeletion": "Follow-up log before deletion",
-    "solutionLabel": "Solution:"
+    "solutionLabel": "Solution:",
+    "types": {
+      "ALL": "All",
+      "ALL_HEADER": "Type",
+      "COMPLAINT": "Complaint",
+      "LOST_FOUND": "Lost & Found",
+      "TECH_SUPPORT": "Tech Support"
+    }
   },
   "roles": {
     "ADMIN": "System Admin",
@@ -915,7 +924,8 @@
       "ITEM_MATCHED": "Item matched to owner",
       "ITEM_RETURNED": "Item returned",
       "ITEM_CLOSED": "Record closed",
-      "NOTE_ADDED": "Note"
+      "NOTE_ADDED": "Note",
+      "ITEM_DELETED": "Report deleted"
     },
     "techSupport": {
       "TICKET_CREATED": "Ticket registered",

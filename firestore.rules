@@ -191,6 +191,20 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Same archive-before-delete posture as deletedComplaints above, for
+    // Lost & Found items (see LostFoundDetails.jsx's handleDelete) and
+    // tech-support tickets (see TechSupportDetails.jsx's handleDelete).
+    match /deletedLostFoundItems/{archiveId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && canDeleteRecord(request.resource.data.item.branch);
+      allow update, delete: if false;
+    }
+    match /deletedTechSupportTickets/{archiveId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated() && canDeleteRecord(request.resource.data.ticket.branch);
+      allow update, delete: if false;
+    }
+
     // Lost & Found items collection
     match /lostFoundItems/{itemId} {
       allow get: if true;
