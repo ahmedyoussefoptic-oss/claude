@@ -868,7 +868,12 @@
     "noMatchingSurveys": "لا توجد استبيانات مطابقة لمعايير التقرير",
     "overallRating": "التقييم العام",
     "parentFeedbackLabel": "ملاحظة ولي الأمر",
-    "unassigned": "غير مسند"
+    "unassigned": "غير مسند",
+    "exportExcel": "تصدير Excel",
+    "studentNameColumn": "اسم الطالب",
+    "studentIdColumn": "رقم الهوية",
+    "studentPhoneColumn": "رقم الهاتف",
+    "stageColumn": "المرحلة"
   },
   "techSupportDetails": {
     "viaPublicLink": "عبر الرابط العام",

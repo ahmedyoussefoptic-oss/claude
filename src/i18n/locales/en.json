@@ -868,7 +868,12 @@
     "noMatchingSurveys": "No surveys match the report criteria",
     "overallRating": "Overall rating",
     "parentFeedbackLabel": "Parent feedback",
-    "unassigned": "Unassigned"
+    "unassigned": "Unassigned",
+    "exportExcel": "Export to Excel",
+    "studentNameColumn": "Student Name",
+    "studentIdColumn": "National ID",
+    "studentPhoneColumn": "Phone Number",
+    "stageColumn": "Stage"
   },
   "techSupportDetails": {
     "viaPublicLink": "Via public link",

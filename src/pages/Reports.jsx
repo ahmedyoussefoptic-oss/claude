@@ -9,7 +9,13 @@ import { normalizeAssignees } from '../utils/assignees';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import logo from '../assets/logo.png';
-import { Printer, RotateCcw, Star } from 'lucide-react';
+import { Printer, FileSpreadsheet, RotateCcw, Star } from 'lucide-react';
+
+// Excel sheet names are capped at 31 chars and can't contain \ / ? * [ ] : —
+// our translated labels are short enough in practice, but trim defensively.
+function sheetName(label) {
+  return label.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31);
+}
 
 const REPORT_TYPE_IDS = ['COMPLAINTS', 'SURVEY'];
 const RATING_KEYS = ['resolutionSpeed', 'solutionQuality', 'staffProfessionalism'];
@@ -208,6 +214,111 @@ export default function Reports() {
 
   const handlePrint = () => window.print();
 
+  const handleExportExcel = async () => {
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+
+    if (reportType === 'COMPLAINTS') {
+      const summarySheet = XLSX.utils.aoa_to_sheet([
+        [t('reports.totalComplaints'), summary.total],
+        [t('reports.resolvedCount'), summary.resolved],
+        [t('statuses.complaint.IN_PROGRESS'), summary.inProgress],
+        [t('statuses.complaint.ESCALATED'), summary.escalated],
+        [t('reports.avgResolutionTime'), formatDuration(summary.avgResolutionMs)],
+        [t('reports.avgSatisfaction', { count: summary.satisfactionCount }), summary.satisfaction != null ? summary.satisfaction.toFixed(1) : '—'],
+      ]);
+      XLSX.utils.book_append_sheet(wb, summarySheet, sheetName(t('reports.generalSummary')));
+
+      if (byType.length) {
+        const typeSheet = XLSX.utils.json_to_sheet(byType.map((ct) => ({
+          [t('common.type')]: ct.name,
+          [t('reports.countLabel')]: ct.count,
+          [t('reports.percentLabel')]: summary.total ? Math.round((ct.count / summary.total) * 100) : 0,
+        })));
+        XLSX.utils.book_append_sheet(wb, typeSheet, sheetName(t('reports.byComplaintType')));
+      }
+
+      if (byBranch.length) {
+        const branchSheet = XLSX.utils.json_to_sheet(byBranch.map((b) => ({
+          [t('common.branch')]: b.name,
+          [t('reports.countLabel')]: b.count,
+        })));
+        XLSX.utils.book_append_sheet(wb, branchSheet, sheetName(t('reports.byBranch')));
+      }
+
+      const detailSheet = XLSX.utils.json_to_sheet(results.map((c) => ({
+        [t('reports.complaintNumber')]: c.complaintId,
+        [t('common.date')]: c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd') : '',
+        [t('common.branch')]: branchName(c.branch),
+        [t('common.type')]: typeName(c.complaintType),
+        [t('complaintForm.subTypeLabel')]: c.subType || '',
+        [t('reports.specialistShort')]: c.assignedToNames?.join(listSep) || '',
+        [t('common.status')]: t(`statuses.complaint.${c.status}`, c.status),
+        [t('reports.resolutionTime')]: c.solvedAt && c.createdAt ? formatDuration(c.solvedAt.toMillis() - c.createdAt.toMillis()) : '',
+        [t('reports.studentNameColumn')]: c.studentName || '',
+        [t('reports.studentIdColumn')]: c.studentId || '',
+        [t('reports.studentPhoneColumn')]: c.parentPhone || '',
+        [t('reports.stageColumn')]: c.stage || '',
+      })));
+      XLSX.utils.book_append_sheet(wb, detailSheet, sheetName(t('reports.detailsLabel')));
+    } else {
+      const summarySheet = XLSX.utils.aoa_to_sheet([
+        [t('reports.respondentCount'), surveyStats.count],
+        [t('reports.overallSatisfactionAvg'), surveyStats.average != null ? surveyStats.average.toFixed(1) : '—'],
+        [t('reports.surveyResponseRate'), surveyStats.responseRate != null ? `${surveyStats.responseRate}%` : '—'],
+        [t('reports.reopenedWithoutRating'), surveyStats.reopenedWithoutRatingCount],
+        ...RATING_KEYS.map((key) => [t(`ratings.${key}`), surveyStats.detailAverages[key] != null ? surveyStats.detailAverages[key].toFixed(1) : '—']),
+      ]);
+      XLSX.utils.book_append_sheet(wb, summarySheet, sheetName(t('reports.generalSummary')));
+
+      if (satisfactionByBranch.length) {
+        const branchSheet = XLSX.utils.json_to_sheet(satisfactionByBranch.map((b) => ({
+          [t('common.branch')]: b.name,
+          [t('reports.respondentCount')]: b.count,
+          [t('reports.satisfactionAvg')]: b.avg.toFixed(1),
+        })));
+        XLSX.utils.book_append_sheet(wb, branchSheet, sheetName(t('reports.satisfactionByBranch')));
+      }
+
+      if (satisfactionByEmployee.length) {
+        const employeeSheet = XLSX.utils.json_to_sheet(satisfactionByEmployee.map((e) => ({
+          [t('reports.employeeLabel')]: e.name,
+          [t('reports.respondentCount')]: e.count,
+          [t('reports.satisfactionAvg')]: e.avg.toFixed(1),
+        })));
+        XLSX.utils.book_append_sheet(wb, employeeSheet, sheetName(t('reports.satisfactionByEmployee')));
+      }
+
+      const detailSheet = XLSX.utils.json_to_sheet(surveyed.map((c) => ({
+        [t('reports.complaintNumber')]: c.complaintId,
+        [t('common.date')]: c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd') : '',
+        [t('common.branch')]: branchName(c.branch),
+        [t('reports.specialistShort')]: c.assignedToNames?.join(listSep) || '',
+        [t('reports.overallRating')]: c.satisfactionRate,
+        ...Object.fromEntries(RATING_KEYS.map((key) => [t(`ratings.${key}`), c.satisfactionDetails?.[key] ?? ''])),
+        [t('reports.parentFeedbackLabel')]: c.parentFeedback || '',
+        [t('reports.studentNameColumn')]: c.studentName || '',
+        [t('reports.studentIdColumn')]: c.studentId || '',
+        [t('reports.studentPhoneColumn')]: c.parentPhone || '',
+        [t('reports.stageColumn')]: c.stage || '',
+      })));
+      XLSX.utils.book_append_sheet(wb, detailSheet, sheetName(t('reports.surveyDetailsLabel')));
+
+      if (reopenedWithoutRating.length) {
+        const reopenedSheet = XLSX.utils.json_to_sheet(reopenedWithoutRating.map((c) => ({
+          [t('reports.complaintNumber')]: c.complaintId,
+          [t('common.branch')]: branchName(c.branch),
+          [t('reports.specialistShort')]: c.assignedToNames?.join(listSep) || '',
+          [t('reports.parentFeedbackLabel')]: c.parentFeedback || '',
+        })));
+        XLSX.utils.book_append_sheet(wb, reopenedSheet, sheetName(t('reports.reopenedWithoutRating')));
+      }
+    }
+
+    const fileName = `${t('reports.types.' + reportType)} - ${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+    XLSX.writeFile(wb, fileName);
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
@@ -215,13 +326,22 @@ export default function Reports() {
           <h1 className="text-2xl font-bold text-slate-900">{t('nav.reports')}</h1>
           <p className="text-slate-500 mt-1">{t('reports.pageSubtitle')}</p>
         </div>
-        <button
-          onClick={handlePrint}
-          className="px-4 py-2.5 flex items-center gap-2 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm shrink-0"
-        >
-          <Printer className="w-4 h-4" />
-          {t('reports.printSavePdf')}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleExportExcel}
+            className="px-4 py-2.5 flex items-center gap-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium text-sm transition-colors shadow-sm"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            {t('reports.exportExcel')}
+          </button>
+          <button
+            onClick={handlePrint}
+            className="px-4 py-2.5 flex items-center gap-2 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm"
+          >
+            <Printer className="w-4 h-4" />
+            {t('reports.printSavePdf')}
+          </button>
+        </div>
       </div>
 
       {/* Report type */}
@@ -435,6 +555,10 @@ export default function Reports() {
                   <th className="text-right py-2 font-medium">{t('reports.specialistShort')}</th>
                   <th className="text-right py-2 font-medium">{t('common.status')}</th>
                   <th className="text-right py-2 font-medium">{t('reports.resolutionTime')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.studentNameColumn')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.studentIdColumn')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.studentPhoneColumn')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.stageColumn')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -448,6 +572,10 @@ export default function Reports() {
                     <td className="py-2 text-slate-600">{c.assignedToNames?.join(listSep) || '—'}</td>
                     <td className="py-2 text-slate-600">{t(`statuses.complaint.${c.status}`, c.status)}</td>
                     <td className="py-2 text-slate-600">{c.solvedAt && c.createdAt ? formatDuration(c.solvedAt.toMillis() - c.createdAt.toMillis()) : '—'}</td>
+                    <td className="py-2 text-slate-600">{c.studentName || '—'}</td>
+                    <td className="py-2 text-slate-600" dir="ltr">{c.studentId || '—'}</td>
+                    <td className="py-2 text-slate-600" dir="ltr">{c.parentPhone || '—'}</td>
+                    <td className="py-2 text-slate-600">{c.stage || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -588,6 +716,10 @@ export default function Reports() {
                     <th key={key} className="text-right py-2 font-medium">{t(`ratings.${key}`)}</th>
                   ))}
                   <th className="text-right py-2 font-medium">{t('reports.parentFeedbackLabel')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.studentNameColumn')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.studentIdColumn')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.studentPhoneColumn')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.stageColumn')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -602,6 +734,10 @@ export default function Reports() {
                       <td key={key} className="py-2 text-slate-600 tabular-nums">{c.satisfactionDetails?.[key] ?? '—'}</td>
                     ))}
                     <td className="py-2 text-slate-600 max-w-xs truncate">{c.parentFeedback || '—'}</td>
+                    <td className="py-2 text-slate-600">{c.studentName || '—'}</td>
+                    <td className="py-2 text-slate-600" dir="ltr">{c.studentId || '—'}</td>
+                    <td className="py-2 text-slate-600" dir="ltr">{c.parentPhone || '—'}</td>
+                    <td className="py-2 text-slate-600">{c.stage || '—'}</td>
                   </tr>
                 ))}
               </tbody>
