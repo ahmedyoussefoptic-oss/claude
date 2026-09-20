@@ -14,10 +14,10 @@ import PublicLinkModal from '../components/common/PublicLinkModal';
 
 // Generic branch-scoped live-count hook shared by the tech-support and
 // lost-found KPI cards below — same scoping rule as the complaints query.
-function useBranchScopedCollection(collectionName, userData) {
+function useBranchScopedCollection(collectionName, userData, enabled = true) {
   const [docs, setDocs] = useState([]);
   useEffect(() => {
-    if (!userData) return;
+    if (!userData || !enabled) return;
     const constraints = [orderBy('createdAt', 'desc')];
     if (userData.access !== 'all') {
       constraints.unshift(where('branch', '==', userData.branch || '__NONE__'));
@@ -28,7 +28,7 @@ function useBranchScopedCollection(collectionName, userData) {
     });
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collectionName, userData?.access, userData?.branch]);
+  }, [collectionName, userData?.access, userData?.branch, enabled]);
   return docs;
 }
 
@@ -53,10 +53,14 @@ function formatDuration(ms, lang) {
 
 export default function Dashboard() {
   const { t, i18n } = useTranslation();
-  const { userData } = useAuthStore();
+  const { userData, role } = useAuthStore();
   const branches = useBranches();
   const complaintTypes = useComplaintTypes();
-  const techTickets = useBranchScopedCollection('techSupportTickets', userData);
+  // Tech Support is restricted to the IT department's own staff (see
+  // firestore.rules) — fetching it for anyone else just trips a
+  // permission-denied listener, so skip the query entirely for them.
+  const canSeeTechSupport = role === 'ADMIN' || userData?.department === 'IT';
+  const techTickets = useBranchScopedCollection('techSupportTickets', userData, canSeeTechSupport);
   const lostFoundItems = useBranchScopedCollection('lostFoundItems', userData);
   const techStats = useMemo(() => ({
     open: techTickets.filter((t) => OPEN_TICKET_STATUSES.includes(t.status)).length,
@@ -315,20 +319,24 @@ export default function Dashboard() {
       <div>
         <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">{t('dashboard.systemOverview')}</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <StatCard
-            title={t('dashboard.openTechTickets')}
-            value={techStats.open.toString()}
-            icon={Wrench}
-            gradient="from-violet-500 to-purple-600"
-            to="/tech-support?filter=OPEN"
-          />
-          <StatCard
-            title={t('dashboard.overdueTechTickets')}
-            value={techStats.overdue.toString()}
-            icon={ShieldAlert}
-            gradient="from-fuchsia-500 to-pink-600"
-            to="/tech-support?filter=OVERDUE"
-          />
+          {canSeeTechSupport && (
+            <>
+              <StatCard
+                title={t('dashboard.openTechTickets')}
+                value={techStats.open.toString()}
+                icon={Wrench}
+                gradient="from-violet-500 to-purple-600"
+                to="/tech-support?filter=OPEN"
+              />
+              <StatCard
+                title={t('dashboard.overdueTechTickets')}
+                value={techStats.overdue.toString()}
+                icon={ShieldAlert}
+                gradient="from-fuchsia-500 to-pink-600"
+                to="/tech-support?filter=OVERDUE"
+              />
+            </>
+          )}
           <StatCard
             title={t('dashboard.unclaimedItems')}
             value={lostFoundStats.unclaimed.toString()}
@@ -358,6 +366,7 @@ export default function Dashboard() {
         complaints={complaints}
         techTickets={techTickets}
         lostFoundItems={lostFoundItems}
+        showTechSupport={canSeeTechSupport}
       />
 
       {/* Recent Activity Table */}

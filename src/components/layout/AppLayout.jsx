@@ -25,11 +25,17 @@ export default function AppLayout() {
     { name: t('nav.dashboard'), path: '/dashboard', icon: LayoutDashboard },
     { name: t('nav.complaints'), path: '/complaints', icon: FileText },
     { name: t('nav.lostFound'), path: '/lost-found', icon: PackageSearch },
-    { name: t('nav.techSupport'), path: '/tech-support', icon: Wrench },
     { name: t('nav.flowMap'), path: '/flow-map', icon: Map },
     { name: t('nav.advancedSearch'), path: '/search', icon: Search },
     { name: t('nav.reports'), path: '/reports', icon: FileBarChart },
   ];
+
+  // Tech Support tickets can hold national IDs and account credentials, so
+  // access is restricted to the IT department's own specialists (plus
+  // admins, like every other restricted page here).
+  if (role === 'ADMIN' || userData?.department === 'IT') {
+    navItems.splice(3, 0, { name: t('nav.techSupport'), path: '/tech-support', icon: Wrench });
+  }
 
   if (role === 'ADMIN' || userData?.perms?.users) {
     navItems.push({ name: t('nav.users'), path: '/users', icon: User });

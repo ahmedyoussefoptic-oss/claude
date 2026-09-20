@@ -2,7 +2,7 @@ import { Navigate } from 'react-router-dom';
 import useAuthStore from '../../stores/useAuthStore';
 import { Loader2 } from 'lucide-react';
 
-export default function ProtectedRoute({ children, allowedRoles, requirePerm }) {
+export default function ProtectedRoute({ children, allowedRoles, requirePerm, requireDepartment }) {
   const { user, role, userData, loading } = useAuthStore();
 
   if (loading) {
@@ -20,7 +20,8 @@ export default function ProtectedRoute({ children, allowedRoles, requirePerm }) 
   if (allowedRoles) {
     const roleAllowed = allowedRoles.includes(role);
     const permAllowed = !!requirePerm && userData?.perms?.[requirePerm] === true;
-    if (!roleAllowed && !permAllowed) {
+    const departmentAllowed = !!requireDepartment && userData?.department === requireDepartment;
+    if (!roleAllowed && !permAllowed && !departmentAllowed) {
       return <Navigate to="/dashboard" replace />;
     }
   }

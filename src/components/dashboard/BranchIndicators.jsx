@@ -33,23 +33,28 @@ function lostFoundBreakdown(list) {
   return { total: list.length, resolved, escalated: 0, inProgress: list.length - resolved };
 }
 
-export default function BranchIndicators({ branches, complaints, techTickets, lostFoundItems }) {
+export default function BranchIndicators({ branches, complaints, techTickets, lostFoundItems, showTechSupport = true }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(null);
+  const categoryMeta = showTechSupport ? CATEGORY_META : CATEGORY_META.filter((c) => c.key !== 'techSupport');
 
   const rows = branches
     .map((b) => {
       const branchComplaints = complaints.filter((c) => c.branch === b.id);
-      const branchTech = techTickets.filter((t) => t.branch === b.id);
       const branchLostFound = lostFoundItems.filter((i) => i.branch === b.id);
       const categories = {
         academic: complaintBreakdown(branchComplaints.filter((c) => c.complaintType === 'ACADEMIC')),
         administrative: complaintBreakdown(branchComplaints.filter((c) => c.complaintType === 'ADMINISTRATIVE')),
         behavioral: complaintBreakdown(branchComplaints.filter((c) => c.complaintType === 'BEHAVIORAL')),
         lostFound: lostFoundBreakdown(branchLostFound),
-        techSupport: techBreakdown(branchTech),
       };
-      return { id: b.id, name: b.name, total: branchComplaints.length + branchTech.length + branchLostFound.length, categories };
+      let total = branchComplaints.length + branchLostFound.length;
+      if (showTechSupport) {
+        const branchTech = techTickets.filter((t) => t.branch === b.id);
+        categories.techSupport = techBreakdown(branchTech);
+        total += branchTech.length;
+      }
+      return { id: b.id, name: b.name, total, categories };
     })
     .filter((r) => r.total > 0)
     .sort((a, b) => b.total - a.total);
@@ -79,7 +84,7 @@ export default function BranchIndicators({ branches, complaints, techTickets, lo
               </button>
               {isOpen && (
                 <div className="px-6 pb-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-                  {CATEGORY_META.map(({ key, icon: Icon, color }) => {
+                  {categoryMeta.map(({ key, icon: Icon, color }) => {
                     const c = row.categories[key];
                     return (
                       <div key={key} className="rounded-xl border border-slate-100 p-3.5 bg-slate-50/60">

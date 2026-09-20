@@ -40,7 +40,11 @@ function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="complaints" element={<ComplaintsList />} />
           <Route path="lost-found" element={<LostFound />} />
-          <Route path="tech-support" element={<TechSupport />} />
+          <Route path="tech-support" element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN]} requireDepartment="IT">
+              <TechSupport />
+            </ProtectedRoute>
+          } />
           <Route path="flow-map" element={<FlowMap />} />
           <Route path="search" element={<Search />} />
           <Route path="reports" element={<Reports />} />
