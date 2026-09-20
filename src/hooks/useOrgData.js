@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { collection, doc, getDocs, onSnapshot, orderBy, query, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDocs, onSnapshot, writeBatch } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { BRANCHES, DEPARTMENTS } from '../config/orgData';
 import { COMPLAINT_TYPES, SUB_TYPES } from '../config/complaintTypes';
@@ -56,11 +56,15 @@ export async function ensureSeeded(collectionName) {
 
   const batch = writeBatch(db);
   let queued = 0;
-  fallback.forEach((item) => {
+  fallback.forEach((item, index) => {
     const key = collectionName === 'complaintSubTypes' ? `${item.parentType}::${item.name}` : item.id;
     if (existingByKey.has(key)) return;
     const { id, ...data } = item;
-    batch.set(doc(db, collectionName, id), { ...data, active: true });
+    // `order` defaults to the item's position in the fallback list — the
+    // fallback configs (COMPLAINT_TYPES, BRANCHES, ...) don't define one
+    // per entry, and useOrgCollection() below now sorts client-side, but a
+    // doc with no `order` field at all is still worth avoiding on principle.
+    batch.set(doc(db, collectionName, id), { order: index, ...data, active: true });
     queued++;
   });
   if (queued > 0) await batch.commit();
@@ -70,9 +74,14 @@ function useOrgCollection(collectionName, fallback) {
   const [items, setItems] = useState(fallback);
 
   useEffect(() => {
-    const q = query(collection(db, collectionName), orderBy('order', 'asc'));
+    // Sorted client-side rather than via a Firestore orderBy('order') query:
+    // Firestore silently excludes any document missing the field it orders
+    // by, and not every doc here is guaranteed to have `order` (e.g. one
+    // manually added to the Firestore console, or written by older code) —
+    // an excluded doc looked exactly like data loss even though it was
+    // still there. Missing `order` now just sorts last instead of vanishing.
     const unsubscribe = onSnapshot(
-      q,
+      collection(db, collectionName),
       (snapshot) => {
         if (snapshot.empty) {
           setItems(fallback);
@@ -82,6 +91,7 @@ function useOrgCollection(collectionName, fallback) {
           snapshot.docs
             .map((d) => ({ id: d.id, ...d.data() }))
             .filter((item) => item.active !== false)
+            .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
         );
       },
       () => setItems(fallback)
