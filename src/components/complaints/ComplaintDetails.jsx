@@ -9,6 +9,7 @@ import { useUsers } from '../../hooks/useUsers';
 import { waLink, buildReceiptMessage, buildResolutionMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { ROLES } from '../../config/roles';
+import { userBranches } from '../../utils/scope';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import ErrorBoundary from '../common/ErrorBoundary';
 import { format } from 'date-fns';
@@ -173,7 +174,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
   // Mirrors firestore.rules' canEditRecord/canDeleteRecord: a branch-scoped
   // holder of the edit/delete permission only gets it for their own branch
   // — otherwise the buttons render but every write is rejected server-side.
-  const inScope = isAdmin || userData?.access === 'all' || userData?.branch === complaint.branch;
+  const inScope = isAdmin || userData?.access === 'all' || userBranches(userData).includes(complaint.branch);
   const canEdit = isAdmin || (inScope && userData?.perms?.edit === true);
   const canDelete = isAdmin || (inScope && userData?.perms?.delete === true);
 

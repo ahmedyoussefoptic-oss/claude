@@ -31,7 +31,13 @@ service cloud.firestore {
     }
     function inMyScope(branch) {
       let u = myDoc();
-      return u != null && (u.get('access', 'branch') == 'all' || u.get('branch', null) == branch);
+      // `branches` (array) is the current multi-branch field; `branch`
+      // (singular) is kept for accounts created before that existed.
+      return u != null && (
+        u.get('access', 'branch') == 'all' ||
+        branch in u.get('branches', []) ||
+        u.get('branch', null) == branch
+      );
     }
     function canEditRecord(branch) {
       return isAdmin() || (myPerm('edit') && inMyScope(branch));

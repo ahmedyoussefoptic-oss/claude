@@ -10,6 +10,7 @@ import useAuthStore from '../stores/useAuthStore';
 import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { normalizeAssignees } from '../utils/assignees';
+import { branchScopeConstraintValues } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -51,6 +52,15 @@ export default function ComplaintsList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
+  // Keeps the open detail drawer's complaint in sync with live Firestore
+  // data — otherwise it stays frozen at whatever it was when first opened.
+  useEffect(() => {
+    if (!selectedComplaint) return;
+    const fresh = complaints.find((c) => c.id === selectedComplaint.id);
+    setSelectedComplaint(fresh || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [complaints]);
+
   useEffect(() => {
     // Wait for the caller's own profile to load before scoping the query —
     // querying before it's known would either leak other branches' data or
@@ -59,8 +69,9 @@ export default function ComplaintsList() {
     const constraints = [orderBy('createdAt', 'desc')];
     if (userData.access !== 'all') {
       // A branch-scoped account with no branch assigned must see nothing,
-      // not everything — '__NONE__' matches no real branch id.
-      constraints.unshift(where('branch', '==', userData.branch || '__NONE__'));
+      // not everything — branchScopeConstraintValues falls back to
+      // '__NONE__', which matches no real branch id.
+      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
     }
     const q = query(collection(db, 'complaints'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -72,7 +83,8 @@ export default function ComplaintsList() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [userData?.access, userData?.branch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
 
   const getStatusBadge = (status) => {
     switch (status) {

@@ -8,6 +8,7 @@ import { useUsers } from '../../hooks/useUsers';
 import { useBranches, useItemCategories } from '../../hooks/useOrgData';
 import { ITEM_STATUS_BADGE } from '../../config/lostFound';
 import { ROLES } from '../../config/roles';
+import { userBranches } from '../../utils/scope';
 import { waLink, buildLostFoundReceiptMessage, buildLostFoundResolutionMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
@@ -47,7 +48,7 @@ function LostFoundDetailsInner({ item, onClose }) {
   const isAdmin = userData?.role === ROLES.ADMIN;
   // Mirrors firestore.rules' canEditRecord/canDeleteRecord: a branch-scoped
   // holder of the edit/delete permission only gets it for their own branch.
-  const inScope = isAdmin || userData?.access === 'all' || userData?.branch === item.branch;
+  const inScope = isAdmin || userData?.access === 'all' || userBranches(userData).includes(item.branch);
   const canEdit = isAdmin || (inScope && userData?.perms?.edit === true);
   const canDelete = isAdmin || (inScope && userData?.perms?.delete === true);
 

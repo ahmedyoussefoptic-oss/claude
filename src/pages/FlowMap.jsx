@@ -5,6 +5,7 @@ import { ChevronLeft, Loader2 } from 'lucide-react';
 import { db } from '../config/firebase';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
+import { branchScopeConstraintValues, userBranches } from '../utils/scope';
 
 const MAIN_FLOW_KEYS = ['RECEIVED', 'IN_PROGRESS', 'WAITING_PARENT_RESPONSE', 'SOLVED', 'CLOSED'];
 const EXCEPTION_FLOW_KEYS = [
@@ -13,7 +14,8 @@ const EXCEPTION_FLOW_KEYS = [
 ];
 
 export default function FlowMap() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const listSep = i18n.language === 'ar' ? '، ' : ', ';
   const { userData } = useAuthStore();
   const branches = useBranches();
   const [complaints, setComplaints] = useState([]);
@@ -24,8 +26,8 @@ export default function FlowMap() {
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
     if (userData.access !== 'all') {
-      // Branch-scoped staff only ever see their own branch's flow.
-      constraints.unshift(where('branch', '==', userData.branch || '__NONE__'));
+      // Branch-scoped staff only ever see their own branch(es)' flow.
+      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
     }
     const q = query(collection(db, 'complaints'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -33,7 +35,8 @@ export default function FlowMap() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [userData?.access, userData?.branch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
 
   const scoped = useMemo(() => {
     return complaints.filter((c) => {
@@ -43,7 +46,7 @@ export default function FlowMap() {
   }, [complaints, userData, branchFilter]);
 
   const countOf = (status) => scoped.filter((c) => c.status === status).length;
-  const visibleBranches = userData?.access === 'all' ? branches : branches.filter((b) => b.id === userData?.branch);
+  const visibleBranches = userData?.access === 'all' ? branches : branches.filter((b) => userBranches(userData).includes(b.id));
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -103,7 +106,9 @@ export default function FlowMap() {
           <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
             <h3 className="font-bold text-slate-900 mb-1">{t('flowMap.totalInScope')}</h3>
             <p className="text-sm text-slate-500 mb-4">
-              {userData?.access === 'all' ? t('common.allBranches') : `${t('reports.branchShort')} ${branches.find((b) => b.id === userData?.branch)?.name || userData?.branch || '—'}`}
+              {userData?.access === 'all'
+                ? t('common.allBranches')
+                : `${t('reports.branchShort')} ${visibleBranches.map((b) => b.name).join(listSep) || '—'}`}
               {branchFilter && ` · ${t('flowMap.filteredBy')} ${branches.find((b) => b.id === branchFilter)?.name}`}
             </p>
             <p className="text-4xl font-extrabold text-slate-900 tabular-nums">{scoped.length}</p>

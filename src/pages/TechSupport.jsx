@@ -10,6 +10,7 @@ import TechSupportDetails from '../components/techSupport/TechSupportDetails';
 import TechSupportForm from '../components/techSupport/TechSupportForm';
 import { TICKET_STATUS_BADGE, OPEN_TICKET_STATUSES } from '../config/techSupport';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
+import { branchScopeConstraintValues } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -29,7 +30,20 @@ export default function TechSupport() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [branchFilter, setBranchFilter] = useState('');
   const [publicLinkOnly, setPublicLinkOnly] = useState(false);
+
+  // Keeps the open detail drawer's ticket in sync with live Firestore data —
+  // without this, actions taken inside the drawer (solve, send, etc.) would
+  // update the real record but the drawer's own status badge would stay
+  // frozen at whatever it was when the drawer was first opened, since
+  // selectedTicket is otherwise just a one-time snapshot from the row click.
+  useEffect(() => {
+    if (!selectedTicket) return;
+    const fresh = tickets.find((tk) => tk.id === selectedTicket.id);
+    setSelectedTicket(fresh || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tickets]);
 
   // Dashboard KPI cards deep-link here with ?filter=OPEN / ?filter=OVERDUE
   // (combined states not covered by the visible tabs above).
@@ -43,7 +57,7 @@ export default function TechSupport() {
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
     if (userData.access !== 'all') {
-      constraints.unshift(where('branch', '==', userData.branch || '__NONE__'));
+      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
     }
     const q = query(collection(db, 'techSupportTickets'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -59,13 +73,15 @@ export default function TechSupport() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [userData?.access, userData?.branch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
 
   const filteredTickets = useMemo(() => {
     return tickets.filter((tk) => {
       if (statusFilter === 'OPEN' && !OPEN_TICKET_STATUSES.includes(tk.status)) return false;
       if (statusFilter === 'OVERDUE' && !tk.isOverdue) return false;
       if (!['ALL', 'OPEN', 'OVERDUE'].includes(statusFilter) && tk.status !== statusFilter) return false;
+      if (branchFilter && tk.branch !== branchFilter) return false;
       if (publicLinkOnly && tk.source !== 'PARENT_PORTAL') return false;
       if (search) {
         const term = search.toLowerCase();
@@ -74,7 +90,7 @@ export default function TechSupport() {
       }
       return true;
     });
-  }, [tickets, search, statusFilter, publicLinkOnly, userData]);
+  }, [tickets, search, statusFilter, branchFilter, publicLinkOnly, userData]);
 
   const problemTypeName = (id) => problemTypes.find((pt) => pt.id === id)?.name || id;
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
@@ -116,6 +132,14 @@ export default function TechSupport() {
                 {t(`techSupportList.filters.${id}`)}
               </button>
             ))}
+            <select
+              value={branchFilter}
+              onChange={(e) => setBranchFilter(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white text-slate-600 shrink-0"
+            >
+              <option value="">{t('common.allBranches')}</option>
+              {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
             <button
               type="button"
               onClick={() => setPublicLinkOnly((v) => !v)}

@@ -137,7 +137,7 @@ exports.createStaffUser = onCall(async (request) => {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
-  const { name, email, password, role, branch, access, perms, phone, jobTitle, department, active } = request.data || {};
+  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active } = request.data || {};
   if (!name || !email || !password || !role) {
     throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
   }
@@ -165,7 +165,7 @@ exports.createStaffUser = onCall(async (request) => {
     name,
     email,
     role,
-    branch: branch || null,
+    branches: access === "all" ? [] : (Array.isArray(branches) ? branches : []),
     access: access === "all" ? "all" : "branch",
     perms: {
       edit: !!perms?.edit,

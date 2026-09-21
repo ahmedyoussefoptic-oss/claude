@@ -715,6 +715,7 @@
       "IT": "IT"
     },
     "departmentHint": "For administrative/academic/behavioral complaints, this determines which complaint types they handle. Choose \"IT\" for the tech support team — without a staff member in this department, tech support tickets won't be auto-assigned to anyone.",
+    "multiBranchHint": "More than one branch can be selected — the staff member will only see data for the branches checked here. Leave empty if they shouldn't see any branch.",
     "activeStatus": "Active",
     "suspendedStatus": "Suspended",
     "accessPermsTitle": "Access scope and permissions",
@@ -722,7 +723,7 @@
     "permEditComplaints": "Edit complaints",
     "permDeleteComplaints": "Delete complaints",
     "permManageUsers": "Manage staff",
-    "accessPermsHint": "Without enabling \"View all branches\", the staff member sees only their own branch's complaints. \"Edit complaints\" includes assignment, resolution, and escalation; without it, access is read-only.",
+    "accessPermsHint": "Without enabling \"View all branches\", the staff member sees only the branches checked above. \"Edit complaints\" includes assignment, resolution, and escalation; without it, access is read-only.",
     "saveChanges": "Save changes",
     "filtersLabel": "Filters",
     "rolesFilterLabel": "Roles (permission)",

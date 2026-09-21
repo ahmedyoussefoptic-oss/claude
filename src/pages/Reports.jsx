@@ -6,6 +6,7 @@ import { useBranches, useComplaintTypes, useSubTypes } from '../hooks/useOrgData
 import useAuthStore from '../stores/useAuthStore';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import { normalizeAssignees } from '../utils/assignees';
+import { branchScopeConstraintValues } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import logo from '../assets/logo.png';
@@ -60,11 +61,20 @@ export default function Reports() {
   const [reportType, setReportType] = useState('COMPLAINTS');
   const [selectedComplaint, setSelectedComplaint] = useState(null);
 
+  // Keeps the open detail drawer's complaint in sync with live Firestore
+  // data — otherwise it stays frozen at whatever it was when first opened.
+  useEffect(() => {
+    if (!selectedComplaint) return;
+    const fresh = complaints.find((c) => c.id === selectedComplaint.id);
+    setSelectedComplaint(fresh || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [complaints]);
+
   useEffect(() => {
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
     if (userData.access !== 'all') {
-      constraints.unshift(where('branch', '==', userData.branch || '__NONE__'));
+      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
     }
     const q = query(collection(db, 'complaints'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -74,7 +84,8 @@ export default function Reports() {
       }));
     });
     return () => unsubscribe();
-  }, [userData?.access, userData?.branch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {

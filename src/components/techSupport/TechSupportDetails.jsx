@@ -7,6 +7,7 @@ import useAuthStore from '../../stores/useAuthStore';
 import { useUsers } from '../../hooks/useUsers';
 import { useBranches, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
 import { ROLES } from '../../config/roles';
+import { userBranches } from '../../utils/scope';
 import { TICKET_STATUS_BADGE } from '../../config/techSupport';
 import { waLink, buildCredentialMessage, buildTechSupportReceiptMessage, buildTechSupportResolutionMessage, toWhatsAppNumber } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
@@ -51,7 +52,7 @@ function TechSupportDetailsInner({ ticket, onClose }) {
   const isAdmin = userData?.role === ROLES.ADMIN;
   // Mirrors firestore.rules' canEditRecord/canDeleteRecord: a branch-scoped
   // holder of the edit/delete permission only gets it for their own branch.
-  const inScope = isAdmin || userData?.access === 'all' || userData?.branch === ticket.branch;
+  const inScope = isAdmin || userData?.access === 'all' || userBranches(userData).includes(ticket.branch);
   const canEdit = isAdmin || (inScope && userData?.perms?.edit === true);
   const canDelete = isAdmin || (inScope && userData?.perms?.delete === true);
 

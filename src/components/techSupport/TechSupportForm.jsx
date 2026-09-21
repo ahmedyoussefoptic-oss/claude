@@ -11,6 +11,7 @@ import { RELATIONS, generateTicketId, classOptionsForStage } from '../../config/
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { waLink, buildTechSupportReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
+import { userBranches } from '../../utils/scope';
 
 export default function TechSupportForm({ onClose }) {
   const { t } = useTranslation();
@@ -81,7 +82,7 @@ export default function TechSupportForm({ onClose }) {
   const findItSpecialist = () => {
     const candidates = staff.filter(
       (u) => u.role === 'SPECIALIST' && u.department === 'IT' && u.active !== false &&
-        (u.access === 'all' || u.branch === formData.branch)
+        (u.access === 'all' || userBranches(u).includes(formData.branch))
     );
     // Prefer a branch-specific specialist over an all-branch one.
     candidates.sort((a, b) => (a.access === 'all' ? 1 : 0) - (b.access === 'all' ? 1 : 0));

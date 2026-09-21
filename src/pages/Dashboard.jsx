@@ -11,6 +11,7 @@ import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
 import { OPEN_TICKET_STATUSES } from '../config/techSupport';
 import ComplaintForm from '../components/complaints/ComplaintForm';
 import PublicLinkModal from '../components/common/PublicLinkModal';
+import { branchScopeConstraintValues } from '../utils/scope';
 
 // Generic branch-scoped live-count hook shared by the tech-support and
 // lost-found KPI cards below — same scoping rule as the complaints query.
@@ -20,7 +21,7 @@ function useBranchScopedCollection(collectionName, userData, enabled = true) {
     if (!userData || !enabled) return;
     const constraints = [orderBy('createdAt', 'desc')];
     if (userData.access !== 'all') {
-      constraints.unshift(where('branch', '==', userData.branch || '__NONE__'));
+      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
     }
     const q = query(collection(db, collectionName), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -28,7 +29,7 @@ function useBranchScopedCollection(collectionName, userData, enabled = true) {
     });
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collectionName, userData?.access, userData?.branch, enabled]);
+  }, [collectionName, userData?.access, userData?.branch, userData?.branches?.join(','), enabled]);
   return docs;
 }
 
@@ -92,7 +93,7 @@ export default function Dashboard() {
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
     if (userData.access !== 'all') {
-      constraints.unshift(where('branch', '==', userData.branch || '__NONE__'));
+      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
     }
     const q = query(collection(db, 'complaints'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -130,7 +131,8 @@ export default function Dashboard() {
       setStats(newStats);
     });
     return () => unsubscribe();
-  }, [userData?.access, userData?.branch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
 
   const branchChartData = useMemo(() => {
     return branches

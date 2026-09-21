@@ -6,6 +6,7 @@ import { db, functions } from '../config/firebase';
 import { ROLES, ROLE_LABELS } from '../config/roles';
 import { useBranches } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
+import { userBranches } from '../utils/scope';
 import { Users as UsersIcon, Plus, Loader2, Mail, Lock, Phone, Briefcase, User as UserIcon, Pencil, Trash2, KeyRound, X, SlidersHorizontal, RotateCcw } from 'lucide-react';
 
 const DEPARTMENT_IDS = ['ADMINISTRATIVE', 'ACADEMIC', 'BEHAVIORAL', 'IT'];
@@ -19,13 +20,14 @@ const emptyForm = {
   department: '',
   active: true,
   role: ROLES.CUSTOMER_SERVICE,
-  branch: '',
+  branches: [],
   access: 'branch',
   perms: { edit: false, delete: false, users: false },
 };
 
 export default function Users() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const listSep = i18n.language === 'ar' ? '، ' : ', ';
   const roleName = (r) => t(`roles.${r}`, ROLE_LABELS[r] || r);
   const departmentName = (id) => t(`users.departments.${id}`, id);
   const { user: currentUser } = useAuthStore();
@@ -73,7 +75,7 @@ export default function Users() {
       department: u.department || '',
       active: u.active !== false,
       role: u.role || ROLES.CUSTOMER_SERVICE,
-      branch: u.branch || '',
+      branches: userBranches(u),
       access: u.access === 'all' ? 'all' : 'branch',
       perms: { edit: !!u.perms?.edit, delete: !!u.perms?.delete, users: !!u.perms?.users },
     });
@@ -97,6 +99,7 @@ export default function Users() {
     setError(null);
     try {
       const department = form.role === ROLES.SPECIALIST ? (form.department || null) : null;
+      const branches = form.access === 'all' ? [] : form.branches;
       if (editingId) {
         await updateDoc(doc(db, 'users', editingId), {
           name: form.name,
@@ -105,7 +108,7 @@ export default function Users() {
           department,
           active: form.active,
           role: form.role,
-          branch: form.access === 'all' ? null : (form.branch || null),
+          branches,
           access: form.access,
           perms: form.perms,
         });
@@ -122,7 +125,7 @@ export default function Users() {
           department,
           active: form.active,
           role: form.role,
-          branch: form.access === 'all' ? null : (form.branch || null),
+          branches,
           access: form.access,
           perms: form.perms,
         });
@@ -179,7 +182,7 @@ export default function Users() {
   const isAdminRole = form.role === ROLES.ADMIN;
 
   const filteredUsers = users.filter((u) => {
-    if (branchFilter && u.access !== 'all' && u.branch !== branchFilter) return false;
+    if (branchFilter && u.access !== 'all' && !userBranches(u).includes(branchFilter)) return false;
     if (roleFilter && u.role !== roleFilter) return false;
     return true;
   });
@@ -293,17 +296,25 @@ export default function Users() {
                 ))}
               </select>
             </div>
-            <div>
+            <div className="md:col-span-2">
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')}</label>
-              <select
-                value={form.branch}
-                onChange={(e) => setForm((p) => ({ ...p, branch: e.target.value }))}
-                disabled={form.access === 'all'}
-                className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary bg-white disabled:bg-slate-50 disabled:text-slate-400"
-              >
-                <option value="">{t('complaintForm.selectBranch')}</option>
-                {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
+              <div className={`flex flex-wrap gap-x-5 gap-y-2 border border-slate-200 rounded-xl p-3 ${form.access === 'all' ? 'bg-slate-50 opacity-60' : 'bg-white'}`}>
+                {branches.map((b) => (
+                  <label key={b.id} className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={form.branches.includes(b.id)}
+                      disabled={form.access === 'all'}
+                      onChange={(e) => setForm((p) => ({
+                        ...p,
+                        branches: e.target.checked ? [...p.branches, b.id] : p.branches.filter((id) => id !== b.id),
+                      }))}
+                    />
+                    {b.name}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">{t('users.multiBranchHint')}</p>
             </div>
             {form.role === ROLES.SPECIALIST && (
               <div>
@@ -476,7 +487,9 @@ export default function Users() {
                       {u.department ? departmentName(u.department) : '—'}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
-                      {u.access === 'all' ? `🌐 ${t('common.allBranches')}` : (branches.find(b => b.id === u.branch)?.name || '—')}
+                      {u.access === 'all'
+                        ? `🌐 ${t('common.allBranches')}`
+                        : (userBranches(u).map((id) => branches.find((b) => b.id === id)?.name || id).join(listSep) || '—')}
                     </td>
                     <td className="px-6 py-4 text-sm">{u.perms?.edit ? '✔' : '—'}</td>
                     <td className="px-6 py-4 text-sm">{u.perms?.delete ? '✔' : '—'}</td>

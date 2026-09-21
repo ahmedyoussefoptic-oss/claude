@@ -10,6 +10,7 @@ import useAuthStore from '../stores/useAuthStore';
 import { useBranches, useItemCategories } from '../hooks/useOrgData';
 import { ITEM_STATUS_BADGE } from '../config/lostFound';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
+import { branchScopeConstraintValues } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -37,11 +38,20 @@ export default function LostFound() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
+  // Keeps the open detail drawer's item in sync with live Firestore data —
+  // otherwise it stays frozen at whatever it was when first opened.
+  useEffect(() => {
+    if (!selectedItem) return;
+    const fresh = items.find((it) => it.id === selectedItem.id);
+    setSelectedItem(fresh || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
+
   useEffect(() => {
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
     if (userData.access !== 'all') {
-      constraints.unshift(where('branch', '==', userData.branch || '__NONE__'));
+      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
     }
     const q = query(collection(db, 'lostFoundItems'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -49,7 +59,8 @@ export default function LostFound() {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [userData?.access, userData?.branch]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {

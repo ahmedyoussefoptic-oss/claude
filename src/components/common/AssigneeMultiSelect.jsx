@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, X } from 'lucide-react';
+import { userBranches } from '../../utils/scope';
 
 // Staff eligible to be assigned a complaint/ticket/item: specialists (the
 // usual case), plus upper management and the system admin so a record can be
@@ -12,7 +13,7 @@ export function eligibleAssignees(staff, { branch, complaintType } = {}) {
     .filter((u) =>
       ['SPECIALIST', 'UPPER_MANAGEMENT', 'ADMIN'].includes(u.role) &&
       u.active !== false &&
-      (u.access === 'all' || !branch || u.branch === branch)
+      (u.access === 'all' || !branch || userBranches(u).includes(branch))
     )
     .sort((a, b) => {
       const aMatch = a.department === complaintType ? 0 : 1;
