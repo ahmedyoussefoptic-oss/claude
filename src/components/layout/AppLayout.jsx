@@ -31,9 +31,10 @@ export default function AppLayout() {
   ];
 
   // Tech Support tickets can hold national IDs and account credentials, so
-  // access is restricted to the IT department's own specialists (plus
-  // admins, like every other restricted page here).
-  if (role === 'ADMIN' || userData?.department === 'IT') {
+  // access is restricted to the IT department's own specialists, admins,
+  // and Customer Service (they're the ones who take the parent's call and
+  // log the ticket in the first place, before it reaches IT).
+  if (role === 'ADMIN' || role === 'CUSTOMER_SERVICE' || userData?.department === 'IT') {
     navItems.splice(3, 0, { name: t('nav.techSupport'), path: '/tech-support', icon: Wrench });
   }
 

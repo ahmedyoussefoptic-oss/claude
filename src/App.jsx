@@ -41,7 +41,7 @@ function App() {
           <Route path="complaints" element={<ComplaintsList />} />
           <Route path="lost-found" element={<LostFound />} />
           <Route path="tech-support" element={
-            <ProtectedRoute allowedRoles={[ROLES.ADMIN]} requireDepartment="IT">
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.CUSTOMER_SERVICE]} requireDepartment="IT">
               <TechSupport />
             </ProtectedRoute>
           } />

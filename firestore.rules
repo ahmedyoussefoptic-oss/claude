@@ -41,10 +41,12 @@ service cloud.firestore {
     }
 
     // Tech-support tickets hold national IDs and account credentials, so
-    // that module is restricted to the IT department's own specialists
-    // (an admin always passes too, like every other admin-only area).
-    function isITStaff() {
-      return isAdmin() || (myDoc() != null && myDoc().get('department', null) == 'IT');
+    // that module is restricted to the IT department's own specialists,
+    // admins, and Customer Service — they're the ones who take the
+    // parent's call and log the ticket before it ever reaches IT.
+    function canAccessTechSupport() {
+      return isAdmin() ||
+        (myDoc() != null && (myDoc().get('department', null) == 'IT' || myDoc().get('role', null) == 'CUSTOMER_SERVICE'));
     }
 
     // A narrow allowance for the public parent-tracking portal: an
@@ -208,7 +210,7 @@ service cloud.firestore {
     }
     match /deletedTechSupportTickets/{archiveId} {
       allow read: if isAdmin();
-      allow create: if isITStaff() && canDeleteRecord(request.resource.data.ticket.branch);
+      allow create: if canAccessTechSupport() && canDeleteRecord(request.resource.data.ticket.branch);
       allow update, delete: if false;
     }
 
@@ -231,9 +233,10 @@ service cloud.firestore {
     // Tech-support tickets — holds national IDs and is adjacent to a
     // credential-delivery workflow, so unlike complaints/lost-found this is
     // never publicly readable or creatable; staff must be signed in for
-    // every operation, not just write. Further restricted to the IT
-    // department's own staff (isITStaff()) — this module is not open to
-    // every signed-in employee the way complaints/lost-found are.
+    // every operation, not just write. Further restricted via
+    // canAccessTechSupport() to IT department staff, Customer Service (who
+    // log the ticket when a parent calls in), and admins — this module is
+    // not open to every signed-in employee the way complaints/lost-found are.
     match /techSupportTickets/{ticketId} {
       // Deliberately never publicly readable/writable (holds national IDs
       // and account credentials) — even the parent's satisfaction survey
@@ -241,14 +244,14 @@ service cloud.firestore {
       // instead of a narrow anonymous update rule like the other two
       // collections get, so this stays "staff must be signed in, no
       // exceptions" end to end.
-      allow get: if isITStaff() && (isAdmin() || inMyScope(resource.data.branch));
-      allow list: if isITStaff() && (isAdmin() || inMyScope(resource.data.branch));
-      allow create: if isITStaff();
-      allow update: if isITStaff() && canEditRecord(resource.data.branch);
-      allow delete: if isITStaff() && canDeleteRecord(resource.data.branch);
+      allow get: if canAccessTechSupport() && (isAdmin() || inMyScope(resource.data.branch));
+      allow list: if canAccessTechSupport() && (isAdmin() || inMyScope(resource.data.branch));
+      allow create: if canAccessTechSupport();
+      allow update: if canAccessTechSupport() && canEditRecord(resource.data.branch);
+      allow delete: if canAccessTechSupport() && canDeleteRecord(resource.data.branch);
 
       match /activityLog/{logId} {
-        allow read, create: if isITStaff();
+        allow read, create: if canAccessTechSupport();
         allow update, delete: if isAdmin();
       }
     }

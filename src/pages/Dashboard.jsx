@@ -59,7 +59,7 @@ export default function Dashboard() {
   // Tech Support is restricted to the IT department's own staff (see
   // firestore.rules) — fetching it for anyone else just trips a
   // permission-denied listener, so skip the query entirely for them.
-  const canSeeTechSupport = role === 'ADMIN' || userData?.department === 'IT';
+  const canSeeTechSupport = role === 'ADMIN' || role === 'CUSTOMER_SERVICE' || userData?.department === 'IT';
   const techTickets = useBranchScopedCollection('techSupportTickets', userData, canSeeTechSupport);
   const lostFoundItems = useBranchScopedCollection('lostFoundItems', userData);
   const techStats = useMemo(() => ({
