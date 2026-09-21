@@ -121,9 +121,11 @@ export function buildResolutionMessage(complaint, solutionDetails, template = DE
   });
 }
 
-// One-time platform-credential message for the tech-support module. The
-// caller must never persist `username`/`tempPassword` anywhere — build the
-// link, let the browser open WhatsApp, then discard the values from state.
+// One-time platform-credential message for the tech-support module. IT
+// prepares this (username/tempPassword saved to the ticket's
+// pendingCredentials field only until it's sent — see
+// TechSupportDetails.jsx), so Customer Service can open the same ticket
+// and send it themselves, mirroring the complaints solve/send split.
 export function buildCredentialMessage({ ticketId, studentName, platformName, platformLink, username, tempPassword }, template = DEFAULT_TEMPLATES.credential) {
   return renderTemplate(template, {
     ticketId,

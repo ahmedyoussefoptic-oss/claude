@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Clock, CheckCircle2, User, Phone, MapPin, Loader2, Trash2, UserPlus, MessageCircle, ShieldCheck, Link2, AlertTriangle } from 'lucide-react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useUsers } from '../../hooks/useUsers';
@@ -117,29 +117,38 @@ function TechSupportDetailsInner({ ticket, onClose }) {
     }
   };
 
-  const handleSendCredentials = async () => {
+  // IT prepares the credentials message but doesn't necessarily send it —
+  // Customer Service is usually the one with the parent-facing WhatsApp
+  // relationship, so it's saved on the ticket (pendingCredentials) until
+  // whoever sends it clicks the WhatsApp link below, exactly mirroring how
+  // complaints split "solve" (write solutionDetails) from the separate,
+  // un-gated "send resolution" link anyone viewing the record can click.
+  const handlePrepareCredentials = async () => {
     if (!username.trim() || !tempPassword.trim()) return;
-    const message = buildCredentialMessage({
-      ticketId: ticket.ticketId,
-      studentName: ticket.studentName,
-      platformName: platforms.find((p) => p.id === ticket.platform)?.name,
-      platformLink: ticket.platformLink,
-      username,
-      tempPassword,
-    }, templates.credential);
-    window.open(waLink(ticket.parentPhone, message), '_blank');
     setLoading(true);
     try {
-      // NOTE: the temp password is deliberately never written to Firestore —
-      // only the fact that credentials were sent, when, by whom, and to which
-      // registered number is kept, per the module's audit requirements.
-      await addLog('CREDENTIALS_SENT', { sentToPhone: ticket.parentPhone, usernameSent: username }, { status: 'WAITING_CONFIRMATION', resolutionMessageSentAt: serverTimestamp() });
+      await addLog('CREDENTIALS_PREPARED', {}, {
+        pendingCredentials: { username: username.trim(), tempPassword: tempPassword.trim() },
+      });
       setShowCredsForm(false);
       setUsername('');
       setTempPassword('');
     } finally {
       setLoading(false);
     }
+  };
+
+  // Fires on the WhatsApp link's click — not awaited, same as the
+  // equivalent complaints resolution-send link, so it never blocks the
+  // browser from opening wa.me. Clears pendingCredentials immediately so
+  // the password sits in Firestore for as short a window as possible.
+  const handleCredentialsSent = () => {
+    if (!ticket.pendingCredentials) return;
+    addLog('CREDENTIALS_SENT', { sentToPhone: ticket.parentPhone, usernameSent: ticket.pendingCredentials.username }, {
+      status: 'WAITING_CONFIRMATION',
+      resolutionMessageSentAt: serverTimestamp(),
+      pendingCredentials: deleteField(),
+    });
   };
 
   const handleConfirmClose = async () => {
@@ -284,11 +293,30 @@ function TechSupportDetailsInner({ ticket, onClose }) {
                 {t('techSupportDetails.startProcessing')}
               </button>
             )}
-            {canEdit && ticket.status === 'IN_PROGRESS' && ticket.identityVerified && (
+            {canEdit && ticket.status === 'IN_PROGRESS' && ticket.identityVerified && !ticket.pendingCredentials && (
               <button disabled={loading} onClick={() => setShowCredsForm(true)} className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2">
                 <MessageCircle className="w-4 h-4" />
-                {t('techSupportDetails.sendCredentialsWhatsApp')}
+                {t('techSupportDetails.prepareCredentialsBtn')}
               </button>
+            )}
+            {ticket.pendingCredentials && ticket.parentPhone && (
+              <a
+                href={waLink(ticket.parentPhone, buildCredentialMessage({
+                  ticketId: ticket.ticketId,
+                  studentName: ticket.studentName,
+                  platformName: platforms.find((p) => p.id === ticket.platform)?.name,
+                  platformLink: ticket.platformLink,
+                  username: ticket.pendingCredentials.username,
+                  tempPassword: ticket.pendingCredentials.tempPassword,
+                }, templates.credential))}
+                target="_blank"
+                rel="noreferrer"
+                onClick={handleCredentialsSent}
+                className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4" />
+                {t('techSupportDetails.sendCredentialsWhatsApp')}
+              </a>
             )}
             {canEdit && ticket.status === 'WAITING_CONFIRMATION' && (
               <button disabled={loading} onClick={handleConfirmClose} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors">
@@ -331,8 +359,8 @@ function TechSupportDetailsInner({ ticket, onClose }) {
               />
               <p className="text-xs text-slate-500">{t('techSupportDetails.willSendToRegistered')} <span dir="ltr" className="font-mono">{toWhatsAppNumber(ticket.parentPhone)}</span></p>
               <div className="flex gap-2">
-                <button disabled={loading || !username.trim() || !tempPassword.trim()} onClick={handleSendCredentials} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
-                  {t('techSupportDetails.openWhatsAppSend')}
+                <button disabled={loading || !username.trim() || !tempPassword.trim()} onClick={handlePrepareCredentials} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
+                  {t('techSupportDetails.saveCredentialsBtn')}
                 </button>
                 <button onClick={() => setShowCredsForm(false)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200">{t('techSupportDetails.cancel')}</button>
               </div>
