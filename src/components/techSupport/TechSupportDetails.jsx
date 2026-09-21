@@ -8,7 +8,7 @@ import { useUsers } from '../../hooks/useUsers';
 import { useBranches, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
 import { ROLES } from '../../config/roles';
 import { TICKET_STATUS_BADGE } from '../../config/techSupport';
-import { waLink, buildCredentialMessage, buildTechSupportReceiptMessage, toWhatsAppNumber } from '../../utils/whatsapp';
+import { waLink, buildCredentialMessage, buildTechSupportReceiptMessage, buildTechSupportResolutionMessage, toWhatsAppNumber } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import ErrorBoundary from '../common/ErrorBoundary';
@@ -41,6 +41,7 @@ function TechSupportDetailsInner({ ticket, onClose }) {
   const [showCredsForm, setShowCredsForm] = useState(false);
   const [username, setUsername] = useState('');
   const [tempPassword, setTempPassword] = useState('');
+  const [resolutionNote, setResolutionNote] = useState('');
 
   useEffect(() => {
     setSelectedAssignees(ticket.assignedTo || []);
@@ -117,22 +118,33 @@ function TechSupportDetailsInner({ ticket, onClose }) {
     }
   };
 
-  // IT prepares the credentials message but doesn't necessarily send it —
-  // Customer Service is usually the one with the parent-facing WhatsApp
-  // relationship, so it's saved on the ticket (pendingCredentials) until
-  // whoever sends it clicks the WhatsApp link below, exactly mirroring how
-  // complaints split "solve" (write solutionDetails) from the separate,
-  // un-gated "send resolution" link anyone viewing the record can click.
-  const handlePrepareCredentials = async () => {
-    if (!username.trim() || !tempPassword.trim()) return;
+  // Not every ticket needs an account credential reset — IT can save just a
+  // resolutionNote, just credentials, or both. Kept on the ticket (not
+  // cleared after sending) since the same credentials are often needed
+  // again later (parent didn't receive the message, lost it, etc.).
+  const hasPartialCredentials = Boolean(username.trim()) !== Boolean(tempPassword.trim());
+  const hasFullCredentials = Boolean(username.trim() && tempPassword.trim());
+  const canSaveResolution = !hasPartialCredentials && (hasFullCredentials || Boolean(resolutionNote.trim()));
+
+  const openResolutionForm = () => {
+    setUsername(ticket.credentials?.username || '');
+    setTempPassword(ticket.credentials?.tempPassword || '');
+    setResolutionNote(ticket.resolutionNote || '');
+    setShowCredsForm(true);
+  };
+
+  const handleSaveResolution = async () => {
+    if (!canSaveResolution) return;
+    const trimmedUsername = username.trim();
+    const trimmedPassword = tempPassword.trim();
+    const trimmedNote = resolutionNote.trim();
     setLoading(true);
     try {
       await addLog('CREDENTIALS_PREPARED', {}, {
-        pendingCredentials: { username: username.trim(), tempPassword: tempPassword.trim() },
+        credentials: trimmedUsername && trimmedPassword ? { username: trimmedUsername, tempPassword: trimmedPassword } : deleteField(),
+        resolutionNote: trimmedNote || deleteField(),
       });
       setShowCredsForm(false);
-      setUsername('');
-      setTempPassword('');
     } finally {
       setLoading(false);
     }
@@ -140,14 +152,17 @@ function TechSupportDetailsInner({ ticket, onClose }) {
 
   // Fires on the WhatsApp link's click — not awaited, same as the
   // equivalent complaints resolution-send link, so it never blocks the
-  // browser from opening wa.me. Clears pendingCredentials immediately so
-  // the password sits in Firestore for as short a window as possible.
-  const handleCredentialsSent = () => {
-    if (!ticket.pendingCredentials) return;
-    addLog('CREDENTIALS_SENT', { sentToPhone: ticket.parentPhone, usernameSent: ticket.pendingCredentials.username }, {
+  // browser from opening wa.me. credentials/resolutionNote are deliberately
+  // left in place afterward so the same message can be resent later.
+  const handleResolutionSent = () => {
+    const hasCredentials = ticket.credentials?.username && ticket.credentials?.tempPassword;
+    if (!hasCredentials && !ticket.resolutionNote) return;
+    addLog('CREDENTIALS_SENT', {
+      sentToPhone: ticket.parentPhone,
+      ...(hasCredentials ? { usernameSent: ticket.credentials.username } : {}),
+    }, {
       status: 'WAITING_CONFIRMATION',
       resolutionMessageSentAt: serverTimestamp(),
-      pendingCredentials: deleteField(),
     });
   };
 
@@ -293,25 +308,28 @@ function TechSupportDetailsInner({ ticket, onClose }) {
                 {t('techSupportDetails.startProcessing')}
               </button>
             )}
-            {canEdit && ticket.status === 'IN_PROGRESS' && ticket.identityVerified && !ticket.pendingCredentials && (
-              <button disabled={loading} onClick={() => setShowCredsForm(true)} className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2">
+            {canEdit && ticket.identityVerified && ticket.status !== 'CLOSED' && (
+              <button disabled={loading} onClick={openResolutionForm} className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2">
                 <MessageCircle className="w-4 h-4" />
-                {t('techSupportDetails.prepareCredentialsBtn')}
+                {(ticket.credentials || ticket.resolutionNote) ? t('techSupportDetails.editResolutionBtn') : t('techSupportDetails.prepareCredentialsBtn')}
               </button>
             )}
-            {ticket.pendingCredentials && ticket.parentPhone && (
+            {(ticket.credentials || ticket.resolutionNote) && ticket.parentPhone && ticket.status !== 'CLOSED' && (
               <a
-                href={waLink(ticket.parentPhone, buildCredentialMessage({
-                  ticketId: ticket.ticketId,
-                  studentName: ticket.studentName,
-                  platformName: platforms.find((p) => p.id === ticket.platform)?.name,
-                  platformLink: ticket.platformLink,
-                  username: ticket.pendingCredentials.username,
-                  tempPassword: ticket.pendingCredentials.tempPassword,
-                }, templates.credential))}
+                href={waLink(ticket.parentPhone, ticket.credentials?.username && ticket.credentials?.tempPassword
+                  ? buildCredentialMessage({
+                    ticketId: ticket.ticketId,
+                    studentName: ticket.studentName,
+                    platformName: platforms.find((p) => p.id === ticket.platform)?.name,
+                    platformLink: ticket.platformLink,
+                    username: ticket.credentials.username,
+                    tempPassword: ticket.credentials.tempPassword,
+                  }, templates.credential)
+                  : buildTechSupportResolutionMessage(ticket, ticket.resolutionNote, templates.techSupportResolution)
+                )}
                 target="_blank"
                 rel="noreferrer"
-                onClick={handleCredentialsSent}
+                onClick={handleResolutionSent}
                 className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
               >
                 <MessageCircle className="w-4 h-4" />
@@ -347,6 +365,12 @@ function TechSupportDetailsInner({ ticket, onClose }) {
                 <ShieldCheck className="w-4 h-4 text-emerald-600" />
                 {t('techSupportDetails.credsFormTitle')}
               </h3>
+              <textarea
+                value={resolutionNote} onChange={(e) => setResolutionNote(e.target.value)}
+                placeholder={t('techSupportDetails.resolutionNotePlaceholder')} rows={3}
+                className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+              />
+              <p className="text-xs text-slate-400">{t('techSupportDetails.credentialsOptionalHint')}</p>
               <input
                 type="text" value={username} onChange={(e) => setUsername(e.target.value)}
                 placeholder={t('techSupportDetails.usernamePlaceholder')} dir="ltr"
@@ -359,7 +383,7 @@ function TechSupportDetailsInner({ ticket, onClose }) {
               />
               <p className="text-xs text-slate-500">{t('techSupportDetails.willSendToRegistered')} <span dir="ltr" className="font-mono">{toWhatsAppNumber(ticket.parentPhone)}</span></p>
               <div className="flex gap-2">
-                <button disabled={loading || !username.trim() || !tempPassword.trim()} onClick={handlePrepareCredentials} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
+                <button disabled={loading || !canSaveResolution} onClick={handleSaveResolution} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
                   {t('techSupportDetails.saveCredentialsBtn')}
                 </button>
                 <button onClick={() => setShowCredsForm(false)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200">{t('techSupportDetails.cancel')}</button>
@@ -447,7 +471,9 @@ function TechSupportDetailsInner({ ticket, onClose }) {
                     <p className="text-sm text-slate-600 mb-1">{t('complaintDetails.by')} {log.actorName || t('complaintDetails.system')}</p>
                     {log.metadata?.sentToPhone && (
                       <div className="mt-2 p-3 bg-emerald-50 text-emerald-800 rounded-lg text-sm border border-emerald-100">
-                        {t('techSupportDetails.credentialsSentDetail', { phone: log.metadata.sentToPhone, username: log.metadata.usernameSent })}
+                        {log.metadata.usernameSent
+                          ? t('techSupportDetails.credentialsSentDetail', { phone: log.metadata.sentToPhone, username: log.metadata.usernameSent })
+                          : t('techSupportDetails.resolutionSentDetail', { phone: log.metadata.sentToPhone })}
                       </div>
                     )}
                     {log.metadata?.reason && (

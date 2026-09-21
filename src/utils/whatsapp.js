@@ -85,6 +85,18 @@ export const DEFAULT_TEMPLATES = {
     '',
     'مدارس مكتشف العالمية',
   ].join('\n'),
+  // Used when a tech-support ticket is resolved without any account
+  // credentials involved (not every ticket needs a password reset).
+  techSupportResolution: [
+    'مرحباً {{parentName}}،',
+    'بخصوص بلاغكم التقني رقم {{ticketId}} الخاص بالطالب/ة {{studentName}}:',
+    '',
+    '{{resolutionNote}}',
+    '',
+    'لأي استفسار: مركز خدمة العملاء',
+    '',
+    'يرجى تأكيد نجاح الحل أو تقييم الخدمة عبر الرابط التالي: {{trackingLink}}',
+  ].join('\n'),
 };
 
 // The placeholder tokens each template may use — surfaced in Settings so an
@@ -96,6 +108,7 @@ export const TEMPLATE_PLACEHOLDERS = {
   lostFoundReceipt: ['reporterName', 'itemCode', 'itemName', 'trackingLink'],
   lostFoundResolution: ['reporterName', 'itemCode', 'itemName', 'trackingLink'],
   techSupportReceipt: ['parentName', 'ticketId', 'studentName', 'trackingLink'],
+  techSupportResolution: ['parentName', 'ticketId', 'studentName', 'resolutionNote', 'trackingLink'],
 };
 
 function renderTemplate(template, vars) {
@@ -121,11 +134,14 @@ export function buildResolutionMessage(complaint, solutionDetails, template = DE
   });
 }
 
-// One-time platform-credential message for the tech-support module. IT
-// prepares this (username/tempPassword saved to the ticket's
-// pendingCredentials field only until it's sent — see
-// TechSupportDetails.jsx), so Customer Service can open the same ticket
-// and send it themselves, mirroring the complaints solve/send split.
+// Platform-credential message for the tech-support module — only used when
+// a ticket actually needed a username/password reset (not every ticket
+// does; see resolutionNote / buildTechSupportResolutionMessage below for
+// the general case). IT prepares this (saved on the ticket's `credentials`
+// field, kept — not cleared — after sending, since it's common to need to
+// resend the same credentials again later), so Customer Service can open
+// the same ticket and send it themselves, mirroring the complaints
+// solve/send split.
 export function buildCredentialMessage({ ticketId, studentName, platformName, platformLink, username, tempPassword }, template = DEFAULT_TEMPLATES.credential) {
   return renderTemplate(template, {
     ticketId,
@@ -161,6 +177,16 @@ export function buildTechSupportReceiptMessage(ticket, template = DEFAULT_TEMPLA
     parentName: ticket.parentName,
     ticketId: ticket.ticketId,
     studentName: ticket.studentName,
+    trackingLink: trackingLink(ticket.ticketId),
+  });
+}
+
+export function buildTechSupportResolutionMessage(ticket, resolutionNote, template = DEFAULT_TEMPLATES.techSupportResolution) {
+  return renderTemplate(template, {
+    parentName: ticket.parentName,
+    ticketId: ticket.ticketId,
+    studentName: ticket.studentName,
+    resolutionNote,
     trackingLink: trackingLink(ticket.ticketId),
   });
 }
