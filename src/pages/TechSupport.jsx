@@ -13,7 +13,7 @@ import MessageStatusIndicators from '../components/common/MessageStatusIndicator
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
-const FILTER_IDS = ['ALL', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_CONFIRMATION', 'CLOSED'];
+const FILTER_IDS = ['ALL', 'ASSIGNED', 'IN_PROGRESS', 'SOLVED', 'WAITING_CONFIRMATION', 'CLOSED'];
 
 export default function TechSupport() {
   const { t, i18n } = useTranslation();

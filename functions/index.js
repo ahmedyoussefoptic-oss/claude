@@ -45,7 +45,7 @@ async function sendEmail(to, subject, text) {
 }
 
 const OPEN_STATUSES = ["RECEIVED", "IN_PROGRESS", "WAITING_PARENT_RESPONSE", "ESCALATED"];
-const OPEN_TICKET_STATUSES = ["NEW", "ASSIGNED", "IN_PROGRESS", "WAITING_CONFIRMATION", "REOPENED"];
+const OPEN_TICKET_STATUSES = ["NEW", "ASSIGNED", "IN_PROGRESS", "SOLVED", "WAITING_CONFIRMATION", "REOPENED"];
 const OPEN_LOST_FOUND_STATUSES = ["UNCLAIMED", "MATCHED"];
 
 // Removes a staff account (Firebase Auth + Firestore profile) via the Admin
@@ -588,7 +588,7 @@ exports.scheduledSlaEngine = onSchedule("every 1 hours", async (event) => {
   // is included so an unassigned ticket doesn't sit forever with a blown
   // SLA and no escalation.
   const itSnapshot = await db.collection("techSupportTickets")
-    .where("status", "in", ["NEW", "ASSIGNED", "IN_PROGRESS", "WAITING_CONFIRMATION"])
+    .where("status", "in", ["NEW", "ASSIGNED", "IN_PROGRESS", "SOLVED", "WAITING_CONFIRMATION"])
     .get();
 
   for (const doc of itSnapshot.docs) {

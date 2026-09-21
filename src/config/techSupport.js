@@ -26,11 +26,14 @@ export function classOptionsForStage(stage) {
   return [...numeric, ...alpha];
 }
 
-// Status flow: NEW -> ASSIGNED -> IN_PROGRESS -> WAITING_CONFIRMATION -> CLOSED / REOPENED
+// Status flow: NEW -> ASSIGNED -> IN_PROGRESS -> SOLVED -> WAITING_CONFIRMATION -> CLOSED / REOPENED
+// SOLVED is set the moment IT saves a resolution (credentials and/or a
+// note) — before that message has necessarily been sent to the parent.
 export const TICKET_STATUS_LABELS = {
   NEW: 'جديد',
   ASSIGNED: 'مُسند',
   IN_PROGRESS: 'قيد المعالجة',
+  SOLVED: 'تم الحل',
   WAITING_CONFIRMATION: 'بانتظار تأكيد المستفيد',
   CLOSED: 'مغلق',
   REOPENED: 'معاد فتحه',
@@ -40,12 +43,13 @@ export const TICKET_STATUS_BADGE = {
   NEW: 'bg-blue-100 text-blue-800 border-blue-200',
   ASSIGNED: 'bg-purple-100 text-purple-800 border-purple-200',
   IN_PROGRESS: 'bg-amber-100 text-amber-800 border-amber-200',
+  SOLVED: 'bg-teal-100 text-teal-800 border-teal-200',
   WAITING_CONFIRMATION: 'bg-sky-100 text-sky-800 border-sky-200',
   CLOSED: 'bg-emerald-100 text-emerald-800 border-emerald-200',
   REOPENED: 'bg-red-100 text-red-800 border-red-200',
 };
 
-export const OPEN_TICKET_STATUSES = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_CONFIRMATION', 'REOPENED'];
+export const OPEN_TICKET_STATUSES = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'SOLVED', 'WAITING_CONFIRMATION', 'REOPENED'];
 
 export function generateTicketId() {
   const year = new Date().getFullYear();

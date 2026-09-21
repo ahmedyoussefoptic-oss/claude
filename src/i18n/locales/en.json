@@ -142,6 +142,7 @@
       "NEW": "New",
       "ASSIGNED": "Assigned",
       "IN_PROGRESS": "In Progress",
+      "SOLVED": "Solved",
       "WAITING_CONFIRMATION": "Awaiting Confirmation",
       "CLOSED": "Closed",
       "REOPENED": "Reopened"
@@ -495,6 +496,7 @@
         "NEW": "Received",
         "ASSIGNED": "In Progress",
         "IN_PROGRESS": "In Progress",
+        "SOLVED": "In Progress",
         "WAITING_CONFIRMATION": "Solution Sent — Awaiting Your Confirmation",
         "CLOSED": "Resolved",
         "REOPENED": "Reopened and Being Followed Up"
@@ -560,6 +562,7 @@
       "ALL": "All",
       "ASSIGNED": "Assigned",
       "IN_PROGRESS": "In Progress",
+      "SOLVED": "Solved",
       "WAITING_CONFIRMATION": "Awaiting Confirmation",
       "CLOSED": "Closed"
     },

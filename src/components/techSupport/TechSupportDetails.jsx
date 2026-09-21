@@ -140,10 +140,18 @@ function TechSupportDetailsInner({ ticket, onClose }) {
     const trimmedNote = resolutionNote.trim();
     setLoading(true);
     try {
-      await addLog('CREDENTIALS_PREPARED', {}, {
+      const updates = {
         credentials: trimmedUsername && trimmedPassword ? { username: trimmedUsername, tempPassword: trimmedPassword } : deleteField(),
         resolutionNote: trimmedNote || deleteField(),
-      });
+      };
+      // Writing a resolution means the ticket is solved, not still "in
+      // progress" — unless it's already past that point (sent and awaiting
+      // the parent's confirmation), in which case an edit shouldn't undo
+      // that progress.
+      if (!['WAITING_CONFIRMATION', 'CLOSED'].includes(ticket.status)) {
+        updates.status = 'SOLVED';
+      }
+      await addLog('CREDENTIALS_PREPARED', {}, updates);
       setShowCredsForm(false);
     } finally {
       setLoading(false);
