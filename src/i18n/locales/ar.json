@@ -39,6 +39,7 @@
     "select": "اختر...",
     "sendReceiptWhatsApp": "إرسال رسالة الاستلام عبر واتساب",
     "sendResolutionWhatsApp": "إرسال رسالة الحل عبر واتساب",
+    "shareWithStaff": "مشاركة مع موظف عبر واتساب",
     "user": "مستخدم"
   },
   "nav": {
@@ -783,7 +784,9 @@
       "lostFoundReceipt": "رسالة استلام بلاغ مفقودات",
       "lostFoundResolution": "رسالة تسليم المفقودات",
       "techSupportReceipt": "رسالة استلام بلاغ تقني",
-      "techSupportResolution": "رسالة حل البلاغ التقني (بدون بيانات دخول)"
+      "techSupportResolution": "رسالة حل البلاغ التقني (بدون بيانات دخول)",
+      "complaintShare": "رسالة مشاركة ملاحظة مع موظف",
+      "techSupportShare": "رسالة مشاركة بلاغ تقني مع موظف"
     },
     "restoreDefault": "استعادة الافتراضي",
     "availableVariables": "المتغيرات المتاحة:",

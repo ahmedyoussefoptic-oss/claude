@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Clock, CheckCircle2, User, Phone, MapPin, Loader2, Trash2, UserPlus, MessageCircle, ShieldCheck, Link2, AlertTriangle } from 'lucide-react';
+import { X, Clock, CheckCircle2, User, Phone, MapPin, Loader2, Trash2, UserPlus, MessageCircle, ShieldCheck, Link2, AlertTriangle, Share2 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
@@ -9,7 +9,7 @@ import { useBranches, useProblemTypes, usePlatforms } from '../../hooks/useOrgDa
 import { ROLES } from '../../config/roles';
 import { userBranches } from '../../utils/scope';
 import { TICKET_STATUS_BADGE } from '../../config/techSupport';
-import { waLink, buildCredentialMessage, buildTechSupportReceiptMessage, buildTechSupportResolutionMessage, toWhatsAppNumber } from '../../utils/whatsapp';
+import { waLink, shareLink, buildCredentialMessage, buildTechSupportReceiptMessage, buildTechSupportResolutionMessage, buildTechSupportShareMessage, toWhatsAppNumber } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import ErrorBoundary from '../common/ErrorBoundary';
@@ -300,6 +300,15 @@ function TechSupportDetailsInner({ ticket, onClose }) {
           )}
 
           <div className="flex flex-wrap gap-2">
+            <a
+              href={shareLink(buildTechSupportShareMessage(ticket, branchName, templates.techSupportShare))}
+              target="_blank"
+              rel="noreferrer"
+              className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors flex items-center gap-2"
+            >
+              <Share2 className="w-4 h-4" />
+              {t('common.shareWithStaff')}
+            </a>
             {!ticket.receiptMessageSentAt && ticket.parentPhone && (
               <a
                 href={waLink(ticket.parentPhone, buildTechSupportReceiptMessage(ticket, templates.techSupportReceipt))}

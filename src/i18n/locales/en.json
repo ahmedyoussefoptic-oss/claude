@@ -39,6 +39,7 @@
     "select": "Select...",
     "sendReceiptWhatsApp": "Send Receipt via WhatsApp",
     "sendResolutionWhatsApp": "Send Resolution via WhatsApp",
+    "shareWithStaff": "Share with staff via WhatsApp",
     "user": "User"
   },
   "nav": {
@@ -783,7 +784,9 @@
       "lostFoundReceipt": "Lost & found report receipt message",
       "lostFoundResolution": "Lost & found item return message",
       "techSupportReceipt": "Tech support ticket receipt message",
-      "techSupportResolution": "Tech support ticket resolution message (no login details)"
+      "techSupportResolution": "Tech support ticket resolution message (no login details)",
+      "complaintShare": "Complaint share message (staff)",
+      "techSupportShare": "Tech support ticket share message (staff)"
     },
     "restoreDefault": "Restore default",
     "availableVariables": "Available variables:",

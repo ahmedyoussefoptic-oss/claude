@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, Plus, ChevronLeft, Download, Loader2, SlidersHorizontal, RotateCcw, Link2 } from 'lucide-react';
@@ -60,6 +60,24 @@ export default function ComplaintsList() {
     setSelectedComplaint(fresh || null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [complaints]);
+
+  // Opens the shared/linked complaint (?openId=<doc id>, see
+  // ComplaintDetails.jsx's "share with staff" button) once it shows up in
+  // the branch-scoped live list — a recipient with no access to that
+  // branch just never gets a match, same as browsing the list normally.
+  // The ref keeps this a one-time thing so closing the drawer afterward
+  // doesn't reopen it the next time `complaints` updates.
+  const openedFromLinkRef = useRef(false);
+  useEffect(() => {
+    if (openedFromLinkRef.current) return;
+    const openId = new URLSearchParams(location.search).get('openId');
+    if (!openId) return;
+    const match = complaints.find((c) => c.id === openId);
+    if (match) {
+      setSelectedComplaint(match);
+      openedFromLinkRef.current = true;
+    }
+  }, [complaints, location.search]);
 
   useEffect(() => {
     // Wait for the caller's own profile to load before scoping the query —

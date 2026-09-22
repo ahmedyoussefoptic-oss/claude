@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
 import { Lock, Mail, Loader2, AlertCircle } from 'lucide-react';
@@ -14,12 +14,18 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const { login, loading, error } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
       await login(email, password);
-      navigate('/dashboard');
+      // A shared complaint/ticket link (?openId=...) redirects here to sign
+      // in first — ProtectedRoute stashed where the user was actually
+      // headed, so send them back there instead of always /dashboard.
+      const redirectTo = location.state?.from;
+      const target = redirectTo ? `${redirectTo.pathname}${redirectTo.search || ''}` : '/dashboard';
+      navigate(target, { replace: true });
     } catch (err) {
       // Error is handled in store
     }

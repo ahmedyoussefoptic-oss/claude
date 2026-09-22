@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, Plus, ChevronLeft, Loader2, Wrench, Link2 } from 'lucide-react';
@@ -44,6 +44,22 @@ export default function TechSupport() {
     setSelectedTicket(fresh || null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tickets]);
+
+  // Opens the shared/linked ticket (?openId=<doc id>, see
+  // TechSupportDetails.jsx's "share with staff" button) once it shows up in
+  // the branch-scoped live list. One-time via the ref so closing the drawer
+  // afterward doesn't reopen it the next time `tickets` updates.
+  const openedFromLinkRef = useRef(false);
+  useEffect(() => {
+    if (openedFromLinkRef.current) return;
+    const openId = new URLSearchParams(location.search).get('openId');
+    if (!openId) return;
+    const match = tickets.find((tk) => tk.id === openId);
+    if (match) {
+      setSelectedTicket(match);
+      openedFromLinkRef.current = true;
+    }
+  }, [tickets, location.search]);
 
   // Dashboard KPI cards deep-link here with ?filter=OPEN / ?filter=OVERDUE
   // (combined states not covered by the visible tabs above).

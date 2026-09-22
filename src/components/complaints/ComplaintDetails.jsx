@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, Trash2, Star, Link2, Mic, Square } from 'lucide-react';
+import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, Trash2, Star, Link2, Mic, Square, Share2 } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useUsers } from '../../hooks/useUsers';
-import { waLink, buildReceiptMessage, buildResolutionMessage } from '../../utils/whatsapp';
+import { useBranches } from '../../hooks/useOrgData';
+import { waLink, shareLink, buildReceiptMessage, buildResolutionMessage, buildComplaintShareMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { ROLES } from '../../config/roles';
 import { userBranches } from '../../utils/scope';
@@ -54,6 +55,8 @@ function ComplaintDetailsInner({ complaint, onClose }) {
   const listSep = i18n.language === 'ar' ? '، ' : ', ';
   const { user, userData } = useAuthStore();
   const users = useUsers();
+  const branches = useBranches();
+  const branchName = branches.find((b) => b.id === complaint.branch)?.name || complaint.branch;
   const templates = useMessageTemplates();
   const [logs, setLogs] = useState([]);
   const [reply, setReply] = useState('');
@@ -379,6 +382,15 @@ function ComplaintDetailsInner({ complaint, onClose }) {
             </div>
           )}
           <div className="flex flex-wrap gap-2 print:hidden">
+            <a
+              href={shareLink(buildComplaintShareMessage(complaint, branchName, templates.complaintShare))}
+              target="_blank"
+              rel="noreferrer"
+              className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors flex items-center gap-2"
+            >
+              <Share2 className="w-4 h-4" />
+              {t('common.shareWithStaff')}
+            </a>
             {canEdit && complaint.status === 'RECEIVED' && (
               <button disabled={loading} onClick={() => handleAction('ACKNOWLEDGE')} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
                 {t('complaintDetails.acknowledge')}
@@ -551,7 +563,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
               <div>
                 <p className="text-xs text-slate-500 mb-0.5">{t('complaintDetails.branchAndStudent')}</p>
                 <p className="font-medium text-slate-900">{complaint.studentName}</p>
-                <p className="text-sm text-slate-500 mt-1">{complaint.branch} - {complaint.grade}</p>
+                <p className="text-sm text-slate-500 mt-1">{branchName} - {complaint.grade}</p>
               </div>
             </div>
           </div>

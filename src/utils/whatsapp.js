@@ -16,8 +16,23 @@ export function trackingLink(complaintId) {
   return `${window.location.origin}/track?id=${encodeURIComponent(complaintId)}`;
 }
 
+// Deep link into the internal (staff-only) app for a specific record —
+// distinct from trackingLink() above, which is the public parent-facing
+// /track page. Opening this without permission on the record's branch
+// shows nothing extra; access is still enforced by the normal branch-scoped
+// query and firestore.rules, same as opening the record from the list.
+export function internalRecordLink(path, id) {
+  return `${window.location.origin}${path}?openId=${encodeURIComponent(id)}`;
+}
+
 export function waLink(phone, message) {
   return `https://wa.me/${toWhatsAppNumber(phone)}?text=${encodeURIComponent(message)}`;
+}
+
+// No fixed recipient — opens WhatsApp's own contact/share picker so the
+// staff member sends it to whichever colleague they choose.
+export function shareLink(message) {
+  return `https://wa.me/?text=${encodeURIComponent(message)}`;
 }
 
 // Default WhatsApp message templates, editable from Settings > قوالب
@@ -97,6 +112,27 @@ export const DEFAULT_TEMPLATES = {
     '',
     'يرجى تأكيد نجاح الحل أو تقييم الخدمة عبر الرابط التالي: {{trackingLink}}',
   ].join('\n'),
+  // Internal staff-to-staff sharing (not parent-facing) — `link` opens the
+  // record inside the app itself, gated by the recipient's own login and
+  // branch access, unlike trackingLink()'s public /track page above.
+  complaintShare: [
+    'مدارس المكتشف العالمية',
+    'مشاركة ملاحظة رقم {{complaintId}}',
+    'الطالب/ة: {{studentName}}',
+    'الفرع: {{branchName}}',
+    '',
+    'لعرض التفاصيل الكاملة (يتطلب تسجيل الدخول للنظام):',
+    '{{link}}',
+  ].join('\n'),
+  techSupportShare: [
+    'مدارس المكتشف العالمية',
+    'مشاركة بلاغ تقني رقم {{ticketId}}',
+    'الطالب/ة: {{studentName}}',
+    'الفرع: {{branchName}}',
+    '',
+    'لعرض التفاصيل الكاملة (يتطلب تسجيل الدخول للنظام):',
+    '{{link}}',
+  ].join('\n'),
 };
 
 // The placeholder tokens each template may use — surfaced in Settings so an
@@ -109,6 +145,8 @@ export const TEMPLATE_PLACEHOLDERS = {
   lostFoundResolution: ['reporterName', 'itemCode', 'itemName', 'trackingLink'],
   techSupportReceipt: ['parentName', 'ticketId', 'studentName', 'trackingLink'],
   techSupportResolution: ['parentName', 'ticketId', 'studentName', 'resolutionNote', 'trackingLink'],
+  complaintShare: ['complaintId', 'studentName', 'branchName', 'link'],
+  techSupportShare: ['ticketId', 'studentName', 'branchName', 'link'],
 };
 
 function renderTemplate(template, vars) {
@@ -188,5 +226,23 @@ export function buildTechSupportResolutionMessage(ticket, resolutionNote, templa
     studentName: ticket.studentName,
     resolutionNote,
     trackingLink: trackingLink(ticket.ticketId),
+  });
+}
+
+export function buildComplaintShareMessage(complaint, branchName, template = DEFAULT_TEMPLATES.complaintShare) {
+  return renderTemplate(template, {
+    complaintId: complaint.complaintId,
+    studentName: complaint.studentName,
+    branchName,
+    link: internalRecordLink('/complaints', complaint.id),
+  });
+}
+
+export function buildTechSupportShareMessage(ticket, branchName, template = DEFAULT_TEMPLATES.techSupportShare) {
+  return renderTemplate(template, {
+    ticketId: ticket.ticketId,
+    studentName: ticket.studentName,
+    branchName,
+    link: internalRecordLink('/tech-support', ticket.id),
   });
 }

@@ -1,9 +1,10 @@
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../../stores/useAuthStore';
 import { Loader2 } from 'lucide-react';
 
 export default function ProtectedRoute({ children, allowedRoles, requirePerm, requireDepartment }) {
   const { user, role, userData, loading } = useAuthStore();
+  const location = useLocation();
 
   if (loading) {
     return (
@@ -14,7 +15,10 @@ export default function ProtectedRoute({ children, allowedRoles, requirePerm, re
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    // Preserves where the user was headed (e.g. a shared complaint/ticket
+    // link with ?openId=...) so Login.jsx can send them back there instead
+    // of always landing on the dashboard.
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   if (allowedRoles) {
