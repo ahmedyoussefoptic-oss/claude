@@ -2,9 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { useBranches, useComplaintTypes, useSubTypes } from '../hooks/useOrgData';
+import { useBranches, useComplaintTypes, useSubTypes, useProblemTypes } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
+import TechSupportDetails from '../components/techSupport/TechSupportDetails';
 import { normalizeAssignees } from '../utils/assignees';
 import { branchScopeConstraintValues } from '../utils/scope';
 import { formatDuration } from '../utils/duration';
@@ -19,7 +20,7 @@ function sheetName(label) {
   return label.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31);
 }
 
-const REPORT_TYPE_IDS = ['COMPLAINTS', 'SURVEY'];
+const REPORT_TYPE_IDS = ['COMPLAINTS', 'TECH_SUPPORT', 'SURVEY'];
 const RATING_KEYS = ['resolutionSpeed', 'solutionQuality', 'staffProfessionalism'];
 
 function average(list, getValue) {
@@ -47,11 +48,14 @@ export default function Reports() {
   const branches = useBranches();
   const complaintTypes = useComplaintTypes();
   const subTypes = useSubTypes();
+  const problemTypes = useProblemTypes();
   const [complaints, setComplaints] = useState([]);
+  const [techTickets, setTechTickets] = useState([]);
   const [specialists, setSpecialists] = useState([]);
   const [filters, setFilters] = useState(emptyFilters);
   const [reportType, setReportType] = useState('COMPLAINTS');
   const [selectedComplaint, setSelectedComplaint] = useState(null);
+  const [selectedTicket, setSelectedTicket] = useState(null);
 
   // Keeps the open detail drawer's complaint in sync with live Firestore
   // data — otherwise it stays frozen at whatever it was when first opened.
@@ -63,6 +67,13 @@ export default function Reports() {
   }, [complaints]);
 
   useEffect(() => {
+    if (!selectedTicket) return;
+    const fresh = techTickets.find((tk) => tk.id === selectedTicket.id);
+    setSelectedTicket(fresh || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [techTickets]);
+
+  useEffect(() => {
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
     if (userData.access !== 'all') {
@@ -71,6 +82,23 @@ export default function Reports() {
     const q = query(collection(db, 'complaints'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setComplaints(snapshot.docs.map((d) => {
+        const data = d.data();
+        return { id: d.id, ...data, ...normalizeAssignees(data) };
+      }));
+    });
+    return () => unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
+
+  useEffect(() => {
+    if (!userData) return;
+    const constraints = [orderBy('createdAt', 'desc')];
+    if (userData.access !== 'all') {
+      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
+    }
+    const q = query(collection(db, 'techSupportTickets'), ...constraints);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setTechTickets(snapshot.docs.map((d) => {
         const data = d.data();
         return { id: d.id, ...data, ...normalizeAssignees(data) };
       }));
@@ -153,6 +181,56 @@ export default function Reports() {
       .sort((a, b) => b.count - a.count);
   }, [results, branches]);
 
+  // Tech-support report data — a separate filtered set since tickets don't
+  // have complaintType/subType fields, only date range/branch/assignedTo
+  // from the shared filters panel apply.
+  const ticketResults = useMemo(() => {
+    return techTickets.filter((tk) => {
+      if (filters.branch && tk.branch !== filters.branch) return false;
+      if (filters.assignedTo && !tk.assignedTo?.includes(filters.assignedTo)) return false;
+      if (filters.from) {
+        const createdAt = tk.createdAt?.toDate?.();
+        if (!createdAt || createdAt < new Date(filters.from)) return false;
+      }
+      if (filters.to) {
+        const createdAt = tk.createdAt?.toDate?.();
+        const to = new Date(filters.to);
+        to.setHours(23, 59, 59, 999);
+        if (!createdAt || createdAt > to) return false;
+      }
+      return true;
+    });
+  }, [techTickets, filters]);
+
+  const ticketSummary = useMemo(() => {
+    const total = ticketResults.length;
+    const resolved = ticketResults.filter((tk) => tk.status === 'CLOSED').length;
+    // Tech tickets have no dedicated ESCALATED status — isOverdue stands in
+    // for it here, same as BranchIndicators.jsx's techBreakdown().
+    const overdue = ticketResults.filter((tk) => tk.isOverdue && tk.status !== 'CLOSED').length;
+    const inProgress = total - resolved - overdue;
+    // resolutionMessageSentAt (not solvedAt/closedAt) marks when the team
+    // actually finished their part — set the moment the resolution message
+    // is sent, independent of whether/when the parent later confirms it.
+    const resolvedDocs = ticketResults.filter((tk) => tk.resolutionMessageSentAt && tk.createdAt);
+    const avgResolutionMs = resolvedDocs.length
+      ? resolvedDocs.reduce((sum, tk) => sum + (tk.resolutionMessageSentAt.toMillis() - tk.createdAt.toMillis()), 0) / resolvedDocs.length
+      : null;
+    return { total, resolved, inProgress, overdue, avgResolutionMs };
+  }, [ticketResults]);
+
+  const byProblemType = useMemo(
+    () => problemTypes.map((pt) => ({ ...pt, count: ticketResults.filter((tk) => tk.problemType === pt.id).length })).filter((pt) => pt.count > 0),
+    [ticketResults, problemTypes]
+  );
+
+  const ticketsByBranch = useMemo(() => {
+    return branches
+      .map((b) => ({ name: b.name, count: ticketResults.filter((tk) => tk.branch === b.id).length }))
+      .filter((b) => b.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [ticketResults, branches]);
+
   // Survey report data — anything rated, or reopened by a parent who left
   // feedback without a star rating (still worth surfacing as a signal).
   const surveyed = useMemo(() => results.filter((c) => typeof c.satisfactionRate === 'number'), [results]);
@@ -206,12 +284,13 @@ export default function Reports() {
 
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
   const typeName = (id) => complaintTypes.find((ct) => ct.id === id)?.name || id;
+  const problemTypeName = (id) => problemTypes.find((pt) => pt.id === id)?.name || id;
 
   const activeFilterLabels = [];
   if (filters.from) activeFilterLabels.push(`${t('reports.fromShort')} ${filters.from}`);
   if (filters.to) activeFilterLabels.push(`${t('reports.toShort')} ${filters.to}`);
-  if (filters.complaintType) activeFilterLabels.push(`${t('reports.typeShort')} ${typeName(filters.complaintType)}`);
-  if (filters.subType) activeFilterLabels.push(`${t('complaintForm.subTypeLabel')}: ${filters.subType}`);
+  if (reportType !== 'TECH_SUPPORT' && filters.complaintType) activeFilterLabels.push(`${t('reports.typeShort')} ${typeName(filters.complaintType)}`);
+  if (reportType !== 'TECH_SUPPORT' && filters.subType) activeFilterLabels.push(`${t('complaintForm.subTypeLabel')}: ${filters.subType}`);
   if (filters.branch) activeFilterLabels.push(`${t('reports.branchShort')} ${branchName(filters.branch)}`);
   if (filters.assignedTo) activeFilterLabels.push(`${t('reports.employeeShort')} ${specialists.find((s) => s.id === filters.assignedTo)?.name || ''}`);
 
@@ -262,6 +341,45 @@ export default function Reports() {
         [t('reports.studentIdColumn')]: c.studentId || '',
         [t('reports.studentPhoneColumn')]: c.parentPhone || '',
         [t('reports.stageColumn')]: c.stage || '',
+      })));
+      XLSX.utils.book_append_sheet(wb, detailSheet, sheetName(t('reports.detailsLabel')));
+    } else if (reportType === 'TECH_SUPPORT') {
+      const summarySheet = XLSX.utils.aoa_to_sheet([
+        [t('reports.totalTickets'), ticketSummary.total],
+        [t('reports.resolvedCount'), ticketSummary.resolved],
+        [t('statuses.techSupport.IN_PROGRESS'), ticketSummary.inProgress],
+        [t('dashboard.overdueTechTickets'), ticketSummary.overdue],
+        [t('reports.avgResolutionTime'), formatDuration(ticketSummary.avgResolutionMs, t)],
+      ]);
+      XLSX.utils.book_append_sheet(wb, summarySheet, sheetName(t('reports.generalSummary')));
+
+      if (byProblemType.length) {
+        const typeSheet = XLSX.utils.json_to_sheet(byProblemType.map((pt) => ({
+          [t('techSupportList.problemType')]: pt.name,
+          [t('reports.countLabel')]: pt.count,
+          [t('reports.percentLabel')]: ticketSummary.total ? Math.round((pt.count / ticketSummary.total) * 100) : 0,
+        })));
+        XLSX.utils.book_append_sheet(wb, typeSheet, sheetName(t('reports.byProblemType')));
+      }
+
+      if (ticketsByBranch.length) {
+        const branchSheet = XLSX.utils.json_to_sheet(ticketsByBranch.map((b) => ({
+          [t('common.branch')]: b.name,
+          [t('reports.countLabel')]: b.count,
+        })));
+        XLSX.utils.book_append_sheet(wb, branchSheet, sheetName(t('reports.byBranch')));
+      }
+
+      const detailSheet = XLSX.utils.json_to_sheet(ticketResults.map((tk) => ({
+        [t('techSupportList.ticketNumber')]: tk.ticketId,
+        [t('common.date')]: tk.createdAt?.toDate ? format(tk.createdAt.toDate(), 'yyyy-MM-dd') : '',
+        [t('common.branch')]: branchName(tk.branch),
+        [t('techSupportList.problemType')]: problemTypeName(tk.problemType),
+        [t('reports.specialistShort')]: tk.assignedToNames?.join(listSep) || '',
+        [t('common.status')]: t(`statuses.techSupport.${tk.status}`, tk.status),
+        [t('reports.resolutionTime')]: tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(tk.resolutionMessageSentAt.toMillis() - tk.createdAt.toMillis(), t) : '',
+        [t('techSupportDetails.student')]: tk.studentName || '',
+        [t('reports.stageColumn')]: tk.stage || '',
       })));
       XLSX.utils.book_append_sheet(wb, detailSheet, sheetName(t('reports.detailsLabel')));
     } else {
@@ -382,20 +500,24 @@ export default function Reports() {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.toDate')}</label>
             <input type="date" name="to" value={filters.to} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('reports.complaintTypeLabel')}</label>
-            <select name="complaintType" value={filters.complaintType} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
-              <option value="">{t('common.allTypes')}</option>
-              {complaintTypes.map((ct) => <option key={ct.id} value={ct.id}>{ct.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.subTypeLabel')}</label>
-            <select name="subType" value={filters.subType} onChange={handleChange} disabled={!filters.complaintType} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white disabled:text-slate-400 disabled:bg-slate-50">
-              <option value="">{t('reports.allSubTypes')}</option>
-              {subTypes.filter((s) => s.parentType === filters.complaintType).map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
-            </select>
-          </div>
+          {reportType !== 'TECH_SUPPORT' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('reports.complaintTypeLabel')}</label>
+              <select name="complaintType" value={filters.complaintType} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
+                <option value="">{t('common.allTypes')}</option>
+                {complaintTypes.map((ct) => <option key={ct.id} value={ct.id}>{ct.name}</option>)}
+              </select>
+            </div>
+          )}
+          {reportType !== 'TECH_SUPPORT' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.subTypeLabel')}</label>
+              <select name="subType" value={filters.subType} onChange={handleChange} disabled={!filters.complaintType} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white disabled:text-slate-400 disabled:bg-slate-50">
+                <option value="">{t('reports.allSubTypes')}</option>
+                {subTypes.filter((s) => s.parentType === filters.complaintType).map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')}</label>
             <select name="branch" value={filters.branch} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
@@ -579,6 +701,124 @@ export default function Reports() {
                     <td className="py-2 text-slate-600" dir="ltr">{c.studentId || '—'}</td>
                     <td className="py-2 text-slate-600" dir="ltr">{c.parentPhone || '—'}</td>
                     <td className="py-2 text-slate-600">{c.stage || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        </>
+        )}
+
+        {reportType === 'TECH_SUPPORT' && (
+        <>
+        {/* Summary */}
+        <div>
+          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.generalSummary')}</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="rounded-xl border border-slate-200 p-4 text-center">
+              <p className="text-2xl font-bold text-slate-900">{ticketSummary.total}</p>
+              <p className="text-xs text-slate-500 mt-1">{t('reports.totalTickets')}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-4 text-center">
+              <p className="text-2xl font-bold text-emerald-600">{ticketSummary.resolved}</p>
+              <p className="text-xs text-slate-500 mt-1">{t('reports.resolvedCount')}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-4 text-center">
+              <p className="text-2xl font-bold text-amber-600">{ticketSummary.inProgress}</p>
+              <p className="text-xs text-slate-500 mt-1">{t('statuses.techSupport.IN_PROGRESS')}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-4 text-center">
+              <p className="text-2xl font-bold text-orange-600">{ticketSummary.overdue}</p>
+              <p className="text-xs text-slate-500 mt-1">{t('dashboard.overdueTechTickets')}</p>
+            </div>
+            <div className="rounded-xl border border-slate-200 p-4 text-center">
+              <p className="text-2xl font-bold text-slate-900">{formatDuration(ticketSummary.avgResolutionMs, t)}</p>
+              <p className="text-xs text-slate-500 mt-1">{t('reports.avgResolutionTime')}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* By problem type */}
+        {byProblemType.length > 0 && (
+          <div>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.byProblemType')}</h3>
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500">
+                  <th className="text-right py-2 font-medium">{t('techSupportList.problemType')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.countLabel')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.percentLabel')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {byProblemType.map((pt) => (
+                  <tr key={pt.id} className="border-b border-slate-100">
+                    <td className="py-2 text-slate-800">{pt.name}</td>
+                    <td className="py-2 text-slate-800 tabular-nums">{pt.count}</td>
+                    <td className="py-2 text-slate-500 tabular-nums">{ticketSummary.total ? Math.round((pt.count / ticketSummary.total) * 100) : 0}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* By branch */}
+        {!filters.branch && ticketsByBranch.length > 0 && (
+          <div>
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.byBranch')}</h3>
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500">
+                  <th className="text-right py-2 font-medium">{t('common.branch')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.countLabel')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ticketsByBranch.map((b) => (
+                  <tr key={b.name} className="border-b border-slate-100">
+                    <td className="py-2 text-slate-800">{b.name}</td>
+                    <td className="py-2 text-slate-800 tabular-nums">{b.count}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Detailed listing */}
+        <div>
+          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.detailsLabel')} ({ticketResults.length})</h3>
+          {ticketResults.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-8">{t('reports.noMatchingTickets')}</p>
+          ) : (
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200 text-slate-500">
+                  <th className="text-right py-2 font-medium">{t('techSupportList.ticketNumber')}</th>
+                  <th className="text-right py-2 font-medium">{t('common.date')}</th>
+                  <th className="text-right py-2 font-medium">{t('common.branch')}</th>
+                  <th className="text-right py-2 font-medium">{t('techSupportList.problemType')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.specialistShort')}</th>
+                  <th className="text-right py-2 font-medium">{t('common.status')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.resolutionTime')}</th>
+                  <th className="text-right py-2 font-medium">{t('techSupportDetails.student')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.stageColumn')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ticketResults.map((tk) => (
+                  <tr key={tk.id} onClick={() => setSelectedTicket(tk)} className="border-b border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors">
+                    <td className="py-2 text-slate-800" dir="ltr">{tk.ticketId}</td>
+                    <td className="py-2 text-slate-600" dir="ltr">{tk.createdAt?.toDate ? format(tk.createdAt.toDate(), 'yyyy-MM-dd') : '—'}</td>
+                    <td className="py-2 text-slate-600">{branchName(tk.branch)}</td>
+                    <td className="py-2 text-slate-600">{problemTypeName(tk.problemType)}</td>
+                    <td className="py-2 text-slate-600">{tk.assignedToNames?.join(listSep) || '—'}</td>
+                    <td className="py-2 text-slate-600">{t(`statuses.techSupport.${tk.status}`, tk.status)}</td>
+                    <td className="py-2 text-slate-600">{tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(tk.resolutionMessageSentAt.toMillis() - tk.createdAt.toMillis(), t) : '—'}</td>
+                    <td className="py-2 text-slate-600">{tk.studentName || '—'}</td>
+                    <td className="py-2 text-slate-600">{tk.stage || '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -781,6 +1021,9 @@ export default function Reports() {
 
       {selectedComplaint && (
         <ComplaintDetails complaint={selectedComplaint} onClose={() => setSelectedComplaint(null)} />
+      )}
+      {selectedTicket && (
+        <TechSupportDetails ticket={selectedTicket} onClose={() => setSelectedTicket(null)} />
       )}
     </div>
   );
