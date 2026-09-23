@@ -204,10 +204,20 @@ export default function Reports() {
 
   const ticketSummary = useMemo(() => {
     const total = ticketResults.length;
-    const resolved = ticketResults.filter((tk) => tk.status === 'CLOSED').length;
-    // Tech tickets have no dedicated ESCALATED status — isOverdue stands in
-    // for it here, same as BranchIndicators.jsx's techBreakdown().
-    const overdue = ticketResults.filter((tk) => tk.isOverdue && tk.status !== 'CLOSED').length;
+    // "Resolved" means the team is done with it — SOLVED (internal),
+    // WAITING_CONFIRMATION (sent, awaiting the parent), or CLOSED (parent
+    // confirmed) — not just CLOSED. A ticket the team already solved but
+    // the parent hasn't confirmed yet is still resolved from our side;
+    // counting only CLOSED undercounted real work done (reported directly:
+    // 12 solved tickets weren't showing up here).
+    const isResolvedStatus = (status) => ['SOLVED', 'WAITING_CONFIRMATION', 'CLOSED'].includes(status);
+    const resolved = ticketResults.filter((tk) => isResolvedStatus(tk.status)).length;
+    // isOverdue is never cleared back to false once set (see
+    // functions/index.js), so a ticket that was late before getting
+    // resolved can still carry isOverdue: true afterward — only count it
+    // toward "overdue" while still unresolved, so these three buckets
+    // always add up to `total` with no double-counting.
+    const overdue = ticketResults.filter((tk) => tk.isOverdue && !isResolvedStatus(tk.status)).length;
     const inProgress = total - resolved - overdue;
     // resolutionMessageSentAt (not solvedAt/closedAt) marks when the team
     // actually finished their part — set the moment the resolution message
