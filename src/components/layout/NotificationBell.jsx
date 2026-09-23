@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Bell, BellRing, BellOff } from 'lucide-react';
 import { doc, updateDoc } from 'firebase/firestore';
@@ -8,6 +9,22 @@ import useAuthStore from '../../stores/useAuthStore';
 import { enablePushNotifications, pushSupported } from '../../utils/push';
 import { formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
+
+// Maps each notification `type` (set server-side in functions/index.js'
+// notifyUsers() calls) to the page that can open the record it points to
+// via ?openId=<doc id> — complaints, tech-support tickets, and lost & found
+// items each live on their own list page. Falls back to complaints, the
+// most common case, for any type not listed here.
+const NOTIFICATION_TARGET_PATH = {
+  IT_ASSIGNED: '/tech-support',
+  IT_ESCALATED: '/tech-support',
+  LF_ASSIGNED: '/lost-found',
+  ASSIGNED: '/complaints',
+  URGENT_CREATED: '/complaints',
+  ESCALATED: '/complaints',
+  SOLVED_NOTIFY_RECEIVER: '/complaints',
+  SLA_WARNING: '/complaints',
+};
 
 function playChime() {
   try {
@@ -58,6 +75,7 @@ function setAppBadge(count) {
 export default function NotificationBell() {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
+  const navigate = useNavigate();
   const { user } = useAuthStore();
   const notifications = useNotifications();
   const [open, setOpen] = useState(false);
@@ -138,6 +156,18 @@ export default function NotificationBell() {
     }
   };
 
+  // Closes the dropdown and jumps straight to the record the notification
+  // is about — previously this only marked it read, leaving staff to close
+  // the dropdown and find the record themselves in the list.
+  const handleNotificationClick = (n) => {
+    markRead(n);
+    setOpen(false);
+    if (n.complaintId) {
+      const path = NOTIFICATION_TARGET_PATH[n.type] || '/complaints';
+      navigate(`${path}?openId=${encodeURIComponent(n.complaintId)}`);
+    }
+  };
+
   return (
     <div className="relative" ref={ref}>
       <button
@@ -180,7 +210,7 @@ export default function NotificationBell() {
               {notifications.map((n) => (
                 <li
                   key={n.id}
-                  onClick={() => markRead(n)}
+                  onClick={() => handleNotificationClick(n)}
                   className={`px-4 py-3 text-sm cursor-pointer hover:bg-slate-50 transition-colors ${!n.read ? 'bg-primary/5' : ''}`}
                 >
                   <div className="flex items-start gap-2">

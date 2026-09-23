@@ -7,6 +7,7 @@ import useAuthStore from '../stores/useAuthStore';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import { normalizeAssignees } from '../utils/assignees';
 import { branchScopeConstraintValues } from '../utils/scope';
+import { formatDuration } from '../utils/duration';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import logo from '../assets/logo.png';
@@ -42,15 +43,6 @@ export default function Reports() {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
   const listSep = i18n.language === 'ar' ? '، ' : ', ';
-  const formatDuration = (ms) => {
-    if (ms == null) return '—';
-    const hours = Math.floor(ms / (1000 * 60 * 60));
-    if (hours < 1) return t('reports.lessThanHour');
-    const days = Math.floor(hours / 24);
-    const remHours = hours % 24;
-    if (days > 0) return remHours > 0 ? t('reports.daysAndHours', { days, hours: remHours }) : t('reports.daysOnly', { days });
-    return t('reports.hoursOnly', { hours });
-  };
   const { userData } = useAuthStore();
   const branches = useBranches();
   const complaintTypes = useComplaintTypes();
@@ -235,7 +227,7 @@ export default function Reports() {
         [t('reports.resolvedCount'), summary.resolved],
         [t('statuses.complaint.IN_PROGRESS'), summary.inProgress],
         [t('statuses.complaint.ESCALATED'), summary.escalated],
-        [t('reports.avgResolutionTime'), formatDuration(summary.avgResolutionMs)],
+        [t('reports.avgResolutionTime'), formatDuration(summary.avgResolutionMs, t)],
         [t('reports.avgSatisfaction', { count: summary.satisfactionCount }), summary.satisfaction != null ? summary.satisfaction.toFixed(1) : '—'],
       ]);
       XLSX.utils.book_append_sheet(wb, summarySheet, sheetName(t('reports.generalSummary')));
@@ -265,7 +257,7 @@ export default function Reports() {
         [t('complaintForm.subTypeLabel')]: c.subType || '',
         [t('reports.specialistShort')]: c.assignedToNames?.join(listSep) || '',
         [t('common.status')]: t(`statuses.complaint.${c.status}`, c.status),
-        [t('reports.resolutionTime')]: c.solvedAt && c.createdAt ? formatDuration(c.solvedAt.toMillis() - c.createdAt.toMillis()) : '',
+        [t('reports.resolutionTime')]: c.solvedAt && c.createdAt ? formatDuration(c.solvedAt.toMillis() - c.createdAt.toMillis(), t) : '',
         [t('reports.studentNameColumn')]: c.studentName || '',
         [t('reports.studentIdColumn')]: c.studentId || '',
         [t('reports.studentPhoneColumn')]: c.parentPhone || '',
@@ -468,7 +460,7 @@ export default function Reports() {
               <p className="text-xs text-slate-500 mt-1">{t('statuses.complaint.ESCALATED')}</p>
             </div>
             <div className="rounded-xl border border-slate-200 p-4 text-center">
-              <p className="text-2xl font-bold text-slate-900">{formatDuration(summary.avgResolutionMs)}</p>
+              <p className="text-2xl font-bold text-slate-900">{formatDuration(summary.avgResolutionMs, t)}</p>
               <p className="text-xs text-slate-500 mt-1">{t('reports.avgResolutionTime')}</p>
             </div>
             <div className="rounded-xl border border-slate-200 p-4 text-center">
@@ -582,7 +574,7 @@ export default function Reports() {
                     <td className="py-2 text-slate-600">{c.subType || '—'}</td>
                     <td className="py-2 text-slate-600">{c.assignedToNames?.join(listSep) || '—'}</td>
                     <td className="py-2 text-slate-600">{t(`statuses.complaint.${c.status}`, c.status)}</td>
-                    <td className="py-2 text-slate-600">{c.solvedAt && c.createdAt ? formatDuration(c.solvedAt.toMillis() - c.createdAt.toMillis()) : '—'}</td>
+                    <td className="py-2 text-slate-600">{c.solvedAt && c.createdAt ? formatDuration(c.solvedAt.toMillis() - c.createdAt.toMillis(), t) : '—'}</td>
                     <td className="py-2 text-slate-600">{c.studentName || '—'}</td>
                     <td className="py-2 text-slate-600" dir="ltr">{c.studentId || '—'}</td>
                     <td className="py-2 text-slate-600" dir="ltr">{c.parentPhone || '—'}</td>

@@ -11,6 +11,7 @@ import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { normalizeAssignees } from '../utils/assignees';
 import { branchScopeConstraintValues } from '../utils/scope';
+import { formatDuration } from '../utils/duration';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -323,6 +324,7 @@ export default function ComplaintsList() {
                   <th className="px-6 py-4 font-medium whitespace-nowrap">{t('common.branch')}</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">{t('common.date')}</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">{t('common.status')}</th>
+                  <th className="px-6 py-4 font-medium whitespace-nowrap">{t('reports.resolutionTime')}</th>
                   <th className="px-6 py-4 font-medium whitespace-nowrap">{t('complaintsList.parentMessages')}</th>
                   <th className="px-6 py-4"></th>
                 </tr>
@@ -354,6 +356,9 @@ export default function ComplaintsList() {
                         {getStatusName(c.status)}
                       </span>
                     </td>
+                    <td className="px-6 py-4 text-slate-600" dir="ltr">
+                      {c.solvedAt && c.createdAt ? formatDuration(c.solvedAt.toMillis() - c.createdAt.toMillis(), t) : '—'}
+                    </td>
                     <td className="px-6 py-4">
                       <MessageStatusIndicators
                         receiptSentAt={c.receiptMessageSentAt}
@@ -370,7 +375,7 @@ export default function ComplaintsList() {
                 ))}
                 {filteredComplaints.length === 0 && (
                   <tr>
-                    <td colSpan="8" className="px-6 py-12 text-center text-slate-500">
+                    <td colSpan="9" className="px-6 py-12 text-center text-slate-500">
                       {t('complaintsList.noResults')}
                     </td>
                   </tr>

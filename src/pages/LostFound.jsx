@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, Plus, ChevronLeft, Loader2, Package, Link2 } from 'lucide-react';
@@ -46,6 +46,21 @@ export default function LostFound() {
     setSelectedItem(fresh || null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
+
+  // Opens the linked item (?openId=<doc id> — notification clicks and any
+  // future share links) once it shows up in the branch-scoped live list.
+  // One-time via the ref so closing the drawer afterward doesn't reopen it.
+  const openedFromLinkRef = useRef(false);
+  useEffect(() => {
+    if (openedFromLinkRef.current) return;
+    const openId = new URLSearchParams(location.search).get('openId');
+    if (!openId) return;
+    const match = items.find((it) => it.id === openId);
+    if (match) {
+      setSelectedItem(match);
+      openedFromLinkRef.current = true;
+    }
+  }, [items, location.search]);
 
   useEffect(() => {
     if (!userData) return;
