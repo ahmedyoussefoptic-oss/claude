@@ -413,8 +413,8 @@ export default function ComplaintForm({ onClose }) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.subTypeLabel')}</label>
-                  <select name="subType" value={formData.subType} onChange={handleChange} disabled={!formData.complaintType} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm disabled:text-slate-400">
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.subTypeLabel')} <span className="text-red-500">*</span></label>
+                  <select name="subType" value={formData.subType} onChange={handleChange} required disabled={!formData.complaintType} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm disabled:text-slate-400">
                     <option value="">{t('common.select')}</option>
                     {subTypes.filter(s => s.parentType === formData.complaintType).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                   </select>
