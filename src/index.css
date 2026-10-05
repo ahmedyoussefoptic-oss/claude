@@ -42,4 +42,25 @@
   thead {
     display: table-header-group;
   }
+  #report-print-area {
+    padding: 0 !important;
+  }
+  #report-print-area * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  #report-print-area .break-inside-avoid,
+  #report-print-area tr {
+    break-inside: avoid;
+  }
+  #report-print-area h3 {
+    break-after: avoid;
+  }
+  #report-print-area .overflow-x-auto {
+    overflow: visible !important;
+  }
+}
+@page {
+  size: A4;
+  margin: 12mm;
 }

@@ -25,6 +25,15 @@ const STALE_TOKEN_ERRORS = new Set([
 const GMAIL_USER = defineSecret("GMAIL_USER");
 const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
 const EMAIL_SECRETS = [GMAIL_USER, GMAIL_APP_PASSWORD];
+// Bearer token of the school's Taqnyat WhatsApp Business API application
+// (Taqnyat portal > Developers > Application). Set once with:
+//   npx firebase-tools functions:secrets:set TAQNYAT_WA_TOKEN
+// Declared only when ENABLE_WA_API=true (functions/.env): the CLI refuses to
+// deploy *any* function while a declared secret has no value, so the WhatsApp
+// API function stays out until the token has been stored.
+const WA_API_ENABLED = process.env.ENABLE_WA_API === "true";
+const TAQNYAT_WA_TOKEN = WA_API_ENABLED ? defineSecret("TAQNYAT_WA_TOKEN") : null;
+const WA_SECRETS = WA_API_ENABLED ? [TAQNYAT_WA_TOKEN] : [];
 
 async function sendEmail(to, subject, text) {
   if (!to) return;
@@ -45,7 +54,7 @@ async function sendEmail(to, subject, text) {
 }
 
 const OPEN_STATUSES = ["RECEIVED", "IN_PROGRESS", "WAITING_PARENT_RESPONSE", "ESCALATED"];
-const OPEN_TICKET_STATUSES = ["NEW", "ASSIGNED", "IN_PROGRESS", "SOLVED", "WAITING_CONFIRMATION", "REOPENED"];
+const OPEN_TICKET_STATUSES = ["NEW", "ASSIGNED", "IN_PROGRESS", "SOLVED", "REOPENED"];
 const OPEN_LOST_FOUND_STATUSES = ["UNCLAIMED", "MATCHED"];
 
 // Removes a staff account (Firebase Auth + Firestore profile) via the Admin
@@ -137,7 +146,7 @@ exports.createStaffUser = onCall(async (request) => {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
-  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active } = request.data || {};
+  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, stages, curricula } = request.data || {};
   if (!name || !email || !password || !role) {
     throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
   }
@@ -175,6 +184,10 @@ exports.createStaffUser = onCall(async (request) => {
     phone: phone || null,
     jobTitle: jobTitle || null,
     department: department || null,
+    isPrincipal: isPrincipal === true,
+    isQuality: isQuality === true,
+    stages: Array.isArray(stages) ? stages.filter((st) => typeof st === "string") : [],
+    curricula: Array.isArray(curricula) ? curricula.filter((c) => typeof c === "string") : [],
     active: active !== false,
     createdAt: Timestamp.now(),
     createdBy: request.auth.uid,
@@ -240,6 +253,83 @@ async function getUserIdsByRoles(roles) {
   return snapshot.docs.map((d) => d.id);
 }
 
+// Notifies the currently assigned staff whenever an internal comment/note is
+// added to a complaint or tech-support ticket, so it doesn't sit unseen in a
+// tab/field nobody but its author opens. Excludes the comment's own author.
+async function notifyInternalComment(parentCollection, parentId, log, { titleLabel, notificationType, idField }) {
+  const parentDoc = await db.collection(parentCollection).doc(parentId).get();
+  if (!parentDoc.exists) return;
+  const parent = parentDoc.data();
+
+  // Flags the record so list/detail views can show an at-a-glance indicator
+  // without every viewer having to open the internal-comment tab/field —
+  // sticky on purpose, the fact that a discussion happened doesn't expire.
+  if (!parent.hasInternalComment) {
+    await parentDoc.ref.update({ hasInternalComment: true });
+  }
+
+  const recipients = (parent.assignedTo || []).filter((uid) => uid !== log.actorId);
+  if (recipients.length === 0) return;
+  await notifyUsers(recipients, {
+    title: "تعليق داخلي جديد",
+    body: `تمت إضافة تعليق داخلي على ${titleLabel} رقم ${parent[idField]}.`,
+    complaintId: parentId,
+    type: notificationType,
+  });
+}
+
+// A reopened record (parent not satisfied, or staff reopening it) is routed
+// again: the auto-assignment set is added to the existing assignees, and
+// everyone already on it is told it came back.
+async function handleReopen(kind, collectionName, docId, idField, label) {
+  const ref = db.collection(collectionName).doc(docId);
+  const snap = await ref.get();
+  if (!snap.exists) return;
+  const record = snap.data();
+  if (record.assignedTo?.length) {
+    await notifyUsers(record.assignedTo, {
+      title: `تمت إعادة فتح ${label}`,
+      body: `${label} رقم ${record[idField]} أُعيد فتحها وتحتاج متابعة.`,
+      complaintId: docId,
+      type: kind === "complaint" ? "REOPENED" : "IT_REOPENED",
+    });
+  }
+  await reassignAutomatically(kind, ref, record, { replace: false, reason: "REOPENED" });
+}
+
+// Complaints already have a dedicated "internal comment" action, kept
+// separate from the regular timeline (see ComplaintDetails.jsx's internal
+// tab). Tech-support tickets only have a single NOTE_ADDED note field, which
+// trackComplaint already treats as staff-only/hidden from parents — that's
+// its internal-comment equivalent.
+exports.notifyComplaintInternalComment = onDocumentCreated("complaints/{complaintId}/activityLog/{logId}", async (event) => {
+  const log = event.data?.data();
+  if (log?.action === "COMPLAINT_REOPENED") {
+    await handleReopen("complaint", "complaints", event.params.complaintId, "complaintId", "الملاحظة");
+    return;
+  }
+  if (!log || log.action !== "INTERNAL_COMMENT_ADDED") return;
+  await notifyInternalComment("complaints", event.params.complaintId, log, {
+    titleLabel: "الملاحظة",
+    notificationType: "INTERNAL_COMMENT_ADDED",
+    idField: "complaintId",
+  });
+});
+
+exports.notifyTechSupportInternalComment = onDocumentCreated("techSupportTickets/{ticketId}/activityLog/{logId}", async (event) => {
+  const log = event.data?.data();
+  if (log?.action === "TICKET_REOPENED") {
+    await handleReopen("techSupport", "techSupportTickets", event.params.ticketId, "ticketId", "البلاغ التقني");
+    return;
+  }
+  if (!log || log.action !== "NOTE_ADDED") return;
+  await notifyInternalComment("techSupportTickets", event.params.ticketId, log, {
+    titleLabel: "البلاغ التقني",
+    notificationType: "IT_INTERNAL_COMMENT_ADDED",
+    idField: "ticketId",
+  });
+});
+
 // Helper to add working hours skipping weekends (Fri/Sat)
 function addWorkingHours(startDate, hoursToAdd) {
   let currentDate = new Date(startDate.getTime());
@@ -256,7 +346,7 @@ function addWorkingHours(startDate, hoursToAdd) {
 }
 
 // 1. Calculate Initial SLA when Complaint is Created + email the parent a receipt confirmation
-exports.calculateInitialSLA = onDocumentCreated({ document: "complaints/{complaintId}", secrets: EMAIL_SECRETS }, async (event) => {
+exports.calculateInitialSLA = onDocumentCreated({ document: "complaints/{complaintId}", secrets: [...EMAIL_SECRETS, ...WA_SECRETS] }, async (event) => {
   const snap = event.data;
   if (!snap) return;
 
@@ -273,7 +363,12 @@ exports.calculateInitialSLA = onDocumentCreated({ document: "complaints/{complai
   // If the complaint was created with assignees already chosen, notify them
   // immediately — later reassignments are handled in handleSlaStatusChanges.
   if (data.assignedTo?.length) {
-    await notifyUsers(data.assignedTo, {
+    await notifyUsers(data.assignedTo, data.viaVisitQr ? {
+      title: "ولي أمر بانتظار المقابلة في الفرع",
+      body: `ولي أمر الطالب/ة ${data.studentName} وصل إلى الفرع ويرغب بمقابلة المسؤول — الملاحظة رقم ${data.complaintId}.`,
+      complaintId: event.params.complaintId,
+      type: "VISIT_ARRIVED",
+    } : {
       title: "تم إسناد ملاحظة لك",
       body: `الملاحظة رقم ${data.complaintId} تم إسنادها إليك للمعالجة.`,
       complaintId: event.params.complaintId,
@@ -293,6 +388,12 @@ exports.calculateInitialSLA = onDocumentCreated({ document: "complaints/{complai
     });
   }
 
+  await ensureQualityAssigned(snap.ref, data);
+
+  // Automatic WhatsApp receipt — not for a branch QR check-in (the parent
+  // is standing at the branch; they get a thank-you after the meeting).
+  if (!data.viaVisitQr) await autoSendWa("complaint", snap.ref, "receipt");
+
   if (data.dueDate) return; // Already has due date
 
   const priority = data.priority || 'NORMAL';
@@ -310,7 +411,7 @@ exports.calculateInitialSLA = onDocumentCreated({ document: "complaints/{complai
 
 // Tech-support tickets: compute the 4-working-hour close SLA and notify an
 // assignee chosen at creation time (the form auto-assigns an IT specialist).
-exports.calculateItTicketSla = onDocumentCreated("techSupportTickets/{ticketId}", async (event) => {
+exports.calculateItTicketSla = onDocumentCreated({ document: "techSupportTickets/{ticketId}", secrets: WA_SECRETS }, async (event) => {
   const snap = event.data;
   if (!snap) return;
   const data = snap.data();
@@ -324,6 +425,9 @@ exports.calculateItTicketSla = onDocumentCreated("techSupportTickets/{ticketId}"
     });
   }
 
+  await ensureQualityAssigned(snap.ref, data);
+  await autoSendWa("techSupport", snap.ref, "receipt");
+
   if (data.dueDate) return;
   const dueDate = addWorkingHours(new Date(), 4);
   return snap.ref.update({ dueDate: Timestamp.fromDate(dueDate) });
@@ -335,7 +439,7 @@ exports.calculateItTicketSla = onDocumentCreated("techSupportTickets/{ticketId}"
 // complaints. Also notifies managers/executives when a staff member manually
 // escalates a ticket (see TechSupportDetails.jsx's handleEscalate, which
 // bumps `escalation`).
-exports.handleItTicketAssignment = onDocumentUpdated("techSupportTickets/{ticketId}", async (event) => {
+exports.handleItTicketAssignment = onDocumentUpdated({ document: "techSupportTickets/{ticketId}", secrets: WA_SECRETS }, async (event) => {
   const before = event.data.before.data();
   const after = event.data.after.data();
 
@@ -348,6 +452,15 @@ exports.handleItTicketAssignment = onDocumentUpdated("techSupportTickets/{ticket
       complaintId: event.params.ticketId,
       type: "IT_ASSIGNED",
     });
+  }
+
+  if (before.branch && after.branch && before.branch !== after.branch) {
+    await reassignAutomatically("techSupport", event.data.after.ref, after, { replace: true, reason: "BRANCH_CHANGED" });
+  }
+
+  // IT saved the resolution (status -> SOLVED): send it and close the ticket.
+  if (before.status !== "SOLVED" && after.status === "SOLVED") {
+    await autoSendWa("techSupport", event.data.after.ref, "resolution");
   }
 
   if ((after.escalation || 0) > (before.escalation || 0)) {
@@ -366,7 +479,7 @@ exports.handleItTicketAssignment = onDocumentUpdated("techSupportTickets/{ticket
 // Lost & found has no SLA/escalation concept (see lostFoundBreakdown in
 // BranchIndicators.jsx) — these two triggers only ever notify on assignment,
 // mirroring calculateItTicketSla/handleItTicketAssignment above but simpler.
-exports.notifyLostFoundAssignment = onDocumentCreated("lostFoundItems/{itemId}", async (event) => {
+exports.notifyLostFoundAssignment = onDocumentCreated({ document: "lostFoundItems/{itemId}", secrets: WA_SECRETS }, async (event) => {
   const snap = event.data;
   if (!snap) return;
   const data = snap.data();
@@ -379,9 +492,11 @@ exports.notifyLostFoundAssignment = onDocumentCreated("lostFoundItems/{itemId}",
       type: "LF_ASSIGNED",
     });
   }
+
+  await autoSendWa("lostFound", snap.ref, "receipt");
 });
 
-exports.handleLostFoundAssignment = onDocumentUpdated("lostFoundItems/{itemId}", async (event) => {
+exports.handleLostFoundAssignment = onDocumentUpdated({ document: "lostFoundItems/{itemId}", secrets: WA_SECRETS }, async (event) => {
   const before = event.data.before.data();
   const after = event.data.after.data();
 
@@ -394,6 +509,10 @@ exports.handleLostFoundAssignment = onDocumentUpdated("lostFoundItems/{itemId}",
       complaintId: event.params.itemId,
       type: "LF_ASSIGNED",
     });
+  }
+
+  if (before.status !== "RETURNED" && after.status === "RETURNED") {
+    await autoSendWa("lostFound", event.data.after.ref, "returned");
   }
 });
 
@@ -440,7 +559,7 @@ exports.pushOnNotification = onDocumentCreated("notifications/{notificationId}",
 });
 
 // 2. Handle SLA Pause/Resume on Status Change, plus assignment/escalation notifications
-exports.handleSlaStatusChanges = onDocumentUpdated("complaints/{complaintId}", async (event) => {
+exports.handleSlaStatusChanges = onDocumentUpdated({ document: "complaints/{complaintId}", secrets: WA_SECRETS }, async (event) => {
   const before = event.data.before.data();
   const after = event.data.after.data();
   const complaintId = event.params.complaintId;
@@ -458,6 +577,21 @@ exports.handleSlaStatusChanges = onDocumentUpdated("complaints/{complaintId}", a
     });
   }
 
+  // Moved to another branch (edited data): the old branch's staff no longer
+  // own it — route it to the new branch's staff instead.
+  if (before.branch && after.branch && before.branch !== after.branch) {
+    await reassignAutomatically("complaint", event.data.after.ref, after, { replace: true, reason: "BRANCH_CHANGED" });
+  }
+
+  // Automatic WhatsApp messages: the solution once it's written, and the
+  // thank-you once a branch QR visit's meeting is confirmed.
+  if (before.status !== "SOLVED" && after.status === "SOLVED" && after.solutionDetails) {
+    await autoSendWa("complaint", event.data.after.ref, "resolution");
+  }
+  if (before.visitStatus !== "MET" && after.visitStatus === "MET") {
+    await autoSendWa("complaint", event.data.after.ref, "visitMet");
+  }
+
   // Notify managers/admin when a complaint is escalated (manually or via SLA breach)
   if (before.status !== 'ESCALATED' && after.status === 'ESCALATED') {
     const managerIds = await getUserIdsByRoles(["DEPARTMENT_MANAGER", "UPPER_MANAGEMENT", "ADMIN"]);
@@ -467,6 +601,9 @@ exports.handleSlaStatusChanges = onDocumentUpdated("complaints/{complaintId}", a
       complaintId,
       type: "ESCALATED",
     });
+    // Sticky marker so reports can still say "escalated & resolved" after
+    // the status moves on to SOLVED/CLOSED.
+    if (!after.wasEscalated) await event.data.after.ref.update({ wasEscalated: true });
   }
 
   // If status changed TO WAITING_PARENT_RESPONSE
@@ -586,10 +723,34 @@ exports.scheduledSlaEngine = onSchedule("every 1 hours", async (event) => {
   // --- Tech-support tickets: 4-hour close SLA + 1-hour start-processing check ---
   // 'NEW' (never assigned — e.g. no active IT specialist at creation time)
   // is included so an unassigned ticket doesn't sit forever with a blown
-  // SLA and no escalation.
+  // SLA and no escalation. SOLVED is excluded: the fix is done, so the
+  // ticket mustn't be flagged late while only the WhatsApp send remains.
   const itSnapshot = await db.collection("techSupportTickets")
-    .where("status", "in", ["NEW", "ASSIGNED", "IN_PROGRESS", "SOLVED", "WAITING_CONFIRMATION"])
+    .where("status", "in", ["NEW", "ASSIGNED", "IN_PROGRESS"])
     .get();
+
+  // The "waiting for the parent to confirm" step was removed (parents
+  // rarely confirm, which left solved tickets counted as late). Any ticket
+  // still parked in it is closed as of when its resolution was sent.
+  const waitingSnapshot = await db.collection("techSupportTickets").where("status", "==", "WAITING_CONFIRMATION").get();
+  for (const doc of waitingSnapshot.docs) {
+    try {
+      const data = doc.data();
+      await doc.ref.update(
+        { status: "CLOSED", closedAt: data.resolutionMessageSentAt || now, updatedAt: now },
+        { lastUpdateTime: doc.updateTime }
+      );
+      await db.collection(`techSupportTickets/${doc.id}/activityLog`).add({
+        action: "CONFIRMED_CLOSED",
+        actorId: "SYSTEM",
+        actorName: "النظام",
+        metadata: { info: "إغلاق تلقائي بعد إرسال رسالة الحل" },
+        createdAt: now,
+      });
+    } catch (err) {
+      console.error(`Auto-close failed for tech ticket ${doc.id}:`, err.message);
+    }
+  }
 
   for (const doc of itSnapshot.docs) {
     const data = doc.data();
@@ -654,6 +815,22 @@ function publicLogMetadata(log) {
   return undefined;
 }
 
+// The WhatsApp number a parent should talk to about a record: its
+// section's own number when it has one (e.g. the British section), else its
+// branch's. Both live on the public branches/departments docs (Settings).
+async function contactNumberFor(record) {
+  if (record.department) {
+    const deptSnap = await db.collection("departments").doc(record.department).get();
+    const deptNumber = deptSnap.exists ? toIntlNumber(deptSnap.data().whatsappNumber) : "";
+    if (deptNumber) return deptNumber;
+  }
+  if (record.branch) {
+    const branchSnap = await db.collection("branches").doc(record.branch).get();
+    if (branchSnap.exists) return toIntlNumber(branchSnap.data().whatsappNumber);
+  }
+  return "";
+}
+
 // Public parent-tracking lookup. The portal searches by a human-readable
 // tracking number (not the Firestore document ID), which Firestore's
 // security rules treat as a `list` operation — something an anonymous
@@ -668,12 +845,22 @@ exports.trackComplaint = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "رقم المتابعة مطلوب.");
   }
 
-  const match = TRACKABLE_TYPES.find((t) => trackingId.startsWith(t.prefix));
+  let match = TRACKABLE_TYPES.find((t) => trackingId.startsWith(t.prefix));
   if (!match) {
     throw new HttpsError("not-found", "عفواً، لم يتم العثور على سجل بهذا الرقم.");
   }
 
-  const snapshot = await db.collection(match.collection).where(match.idField, "==", trackingId).limit(1).get();
+  let snapshot = await db.collection(match.collection).where(match.idField, "==", trackingId).limit(1).get();
+  // A complaint that staff converted into a tech-support ticket (see
+  // convertComplaintToTechTicket) no longer exists under its COM- number,
+  // but the parent still holds that number — follow it to the ticket.
+  if (snapshot.empty && match.type === "complaint") {
+    const converted = await db.collection("techSupportTickets").where("convertedFromId", "==", trackingId).limit(1).get();
+    if (!converted.empty) {
+      match = TRACKABLE_TYPES.find((t) => t.type === "techSupport");
+      snapshot = converted;
+    }
+  }
   if (snapshot.empty) {
     throw new HttpsError("not-found", "عفواً، لم يتم العثور على سجل بهذا الرقم.");
   }
@@ -684,7 +871,7 @@ exports.trackComplaint = onCall(async (request) => {
   const logsSnapshot = await db.collection(`${match.collection}/${doc.id}/activityLog`).orderBy("createdAt", "desc").get();
   const history = logsSnapshot.docs
     .map((d) => d.data())
-    .filter((l) => l.action !== "INTERNAL_COMMENT_ADDED" && l.action !== "NOTE_ADDED")
+    .filter((l) => !["INTERNAL_COMMENT_ADDED", "NOTE_ADDED", "WHATSAPP_API_SENT", "WHATSAPP_API_FAILED"].includes(l.action))
     .map((l) => ({
       action: l.action,
       createdAtMillis: l.createdAt?.toMillis?.() ?? null,
@@ -696,8 +883,12 @@ exports.trackComplaint = onCall(async (request) => {
     type: match.type,
     complaintId: data[match.idField],
     status: data.status,
+    rated: data.satisfactionRate != null,
     studentName: data.studentName || null,
     itemName: data.itemName || null,
+    // Branch/section WhatsApp number for the /contact/<number> page that
+    // the WhatsApp API templates' "تواصل مع الفرع" button opens.
+    contactNumber: (await contactNumberFor(data)) || null,
     history,
   };
 });
@@ -720,7 +911,10 @@ exports.submitTechSupportSurvey = onCall(async (request) => {
   }
   const ticketDoc = snapshot.docs[0];
   const ticket = ticketDoc.data();
-  if (ticket.status !== "WAITING_CONFIRMATION") {
+  // Offered once the ticket is closed (sending the resolution closes it),
+  // and only until the parent has rated it.
+  const surveyOpen = ticket.status === "WAITING_CONFIRMATION" || (ticket.status === "CLOSED" && ticket.satisfactionRate == null);
+  if (!surveyOpen) {
     throw new HttpsError("failed-precondition", "لا يمكن إرسال التقييم في هذه الحالة.");
   }
 
@@ -748,7 +942,7 @@ exports.submitTechSupportSurvey = onCall(async (request) => {
       satisfactionRate,
       satisfactionDetails: ratings || null,
       parentFeedback: comment || null,
-      closedAt: now,
+      closedAt: ticket.closedAt || now,
       updatedAt: now,
     });
     await db.collection(`techSupportTickets/${ticketDoc.id}/activityLog`).add({
@@ -767,7 +961,7 @@ const MAX_PUBLIC_ATTACHMENTS = 3;
 const MAX_PUBLIC_ATTACHMENT_BYTES = 4 * 1024 * 1024;
 const PUBLIC_COMPLAINT_REQUIRED_FIELDS = [
   "parentName", "parentPhone", "studentName", "studentId",
-  "branch", "stage", "complaintType", "subject", "details",
+  "branch", "stage", "grade", "complaintType", "subject", "details",
 ];
 
 // Shared by all three /report submission functions: uploads one attachment
@@ -805,13 +999,145 @@ async function uploadPublicAttachment(bucket, pathPrefix, att) {
 // Finds the same eligible IT specialist TechSupportForm.jsx's client-side
 // findItSpecialist() would (branch-specific preferred over all-branch),
 // server-side — used only by submitPublicTechSupportTicket below.
-async function findEligibleItSpecialist(branch) {
+async function findEligibleItSpecialist(branch, stage, curriculum) {
   const snapshot = await db.collection("users").where("role", "==", "SPECIALIST").where("department", "==", "IT").get();
   const candidates = snapshot.docs
     .map((d) => ({ id: d.id, ...d.data() }))
-    .filter((u) => u.active !== false && (u.access === "all" || u.branch === branch));
-  candidates.sort((a, b) => (a.access === "all" ? 1 : 0) - (b.access === "all" ? 1 : 0));
+    .filter((u) => u.active !== false && (u.access === "all" || (u.branches || []).includes(branch) || u.branch === branch));
+  // Whoever covers the grade and curriculum first, then branch-specific
+  // over all-branch.
+  const rank = (u) => (coversStage(u, stage) && coversCurriculum(u, curriculum) ? 0 : 2) + (u.access === "all" ? 1 : 0);
+  candidates.sort((a, b) => rank(a) - rank(b));
   return candidates[0] || null;
+}
+
+// Mirrors src/utils/scope.js coversStage(): a user may be limited to certain
+// grades (`stages`, e.g. G1..G5); an empty/missing list means every grade.
+function coversStage(u, stage) {
+  const stages = Array.isArray(u.stages) ? u.stages : [];
+  return !stages.length || !stage || stages.includes(stage);
+}
+
+// Mirrors src/utils/scope.js coversCurriculum(): same, per curriculum /
+// section (`curricula` holds the record `department` ids — AMERICAN, ...).
+function coversCurriculum(u, curriculum) {
+  const list = Array.isArray(u.curricula) ? u.curricula : [];
+  return !list.length || !curriculum || list.includes(curriculum);
+}
+
+// Who a submission from the public report link is routed to: every active
+// specialist of the matching department (ACADEMIC / ADMINISTRATIVE /
+// BEHAVIORAL / IT — the same ids as complaint types) in the student's
+// branch who covers the student's grade (stage) and curriculum (the record's
+// `department` — AMERICAN, BRITISH, ...) — or, failing that, the all-branch
+// specialists of that department who cover them; if nobody covers them, the
+// department's specialists regardless so the record is never left
+// unassigned — plus every school principal over that branch, grade and
+// curriculum.
+async function findPublicAssignees(branch, department, stage, curriculum) {
+  return findAutoAssignees({ branch, departments: [department], stage, curriculum });
+}
+
+// Same routing for several departments at once (a complaint can carry more
+// than one category — see complaintTypesOf), plus the branch's quality
+// officers (`isQuality`), who are auto-assigned every complaint and tech
+// ticket in their branches regardless of grade/curriculum.
+async function findAutoAssignees({ branch, departments, stage, curriculum, users: preloaded }) {
+  const users = preloaded || await loadActiveUsers();
+  const inBranch = (u) => (u.branches || []).includes(branch) || u.branch === branch;
+  const covers = (u) => coversStage(u, stage) && coversCurriculum(u, curriculum);
+  const specialists = [];
+  for (const department of [...new Set(departments.filter(Boolean))]) {
+    const deptSpecialists = users.filter((u) => u.role === "SPECIALIST" && u.department === department);
+    const branchSpecialists = deptSpecialists.filter(inBranch);
+    const allBranchSpecialists = deptSpecialists.filter((u) => u.access === "all");
+    specialists.push(...([
+      branchSpecialists.filter(covers),
+      allBranchSpecialists.filter(covers),
+      branchSpecialists,
+      allBranchSpecialists,
+    ].find((list) => list.length) || []));
+  }
+  const principals = users.filter((u) => u.isPrincipal === true && (u.access === "all" || inBranch(u)) && covers(u));
+  const seen = new Set();
+  return [...specialists, ...principals, ...qualityOfficers(users, branch)]
+    .filter((u) => !seen.has(u.id) && seen.add(u.id))
+    .map((u) => ({ id: u.id, name: u.name || "" }));
+}
+
+async function loadActiveUsers() {
+  const snapshot = await db.collection("users").get();
+  return snapshot.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => u.active !== false);
+}
+
+function qualityOfficers(users, branch) {
+  return users.filter((u) => u.isQuality === true && (u.access === "all" || (u.branches || []).includes(branch) || u.branch === branch));
+}
+
+// Every category a complaint carries: the primary complaintType plus any
+// extra ones (`extraTypes: [{ type, subType }]`). Mirrors
+// src/config/complaintTypes.js complaintTypesOf().
+function complaintTypesOf(c) {
+  const extra = Array.isArray(c.extraTypes) ? c.extraTypes.map((x) => x && x.type) : [];
+  return [...new Set([c.complaintType, ...extra].filter(Boolean))];
+}
+
+function autoAssigneesFor(kind, record, users) {
+  return findAutoAssignees({
+    branch: record.branch,
+    departments: kind === "complaint" ? complaintTypesOf(record) : ["IT"],
+    stage: record.stage,
+    curriculum: record.department,
+    users,
+  });
+}
+
+// Adds the branch's quality officers to a newly created record that doesn't
+// already list them (staff-created records, converted tickets...). The
+// update re-fires the record's onUpdate trigger, which notifies them like
+// any other newly assigned person.
+async function ensureQualityAssigned(ref, data) {
+  const users = await loadActiveUsers();
+  const current = data.assignedTo || [];
+  const missing = qualityOfficers(users, data.branch).filter((u) => !current.includes(u.id));
+  if (!missing.length) return;
+  await ref.update({
+    assignedTo: [...current, ...missing.map((u) => u.id)],
+    assignedToNames: [...(data.assignedToNames || []), ...missing.map((u) => u.name || "")],
+    ...(current.length ? {} : { assignedAt: Timestamp.now() }),
+  });
+}
+
+// Re-runs auto-assignment for an existing record. `replace` (branch changed)
+// swaps the whole assignment for the new branch's staff; otherwise (reopen)
+// the auto set is added to whoever is already assigned.
+async function reassignAutomatically(kind, ref, record, { replace, logCollection, reason }) {
+  const auto = await autoAssigneesFor(kind, record);
+  const current = record.assignedTo || [];
+  const currentNames = record.assignedToNames || [];
+  let ids;
+  let names;
+  if (replace) {
+    ids = auto.map((a) => a.id);
+    names = auto.map((a) => a.name);
+  } else {
+    const added = auto.filter((a) => !current.includes(a.id));
+    ids = [...current, ...added.map((a) => a.id)];
+    names = [...currentNames, ...added.map((a) => a.name)];
+  }
+  const changed = ids.length !== current.length || ids.some((id) => !current.includes(id));
+  if (!changed) return;
+  const now = Timestamp.now();
+  await ref.update({ assignedTo: ids, assignedToNames: names, assignedAt: now });
+  const addedNames = names.filter((_, i) => !current.includes(ids[i]));
+  const removedNames = currentNames.filter((_, i) => !ids.includes(current[i]));
+  await ref.collection("activityLog").add({
+    action: kind === "complaint" ? "COMPLAINT_TRANSFERRED" : "TICKET_TRANSFERRED",
+    actorId: null,
+    actorName: "النظام (إسناد تلقائي)",
+    metadata: { toUserIds: ids, toUserNames: names, addedNames, removedNames, reason },
+    createdAt: now,
+  });
 }
 
 // Public complaint submission (the /report link shared with parents).
@@ -822,7 +1148,14 @@ async function findEligibleItSpecialist(branch) {
 // complaint doc is created in the same call so a record is never left
 // without its attachments due to a partial client-side failure.
 exports.submitPublicComplaint = onCall(async (request) => {
-  const data = request.data || {};
+  const data = { ...(request.data || {}) };
+  // `visit: true` = submitted from a branch's QR code (/visit) by a parent
+  // who is physically at the branch waiting to meet someone. Only the visit
+  // reason (subject) is asked for; details fall back to it.
+  const isVisit = data.visit === true;
+  if (isVisit && (typeof data.details !== "string" || !data.details.trim())) {
+    data.details = data.subject;
+  }
   for (const field of PUBLIC_COMPLAINT_REQUIRED_FIELDS) {
     if (!data[field] || typeof data[field] !== "string" || !data[field].trim()) {
       throw new HttpsError("invalid-argument", "يرجى تعبئة جميع الحقول المطلوبة.");
@@ -844,6 +1177,17 @@ exports.submitPublicComplaint = onCall(async (request) => {
     attachments.push({ ...uploaded, uploadedBy: null, createdAt: new Date().toISOString() });
   }
 
+  // Extra categories when one submission touches several areas.
+  const extraTypes = (Array.isArray(data.extraTypes) ? data.extraTypes : [])
+    .filter((x) => x && typeof x.type === "string" && x.type && x.type !== data.complaintType)
+    .slice(0, 3)
+    .map((x) => ({ type: x.type, subType: typeof x.subType === "string" ? x.subType : "" }));
+  const assignees = await findAutoAssignees({
+    branch: data.branch,
+    departments: [data.complaintType, ...extraTypes.map((x) => x.type)],
+    stage: data.stage,
+    curriculum: data.department,
+  });
   const now = Timestamp.now();
   const docRef = await db.collection("complaints").add({
     parentName: data.parentName.trim(),
@@ -854,20 +1198,22 @@ exports.submitPublicComplaint = onCall(async (request) => {
     branch: data.branch,
     department: data.department || "",
     stage: data.stage,
-    grade: data.grade || "",
+    grade: data.grade.trim(),
     complaintType: data.complaintType,
     subType: data.subType || "",
+    extraTypes,
     subject: data.subject.trim(),
     details: data.details.trim(),
     complaintId,
     priority: "NORMAL",
-    source: "PARENT_PORTAL",
+    source: isVisit ? "VISIT" : "PARENT_PORTAL",
+    ...(isVisit ? { viaVisitQr: true, visitStatus: "WAITING", visitArrivedAt: now } : {}),
     receiver: null,
     status: "RECEIVED",
     attachments,
-    assignedTo: [],
-    assignedToNames: [],
-    assignedAt: null,
+    assignedTo: assignees.map((a) => a.id),
+    assignedToNames: assignees.map((a) => a.name),
+    assignedAt: assignees.length ? now : null,
     reopened: false,
     isOverdue: false,
     createdAt: now,
@@ -875,11 +1221,20 @@ exports.submitPublicComplaint = onCall(async (request) => {
   });
 
   await db.collection(`complaints/${docRef.id}/activityLog`).add({
-    action: "COMPLAINT_CREATED",
+    action: isVisit ? "VISIT_CHECKED_IN" : "COMPLAINT_CREATED",
     actorId: null,
-    actorName: "ولي الأمر (نموذج إلكتروني)",
+    actorName: isVisit ? "ولي الأمر (تسجيل وصول بالفرع عبر QR)" : "ولي الأمر (نموذج إلكتروني)",
     createdAt: now,
   });
+  if (assignees.length) {
+    await db.collection(`complaints/${docRef.id}/activityLog`).add({
+      action: "COMPLAINT_ASSIGNED",
+      actorId: null,
+      actorName: "النظام (إسناد تلقائي)",
+      metadata: { toUserIds: assignees.map((a) => a.id), toUserNames: assignees.map((a) => a.name), addedNames: assignees.map((a) => a.name) },
+      createdAt: now,
+    });
+  }
 
   return { complaintId };
 });
@@ -926,6 +1281,9 @@ exports.submitPublicLostFoundItem = onCall(async (request) => {
     reporterPhone: (data.reporterPhone || "").trim(),
     studentName: (data.studentName || "").trim(),
     studentId: (data.studentId || "").trim(),
+    department: typeof data.department === "string" ? data.department : "",
+    stage: typeof data.stage === "string" ? data.stage : "",
+    grade: typeof data.grade === "string" ? data.grade.trim() : "",
     photoUrl,
     status: "UNCLAIMED",
     receiver: null,
@@ -953,15 +1311,7 @@ const PUBLIC_TECH_SUPPORT_REQUIRED_FIELDS = [
 // techSupportTickets stays `allow create: if isAuthenticated()` in
 // firestore.rules — completely unchanged — because this collection holds
 // national IDs and is the entry point to an eventual account-credential
-// reset. The staff-facing form requires a human to tick an "I confirmed this
-// phone number matches our records" box before a ticket is even created; a
-// public submitter obviously can't do that, so tickets created here always
-// get identityVerified: false. TechSupportDetails.jsx gates the "send
-// credentials" action on that flag — a specialist must explicitly confirm
-// identity (by checking the student record themselves) before anything
-// sensitive can be sent, regardless of how the ticket originated. Only that
-// confirmation gate changes; auto-assignment to a specialist is unaffected
-// since routing the ticket to the right person leaks nothing.
+// reset.
 exports.submitPublicTechSupportTicket = onCall(async (request) => {
   const data = request.data || {};
   for (const field of PUBLIC_TECH_SUPPORT_REQUIRED_FIELDS) {
@@ -970,33 +1320,46 @@ exports.submitPublicTechSupportTicket = onCall(async (request) => {
     }
   }
 
+  const attachmentsInput = Array.isArray(data.attachments) ? data.attachments : [];
+  if (attachmentsInput.length > MAX_PUBLIC_ATTACHMENTS) {
+    throw new HttpsError("invalid-argument", `يمكن إرفاق ${MAX_PUBLIC_ATTACHMENTS} ملفات كحد أقصى.`);
+  }
+
   const ticketId = `IT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
-  const assignee = await findEligibleItSpecialist(data.branch);
+  const bucket = getStorage().bucket();
+  const attachments = [];
+  for (const att of attachmentsInput) {
+    const uploaded = await uploadPublicAttachment(bucket, `techSupport/${ticketId}`, att);
+    attachments.push({ ...uploaded, uploadedBy: null, createdAt: new Date().toISOString() });
+  }
+
+  const assignees = await findPublicAssignees(data.branch, "IT", data.stage, data.department);
   const now = Timestamp.now();
 
   const docRef = await db.collection("techSupportTickets").add({
+    attachments,
     studentName: data.studentName.trim(),
     nationalId: data.nationalId.trim(),
     academicId: (data.academicId || "").trim(),
     branch: data.branch,
+    department: data.department || "",
     stage: data.stage,
     grade: data.grade.trim(),
     parentName: data.parentName.trim(),
     relation: data.relation || "الأب",
     parentPhone: data.parentPhone.trim(),
+    parentNationalId: typeof data.parentNationalId === "string" ? data.parentNationalId.trim() : "",
     problemType: data.problemType,
     platform: data.platform,
     platformLink: (data.platformLink || "").trim(),
     details: (data.details || "").trim(),
     ticketId,
     receiver: null,
-    identityVerified: false,
-    identityVerifiedBy: null,
     source: "PARENT_PORTAL",
-    status: assignee ? "ASSIGNED" : "NEW",
-    assignedTo: assignee ? [assignee.id] : [],
-    assignedToNames: assignee ? [assignee.name] : [],
-    assignedAt: assignee ? now : null,
+    status: assignees.length ? "ASSIGNED" : "NEW",
+    assignedTo: assignees.map((a) => a.id),
+    assignedToNames: assignees.map((a) => a.name),
+    assignedAt: assignees.length ? now : null,
     isOverdue: false,
     reopenCount: 0,
     createdAt: now,
@@ -1009,15 +1372,546 @@ exports.submitPublicTechSupportTicket = onCall(async (request) => {
     actorName: "ولي الأمر (نموذج إلكتروني)",
     createdAt: now,
   });
-  if (assignee) {
+  if (assignees.length) {
     await db.collection(`techSupportTickets/${docRef.id}/activityLog`).add({
       action: "TICKET_ASSIGNED",
       actorId: null,
-      actorName: "ولي الأمر (نموذج إلكتروني)",
-      metadata: { toUserNames: [assignee.name], addedNames: [assignee.name] },
+      actorName: "النظام (إسناد تلقائي)",
+      metadata: { toUserNames: assignees.map((a) => a.name), addedNames: assignees.map((a) => a.name) },
       createdAt: now,
     });
   }
 
   return { ticketId };
 });
+
+// Moves a complaint that was filed under the wrong kind (parents often log a
+// platform-login problem as a general complaint) into the tech-support
+// module. Done server-side so it is all-or-nothing and doesn't require the
+// caller to hold the delete permission: the ticket is created, the complaint
+// is archived to deletedComplaints (same shape ComplaintDetails.jsx's
+// handleDelete writes) and then removed together with its activity log.
+exports.convertComplaintToTechTicket = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  }
+  const { complaintDocId, problemType, platform, grade, relation, parentNationalId } = request.data || {};
+  for (const value of [complaintDocId, problemType, platform, grade]) {
+    if (!value || typeof value !== "string" || !value.trim()) {
+      throw new HttpsError("invalid-argument", "يرجى تعبئة جميع الحقول المطلوبة.");
+    }
+  }
+
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  if (!callerDoc.exists || caller.active === false) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  }
+
+  const complaintRef = db.collection("complaints").doc(complaintDocId);
+  const complaintSnap = await complaintRef.get();
+  if (!complaintSnap.exists) {
+    throw new HttpsError("not-found", "لم يتم العثور على الملاحظة.");
+  }
+  const complaint = complaintSnap.data();
+
+  // Mirrors firestore.rules: canEditRecord(branch) for the complaint plus
+  // canAccessTechSupport() for the module it is moving into.
+  const isAdminCaller = caller.role === "ADMIN";
+  const inScope = caller.access === "all" || (caller.branches || []).includes(complaint.branch) || caller.branch === complaint.branch;
+  const canEdit = isAdminCaller || (caller.perms?.edit === true && inScope);
+  const canAccessTech = isAdminCaller || caller.department === "IT" || caller.role === "CUSTOMER_SERVICE" || caller.isPrincipal === true || caller.isQuality === true;
+  if (!canEdit || !canAccessTech) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية تحويل هذه الملاحظة.");
+  }
+  if (["SOLVED", "CLOSED", "REJECTED"].includes(complaint.status)) {
+    throw new HttpsError("failed-precondition", "لا يمكن تحويل ملاحظة منتهية.");
+  }
+
+  const now = Timestamp.now();
+  const actorName = caller.name || "مستخدم";
+  const ticketId = `IT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const assignee = await findEligibleItSpecialist(complaint.branch, complaint.stage, complaint.department);
+  const logsSnapshot = await complaintRef.collection("activityLog").orderBy("createdAt", "asc").get();
+  const reason = `تحويل إلى بلاغ تقني ${ticketId}`;
+
+  const ticketRef = db.collection("techSupportTickets").doc();
+  const batch = db.batch();
+  batch.set(ticketRef, {
+    studentName: complaint.studentName || "",
+    nationalId: complaint.studentId || "",
+    academicId: "",
+    branch: complaint.branch || "",
+    department: complaint.department || "",
+    stage: complaint.stage || "",
+    grade: grade.trim(),
+    parentName: complaint.parentName || "",
+    relation: relation || "الأب",
+    parentPhone: complaint.parentPhone || "",
+    parentNationalId: typeof parentNationalId === "string" ? parentNationalId.trim() : "",
+    problemType,
+    platform,
+    platformLink: "",
+    details: [complaint.subject, complaint.details].filter(Boolean).join("\n"),
+    attachments: complaint.attachments || [],
+    ticketId,
+    convertedFromId: complaint.complaintId || null,
+    receiver: complaint.receiver || request.auth.uid,
+    source: complaint.source || null,
+    receiptMessageSentAt: complaint.receiptMessageSentAt || null,
+    status: assignee ? "ASSIGNED" : "NEW",
+    assignedTo: assignee ? [assignee.id] : [],
+    assignedToNames: assignee ? [assignee.name] : [],
+    assignedAt: assignee ? now : null,
+    isOverdue: false,
+    reopenCount: 0,
+    createdAt: complaint.createdAt || now,
+    updatedAt: now,
+  });
+  batch.set(ticketRef.collection("activityLog").doc(), {
+    action: "CONVERTED_FROM_COMPLAINT",
+    actorId: request.auth.uid,
+    actorName,
+    metadata: { note: `رقم الملاحظة الأصلي: ${complaint.complaintId}` },
+    createdAt: now,
+  });
+  if (assignee) {
+    batch.set(ticketRef.collection("activityLog").doc(), {
+      action: "TICKET_ASSIGNED",
+      actorId: request.auth.uid,
+      actorName,
+      metadata: { toUserNames: [assignee.name], addedNames: [assignee.name] },
+      createdAt: now,
+    });
+  }
+  batch.set(db.collection("deletedComplaints").doc(), {
+    complaint: { ...complaint, id: complaintDocId },
+    activityLog: [
+      ...logsSnapshot.docs.map((d) => d.data()),
+      { action: "COMPLAINT_CONVERTED", actorId: request.auth.uid, actorName, metadata: { reason }, createdAt: now },
+    ],
+    reason,
+    convertedToTicketId: ticketId,
+    deletedBy: request.auth.uid,
+    deletedByName: actorName,
+    deletedAt: now,
+  });
+  await batch.commit();
+  await db.recursiveDelete(complaintRef);
+
+  return { ticketId, ticketDocId: ticketRef.id };
+});
+
+// Uploads one file for a tech-support resolution message (screenshot,
+// instructions PDF, ...). Done with the Admin SDK — same helper as the
+// public-link attachments — so it doesn't depend on Storage security rules;
+// access is checked here against the same rules firestore.rules applies to
+// the ticket (tech-support access + edit permission in its branch).
+exports.uploadTechSupportResolutionFile = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  }
+  const { ticketDocId, file } = request.data || {};
+  if (!ticketDocId || typeof ticketDocId !== "string") {
+    throw new HttpsError("invalid-argument", "رقم البلاغ مطلوب.");
+  }
+
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  if (!callerDoc.exists || caller.active === false) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  }
+  const ticketSnap = await db.collection("techSupportTickets").doc(ticketDocId).get();
+  if (!ticketSnap.exists) {
+    throw new HttpsError("not-found", "لم يتم العثور على البلاغ.");
+  }
+  const ticket = ticketSnap.data();
+
+  const isAdminCaller = caller.role === "ADMIN";
+  const inScope = caller.access === "all" || (caller.branches || []).includes(ticket.branch) || caller.branch === ticket.branch;
+  const canAccessTech = isAdminCaller || caller.department === "IT" || caller.role === "CUSTOMER_SERVICE" || caller.isPrincipal === true || caller.isQuality === true;
+  const canEdit = isAdminCaller || (caller.perms?.edit === true && inScope);
+  if (!canAccessTech || !canEdit) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية تعديل هذا البلاغ.");
+  }
+
+  const uploaded = await uploadPublicAttachment(getStorage().bucket(), `techSupport/${ticket.ticketId}/resolution`, file);
+  return { ...uploaded, uploadedBy: request.auth.uid, createdAt: new Date().toISOString() };
+});
+
+// Confirms that a parent who checked in at a branch (QR visit, see
+// submitPublicComplaint's `visit` flag) has been met. The meeting notes /
+// agreed solution are stored as an internal comment (staff-only, never
+// shown to the parent), and the complaint is marked solved when the
+// meeting resolved it. Allowed for anyone who can edit the record in its
+// branch, and also for its assignees and branch principals — the person
+// meeting the parent may not hold the general edit permission.
+exports.confirmBranchVisit = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  }
+  const { complaintDocId, notes, solved } = request.data || {};
+  if (!complaintDocId || typeof complaintDocId !== "string") {
+    throw new HttpsError("invalid-argument", "رقم الملاحظة مطلوب.");
+  }
+  if (typeof notes !== "string" || !notes.trim()) {
+    throw new HttpsError("invalid-argument", "يرجى كتابة ملخص المقابلة والحل.");
+  }
+
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  if (!callerDoc.exists || caller.active === false) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  }
+  const complaintRef = db.collection("complaints").doc(complaintDocId);
+  const snap = await complaintRef.get();
+  if (!snap.exists) {
+    throw new HttpsError("not-found", "لم يتم العثور على الملاحظة.");
+  }
+  const complaint = snap.data();
+  if (complaint.visitStatus !== "WAITING") {
+    throw new HttpsError("failed-precondition", "تم تأكيد هذه المقابلة مسبقاً.");
+  }
+
+  const isAdminCaller = caller.role === "ADMIN";
+  const inScope = caller.access === "all" || (caller.branches || []).includes(complaint.branch) || caller.branch === complaint.branch;
+  const isAssignee = (complaint.assignedTo || []).includes(request.auth.uid);
+  const allowed = isAdminCaller || isAssignee || (inScope && (caller.perms?.edit === true || caller.isPrincipal === true || caller.isQuality === true));
+  if (!allowed) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية تأكيد هذه المقابلة.");
+  }
+
+  const now = Timestamp.now();
+  const actorName = caller.name || "مستخدم";
+  const text = notes.trim();
+  const isSolved = solved === true && !["SOLVED", "CLOSED", "REJECTED"].includes(complaint.status);
+
+  // The person who met the parent becomes an assignee if they weren't.
+  const assignedTo = complaint.assignedTo || [];
+  const assignedToNames = complaint.assignedToNames || [];
+  const assigneeUpdate = isAssignee ? {} : {
+    assignedTo: [...assignedTo, request.auth.uid],
+    assignedToNames: [...assignedToNames, actorName],
+    ...(assignedTo.length ? {} : { assignedAt: now }),
+  };
+
+  const logs = complaintRef.collection("activityLog");
+  const batch = db.batch();
+  batch.set(logs.doc(), {
+    action: "INTERNAL_COMMENT_ADDED",
+    actorId: request.auth.uid,
+    actorName,
+    metadata: { comment: `✅ تمت مقابلة ولي الأمر في الفرع.\n${text}`, visit: true },
+    createdAt: now,
+  });
+  batch.set(logs.doc(), {
+    action: "VISIT_MET",
+    actorId: request.auth.uid,
+    actorName,
+    metadata: { solved: isSolved },
+    createdAt: now,
+  });
+  batch.update(complaintRef, {
+    visitStatus: "MET",
+    visitMetAt: now,
+    visitMetBy: request.auth.uid,
+    visitMetByName: actorName,
+    hasInternalComment: true,
+    ...assigneeUpdate,
+    ...(isSolved ? { status: "SOLVED", solvedAt: now } : (complaint.status === "RECEIVED" ? { status: "IN_PROGRESS" } : {})),
+    updatedAt: now,
+  });
+  await batch.commit();
+  return { ok: true, solved: isSolved };
+});
+
+// One-time backfill of `wasEscalated` for complaints escalated before the
+// flag existed (manual escalations are only recorded in the activity log;
+// SLA escalations also set isOverdue). Runs on a schedule but does its work
+// once — a marker doc makes every later run a single cheap read.
+exports.backfillWasEscalated = onSchedule("every 30 minutes", async () => {
+  const markerRef = db.collection("meta").doc("migrations");
+  const marker = await markerRef.get();
+  if (marker.exists && marker.data().wasEscalatedBackfill) return;
+
+  const snapshot = await db.collection("complaints").get();
+  let updated = 0;
+  for (const doc of snapshot.docs) {
+    const c = doc.data();
+    if (c.wasEscalated) continue;
+    let escalated = c.status === "ESCALATED" || c.isOverdue === true;
+    if (!escalated) {
+      const logs = await doc.ref.collection("activityLog").where("action", "in", ["COMPLAINT_ESCALATED", "SLA_BREACH"]).limit(1).get();
+      escalated = !logs.empty;
+    }
+    if (escalated) {
+      await doc.ref.update({ wasEscalated: true });
+      updated++;
+    }
+  }
+  await markerRef.set({ wasEscalatedBackfill: Timestamp.now(), wasEscalatedBackfillCount: updated }, { merge: true });
+  console.log(`wasEscalated backfill: ${updated} complaints flagged out of ${snapshot.size}.`);
+});
+
+// ---------------------------------------------------------------------------
+// WhatsApp Business API (Taqnyat) — template messages to parents.
+//
+// The API number is notification-only: every template carries a URL button
+// "تواصل مع الفرع" whose dynamic suffix is the student's branch WhatsApp
+// number (branches/{id}.whatsappNumber, set in Settings), so a parent who
+// wants to talk is sent to the branch's own number instead of replying to
+// the API number. Template names/language live in settings/whatsappApi.
+//
+// Every template has the same 5 body variables and one URL button:
+//   {{1}} parent name   {{2}} record number   {{3}} student name
+//   {{4}} branch name (receipt) / resolution details (resolution)
+//   {{5}} tracking link
+//   button 0: https://mis-complaints.web.app/contact/{{1}} -> record number
+//   (the /contact page redirects to the branch/section WhatsApp chat)
+// ---------------------------------------------------------------------------
+const TAQNYAT_MESSAGES_URL = "https://api.taqnyat.sa/wa/v2/messages/";
+const PUBLIC_APP_URL = "https://mis-complaints.web.app";
+const WA_TEMPLATE_KEYS = {
+  complaint: { receipt: "complaintReceipt", resolution: "complaintResolution", visitMet: "visitMet" },
+  techSupport: { receipt: "techReceipt", resolution: "techResolution" },
+  lostFound: { receipt: "lostFoundReceipt", returned: "lostFoundReturned" },
+};
+// Where each record type keeps its number / recipient / 3rd variable.
+// Lost & found messages go to the reporter, and {{3}} is the item name.
+const WA_KINDS = {
+  complaint: { collection: "complaints", idField: "complaintId", phone: "parentPhone", name: "parentName", third: "studentName" },
+  techSupport: { collection: "techSupportTickets", idField: "ticketId", phone: "parentPhone", name: "parentName", third: "studentName" },
+  lostFound: { collection: "lostFoundItems", idField: "itemCode", phone: "reporterPhone", name: "reporterName", third: "itemName" },
+};
+
+// Same normalization as src/utils/whatsapp.js toWhatsAppNumber().
+function toIntlNumber(phone) {
+  const normalized = String(phone || "").replace(/[٠-٩۰-۹]/g, (d) => String(d.charCodeAt(0) & 0xf));
+  let digits = normalized.replace(/\D/g, "");
+  if (digits.startsWith("00")) digits = digits.slice(2);
+  if (digits.startsWith("0")) digits = "966" + digits.slice(1);
+  return digits;
+}
+
+// WhatsApp rejects template parameters containing new lines, tabs or more
+// than 4 consecutive spaces, and empty values.
+function waParam(value) {
+  const text = String(value == null ? "" : value).replace(/[\r\n\t]+/g, " - ").replace(/ {4,}/g, "   ").trim();
+  return (text || "—").slice(0, 900);
+}
+
+// Exported only when WA_API_ENABLED (see TAQNYAT_WA_TOKEN above).
+// Shared sender for the manual callable and the automatic triggers below.
+// Throws HttpsError with an Arabic message the UI / activity log can show.
+async function sendWaTemplate({ kind, ref, record, event, actorId, actorName, settings }) {
+  const kindConfig = WA_KINDS[kind];
+  const templateName = (settings.templates || {})[WA_TEMPLATE_KEYS[kind][event]];
+  if (!templateName) {
+    throw new HttpsError("failed-precondition", "لم يُحدَّد اسم القالب لهذه الرسالة في الإعدادات.");
+  }
+
+  const branchSnap = record.branch ? await db.collection("branches").doc(record.branch).get() : null;
+  const branch = branchSnap && branchSnap.exists ? branchSnap.data() : {};
+  if (!(await contactNumberFor(record))) {
+    throw new HttpsError("failed-precondition", "لم يُضف رقم واتساب لفرع هذا السجل (أو لقسمه) في الإعدادات.");
+  }
+  const to = toIntlNumber(record[kindConfig.phone]);
+  if (!to) {
+    throw new HttpsError("failed-precondition", "لا يوجد رقم جوال لولي الأمر.");
+  }
+
+  const recordNumber = record[kindConfig.idField];
+  const attachmentLinks = (list) => (Array.isArray(list) && list.length ? ` | المرفقات: ${list.map((a) => a.fileUrl).join(" ")}` : "");
+  let fourth;
+  if (event === "receipt") {
+    fourth = branch.name || record.branch;
+  } else if (event === "visitMet") {
+    // Thank-you after a branch QR visit (see confirmBranchVisit).
+    if (record.visitStatus !== "MET") {
+      throw new HttpsError("failed-precondition", "لم يتم تأكيد المقابلة بعد.");
+    }
+    fourth = branch.name || record.branch;
+  } else if (kind === "lostFound") {
+    if (record.status !== "RETURNED") {
+      throw new HttpsError("failed-precondition", "لم يتم تسليم الغرض بعد.");
+    }
+    fourth = record.returnedTo ? `تم التسليم إلى: ${record.returnedTo}` : "تم التسليم";
+  } else if (kind === "complaint") {
+    if (!["SOLVED", "CLOSED"].includes(record.status) || !record.solutionDetails) {
+      throw new HttpsError("failed-precondition", "لا يوجد حل مسجّل لهذه الملاحظة بعد.");
+    }
+    fourth = record.solutionDetails + attachmentLinks(record.solutionAttachments);
+  } else {
+    const creds = record.credentials && record.credentials.username && record.credentials.tempPassword ? record.credentials : null;
+    if (!creds && !record.resolutionNote && !(record.resolutionAttachments || []).length && !(record.resolutionLinks || []).length) {
+      throw new HttpsError("failed-precondition", "لا يوجد حل مسجّل لهذا البلاغ بعد.");
+    }
+    let platformName = "";
+    if (record.platform) {
+      const platformSnap = await db.collection("platforms").doc(record.platform).get();
+      platformName = platformSnap.exists ? platformSnap.data().name : record.platform;
+    }
+    fourth = [
+      creds && platformName ? `المنصة: ${platformName}` : "",
+      creds && record.platformLink ? `الرابط: ${record.platformLink}` : "",
+      creds ? `اسم المستخدم: ${creds.username}` : "",
+      creds ? `الرمز السري المؤقت: ${creds.tempPassword}` : "",
+      record.resolutionNote || "",
+      ...(Array.isArray(record.resolutionLinks) ? record.resolutionLinks.filter((l) => l && l.url).map((l) => (l.label ? `${l.label}: ${l.url}` : l.url)) : []),
+    ].filter(Boolean).join(" | ") + attachmentLinks(record.resolutionAttachments);
+  }
+
+  const payload = {
+    to,
+    type: "template",
+    template: { name: templateName, language: { code: settings.language || "ar" } },
+    components: [
+      {
+        type: "body",
+        parameters: [
+          record[kindConfig.name],
+          recordNumber,
+          record[kindConfig.third],
+          fourth,
+          `${PUBLIC_APP_URL}/track?id=${encodeURIComponent(recordNumber)}`,
+        ].map((v) => ({ type: "text", text: waParam(v) })),
+      },
+      // Button URL https://mis-complaints.web.app/contact/{{1}} — Meta does
+      // not allow wa.me links in template buttons, so it opens our page,
+      // which redirects to the branch/section WhatsApp chat.
+      { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: recordNumber }] },
+    ],
+  };
+
+  const response = await fetch(TAQNYAT_MESSAGES_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TAQNYAT_WA_TOKEN.value()}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const bodyText = await response.text();
+  let body = null;
+  try { body = JSON.parse(bodyText); } catch { /* non-JSON error page */ }
+  if (!response.ok) {
+    console.error("Taqnyat WhatsApp send failed", response.status, bodyText.slice(0, 500));
+    const providerReason = body && (body.message || (body.error && (body.error.message || body.error)) || body.detail);
+    const reasonText = providerReason ? ` — ${String(typeof providerReason === "string" ? providerReason : JSON.stringify(providerReason)).slice(0, 200)}` : "";
+    throw new HttpsError("internal", `تعذّر الإرسال عبر واتساب API (رمز ${response.status})${reasonText}. تحقق من اسم القالب واعتماده ورقم الفرع.`);
+  }
+  const messageId = (body && body.statuses && body.statuses.message_id) || null;
+
+  // Same "sent by" fields the client's messageSentFields() writes, set here
+  // so a sender without edit permission (an assignee) still records it.
+  // A tech-support resolution's fields (and closing the ticket) are left to
+  // the client's existing handleResolutionSent flow.
+  const sentPrefix = { receipt: "receipt", resolution: "resolution", returned: "resolution", visitMet: "visit" }[event];
+  if (!(kind === "techSupport" && event === "resolution")) {
+    const sentNow = Timestamp.now();
+    await ref.update({
+      [`${sentPrefix}MessageSentAt`]: sentNow,
+      [`${sentPrefix}MessageSentBy`]: actorId,
+      [`${sentPrefix}MessageSentByName`]: actorName,
+    });
+  }
+
+  await ref.collection("activityLog").add({
+    action: "WHATSAPP_API_SENT",
+    actorId: actorId,
+    actorName: actorName,
+    metadata: { event, template: templateName, messageId, to },
+    createdAt: Timestamp.now(),
+  });
+  return messageId;
+}
+
+const sendWhatsAppApiMessage = !WA_API_ENABLED ? null : onCall({ secrets: [TAQNYAT_WA_TOKEN] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  }
+  const { kind, docId, event } = request.data || {};
+  if (!WA_TEMPLATE_KEYS[kind] || !WA_TEMPLATE_KEYS[kind][event] || typeof docId !== "string" || !docId) {
+    throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  }
+
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  if (!callerDoc.exists || caller.active === false) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  }
+
+  const kindConfig = WA_KINDS[kind];
+  const ref = db.collection(kindConfig.collection).doc(docId);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    throw new HttpsError("not-found", "لم يتم العثور على السجل.");
+  }
+  const record = snap.data();
+
+  const isAdminCaller = caller.role === "ADMIN";
+  const inScope = caller.access === "all" || (caller.branches || []).includes(record.branch) || caller.branch === record.branch;
+  const isAssignee = (record.assignedTo || []).includes(request.auth.uid);
+  const canAccessTech = isAdminCaller || caller.department === "IT" || caller.role === "CUSTOMER_SERVICE" || caller.isPrincipal === true || caller.isQuality === true;
+  if (!(isAdminCaller || inScope || isAssignee) || (kind === "techSupport" && !canAccessTech)) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية الإرسال لهذا السجل.");
+  }
+
+  const settingsSnap = await db.collection("settings").doc("whatsappApi").get();
+  const settings = settingsSnap.exists ? settingsSnap.data() : {};
+  if (!settings.enabled) {
+    throw new HttpsError("failed-precondition", "الإرسال عبر واتساب API غير مفعّل من الإعدادات.");
+  }
+  const messageId = await sendWaTemplate({ kind, ref, record, event, actorId: request.auth.uid, actorName: caller.name || "مستخدم", settings });
+  return { ok: true, messageId };
+});
+
+// Automatic sending — on receipt (record created) and on resolution (status
+// moves to solved / returned / visit met), when the API and its auto-send
+// switch are on in Settings. Never throws: a failure is written to the
+// record's activity log so staff can see why and resend manually.
+const AUTO_ACTOR = "النظام (إرسال تلقائي)";
+async function autoSendWa(kind, ref, event) {
+  if (!WA_API_ENABLED) return;
+  try {
+    const settingsSnap = await db.collection("settings").doc("whatsappApi").get();
+    const settings = settingsSnap.exists ? settingsSnap.data() : {};
+    if (!settings.enabled || settings.autoSend === false) return;
+    const snap = await ref.get();
+    if (!snap.exists) return;
+    const record = snap.data();
+    if (!record[WA_KINDS[kind].phone]) return;
+    await sendWaTemplate({ kind, ref, record, event, actorId: null, actorName: AUTO_ACTOR, settings });
+    // A tech resolution sent automatically closes the ticket, exactly like
+    // the manual send (TechSupportDetails' handleResolutionSent).
+    if (kind === "techSupport" && event === "resolution") {
+      const now = Timestamp.now();
+      await ref.update({
+        resolutionMessageSentAt: now,
+        resolutionMessageSentBy: null,
+        resolutionMessageSentByName: AUTO_ACTOR,
+        ...(record.status === "CLOSED" ? {} : { status: "CLOSED", closedAt: now }),
+      });
+      await ref.collection("activityLog").add({
+        action: "CREDENTIALS_SENT",
+        actorId: null,
+        actorName: AUTO_ACTOR,
+        metadata: {
+          sentToPhone: record.parentPhone || null,
+          ...(record.credentials?.username ? { usernameSent: record.credentials.username } : {}),
+          viaApi: true,
+        },
+        createdAt: now,
+      });
+    }
+  } catch (err) {
+    console.error(`WhatsApp auto-send failed (${kind}/${event}) for ${ref.path}:`, err.message);
+    await ref.collection("activityLog").add({
+      action: "WHATSAPP_API_FAILED",
+      actorId: null,
+      actorName: AUTO_ACTOR,
+      metadata: { event, reason: err.message || "خطأ غير معروف" },
+      createdAt: Timestamp.now(),
+    });
+  }
+}
+if (WA_API_ENABLED) {
+  exports.sendWhatsAppApiMessage = sendWhatsAppApiMessage;
+}

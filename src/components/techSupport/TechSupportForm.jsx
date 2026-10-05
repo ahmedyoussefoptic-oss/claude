@@ -1,22 +1,26 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Save, Loader2, CheckCircle2, ShieldCheck, MessageCircle } from 'lucide-react';
+import { X, Save, Loader2, CheckCircle2, MessageCircle } from 'lucide-react';
 import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
-import { useBranches, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
+import { messageSentFields } from '../../utils/messageSent';
+import { useBranches, useDepartments, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
 import { useUsers } from '../../hooks/useUsers';
 import { STAGES } from '../../config/complaintTypes';
 import { RELATIONS, generateTicketId, classOptionsForStage } from '../../config/techSupport';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { waLink, buildTechSupportReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
-import { userBranches } from '../../utils/scope';
+import { userBranches, coversStage, coversCurriculum } from '../../utils/scope';
+import { isParentRelated } from '../../config/techSupport';
+import ParentNationalIdField from './ParentNationalIdField';
 
 export default function TechSupportForm({ onClose }) {
   const { t } = useTranslation();
-  const { user } = useAuthStore();
+  const { user, userData } = useAuthStore();
   const branches = useBranches();
+  const departments = useDepartments();
   const problemTypes = useProblemTypes();
   const platforms = usePlatforms();
   const staff = useUsers();
@@ -26,6 +30,7 @@ export default function TechSupportForm({ onClose }) {
     studentName: '',
     nationalId: '',
     branch: '',
+    department: '',
     stage: '',
     grade: '',
     parentName: '',
@@ -33,10 +38,10 @@ export default function TechSupportForm({ onClose }) {
     parentPhone: '',
     problemType: '',
     platform: '',
+    parentNationalId: '',
     platformLink: '',
     details: '',
   });
-  const [identityVerified, setIdentityVerified] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [savedTicket, setSavedTicket] = useState(null);
@@ -84,17 +89,15 @@ export default function TechSupportForm({ onClose }) {
       (u) => u.role === 'SPECIALIST' && u.department === 'IT' && u.active !== false &&
         (u.access === 'all' || userBranches(u).includes(formData.branch))
     );
-    // Prefer a branch-specific specialist over an all-branch one.
-    candidates.sort((a, b) => (a.access === 'all' ? 1 : 0) - (b.access === 'all' ? 1 : 0));
+    // Prefer whoever covers the ticket's grade and curriculum, then a
+    // branch-specific specialist over an all-branch one.
+    const rank = (u) => (coversStage(u, formData.stage) && coversCurriculum(u, formData.department) ? 0 : 2) + (u.access === 'all' ? 1 : 0);
+    candidates.sort((a, b) => rank(a) - rank(b));
     return candidates[0] || null;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!identityVerified) {
-      setError(t('techSupportForm.identityRequiredAlert'));
-      return;
-    }
     setLoading(true);
     setError(null);
 
@@ -105,10 +108,9 @@ export default function TechSupportForm({ onClose }) {
 
       const newTicket = {
         ...formData,
+        parentNationalId: isParentRelated(formData.problemType, formData.platform, problemTypes, platforms) ? formData.parentNationalId.trim() : '',
         ticketId,
         receiver: user.uid,
-        identityVerified: true,
-        identityVerifiedBy: user.uid,
         status: assignee ? 'ASSIGNED' : 'NEW',
         assignedTo: assignee ? [assignee.id] : [],
         assignedToNames: assignee ? [assignee.name] : [],
@@ -124,12 +126,6 @@ export default function TechSupportForm({ onClose }) {
       await addDoc(collection(db, `techSupportTickets/${docRef.id}/activityLog`), {
         action: 'TICKET_CREATED',
         actorId: user.uid,
-        createdAt: now,
-      });
-      await addDoc(collection(db, `techSupportTickets/${docRef.id}/activityLog`), {
-        action: 'IDENTITY_VERIFIED',
-        actorId: user.uid,
-        metadata: { phone: formData.parentPhone },
         createdAt: now,
       });
       if (assignee) {
@@ -167,7 +163,7 @@ export default function TechSupportForm({ onClose }) {
               href={waLink(savedTicket.parentPhone, buildTechSupportReceiptMessage(savedTicket, templates.techSupportReceipt))}
               target="_blank"
               rel="noreferrer"
-              onClick={() => updateDoc(doc(db, 'techSupportTickets', savedTicket.id), { receiptMessageSentAt: serverTimestamp() })}
+              onClick={() => updateDoc(doc(db, 'techSupportTickets', savedTicket.id), messageSentFields('receipt', user, userData))}
               className="w-full px-4 py-2.5 bg-[#25D366] text-white rounded-xl text-sm font-medium hover:brightness-95 transition-all flex items-center justify-center gap-2 mb-3"
             >
               <MessageCircle className="w-4 h-4" />
@@ -234,12 +230,19 @@ export default function TechSupportForm({ onClose }) {
                   <input type="text" name="nationalId" value={formData.nationalId} onChange={handleChange} onBlur={handleNationalIdBlur} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')} <span className="text-red-500">*</span></label>
                   <select name="branch" value={formData.branch} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
                     <option value="">{t('complaintForm.selectBranch')}</option>
                     {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.departmentLabel')} <span className="text-red-500">*</span></label>
+                  <select name="department" value={formData.department} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
+                    <option value="">{t('complaintForm.selectDepartment')}</option>
+                    {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
                 <div>
@@ -273,17 +276,10 @@ export default function TechSupportForm({ onClose }) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.phoneRegisteredLabel')} <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.phone')} <span className="text-red-500">*</span></label>
                   <input type="tel" name="parentPhone" value={formData.parentPhone} onChange={handleChange} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
               </div>
-              <label className="flex items-start gap-2.5 bg-amber-50 border border-amber-200 rounded-xl p-3 cursor-pointer">
-                <input type="checkbox" checked={identityVerified} onChange={(e) => setIdentityVerified(e.target.checked)} className="mt-0.5" required />
-                <span className="text-sm text-amber-900 flex items-start gap-1.5">
-                  <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
-                  {t('techSupportForm.identityNotice')}
-                </span>
-              </label>
             </div>
 
             <div className="space-y-4">
@@ -304,6 +300,9 @@ export default function TechSupportForm({ onClose }) {
                   </select>
                 </div>
               </div>
+              {isParentRelated(formData.problemType, formData.platform, problemTypes, platforms) && (
+                <ParentNationalIdField value={formData.parentNationalId} onChange={handleChange} inputCls="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.platformLinkLabel')}</label>
                 <input type="text" name="platformLink" value={formData.platformLink} onChange={handleChange} dir="ltr" placeholder="https://..." className="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />

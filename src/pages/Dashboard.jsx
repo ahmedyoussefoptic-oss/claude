@@ -8,10 +8,11 @@ import { TrendChart, BranchChart } from '../components/dashboard/Charts';
 import BranchIndicators from '../components/dashboard/BranchIndicators';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
-import { OPEN_TICKET_STATUSES } from '../config/techSupport';
+import { OPEN_TICKET_STATUSES, isTicketOverdue } from '../config/techSupport';
 import ComplaintForm from '../components/complaints/ComplaintForm';
 import PublicLinkModal from '../components/common/PublicLinkModal';
-import { branchScopeConstraintValues } from '../utils/scope';
+import { branchScopeConstraintValues, canAccessTechSupport } from '../utils/scope';
+import { isComplaintOverdue, complaintHasType, complaintTypesOf } from '../config/complaintTypes';
 
 // Generic branch-scoped live-count hook shared by the tech-support and
 // lost-found KPI cards below — same scoping rule as the complaints query.
@@ -54,18 +55,18 @@ function formatDuration(ms, lang) {
 
 export default function Dashboard() {
   const { t, i18n } = useTranslation();
-  const { userData, role } = useAuthStore();
+  const { userData } = useAuthStore();
   const branches = useBranches();
   const complaintTypes = useComplaintTypes();
   // Tech Support is restricted to the IT department's own staff (see
   // firestore.rules) — fetching it for anyone else just trips a
   // permission-denied listener, so skip the query entirely for them.
-  const canSeeTechSupport = role === 'ADMIN' || role === 'CUSTOMER_SERVICE' || userData?.department === 'IT';
+  const canSeeTechSupport = canAccessTechSupport(userData);
   const techTickets = useBranchScopedCollection('techSupportTickets', userData, canSeeTechSupport);
   const lostFoundItems = useBranchScopedCollection('lostFoundItems', userData);
   const techStats = useMemo(() => ({
     open: techTickets.filter((t) => OPEN_TICKET_STATUSES.includes(t.status)).length,
-    overdue: techTickets.filter((t) => t.isOverdue).length,
+    overdue: techTickets.filter(isTicketOverdue).length,
   }), [techTickets]);
   const lostFoundStats = useMemo(() => ({
     unclaimed: lostFoundItems.filter((i) => i.status === 'UNCLAIMED').length,
@@ -117,16 +118,16 @@ export default function Dashboard() {
       const newStats = {
         total: docs.length,
         inProgress: docs.filter(c => c.status === 'IN_PROGRESS' || c.status === 'RECEIVED').length,
-        overdue: docs.filter(c => c.isOverdue).length,
+        overdue: docs.filter(isComplaintOverdue).length,
         solved: docs.filter(c => c.status === 'SOLVED' || c.status === 'CLOSED').length,
         avgResolution: avgResolutionMs,
         slaCompliance,
         satisfaction,
         satisfactionCount: rated.length,
         reopened: docs.filter(c => c.reopened).length,
-        academic: docs.filter(c => c.complaintType === 'ACADEMIC').length,
-        administrative: docs.filter(c => c.complaintType === 'ADMINISTRATIVE').length,
-        behavioral: docs.filter(c => c.complaintType === 'BEHAVIORAL').length,
+        academic: docs.filter(c => complaintHasType(c, 'ACADEMIC')).length,
+        administrative: docs.filter(c => complaintHasType(c, 'ADMINISTRATIVE')).length,
+        behavioral: docs.filter(c => complaintHasType(c, 'BEHAVIORAL')).length,
       };
       setStats(newStats);
     });
@@ -392,7 +393,7 @@ export default function Dashboard() {
                 <tr key={c.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-6 py-4 font-medium text-slate-900" dir="ltr">{c.complaintId}</td>
                   <td className="px-6 py-4 text-slate-600">{c.parentName}</td>
-                  <td className="px-6 py-4 text-slate-600">{typeName(c.complaintType)}</td>
+                  <td className="px-6 py-4 text-slate-600">{complaintTypesOf(c).map(typeName).join(' + ')}</td>
                   <td className="px-6 py-4 text-slate-600">{branchName(c.branch)}</td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusBadge(c.status)}`}>

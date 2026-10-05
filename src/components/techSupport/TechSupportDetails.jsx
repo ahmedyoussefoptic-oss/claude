@@ -1,18 +1,24 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Clock, CheckCircle2, User, Phone, MapPin, Loader2, Trash2, UserPlus, MessageCircle, ShieldCheck, Link2, AlertTriangle, Share2 } from 'lucide-react';
+import { X, Clock, CheckCircle2, User, Phone, MapPin, Loader2, Trash2, UserPlus, MessageCircle, MessageSquare, ShieldCheck, Link2, Share2, Pencil, Paperclip, Plus } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../../config/firebase';
+import { MAX_PUBLIC_FILES, MAX_PUBLIC_FILE_BYTES, fileToBase64 } from '../../utils/publicSubmission';
+import AttachmentUploader from '../publicReport/AttachmentUploader';
 import useAuthStore from '../../stores/useAuthStore';
+import { messageSentFields } from '../../utils/messageSent';
 import { useUsers } from '../../hooks/useUsers';
-import { useBranches, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
+import { useBranches, useDepartments, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
 import { ROLES } from '../../config/roles';
 import { userBranches } from '../../utils/scope';
 import { TICKET_STATUS_BADGE } from '../../config/techSupport';
-import { waLink, shareLink, buildCredentialMessage, buildTechSupportReceiptMessage, buildTechSupportResolutionMessage, buildTechSupportShareMessage, toWhatsAppNumber } from '../../utils/whatsapp';
+import { waLink, shareLink, buildCredentialMessage, buildTechSupportReceiptMessage, buildTechSupportResolutionMessage, buildTechSupportShareMessage, toWhatsAppNumber, appendAttachmentLinks, appendResolutionLinks } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
+import { useWhatsAppApi } from '../../hooks/useWhatsAppApi';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import ErrorBoundary from '../common/ErrorBoundary';
+import TechSupportEditForm from './TechSupportEditForm';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -32,6 +38,7 @@ function TechSupportDetailsInner({ ticket, onClose }) {
   const { user, userData } = useAuthStore();
   const users = useUsers();
   const branches = useBranches();
+  const departments = useDepartments();
   const problemTypes = useProblemTypes();
   const platforms = usePlatforms();
   const templates = useMessageTemplates();
@@ -43,6 +50,11 @@ function TechSupportDetailsInner({ ticket, onClose }) {
   const [username, setUsername] = useState('');
   const [tempPassword, setTempPassword] = useState('');
   const [resolutionNote, setResolutionNote] = useState('');
+  const [resFiles, setResFiles] = useState([]);
+  const [resKept, setResKept] = useState([]);
+  const [resLinks, setResLinks] = useState([]);
+  const [resError, setResError] = useState(null);
+  const [showEdit, setShowEdit] = useState(false);
 
   useEffect(() => {
     setSelectedAssignees(ticket.assignedTo || []);
@@ -101,15 +113,6 @@ function TechSupportDetailsInner({ ticket, onClose }) {
     }
   };
 
-  const handleVerifyIdentity = async () => {
-    setLoading(true);
-    try {
-      await addLog('IDENTITY_VERIFIED', { phone: ticket.parentPhone, verifiedManually: true }, { identityVerified: true, identityVerifiedBy: user.uid });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleStart = async () => {
     setLoading(true);
     try {
@@ -125,12 +128,33 @@ function TechSupportDetailsInner({ ticket, onClose }) {
   // again later (parent didn't receive the message, lost it, etc.).
   const hasPartialCredentials = Boolean(username.trim()) !== Boolean(tempPassword.trim());
   const hasFullCredentials = Boolean(username.trim() && tempPassword.trim());
-  const canSaveResolution = !hasPartialCredentials && (hasFullCredentials || Boolean(resolutionNote.trim()));
+  const resAttachmentCount = resKept.length + resFiles.length;
+  const cleanResLinks = resLinks.map((l) => ({ label: l.label.trim(), url: l.url.trim() })).filter((l) => l.url);
+  const canSaveResolution = !hasPartialCredentials && (hasFullCredentials || Boolean(resolutionNote.trim()) || resAttachmentCount > 0 || cleanResLinks.length > 0);
+  const hasResolution = Boolean(ticket.credentials || ticket.resolutionNote || ticket.resolutionAttachments?.length || ticket.resolutionLinks?.length);
+
+  const addResFiles = (newFiles) => {
+    setResError(null);
+    const oversized = newFiles.find((f) => f.size > MAX_PUBLIC_FILE_BYTES);
+    if (oversized) {
+      setResError(t('publicReport.fileSizeError', { name: oversized.name, max: (MAX_PUBLIC_FILE_BYTES / 1024 / 1024).toFixed(0) }));
+      return;
+    }
+    if (resAttachmentCount + newFiles.length > MAX_PUBLIC_FILES) {
+      setResError(t('publicReport.maxFilesError', { count: MAX_PUBLIC_FILES }));
+      return;
+    }
+    setResFiles((prev) => [...prev, ...newFiles]);
+  };
 
   const openResolutionForm = () => {
     setUsername(ticket.credentials?.username || '');
     setTempPassword(ticket.credentials?.tempPassword || '');
     setResolutionNote(ticket.resolutionNote || '');
+    setResKept(ticket.resolutionAttachments || []);
+    setResLinks((ticket.resolutionLinks || []).map((l) => ({ label: l.label || '', url: l.url || '' })));
+    setResFiles([]);
+    setResError(null);
     setShowCredsForm(true);
   };
 
@@ -140,20 +164,36 @@ function TechSupportDetailsInner({ ticket, onClose }) {
     const trimmedPassword = tempPassword.trim();
     const trimmedNote = resolutionNote.trim();
     setLoading(true);
+    setResError(null);
     try {
+      // wa.me links can't carry files, so each one is uploaded and its link
+      // goes into the message instead (see withAttachmentLinks below).
+      const upload = httpsCallable(functions, 'uploadTechSupportResolutionFile');
+      const uploaded = [];
+      for (const file of resFiles) {
+        const { data } = await upload({
+          ticketDocId: ticket.id,
+          file: { fileName: file.name, mimeType: file.type || 'application/octet-stream', base64Data: await fileToBase64(file) },
+        });
+        uploaded.push(data);
+      }
+      const attachments = [...resKept, ...uploaded];
       const updates = {
         credentials: trimmedUsername && trimmedPassword ? { username: trimmedUsername, tempPassword: trimmedPassword } : deleteField(),
         resolutionNote: trimmedNote || deleteField(),
+        resolutionAttachments: attachments.length ? attachments : deleteField(),
+        resolutionLinks: cleanResLinks.length ? cleanResLinks : deleteField(),
       };
       // Writing a resolution means the ticket is solved, not still "in
-      // progress" — unless it's already past that point (sent and awaiting
-      // the parent's confirmation), in which case an edit shouldn't undo
-      // that progress.
-      if (!['WAITING_CONFIRMATION', 'CLOSED'].includes(ticket.status)) {
+      // progress" — unless it's already closed, which an edit shouldn't undo.
+      if (ticket.status !== 'CLOSED') {
         updates.status = 'SOLVED';
       }
       await addLog('CREDENTIALS_PREPARED', {}, updates);
       setShowCredsForm(false);
+    } catch (err) {
+      console.error(err);
+      setResError(t('techSupportDetails.attachmentUploadError'));
     } finally {
       setLoading(false);
     }
@@ -161,27 +201,41 @@ function TechSupportDetailsInner({ ticket, onClose }) {
 
   // Fires on the WhatsApp link's click — not awaited, same as the
   // equivalent complaints resolution-send link, so it never blocks the
-  // browser from opening wa.me. credentials/resolutionNote are deliberately
-  // left in place afterward so the same message can be resent later.
+  // browser from opening wa.me. Sending the resolution closes the ticket —
+  // parents rarely confirm back, and waiting on them left solved tickets
+  // counted as overdue. credentials/resolutionNote are deliberately left in
+  // place so the same message can be resent later from the closed ticket.
+  const waApi = useWhatsAppApi();
+  const [waSending, setWaSending] = useState(null);
+  const sendViaApi = async (event) => {
+    if (!confirm(t('waApi.confirmSend', { phone: ticket.parentPhone }))) return;
+    setWaSending(event);
+    try {
+      await httpsCallable(functions, 'sendWhatsAppApiMessage')({ kind: 'techSupport', docId: ticket.id, event });
+      // The function records the receipt "sent by" fields; a resolution
+      // goes through the same close-the-ticket flow as the wa.me link.
+      if (event === 'resolution') handleResolutionSent();
+      alert(t('waApi.sentOk'));
+    } catch (err) {
+      console.error(err);
+      alert(err.message || t('waApi.sendFailed'));
+    } finally {
+      setWaSending(null);
+    }
+  };
+
   const handleResolutionSent = () => {
     const hasCredentials = ticket.credentials?.username && ticket.credentials?.tempPassword;
-    if (!hasCredentials && !ticket.resolutionNote) return;
+    if (!hasResolution) return;
+    const now = serverTimestamp();
     addLog('CREDENTIALS_SENT', {
       sentToPhone: ticket.parentPhone,
       ...(hasCredentials ? { usernameSent: ticket.credentials.username } : {}),
-    }, {
-      status: 'WAITING_CONFIRMATION',
-      resolutionMessageSentAt: serverTimestamp(),
-    });
-  };
-
-  const handleConfirmClose = async () => {
-    setLoading(true);
-    try {
-      await addLog('CONFIRMED_CLOSED', {}, { status: 'CLOSED', closedAt: serverTimestamp() });
-    } finally {
-      setLoading(false);
-    }
+      ...(ticket.resolutionAttachments?.length ? { attachmentsSent: ticket.resolutionAttachments.length } : {}),
+    }, ticket.status === 'CLOSED' && ticket.resolutionMessageSentAt
+      // A resend from an already-closed ticket keeps the original send time and sender.
+      ? {}
+      : { ...messageSentFields('resolution', user, userData), ...(ticket.status === 'CLOSED' ? {} : { status: 'CLOSED', closedAt: now }) });
   };
 
   const handleReopen = async () => {
@@ -248,6 +302,7 @@ function TechSupportDetailsInner({ ticket, onClose }) {
   const problemTypeName = problemTypes.find((pt) => pt.id === ticket.problemType)?.name || ticket.problemType;
   const platformName = platforms.find((p) => p.id === ticket.platform)?.name || ticket.platform;
   const branchName = branches.find((b) => b.id === ticket.branch)?.name || ticket.branch;
+  const departmentName = ticket.department ? (departments.find((d) => d.id === ticket.department)?.name || ticket.department) : '';
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex justify-end">
@@ -264,6 +319,12 @@ function TechSupportDetailsInner({ ticket, onClose }) {
                 <span className="px-2.5 py-1 rounded-md text-xs font-medium border bg-primary/10 text-primary border-primary/20 flex items-center gap-1">
                   <Link2 className="w-3 h-3" />
                   {t('techSupportDetails.viaPublicLink')}
+                </span>
+              )}
+              {ticket.hasInternalComment && (
+                <span className="px-2.5 py-1 rounded-md text-xs font-medium border bg-amber-100 text-amber-700 border-amber-200 flex items-center gap-1">
+                  <MessageSquare className="w-3 h-3" />
+                  {t('common.hasInternalComment')}
                 </span>
               )}
             </div>
@@ -285,20 +346,6 @@ function TechSupportDetailsInner({ ticket, onClose }) {
             </div>
           )}
 
-          {!ticket.identityVerified && (
-            <div className="bg-amber-50 border border-amber-200 text-amber-900 text-sm rounded-xl p-3 flex items-start gap-2.5">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p>{t('techSupportDetails.identityNotVerifiedNotice')}</p>
-                {canEdit && (
-                  <button disabled={loading} onClick={handleVerifyIdentity} className="mt-2 px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 transition-colors">
-                    {t('techSupportDetails.confirmIdentityBtn')}
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
           <div className="flex flex-wrap gap-2">
             <a
               href={shareLink(buildTechSupportShareMessage(ticket, branchName, templates.techSupportShare))}
@@ -309,32 +356,44 @@ function TechSupportDetailsInner({ ticket, onClose }) {
               <Share2 className="w-4 h-4" />
               {t('common.shareWithStaff')}
             </a>
+            {canEdit && (
+              <button disabled={loading} onClick={() => setShowEdit(true)} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors flex items-center gap-2">
+                <Pencil className="w-4 h-4" />
+                {t('complaintDetails.editDetailsBtn')}
+              </button>
+            )}
             {!ticket.receiptMessageSentAt && ticket.parentPhone && (
               <a
                 href={waLink(ticket.parentPhone, buildTechSupportReceiptMessage(ticket, templates.techSupportReceipt))}
                 target="_blank"
                 rel="noreferrer"
-                onClick={() => updateDoc(doc(db, 'techSupportTickets', ticket.id), { receiptMessageSentAt: serverTimestamp() })}
+                onClick={() => updateDoc(doc(db, 'techSupportTickets', ticket.id), messageSentFields('receipt', user, userData))}
                 className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
               >
                 <MessageCircle className="w-4 h-4" />
                 {t('techSupportDetails.sendReceiptWhatsApp')}
               </a>
             )}
+            {waApi.enabled && !ticket.receiptMessageSentAt && ticket.parentPhone && (
+              <button disabled={!!waSending} onClick={() => sendViaApi('receipt')} className="px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm font-medium hover:bg-emerald-800 transition-all flex items-center gap-2 disabled:opacity-60">
+                {waSending === 'receipt' ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                {t('waApi.sendReceiptApi')}
+              </button>
+            )}
             {canEdit && ticket.status === 'ASSIGNED' && (
               <button disabled={loading} onClick={handleStart} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
                 {t('techSupportDetails.startProcessing')}
               </button>
             )}
-            {canEdit && ticket.identityVerified && ticket.status !== 'CLOSED' && (
+            {canEdit && ticket.status !== 'CLOSED' && (
               <button disabled={loading} onClick={openResolutionForm} className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2">
                 <MessageCircle className="w-4 h-4" />
-                {(ticket.credentials || ticket.resolutionNote) ? t('techSupportDetails.editResolutionBtn') : t('techSupportDetails.prepareCredentialsBtn')}
+                {hasResolution ? t('techSupportDetails.editResolutionBtn') : t('techSupportDetails.prepareCredentialsBtn')}
               </button>
             )}
-            {(ticket.credentials || ticket.resolutionNote) && ticket.parentPhone && ticket.status !== 'CLOSED' && (
+            {hasResolution && ticket.parentPhone && (
               <a
-                href={waLink(ticket.parentPhone, ticket.credentials?.username && ticket.credentials?.tempPassword
+                href={waLink(ticket.parentPhone, appendResolutionLinks(appendAttachmentLinks(ticket.credentials?.username && ticket.credentials?.tempPassword
                   ? buildCredentialMessage({
                     ticketId: ticket.ticketId,
                     studentName: ticket.studentName,
@@ -343,8 +402,8 @@ function TechSupportDetailsInner({ ticket, onClose }) {
                     username: ticket.credentials.username,
                     tempPassword: ticket.credentials.tempPassword,
                   }, templates.credential)
-                  : buildTechSupportResolutionMessage(ticket, ticket.resolutionNote, templates.techSupportResolution)
-                )}
+                  : buildTechSupportResolutionMessage(ticket, ticket.resolutionNote, templates.techSupportResolution),
+                ticket.resolutionAttachments), ticket.resolutionLinks))}
                 target="_blank"
                 rel="noreferrer"
                 onClick={handleResolutionSent}
@@ -354,12 +413,13 @@ function TechSupportDetailsInner({ ticket, onClose }) {
                 {t('techSupportDetails.sendCredentialsWhatsApp')}
               </a>
             )}
-            {canEdit && ticket.status === 'WAITING_CONFIRMATION' && (
-              <button disabled={loading} onClick={handleConfirmClose} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 transition-colors">
-                {t('techSupportDetails.confirmCloseBtn')}
+            {waApi.enabled && hasResolution && ticket.parentPhone && (
+              <button disabled={!!waSending} onClick={() => sendViaApi('resolution')} className="px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm font-medium hover:bg-emerald-800 transition-all flex items-center gap-2 disabled:opacity-60">
+                {waSending === 'resolution' ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                {t('waApi.sendResolutionApi')}
               </button>
             )}
-            {canEdit && ['CLOSED', 'WAITING_CONFIRMATION'].includes(ticket.status) && (
+            {canEdit && ticket.status === 'CLOSED' && (
               <button disabled={loading} onClick={handleReopen} className="px-4 py-2 bg-orange-600 text-white rounded-lg text-sm font-medium hover:bg-orange-700 transition-colors">
                 {t('techSupportDetails.reopenBtn')}
               </button>
@@ -399,9 +459,55 @@ function TechSupportDetailsInner({ ticket, onClose }) {
                 placeholder={t('techSupportDetails.tempPasswordPlaceholder')} dir="ltr"
                 className="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />
+              {resKept.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {resKept.map((file, i) => (
+                    <span key={file.fileUrl} className="inline-flex items-center gap-1.5 bg-slate-50 border border-slate-200 px-2.5 py-1 rounded-lg text-xs text-slate-700">
+                      <Paperclip className="w-3.5 h-3.5" />
+                      <span dir="ltr">{file.fileName}</span>
+                      <button type="button" onClick={() => setResKept((prev) => prev.filter((_, j) => j !== i))} className="text-slate-400 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-slate-700">{t('techSupportDetails.resolutionLinksLabel')}</p>
+                {resLinks.map((link, i) => (
+                  <div key={i} className="flex gap-2">
+                    <input
+                      type="text" value={link.label} placeholder={t('techSupportDetails.linkLabelPlaceholder')}
+                      onChange={(e) => setResLinks((prev) => prev.map((l, j) => (j === i ? { ...l, label: e.target.value } : l)))}
+                      className="w-2/5 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary"
+                    />
+                    <input
+                      type="url" dir="ltr" value={link.url} placeholder="https://..."
+                      onChange={(e) => setResLinks((prev) => prev.map((l, j) => (j === i ? { ...l, url: e.target.value } : l)))}
+                      className="flex-1 border border-slate-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-primary"
+                    />
+                    <button type="button" onClick={() => setResLinks((prev) => prev.filter((_, j) => j !== i))} className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+                {resLinks.length < 10 && (
+                  <button type="button" onClick={() => setResLinks((prev) => [...prev, { label: '', url: '' }])} className="flex items-center gap-1.5 text-sm font-medium text-primary hover:bg-primary/5 px-3 py-1.5 rounded-lg border border-dashed border-primary/40">
+                    <Plus className="w-4 h-4" />
+                    {t('techSupportDetails.addLinkBtn')}
+                  </button>
+                )}
+              </div>
+              <AttachmentUploader
+                files={resFiles}
+                onAdd={addResFiles}
+                onRemove={(i) => setResFiles((prev) => prev.filter((_, j) => j !== i))}
+                label={t('techSupportDetails.resolutionAttachmentsLabel')}
+              />
+              <p className="text-xs text-slate-400">{t('techSupportDetails.resolutionAttachmentsHint')}</p>
+              {resError && <p className="text-sm text-red-600">{resError}</p>}
               <p className="text-xs text-slate-500">{t('techSupportDetails.willSendToRegistered')} <span dir="ltr" className="font-mono">{toWhatsAppNumber(ticket.parentPhone)}</span></p>
               <div className="flex gap-2">
-                <button disabled={loading || !canSaveResolution} onClick={handleSaveResolution} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50">
+                <button disabled={loading || !canSaveResolution} onClick={handleSaveResolution} className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2">
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   {t('techSupportDetails.saveCredentialsBtn')}
                 </button>
                 <button onClick={() => setShowCredsForm(false)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-200">{t('techSupportDetails.cancel')}</button>
@@ -420,7 +526,7 @@ function TechSupportDetailsInner({ ticket, onClose }) {
               )}
               <div className="space-y-3">
                 <AssigneeMultiSelect
-                  options={eligibleAssignees(users, { branch: ticket.branch, complaintType: 'IT' })}
+                  options={eligibleAssignees(users, { branch: ticket.branch, complaintType: 'IT', stage: ticket.stage, curriculum: ticket.department })}
                   selected={selectedAssignees}
                   onChange={setSelectedAssignees}
                   placeholder={t('assigneeSelect.selectStaffPlaceholder')}
@@ -456,7 +562,7 @@ function TechSupportDetailsInner({ ticket, onClose }) {
               <div>
                 <p className="text-xs text-slate-500 mb-0.5">{t('techSupportDetails.student')}</p>
                 <p className="font-medium text-slate-900">{ticket.studentName}</p>
-                <p className="text-sm text-slate-500 mt-1">{branchName} - {ticket.stage} {ticket.grade}</p>
+                <p className="text-sm text-slate-500 mt-1">{branchName}{departmentName ? ` - ${departmentName}` : ''} - {ticket.stage} {ticket.grade}</p>
               </div>
             </div>
           </div>
@@ -469,8 +575,48 @@ function TechSupportDetailsInner({ ticket, onClose }) {
             {ticket.details && <p className="text-slate-600 leading-relaxed text-sm whitespace-pre-wrap">{ticket.details}</p>}
             <div className="mt-3 pt-3 border-t border-slate-100 text-xs text-slate-500 space-y-1">
               <p>{t('techSupportDetails.nationalIdLabel')} <span dir="ltr">{ticket.nationalId}</span> {ticket.academicId && <>· {t('techSupportDetails.academicIdLabel')} <span dir="ltr">{ticket.academicId}</span></>}</p>
+              {ticket.parentNationalId && <p className="text-amber-700">{t('techSupportForm.parentNationalIdLabel')}: <span dir="ltr">{ticket.parentNationalId}</span></p>}
               {ticket.platformLink && <p dir="ltr">{ticket.platformLink}</p>}
             </div>
+            {ticket.attachments?.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                <h4 className="text-sm font-medium text-slate-700 mb-2">{t('complaintDetails.attachmentsLabel')}</h4>
+                <div className="flex flex-wrap gap-2">
+                  {ticket.attachments.map((file, i) => (
+                    <a key={i} href={file.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-lg text-sm text-primary hover:bg-slate-100 transition-colors">
+                      <Paperclip className="w-4 h-4" />
+                      <span dir="ltr">{file.fileName}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            {ticket.resolutionLinks?.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                <h4 className="text-sm font-medium text-slate-700 mb-2">{t('techSupportDetails.resolutionLinksLabel')}</h4>
+                <div className="flex flex-wrap gap-2">
+                  {ticket.resolutionLinks.map((l, i) => (
+                    <a key={i} href={l.url} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg text-sm text-emerald-700 hover:bg-emerald-100 transition-colors">
+                      <Link2 className="w-4 h-4" />
+                      {l.label || <span dir="ltr">{l.url}</span>}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+            {ticket.resolutionAttachments?.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-slate-100">
+                <h4 className="text-sm font-medium text-slate-700 mb-2">{t('techSupportDetails.resolutionAttachmentsLabel')}</h4>
+                <div className="flex flex-wrap gap-2">
+                  {ticket.resolutionAttachments.map((file) => (
+                    <a key={file.fileUrl} href={file.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg text-sm text-emerald-700 hover:bg-emerald-100 transition-colors">
+                      <Paperclip className="w-4 h-4" />
+                      <span dir="ltr">{file.fileName}</span>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
@@ -492,6 +638,17 @@ function TechSupportDetailsInner({ ticket, onClose }) {
                         {log.metadata.usernameSent
                           ? t('techSupportDetails.credentialsSentDetail', { phone: log.metadata.sentToPhone, username: log.metadata.usernameSent })
                           : t('techSupportDetails.resolutionSentDetail', { phone: log.metadata.sentToPhone })}
+                      </div>
+                    )}
+                    {log.metadata?.changes?.length > 0 && (
+                      <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200 space-y-1">
+                        {log.metadata.changes.map((c) => (
+                          <p key={c.field}>
+                            <strong>{t(`techSupportEdit.fields.${c.field}`, c.field)}:</strong>{' '}
+                            <span className="text-red-700 line-through">{c.from || '—'}</span>{' ← '}
+                            <span className="text-emerald-700">{c.to || '—'}</span>
+                          </p>
+                        ))}
                       </div>
                     )}
                     {log.metadata?.reason && (
@@ -530,6 +687,7 @@ function TechSupportDetailsInner({ ticket, onClose }) {
           </div>
         </div>
       </div>
+      {showEdit && <TechSupportEditForm ticket={ticket} onClose={() => setShowEdit(false)} />}
     </div>
   );
 }

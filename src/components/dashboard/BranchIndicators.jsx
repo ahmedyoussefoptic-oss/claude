@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, GraduationCap, Briefcase, AlertOctagon, PackageSearch, Wrench } from 'lucide-react';
+import { RESOLVED_TICKET_STATUSES, isTicketOverdue } from '../../config/techSupport';
+import { complaintHasType } from '../../config/complaintTypes';
 
 const CATEGORY_META = [
   { key: 'academic', icon: GraduationCap, color: 'text-indigo-600 bg-indigo-100' },
@@ -22,8 +24,8 @@ function complaintBreakdown(list) {
 // Tech tickets have no dedicated ESCALATED status — an SLA breach just flips
 // isOverdue (see functions/index.js), so that flag stands in for "escalated".
 function techBreakdown(list) {
-  const resolved = list.filter((t) => t.status === 'CLOSED').length;
-  const escalated = list.filter((t) => t.isOverdue && t.status !== 'CLOSED').length;
+  const resolved = list.filter((t) => RESOLVED_TICKET_STATUSES.includes(t.status)).length;
+  const escalated = list.filter(isTicketOverdue).length;
   return { total: list.length, resolved, escalated, inProgress: list.length - resolved - escalated };
 }
 
@@ -43,9 +45,9 @@ export default function BranchIndicators({ branches, complaints, techTickets, lo
       const branchComplaints = complaints.filter((c) => c.branch === b.id);
       const branchLostFound = lostFoundItems.filter((i) => i.branch === b.id);
       const categories = {
-        academic: complaintBreakdown(branchComplaints.filter((c) => c.complaintType === 'ACADEMIC')),
-        administrative: complaintBreakdown(branchComplaints.filter((c) => c.complaintType === 'ADMINISTRATIVE')),
-        behavioral: complaintBreakdown(branchComplaints.filter((c) => c.complaintType === 'BEHAVIORAL')),
+        academic: complaintBreakdown(branchComplaints.filter((c) => complaintHasType(c, 'ACADEMIC'))),
+        administrative: complaintBreakdown(branchComplaints.filter((c) => complaintHasType(c, 'ADMINISTRATIVE'))),
+        behavioral: complaintBreakdown(branchComplaints.filter((c) => complaintHasType(c, 'BEHAVIORAL'))),
         lostFound: lostFoundBreakdown(branchLostFound),
       };
       let total = branchComplaints.length + branchLostFound.length;

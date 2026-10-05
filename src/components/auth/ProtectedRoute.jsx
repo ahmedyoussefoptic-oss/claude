@@ -2,7 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import useAuthStore from '../../stores/useAuthStore';
 import { Loader2 } from 'lucide-react';
 
-export default function ProtectedRoute({ children, allowedRoles, requirePerm, requireDepartment }) {
+export default function ProtectedRoute({ children, allowedRoles, requirePerm, requireDepartment, allowPrincipal }) {
   const { user, role, userData, loading } = useAuthStore();
   const location = useLocation();
 
@@ -25,7 +25,10 @@ export default function ProtectedRoute({ children, allowedRoles, requirePerm, re
     const roleAllowed = allowedRoles.includes(role);
     const permAllowed = !!requirePerm && userData?.perms?.[requirePerm] === true;
     const departmentAllowed = !!requireDepartment && userData?.department === requireDepartment;
-    if (!roleAllowed && !permAllowed && !departmentAllowed) {
+    // allowPrincipal also covers quality officers — both are auto-assigned
+    // across a branch's records (see findAutoAssignees in functions).
+    const principalAllowed = !!allowPrincipal && (userData?.isPrincipal === true || userData?.isQuality === true);
+    if (!roleAllowed && !permAllowed && !departmentAllowed && !principalAllowed) {
       return <Navigate to="/dashboard" replace />;
     }
   }

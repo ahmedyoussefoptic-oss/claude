@@ -3,7 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { Loader2 } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
-import { useBranches, useItemCategories } from '../../hooks/useOrgData';
+import { useBranches, useDepartments, useItemCategories } from '../../hooks/useOrgData';
+import { STAGES } from '../../config/complaintTypes';
+import { classOptionsForStage } from '../../config/techSupport';
 import { MAX_PUBLIC_FILE_BYTES, fileToBase64 } from '../../utils/publicSubmission';
 import AttachmentUploader from './AttachmentUploader';
 
@@ -21,11 +23,15 @@ const emptyForm = {
   reporterPhone: '',
   studentName: '',
   studentId: '',
+  department: '',
+  stage: '',
+  grade: '',
 };
 
 export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
   const { t } = useTranslation();
   const branches = useBranches();
+  const departments = useDepartments();
   const itemCategories = useItemCategories();
 
   const [formData, setFormData] = useState({ ...emptyForm, branch: initialBranch || '' });
@@ -36,7 +42,7 @@ export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value, ...(name === 'stage' ? { grade: '' } : {}) }));
   };
 
   const addPhoto = (newFiles) => {
@@ -179,6 +185,31 @@ export default function PublicLostFoundFields({ initialBranch, onSuccess }) {
               <input type="text" name="studentId" value={formData.studentId} onChange={handleChange} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
             </div>
           </div>
+        )}
+        {formData.reportType === 'LOST' && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.departmentLabel')}</label>
+                    <select name="department" value={formData.department} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
+                      <option value="">{t('complaintForm.selectDepartment')}</option>
+                      {departments.map((d) => <option key={d.id} value={d.id}>{t(`businessData.departments.${d.id}`, d.name)}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.stageLabel')}</label>
+                    <select name="stage" value={formData.stage} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
+                      <option value="">{t('complaintForm.selectStage')}</option>
+                      {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.gradeLabel')}</label>
+                    <select name="grade" value={formData.grade} onChange={handleChange} disabled={!formData.stage} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white disabled:text-slate-400 disabled:bg-slate-50">
+                      <option value="">{t('techSupportForm.selectClass')}</option>
+                      {classOptionsForStage(formData.stage).map((g) => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                </div>
         )}
 
         <AttachmentUploader files={photoFiles} onAdd={addPhoto} onRemove={removePhoto} max={1} label={t('publicReport.itemPhotoOptional')} accept="image/*" />

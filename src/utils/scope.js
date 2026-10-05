@@ -18,3 +18,26 @@ export function branchScopeConstraintValues(userData) {
   const list = userBranches(userData);
   return list.length ? list.slice(0, 30) : ['__NONE__'];
 }
+
+// Mirrors firestore.rules' canAccessTechSupport(): tech-support tickets hold
+// national IDs and account credentials, so only admins, Customer Service,
+// the IT department, and school principals (who are auto-assigned every
+// public-link submission in their branch) may open that module.
+export function canAccessTechSupport(userData) {
+  return userData?.role === 'ADMIN' || userData?.role === 'CUSTOMER_SERVICE' || userData?.department === 'IT' || userData?.isPrincipal === true || userData?.isQuality === true;
+}
+
+// A staff user may be limited to certain grades (`stages`, e.g. G1..G5) for
+// auto-assignment. An empty/missing list means every grade — the default,
+// so existing accounts keep their behavior. Mirrored in functions/index.js.
+export function coversStage(userData, stage) {
+  const stages = Array.isArray(userData?.stages) ? userData.stages : [];
+  return !stages.length || !stage || stages.includes(stage);
+}
+
+// Same idea per curriculum/section (`curricula`, the complaint/ticket
+// `department` ids — AMERICAN, BRITISH, ...); empty/missing = every one.
+export function coversCurriculum(userData, curriculum) {
+  const list = Array.isArray(userData?.curricula) ? userData.curricula : [];
+  return !list.length || !curriculum || list.includes(curriculum);
+}

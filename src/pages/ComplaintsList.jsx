@@ -1,21 +1,23 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, Plus, ChevronLeft, Download, Loader2, SlidersHorizontal, RotateCcw, Link2 } from 'lucide-react';
+import { Search, Plus, ChevronLeft, Download, Loader2, SlidersHorizontal, RotateCcw, Link2, MessageSquare, Repeat, Armchair } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import ComplaintForm from '../components/complaints/ComplaintForm';
 import useAuthStore from '../stores/useAuthStore';
-import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
+import { useBranches, useComplaintTypes, useDepartments } from '../hooks/useOrgData';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { normalizeAssignees } from '../utils/assignees';
 import { branchScopeConstraintValues } from '../utils/scope';
 import { formatDuration } from '../utils/duration';
+import { studentKey } from '../utils/studentKey';
+import { isComplaintOverdue, complaintStatusLabel, complaintHasType, complaintTypesOf } from '../config/complaintTypes';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
-const QUICK_FILTER_IDS = ['ALL', 'OPEN', 'OVERDUE', 'ESCALATED', 'CLOSED'];
+const QUICK_FILTER_IDS = ['ALL', 'OPEN', 'OVERDUE', 'ESCALATED', 'CLOSED', 'VISITS'];
 
 // Recognized but not shown as a tab — only reachable via a dashboard KPI
 // link (?filter=IN_PROGRESS / ?filter=REOPENED), same list underneath.
@@ -26,6 +28,7 @@ export default function ComplaintsList() {
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
   const { userData } = useAuthStore();
   const branches = useBranches();
+  const departments = useDepartments();
   const complaintTypes = useComplaintTypes();
   const location = useLocation();
   const [selectedComplaint, setSelectedComplaint] = useState(null);
@@ -36,6 +39,8 @@ export default function ComplaintsList() {
   const [quickFilter, setQuickFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState('');
   const [branchFilter, setBranchFilter] = useState('');
+  // Curriculum/section (the record's `department`); '__NONE__' = not set.
+  const [departmentFilter, setDepartmentFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [publicLinkOnly, setPublicLinkOnly] = useState(false);
@@ -118,21 +123,25 @@ export default function ComplaintsList() {
     }
   };
 
-  const getStatusName = (status) => t(`statuses.complaint.${status}`, status);
 
   const typeName = (id) => complaintTypes.find((ct) => ct.id === id)?.name || id;
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
+  const departmentName = (id) => departments.find((d) => d.id === id)?.name || id;
+
+  const waitingVisits = complaints.filter((c) => c.visitStatus === 'WAITING').length;
 
   const filteredComplaints = useMemo(() => {
     return complaints.filter((c) => {
       if (quickFilter === 'OPEN' && ['SOLVED', 'CLOSED', 'REJECTED'].includes(c.status)) return false;
-      if (quickFilter === 'OVERDUE' && !c.isOverdue) return false;
+      if (quickFilter === 'OVERDUE' && !isComplaintOverdue(c)) return false;
       if (quickFilter === 'CLOSED' && !['SOLVED', 'CLOSED'].includes(c.status)) return false;
       if (quickFilter === 'ESCALATED' && c.status !== 'ESCALATED') return false;
       if (quickFilter === 'IN_PROGRESS' && !['IN_PROGRESS', 'RECEIVED'].includes(c.status)) return false;
       if (quickFilter === 'REOPENED' && !c.reopened) return false;
-      if (typeFilter && c.complaintType !== typeFilter) return false;
+      if (quickFilter === 'VISITS' && !c.viaVisitQr) return false;
+      if (typeFilter && !complaintHasType(c, typeFilter)) return false;
       if (branchFilter && c.branch !== branchFilter) return false;
+      if (departmentFilter && (c.department || '__NONE__') !== departmentFilter) return false;
       if (publicLinkOnly && c.source !== 'PARENT_PORTAL') return false;
       if (dateFrom) {
         const createdAt = c.createdAt?.toDate?.();
@@ -151,12 +160,24 @@ export default function ComplaintsList() {
       }
       return true;
     });
-  }, [complaints, search, quickFilter, typeFilter, branchFilter, dateFrom, dateTo, publicLinkOnly, userData]);
+  }, [complaints, search, quickFilter, typeFilter, branchFilter, departmentFilter, dateFrom, dateTo, publicLinkOnly, userData]);
 
-  const advancedFiltersActive = typeFilter || branchFilter || dateFrom || dateTo || publicLinkOnly;
+  // How many complaints each student has in the loaded list — drives the
+  // "repeated" chip that links to the student's full record.
+  const complaintsPerStudent = useMemo(() => {
+    const counts = new Map();
+    complaints.forEach((c) => {
+      const key = studentKey(c.studentId, c.studentName);
+      if (key) counts.set(key, (counts.get(key) || 0) + 1);
+    });
+    return counts;
+  }, [complaints]);
+
+  const advancedFiltersActive = typeFilter || branchFilter || departmentFilter || dateFrom || dateTo || publicLinkOnly;
   const resetAdvancedFilters = () => {
     setTypeFilter('');
     setBranchFilter('');
+    setDepartmentFilter('');
     setDateFrom('');
     setDateTo('');
     setPublicLinkOnly(false);
@@ -168,7 +189,7 @@ export default function ComplaintsList() {
     csvContent += `${i18n.language === 'ar' ? 'رقم الملاحظة' : 'Feedback #'},${t('common.student')},${t('common.parent')},${t('common.type')},${t('common.branch')},${t('common.date')},${t('common.status')}\n`;
     filteredComplaints.forEach((c) => {
       const createdAt = c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd HH:mm') : '';
-      csvContent += `${c.complaintId},"${c.studentName || ''}","${c.parentName || ''}","${c.complaintType || ''}","${c.branch || ''}","${createdAt}","${getStatusName(c.status)}"\n`;
+      csvContent += `${c.complaintId},"${c.studentName || ''}","${c.parentName || ''}","${complaintTypesOf(c).map(typeName).join(' + ')}","${c.branch || ''}","${createdAt}","${complaintStatusLabel(c, t)}"\n`;
     });
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -225,6 +246,9 @@ export default function ComplaintsList() {
                 className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${quickFilter === id ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
               >
                 {t(`complaintsList.quickFilters.${id}`)}
+                {id === 'VISITS' && waitingVisits > 0 && (
+                  <span className="mr-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[11px] font-bold">{waitingVisits}</span>
+                )}
               </button>
             ))}
             {typeFilter && (
@@ -251,6 +275,18 @@ export default function ComplaintsList() {
             >
               <option value="">{t('common.allBranches')}</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+          <div className="w-full sm:w-44">
+            <label className="block text-xs text-slate-500 mb-1">{t('complaintForm.departmentLabel')}</label>
+            <select
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+            >
+              <option value="">{t('common.allDepartments')}</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              <option value="__NONE__">{t('common.noDepartment')}</option>
             </select>
           </div>
           <div className="w-full sm:w-44">
@@ -340,20 +376,46 @@ export default function ComplaintsList() {
                             <Link2 className="w-3 h-3" />
                           </span>
                         )}
+                        {c.viaVisitQr && (
+                          <span title={t(c.visitStatus === 'WAITING' ? 'branchVisit.badgeWaiting' : 'branchVisit.badgeMet')} className={`inline-flex items-center justify-center w-5 h-5 rounded-full shrink-0 ${c.visitStatus === 'WAITING' ? 'bg-rose-100 text-rose-600 animate-pulse' : 'bg-teal-100 text-teal-600'}`}>
+                            <Armchair className="w-3 h-3" />
+                          </span>
+                        )}
+                        {c.hasInternalComment && (
+                          <span title={t('common.hasInternalComment')} className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-600 shrink-0">
+                            <MessageSquare className="w-3 h-3" />
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <div className="font-medium text-slate-900">{c.studentName}</div>
+                      <div className="font-medium text-slate-900 flex items-center gap-2">
+                        {c.studentName}
+                        {complaintsPerStudent.get(studentKey(c.studentId, c.studentName)) >= 2 && (
+                          <Link
+                            to={`/students?student=${encodeURIComponent(studentKey(c.studentId, c.studentName))}`}
+                            onClick={(e) => e.stopPropagation()}
+                            title={t('studentRecords.openRecord')}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-700 hover:bg-amber-200 whitespace-nowrap"
+                          >
+                            <Repeat className="w-3 h-3" />
+                            {t('studentRecords.repeatedTimes', { count: complaintsPerStudent.get(studentKey(c.studentId, c.studentName)) })}
+                          </Link>
+                        )}
+                      </div>
                       <div className="text-slate-500 text-xs mt-0.5">{c.parentName}</div>
                     </td>
-                    <td className="px-6 py-4 text-slate-600">{typeName(c.complaintType)}</td>
-                    <td className="px-6 py-4 text-slate-600">{branchName(c.branch)}</td>
+                    <td className="px-6 py-4 text-slate-600">{complaintTypesOf(c).map(typeName).join(' + ')}</td>
+                    <td className="px-6 py-4 text-slate-600">
+                      {branchName(c.branch)}
+                      {c.department && <div className="text-xs text-slate-400 mt-0.5">{departmentName(c.department)}</div>}
+                    </td>
                     <td className="px-6 py-4 text-slate-600" dir="ltr">
                       {c.createdAt ? format(c.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}
                     </td>
                     <td className="px-6 py-4">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border ${getStatusBadge(c.status)}`}>
-                        {getStatusName(c.status)}
+                        {complaintStatusLabel(c, t)}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-slate-600" dir="ltr">
@@ -361,8 +423,7 @@ export default function ComplaintsList() {
                     </td>
                     <td className="px-6 py-4">
                       <MessageStatusIndicators
-                        receiptSentAt={c.receiptMessageSentAt}
-                        resolutionSentAt={c.resolutionMessageSentAt}
+                        record={c}
                         showResolution={['SOLVED', 'CLOSED'].includes(c.status)}
                       />
                     </td>

@@ -5,8 +5,11 @@ import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/fi
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
+import { messageSentFields } from '../../utils/messageSent';
 import { useUsers } from '../../hooks/useUsers';
-import { useBranches, useItemCategories } from '../../hooks/useOrgData';
+import { useBranches, useDepartments, useItemCategories } from '../../hooks/useOrgData';
+import { STAGES } from '../../config/complaintTypes';
+import { classOptionsForStage } from '../../config/techSupport';
 import { generateItemCode } from '../../config/lostFound';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { waLink, buildLostFoundReceiptMessage } from '../../utils/whatsapp';
@@ -17,9 +20,10 @@ const REPORT_TYPE_IDS = ['FOUND', 'LOST'];
 
 export default function LostFoundForm({ onClose }) {
   const { t } = useTranslation();
-  const { user } = useAuthStore();
+  const { user, userData } = useAuthStore();
   const staff = useUsers();
   const branches = useBranches();
+  const departments = useDepartments();
   const itemCategories = useItemCategories();
   const templates = useMessageTemplates();
   const fileInputRef = useRef(null);
@@ -37,6 +41,9 @@ export default function LostFoundForm({ onClose }) {
     reporterPhone: '',
     studentName: '',
     studentId: '',
+    department: '',
+    stage: '',
+    grade: '',
     assignedTo: [],
   });
 
@@ -48,7 +55,7 @@ export default function LostFoundForm({ onClose }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value, ...(name === 'stage' ? { grade: '' } : {}) }));
   };
 
   const [studentSuggestions, setStudentSuggestions] = useState([]);
@@ -156,7 +163,7 @@ export default function LostFoundForm({ onClose }) {
               href={waLink(savedItem.reporterPhone, buildLostFoundReceiptMessage(savedItem, templates.lostFoundReceipt))}
               target="_blank"
               rel="noreferrer"
-              onClick={() => updateDoc(doc(db, 'lostFoundItems', savedItem.id), { receiptMessageSentAt: serverTimestamp() })}
+              onClick={() => updateDoc(doc(db, 'lostFoundItems', savedItem.id), messageSentFields('receipt', user, userData))}
               className="w-full px-4 py-2.5 bg-[#25D366] text-white rounded-xl text-sm font-medium hover:brightness-95 transition-all flex items-center justify-center gap-2 mb-3"
             >
               <MessageCircle className="w-4 h-4" />
@@ -281,6 +288,7 @@ export default function LostFoundForm({ onClose }) {
               </div>
 
               {formData.reportType === 'LOST' && (
+                <>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="relative">
                     <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('lostFoundForm.studentNameLabel')}</label>
@@ -310,6 +318,30 @@ export default function LostFoundForm({ onClose }) {
                     <input type="text" name="studentId" value={formData.studentId} onChange={handleChange} onBlur={handleStudentIdBlur} dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                   </div>
                 </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.departmentLabel')}</label>
+                    <select name="department" value={formData.department} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
+                      <option value="">{t('complaintForm.selectDepartment')}</option>
+                      {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.stageLabel')}</label>
+                    <select name="stage" value={formData.stage} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
+                      <option value="">{t('complaintForm.selectStage')}</option>
+                      {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.gradeLabel')}</label>
+                    <select name="grade" value={formData.grade} onChange={handleChange} disabled={!formData.stage} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white disabled:text-slate-400 disabled:bg-slate-50">
+                      <option value="">{t('techSupportForm.selectClass')}</option>
+                      {classOptionsForStage(formData.stage).map((g) => <option key={g} value={g}>{g}</option>)}
+                    </select>
+                  </div>
+                </div>
+                </>
               )}
 
               <div>

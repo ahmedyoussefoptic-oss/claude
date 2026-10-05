@@ -40,7 +40,10 @@
     "sendReceiptWhatsApp": "Send Receipt via WhatsApp",
     "sendResolutionWhatsApp": "Send Resolution via WhatsApp",
     "shareWithStaff": "Share with staff via WhatsApp",
-    "user": "User"
+    "hasInternalComment": "Has an internal comment",
+    "user": "User",
+    "allDepartments": "All sections",
+    "noDepartment": "No section"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -53,7 +56,9 @@
     "users": "Users",
     "settings": "Settings",
     "archive": "Deleted Archive",
-    "logout": "Log Out"
+    "logout": "Log Out",
+    "studentRecords": "Student Records",
+    "branchQr": "Branch visit QR"
   },
   "app": {
     "brand": "Al Moktashef International",
@@ -131,7 +136,8 @@
       "SOLVED": "Solved",
       "CLOSED": "Closed",
       "REJECTED": "Rejected",
-      "ESCALATED": "Escalated"
+      "ESCALATED": "Escalated",
+      "ESCALATED_RESOLVED": "Escalated & resolved"
     },
     "lostFound": {
       "UNCLAIMED": "Awaiting Claim",
@@ -159,7 +165,8 @@
       "OPEN": "Open",
       "OVERDUE": "Overdue",
       "ESCALATED": "Escalated",
-      "CLOSED": "Closed"
+      "CLOSED": "Closed",
+      "VISITS": "Branch visits"
     },
     "studentParent": "Student / Parent",
     "parentMessages": "Parent Messages",
@@ -226,7 +233,12 @@
     "dictationInProgress": "Listening...",
     "dictationUnsupported": "Voice dictation is not supported in this browser.",
     "dictationError": "Couldn't recognize the speech. Please try again.",
-    "recordingUploadFailedAlert": "The solution was saved, but the voice recording failed to upload: {{message}}"
+    "recordingUploadFailedAlert": "The solution was saved, but the voice recording failed to upload: {{message}}",
+    "editDetailsBtn": "Edit details",
+    "convertToTechBtn": "Convert to tech ticket",
+    "attachSolutionFile": "Attach an image or file to the solution",
+    "solutionAttachmentsLabel": "Solution attachments:",
+    "solutionFileUploadFailedAlert": "The solution was saved, but this file could not be uploaded: {{name}}"
   },
   "complaintForm": {
     "priorities": {
@@ -272,7 +284,10 @@
     "saving": "Saving...",
     "saveBtn": "Save Feedback",
     "recordingFilePrefix": "Voice_Recording_",
-    "attachmentUploadFailedTitle": "The feedback was saved, but these attachments failed to upload:"
+    "attachmentUploadFailedTitle": "The feedback was saved, but these attachments failed to upload:",
+    "extraTypesLabel": "Additional categories (if the feedback has more than one part)",
+    "addExtraType": "Add another category",
+    "extraTypeSelect": "Select category..."
   },
   "assigneeSelect": {
     "roleTagAdmin": "System Admin",
@@ -288,13 +303,17 @@
     "assignedToLogLabel": "Assigned to:",
     "addedLogLabel": "Added:",
     "removedLogLabel": "Removed:",
-    "noChangeAlert": "No change was made to the assignment."
+    "noChangeAlert": "No change was made to the assignment.",
+    "gradeTag": "Covers grade",
+    "curriculumTag": "Covers section"
   },
   "messageStatus": {
     "receiptSent": "Receipt message sent to parent",
     "receiptNotSent": "Receipt message not sent yet",
     "resolutionSent": "Resolution message sent to parent",
-    "resolutionNotSent": "Resolution message not sent yet"
+    "resolutionNotSent": "Resolution message not sent yet",
+    "receiptSentBy": "Receipt message sent by: {{name}}",
+    "resolutionSentBy": "Resolution message sent by: {{name}}"
   },
   "lostFoundCommon": {
     "reportTypes": {
@@ -335,7 +354,8 @@
     "followUpPlaceholder": "Add a follow-up note...",
     "followUpLog": "Activity Log",
     "deleteFinal": "Delete Report Permanently",
-    "deleteReasonPrompt": "Write the reason for permanently deleting this report (required):"
+    "deleteReasonPrompt": "Write the reason for permanently deleting this report (required):",
+    "studentLabel": "Student"
   },
   "lostFoundForm": {
     "successTitle": "Record saved successfully",
@@ -367,6 +387,8 @@
     "kinds": {
       "COMPLAINT": {
         "name": "Feedback",
+        "tabHint": "Complaint or suggestion",
+        "includes": "Covers: academic matters (grades, homework, teachers), administrative matters (fees, transport, uniform, certificates), behavioural matters (student conduct, bullying), and any general complaint or suggestion.",
         "pageTitle": "Submit Feedback",
         "pageSubtitle": "Please fill in the details below accurately, and we'll be in touch as soon as possible.",
         "idLabel": "Feedback #",
@@ -376,6 +398,8 @@
       },
       "LOST_FOUND": {
         "name": "Lost & Found",
+        "tabHint": "Lost or found item",
+        "includes": "Covers: any item a student lost or that was found at school or on the bus — such as a bag, clothing, glasses, a water bottle, or school supplies.",
         "pageTitle": "Report a Lost or Found Item",
         "pageSubtitle": "Register an item you lost or found at school.",
         "idLabel": "Report #",
@@ -385,6 +409,8 @@
       },
       "TECH_SUPPORT": {
         "name": "Tech Issue",
+        "tabHint": "Platform login problem",
+        "includes": "Covers: being unable to log in to the learning platforms (misedu, Classera) — such as a forgotten password, a wrong username, a suspended or missing account, or a changed phone number.",
         "pageTitle": "Report a Technical Issue",
         "pageSubtitle": "Issues accessing learning platforms (unable to log in).",
         "idLabel": "Ticket #",
@@ -393,6 +419,7 @@
         "anotherCta": "Submit Another Report"
       }
     },
+    "chooseKind": "Choose the right request type:",
     "reviewSoon": "It will be reviewed and we'll be in touch as soon as possible.",
     "keepLink": "Keep the following tracking link to check the status later:",
     "copyLink": "Copy Link",
@@ -408,13 +435,25 @@
     "oneFile": "One file, max {{max}} MB",
     "itemPhotoOptional": "Item photo (optional)",
     "reporterNameRequiredAlert": "Please enter the name and phone number of the person reporting the loss.",
-    "identityNotice": "An IT specialist will verify the details before sending any login information — please enter the phone number registered with the school accurately.",
     "submitComplaint": "Submit Feedback",
+    "submitComplaintMulti": "Submit feedback ({{count}})",
+    "addSibling": "Add feedback for a sibling",
+    "siblingHint": "If you have more than one child at the school, you can add feedback for each of them and submit them together — each one gets its own tracking number.",
+    "entryTitle": "Student {{n}}",
+    "removeEntry": "Remove",
+    "multiSuccessTitle": "{{count}} feedback items submitted successfully",
+    "partialSendError": "Feedback for {{names}} was submitted, but the rest could not be sent. Please press submit again.",
+    "listSeparator": ", ",
     "submitReport": "Submit Report",
-    "parentPhoneWhatsApp": "Phone Number (WhatsApp)"
+    "parentPhoneWhatsApp": "Phone Number (WhatsApp)",
+    "addSiblingReport": "Add a report for a sibling",
+    "siblingHintReport": "If more than one of your children has the problem, you can add a report for each of them and submit them together — each one gets its own tracking number.",
+    "submitReportMulti": "Submit reports ({{count}})",
+    "multiSuccessTitleReport": "{{count}} reports submitted successfully",
+    "partialSendErrorReport": "The report for {{names}} was submitted, but the rest could not be sent. Please press submit again.",
+    "extraTypesLabel": "Does this feedback cover another area too? (optional)"
   },
   "techSupportForm": {
-    "identityNotice": "I confirm that the number above matches the parent's/student's number registered in the school system. Reports from a non-matching number are not accepted — if there is a mismatch, the request must be referred to Student Affairs to update the records first.",
     "studentSection": "Student Information",
     "studentNameFull": "Student's Full Name",
     "nationalCivilIdLabel": "National ID / Civil Registry Number",
@@ -438,7 +477,6 @@
     "additionalNotesPlaceholder": "Any additional details that help the IT specialist...",
     "newTicketTitle": "New Tech Support Ticket",
     "newTicketSubtitle": "Issues accessing learning platforms (unable to log in)",
-    "identityRequiredAlert": "You must confirm the phone number matches the student's record before registering the ticket.",
     "saveError": "An error occurred while saving the ticket. Please try again.",
     "saving": "Saving...",
     "saveBtn": "Save Ticket",
@@ -446,7 +484,9 @@
     "ticketNumberLabel": "Ticket #:",
     "autoAssigned": "Automatically assigned to {{name}} — they received an instant notification.",
     "noAutoAssign": "No suitable IT specialist was found for automatic assignment — needs manual assignment.",
-    "sourceReceiverNote": "Source: Customer Service Center · Receiver: You (recorded automatically)"
+    "sourceReceiverNote": "Source: Customer Service Center · Receiver: You (recorded automatically)",
+    "parentNationalIdLabel": "Parent national ID",
+    "parentNationalIdHint": "This issue concerns the parent's own account, so their ID is needed."
   },
   "publicLinkModal": {
     "title": "Report Submission Link for Parents",
@@ -523,10 +563,15 @@
       "TICKET_TRANSFERRED": "Ticket is being worked on",
       "PROCESSING_STARTED": "Specialist started processing",
       "CREDENTIALS_SENT": "Solution sent",
-      "CONFIRMED_CLOSED": "Solution confirmed and ticket closed",
+      "CONFIRMED_CLOSED": "Ticket closed",
       "TICKET_REOPENED": "Ticket reopened at your request",
       "TICKET_ESCALATED": "Under senior management review",
-      "SURVEY_SUBMITTED": "Your rating was received"
+      "SURVEY_SUBMITTED": "Your rating was received",
+      "COMPLAINT_EDITED": "Feedback details updated",
+      "CONVERTED_FROM_COMPLAINT": "Your request was transferred to tech support",
+      "TICKET_EDITED": "Ticket details updated",
+      "VISIT_CHECKED_IN": "You checked in at the branch",
+      "VISIT_MET": "Meeting held"
     },
     "pageTitle": "Feedback & Reports Tracking Portal",
     "pageSubtitle": "Enter your feedback or report number to check its current status.",
@@ -564,7 +609,6 @@
       "ASSIGNED": "Assigned",
       "IN_PROGRESS": "In Progress",
       "SOLVED": "Solved",
-      "WAITING_CONFIRMATION": "Awaiting Confirmation",
       "CLOSED": "Closed"
     },
     "ticketNumber": "Ticket #",
@@ -743,7 +787,23 @@
     "forStaff": "For staff member:",
     "newPasswordLabel": "New password",
     "savePasswordBtn": "Save password",
-    "passwordTooShort": "The password must be at least 6 characters."
+    "passwordTooShort": "The password must be at least 6 characters.",
+    "isPrincipalLabel": "School / branch principal",
+    "isPrincipalHint": "Automatically assigned every submission from the public report link (feedback and tech tickets) in their branches, with a notification for each. Also grants access to the Tech Support section for those branches.",
+    "principalTag": "Principal",
+    "stagesLabel": "Responsible grades",
+    "stagesClear": "All grades",
+    "stagesAll": "None selected = responsible for every grade.",
+    "stagesSelected": "Responsible for: {{list}}.",
+    "stagesHint": "Auto-assignment (public report link and tech tickets) only routes a record to staff covering the student's grade and section, and they are listed first for manual assignment.",
+    "stagesShort": "Grades",
+    "curriculaLabel": "Responsible sections / curricula",
+    "curriculaAll": "None selected = responsible for every section.",
+    "curriculaSelected": "Responsible for: {{list}}.",
+    "curriculaShort": "Section",
+    "isQualityLabel": "Quality officer",
+    "isQualityHint": "Automatically assigned every feedback record and tech ticket in their branches — from the public link, staff entry, or conversion — with a notification for each. Also grants access to the Tech Support section for those branches.",
+    "qualityTag": "Quality"
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",
@@ -790,7 +850,8 @@
     },
     "restoreDefault": "Restore default",
     "availableVariables": "Available variables:",
-    "savedCheck": "Saved ✓"
+    "savedCheck": "Saved ✓",
+    "parentRelatedFlag": "Parent's account"
   },
   "flowMap": {
     "title": "Complaint Flow Map",
@@ -885,19 +946,41 @@
     "studentNameColumn": "Student Name",
     "studentIdColumn": "National ID",
     "studentPhoneColumn": "Phone Number",
-    "stageColumn": "Stage"
+    "stageColumn": "Stage",
+    "full": {
+      "optIncludeTech": "Merge tech-support tickets into one report with feedback",
+      "optShowDetails": "Show detailed record list (for printing)",
+      "mergedTitle": "Feedback & tech-support report",
+      "escalatedOpen": "Escalated (open)",
+      "escalatedOpenSub": "Escalated, not yet resolved",
+      "overdue": "Overdue",
+      "resolutionRate": "Resolution rate",
+      "ofTotal": "Resolution rate {{rate}}",
+      "techSection": "Tech support",
+      "perBranchTitle": "Counts per branch",
+      "perBranchSub": "Counts by category and status in each branch",
+      "category": "Category",
+      "colTotal": "Total",
+      "totalRow": "Total",
+      "comparisonTitle": "Branch comparison",
+      "comparisonSub": "Counts, rates and performance indicators side by side",
+      "notResolved": "Not resolved yet",
+      "sharePct": "Share",
+      "techTotalCol": "Tech — total",
+      "techResolvedCol": "Tech — resolved",
+      "recordNumber": "No.",
+      "resolvedOfTotal": "{{resolved}} of {{total}}",
+      "multiCategoryNote": "{{count}} multi-category records counted under each category"
+    }
   },
   "techSupportDetails": {
     "viaPublicLink": "Via public link",
     "readOnlyNotice": "You have view-only access to this ticket — you do not have edit permission.",
-    "identityNotVerifiedNotice": "The reporter's identity has not been verified yet — confirm the phone number matches the student's record before sending any resolution message.",
-    "confirmIdentityBtn": "Confirm identity match",
     "sendReceiptWhatsApp": "Send receipt message via WhatsApp",
     "startProcessing": "Start processing",
     "prepareCredentialsBtn": "Prepare resolution message",
     "editResolutionBtn": "Edit resolution message",
     "sendCredentialsWhatsApp": "Send resolution message via WhatsApp",
-    "confirmCloseBtn": "Confirm login success and close ticket",
     "reopenBtn": "Reopen ticket",
     "escalateBtn": "Escalate",
     "deleteBtn": "Delete ticket permanently",
@@ -921,7 +1004,13 @@
     "reasonLabel": "Reason:",
     "toLabel": "To:",
     "addNotePlaceholder": "Add a follow-up note...",
-    "addBtn": "Add"
+    "addBtn": "Add",
+    "resolutionAttachmentsLabel": "Resolution attachments (image or file — optional)",
+    "resolutionAttachmentsHint": "Added to the WhatsApp message as download links the parent opens with one tap — e.g. a screenshot of the login steps or an instructions file.",
+    "attachmentUploadError": "Could not upload the attachments. Please try again.",
+    "resolutionLinksLabel": "Links sent to the parent",
+    "linkLabelPlaceholder": "Link description (optional)",
+    "addLinkBtn": "Add link"
   },
   "actions": {
     "complaint": {
@@ -937,7 +1026,13 @@
       "COMPLAINT_REOPENED": "Feedback reopened",
       "SURVEY_SUBMITTED": "Parent survey received",
       "INTERNAL_COMMENT_ADDED": "Internal comment",
-      "COMPLAINT_DELETED": "Feedback deleted"
+      "COMPLAINT_DELETED": "Feedback deleted",
+      "COMPLAINT_EDITED": "Feedback details edited",
+      "COMPLAINT_CONVERTED": "Feedback converted to a tech-support ticket",
+      "VISIT_CHECKED_IN": "Parent checked in at branch",
+      "VISIT_MET": "Parent met",
+      "WHATSAPP_API_SENT": "Sent to parent via WhatsApp API",
+      "WHATSAPP_API_FAILED": "Automatic WhatsApp API send failed"
     },
     "lostFound": {
       "ITEM_REGISTERED": "Item registered",
@@ -947,7 +1042,9 @@
       "ITEM_RETURNED": "Item returned",
       "ITEM_CLOSED": "Record closed",
       "NOTE_ADDED": "Note",
-      "ITEM_DELETED": "Report deleted"
+      "ITEM_DELETED": "Report deleted",
+      "WHATSAPP_API_FAILED": "Automatic WhatsApp API send failed",
+      "WHATSAPP_API_SENT": "Sent to parent via WhatsApp API"
     },
     "techSupport": {
       "TICKET_CREATED": "Ticket registered",
@@ -957,11 +1054,182 @@
       "PROCESSING_STARTED": "Specialist started processing",
       "CREDENTIALS_PREPARED": "Resolution message prepared",
       "CREDENTIALS_SENT": "Resolution message sent",
-      "CONFIRMED_CLOSED": "Login success confirmed, ticket closed",
+      "CONFIRMED_CLOSED": "Ticket closed",
       "TICKET_REOPENED": "Ticket reopened",
       "TICKET_ESCALATED": "Ticket escalated",
       "NOTE_ADDED": "Note",
-      "TICKET_DELETED": "Ticket deleted"
+      "TICKET_DELETED": "Ticket deleted",
+      "CONVERTED_FROM_COMPLAINT": "Converted from feedback",
+      "TICKET_EDITED": "Ticket details edited",
+      "WHATSAPP_API_SENT": "Sent to parent via WhatsApp API",
+      "WHATSAPP_API_FAILED": "Automatic WhatsApp API send failed"
     }
+  },
+  "complaintEdit": {
+    "title": "Edit feedback details",
+    "saveBtn": "Save changes",
+    "noChanges": "No details were changed.",
+    "saveError": "An error occurred while saving the changes. Please try again.",
+    "fields": {
+      "parentName": "Parent name",
+      "parentPhone": "Phone number",
+      "parentEmail": "Email",
+      "studentName": "Student name",
+      "studentId": "National ID",
+      "branch": "Branch",
+      "department": "Department",
+      "stage": "Stage",
+      "grade": "Grade",
+      "complaintType": "Classification",
+      "subType": "Sub-classification",
+      "subject": "Subject",
+      "details": "Feedback text",
+      "extraTypes": "Additional categories"
+    }
+  },
+  "complaintConvert": {
+    "title": "Convert feedback to a tech-support ticket",
+    "description": "This feedback will be moved, with its data, to the Tech Support section and assigned to an IT specialist, and removed from the feedback log (a copy stays in the deleted archive). The tracking number the parent already has keeps working.",
+    "confirmBtn": "Convert",
+    "converting": "Converting...",
+    "successAlert": "Converted to tech-support ticket {{id}}",
+    "error": "Could not convert the feedback. Please try again.",
+    "originalGrade": "Grade written in the feedback: {{grade}}"
+  },
+  "techSupportEdit": {
+    "title": "Edit tech-support ticket details",
+    "saveBtn": "Save changes",
+    "noChanges": "No details were changed.",
+    "saveError": "An error occurred while saving the changes. Please try again.",
+    "fields": {
+      "studentName": "Student name",
+      "nationalId": "National ID",
+      "branch": "Branch",
+      "stage": "Stage",
+      "grade": "Grade",
+      "parentName": "Parent name",
+      "relation": "Relation",
+      "parentPhone": "Phone number",
+      "problemType": "Problem type",
+      "platform": "Platform",
+      "platformLink": "Platform link",
+      "details": "Additional notes",
+      "department": "Section",
+      "parentNationalId": "Parent national ID"
+    }
+  },
+  "studentRecords": {
+    "title": "Student Records",
+    "subtitle": "A year-long reference for each student: their feedback, tech-support tickets and lost & found reports in one place",
+    "exportExcel": "Export Excel",
+    "studentsCount": "Students with records",
+    "repeatedCount": "Students with repeated records",
+    "recordsCount": "Total records",
+    "searchPlaceholder": "Search by student name, national ID, or parent's phone...",
+    "allYears": "All years",
+    "repeatedOnly": "Repeated only",
+    "student": "Student",
+    "nationalId": "National ID",
+    "total": "Total",
+    "lastRecord": "Last record",
+    "repeated": "Repeated",
+    "repeatedTimes": "Repeated ×{{count}}",
+    "openRecord": "Open the student's record",
+    "noResults": "No matching students",
+    "totalInYear": "Total records — {{year}}",
+    "mostRepeated": "Most repeated",
+    "kind": "Type",
+    "number": "Number",
+    "topic": "Topic",
+    "sheetStudents": "Students",
+    "sheetRecords": "Records",
+    "kinds": {
+      "complaint": "Feedback",
+      "tech": "Tech tickets",
+      "lostFound": "Lost & found"
+    }
+  },
+  "branchVisit": {
+    "pageTitle": "Parent check-in",
+    "pageSubtitle": "Welcome. Enter your details and the reason for your visit, and a staff member will meet you shortly.",
+    "reasonLabel": "Reason for visit",
+    "reasonPlaceholder": "e.g. Question about my child's grades",
+    "detailsPlaceholder": "Additional details (optional)",
+    "submit": "Check in",
+    "successTitle": "You're checked in",
+    "successWait": "Please wait — the responsible staff member has been notified and will meet you shortly.",
+    "keepNumber": "Keep the feedback number to track it later.",
+    "badgeWaiting": "Parent waiting to be met",
+    "badgeMet": "Branch visit — met",
+    "waitingNotice": "Parent is at the branch waiting to be met",
+    "arrivedAt": "arrived at {{time}} ({{ago}})",
+    "notesPlaceholder": "Meeting summary and agreed solution...",
+    "notesInternalHint": "Saved as an internal comment — not shown to the parent.",
+    "solvedInMeeting": "Resolved during the meeting",
+    "confirmBtn": "Confirm meeting",
+    "notesRequired": "Please write the meeting summary and solution.",
+    "confirmError": "Could not confirm the meeting. Please try again.",
+    "noPermission": "Assignees, the branch principal, and staff with edit permission can confirm the meeting.",
+    "metNotice": "Parent met by {{name}} — {{time}}"
+  },
+  "branchQr": {
+    "title": "Branch visit QR codes",
+    "subtitle": "Print each branch's code for reception. Parents scan it on arrival and enter their details and visit reason; the responsible staff are notified to meet them.",
+    "printPoster": "Print poster",
+    "downloadPng": "Download QR image",
+    "posterTitle": "Welcome — please check in",
+    "posterStep1": "Scan the code with your phone camera.",
+    "posterStep2": "Enter the student's details and reason for visit.",
+    "posterStep3": "Please wait — a staff member will meet you."
+  },
+  "waApi": {
+    "title": "WhatsApp API integration (Taqnyat)",
+    "subtitle": "Send to parents from the official notifications number, with a “Contact the branch” button in every message that opens a chat with the student's branch number — so parents don't reply to the API number.",
+    "enabled": "Enable sending via WhatsApp API",
+    "branchNumbersTitle": "Branch WhatsApp numbers",
+    "branchNumbersHint": "The number the “Contact the branch” button opens. Branches without a number can't be messaged via the API.",
+    "templatesTitle": "Approved template names in Taqnyat",
+    "language": "Template language code",
+    "templateNames": {
+      "complaintReceipt": "Feedback receipt",
+      "complaintResolution": "Feedback resolution",
+      "techReceipt": "Tech ticket receipt",
+      "techResolution": "Tech ticket resolution",
+      "visitMet": "Thank-you after branch visit (QR)",
+      "lostFoundReceipt": "Lost & found receipt",
+      "lostFoundReturned": "Lost item returned"
+    },
+    "guideTitle": "Suggested template texts to submit for approval",
+    "guideIntro": "Create these four templates in the Taqnyat portal (Message Templates) with the names above, and wait for WhatsApp approval before enabling.",
+    "guideCategory": "Category: UTILITY — Language: Arabic (ar).",
+    "guideVars": "Same variable order in every template: {{1}} parent name, {{2}} number, {{3}} student name (item name for lost & found), {{4}} depends on the template (noted under each text), {{5}} tracking link.",
+    "guideButton": "Add a URL button named “تواصل مع الفرع” with a dynamic URL (Meta doesn't allow wa.me links directly, so the button opens a page in the system that forwards the parent to the branch chat):",
+    "guideButtonExample": "sample variable:",
+    "saved": "Saved",
+    "sendReceiptApi": "Send receipt (WhatsApp API)",
+    "sendResolutionApi": "Send resolution (WhatsApp API)",
+    "confirmSend": "The message will be sent now via WhatsApp API to {{phone}}. Continue?",
+    "sentOk": "Message sent via WhatsApp API.",
+    "sendFailed": "Could not send via WhatsApp API.",
+    "deptNumbersTitle": "Section-specific WhatsApp number (optional)",
+    "deptNumbersHint": "If a section has its own number (e.g. the British section), it is used instead of the branch number for all its students. Leave empty to use the branch number.",
+    "deptNumberPlaceholder": "Empty = branch number",
+    "receiptVars": "{{3}} student name — {{4}} branch name",
+    "resolutionVars": "{{3}} student name — {{4}} resolution details",
+    "visitVars": "{{3}} student name — {{4}} branch name. Sent after confirming the meeting for QR visits.",
+    "lostReceiptVars": "{{1}} reporter name — {{3}} item name — {{4}} branch name",
+    "lostReturnedVars": "{{1}} reporter name — {{3}} item name — {{4}} “Handed to: …”",
+    "sendVisitApi": "Send thank-you (WhatsApp API)",
+    "sendReturnedApi": "Send handover (WhatsApp API)",
+    "autoSend": "Automatic sending",
+    "autoSendHint": "Receipt as soon as a feedback / tech ticket / lost-item report is logged, resolution as soon as it's written (closing the tech ticket), thank-you once a branch meeting is confirmed, and handover once an item is returned. If sending fails, the reason is logged on the record and the manual send buttons remain available.",
+    "visitAutoNote": "The parent will automatically get a WhatsApp thank-you after confirming."
+  },
+  "contactBranch": {
+    "loading": "Opening the branch chat...",
+    "openChat": "Open WhatsApp chat with the branch",
+    "notFound": "Couldn't find a contact number for this request.",
+    "prefill": "Hello, I'm contacting you about request {{id}}",
+    "button": "Contact the branch on WhatsApp"
   }
 }

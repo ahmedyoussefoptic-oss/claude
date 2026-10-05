@@ -11,8 +11,12 @@ import TechSupport from './pages/TechSupport';
 import FlowMap from './pages/FlowMap';
 import Search from './pages/Search';
 import Reports from './pages/Reports';
+import StudentRecords from './pages/StudentRecords';
 import ParentPortal from './pages/ParentPortal';
 import PublicReportForm from './pages/PublicReportForm';
+import BranchVisit from './pages/BranchVisit';
+import ContactBranch from './pages/ContactBranch';
+import BranchQrCodes from './pages/BranchQrCodes';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
 import DeletedComplaints from './pages/DeletedComplaints';
@@ -32,6 +36,8 @@ function App() {
         {/* Public Routes */}
         <Route path="/track" element={<ParentPortal />} />
         <Route path="/report" element={<PublicReportForm />} />
+        <Route path="/visit" element={<BranchVisit />} />
+        <Route path="/contact/:id" element={<ContactBranch />} />
         <Route path="/login" element={<Login />} />
         
         {/* Protected Routes */}
@@ -41,16 +47,22 @@ function App() {
           <Route path="complaints" element={<ComplaintsList />} />
           <Route path="lost-found" element={<LostFound />} />
           <Route path="tech-support" element={
-            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.CUSTOMER_SERVICE]} requireDepartment="IT">
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN, ROLES.CUSTOMER_SERVICE]} requireDepartment="IT" allowPrincipal>
               <TechSupport />
             </ProtectedRoute>
           } />
           <Route path="flow-map" element={<FlowMap />} />
           <Route path="search" element={<Search />} />
           <Route path="reports" element={<Reports />} />
+          <Route path="students" element={<StudentRecords />} />
           <Route path="users" element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN]} requirePerm="users">
               <Users />
+            </ProtectedRoute>
+          } />
+          <Route path="branch-qr" element={
+            <ProtectedRoute allowedRoles={[ROLES.ADMIN]} allowPrincipal>
+              <BranchQrCodes />
             </ProtectedRoute>
           } />
           <Route path="settings" element={

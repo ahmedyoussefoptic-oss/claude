@@ -26,9 +26,11 @@ export function classOptionsForStage(stage) {
   return [...numeric, ...alpha];
 }
 
-// Status flow: NEW -> ASSIGNED -> IN_PROGRESS -> SOLVED -> WAITING_CONFIRMATION -> CLOSED / REOPENED
+// Status flow: NEW -> ASSIGNED -> IN_PROGRESS -> SOLVED -> CLOSED / REOPENED
 // SOLVED is set the moment IT saves a resolution (credentials and/or a
-// note) — before that message has necessarily been sent to the parent.
+// note); sending that message to the parent closes the ticket. There is no
+// longer a wait for the parent to confirm — WAITING_CONFIRMATION only
+// survives in labels/badges for old activity-log entries.
 export const TICKET_STATUS_LABELS = {
   NEW: 'جديد',
   ASSIGNED: 'مُسند',
@@ -49,10 +51,31 @@ export const TICKET_STATUS_BADGE = {
   REOPENED: 'bg-red-100 text-red-800 border-red-200',
 };
 
-export const OPEN_TICKET_STATUSES = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'SOLVED', 'WAITING_CONFIRMATION', 'REOPENED'];
+export const OPEN_TICKET_STATUSES = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'SOLVED', 'REOPENED'];
+
+// "Resolved" = the team's part is done, regardless of what the parent does.
+export const RESOLVED_TICKET_STATUSES = ['SOLVED', 'WAITING_CONFIRMATION', 'CLOSED'];
+
+// isOverdue is never cleared once set (see functions/index.js), so a ticket
+// that ran late before being resolved still carries it — only unresolved
+// tickets actually count as overdue.
+export const isTicketOverdue = (ticket) => Boolean(ticket.isOverdue) && !RESOLVED_TICKET_STATUSES.includes(ticket.status);
+
+// Tickets escalate by bumping `escalation` (manual or SLA) and/or isOverdue.
+export const isTicketEscalatedResolved = (ticket) => Boolean(ticket.escalation > 0 || ticket.isOverdue) && RESOLVED_TICKET_STATUSES.includes(ticket.status);
 
 export function generateTicketId() {
   const year = new Date().getFullYear();
   const randomId = Math.floor(1000 + Math.random() * 9000);
   return `IT-${year}-${randomId}`;
+}
+
+// A ticket is about the PARENT's own account (not the student's) when its
+// problem type or platform is flagged "يخص ولي الأمر" in Settings — then
+// the parent's national ID is asked for (parentNationalId).
+export function isParentRelated(problemTypeId, platformId, problemTypes, platforms) {
+  return Boolean(
+    problemTypes.find((p) => p.id === problemTypeId)?.parentRelated ||
+    platforms.find((p) => p.id === platformId)?.parentRelated
+  );
 }

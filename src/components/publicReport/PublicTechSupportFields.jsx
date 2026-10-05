@@ -1,162 +1,264 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, ShieldCheck } from 'lucide-react';
+import { Loader2, Plus, X } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
-import { useBranches, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
+import { useBranches, useDepartments, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
 import { STAGES } from '../../config/complaintTypes';
 import { RELATIONS, classOptionsForStage } from '../../config/techSupport';
+import { MAX_PUBLIC_FILES, MAX_PUBLIC_FILE_BYTES, fileToBase64 } from '../../utils/publicSubmission';
+import AttachmentUploader from './AttachmentUploader';
+import { isParentRelated } from '../../config/techSupport';
+import ParentNationalIdField from '../techSupport/ParentNationalIdField';
 
-const emptyForm = {
+const MAX_ENTRIES = 5;
+
+const emptyParent = { parentName: '', relation: RELATIONS[0], parentPhone: '' };
+
+const emptyEntry = (branch) => ({
   studentName: '',
   nationalId: '',
-  branch: '',
+  branch,
+  department: '',
   stage: '',
   grade: '',
-  parentName: '',
-  relation: RELATIONS[0],
-  parentPhone: '',
   problemType: '',
   platform: '',
+  parentNationalId: '',
   platformLink: '',
   details: '',
-};
+  files: [],
+});
 
+const inputCls = 'w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm';
+const selectCls = `${inputCls} bg-white`;
+
+// Same shape as PublicComplaintFields: parent details once, then one entry
+// per sibling — each becomes its own ticket with its own number.
 export default function PublicTechSupportFields({ initialBranch, onSuccess }) {
   const { t } = useTranslation();
   const branches = useBranches();
+  const departments = useDepartments();
   const problemTypes = useProblemTypes();
   const platforms = usePlatforms();
 
-  const [formData, setFormData] = useState({ ...emptyForm, branch: initialBranch || '' });
+  const nextKey = useRef(2);
+  const [parent, setParent] = useState(emptyParent);
+  const [entries, setEntries] = useState(() => [{ ...emptyEntry(initialBranch || ''), key: 1 }]);
+  const [sent, setSent] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const handleChange = (e) => {
+  const maxMb = (MAX_PUBLIC_FILE_BYTES / 1024 / 1024).toFixed(0);
+
+  const handleParentChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-      ...(name === 'stage' ? { grade: '' } : {}),
-    }));
+    setParent((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const updateEntry = (key, patch) => {
+    setEntries((list) => list.map((en) => (en.key === key ? { ...en, ...patch } : en)));
+  };
+
+  const handleEntryChange = (key) => (e) => {
+    const { name, value } = e.target;
+    updateEntry(key, { [name]: value, ...(name === 'stage' ? { grade: '' } : {}) });
+  };
+
+  const addEntry = () => {
+    setEntries((list) => [...list, { ...emptyEntry(list[list.length - 1]?.branch || initialBranch || ''), key: nextKey.current++ }]);
+  };
+
+  const removeEntry = (key) => setEntries((list) => list.filter((en) => en.key !== key));
+
+  const addFiles = (key, newFiles) => {
+    setError(null);
+    const oversized = newFiles.find((f) => f.size > MAX_PUBLIC_FILE_BYTES);
+    if (oversized) {
+      setError(t('publicReport.fileSizeError', { name: oversized.name, max: maxMb }));
+      return;
+    }
+    const entry = entries.find((en) => en.key === key);
+    if (entry.files.length + newFiles.length > MAX_PUBLIC_FILES) {
+      setError(t('publicReport.maxFilesError', { count: MAX_PUBLIC_FILES }));
+      return;
+    }
+    updateEntry(key, { files: [...entry.files, ...newFiles] });
+  };
+
+  const removeFile = (key, index) => {
+    setEntries((list) => list.map((en) => (en.key === key ? { ...en, files: en.files.filter((_, i) => i !== index) } : en)));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    const submitPublicTechSupportTicket = httpsCallable(functions, 'submitPublicTechSupportTicket');
+    const done = [...sent];
     try {
-      const submitPublicTechSupportTicket = httpsCallable(functions, 'submitPublicTechSupportTicket');
-      const result = await submitPublicTechSupportTicket(formData);
-      onSuccess(result.data.ticketId);
+      for (const entry of entries) {
+        const { files, key: _key, ...fields } = entry;
+        const attachments = await Promise.all(
+          files.map(async (file) => ({
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            base64Data: await fileToBase64(file),
+          }))
+        );
+        const result = await submitPublicTechSupportTicket({ ...parent, ...fields, attachments });
+        done.push({ id: result.data.ticketId, studentName: entry.studentName });
+      }
+      onSuccess(done);
     } catch (err) {
       console.error(err);
-      setError(t('publicReport.genericSendError'));
+      // Entries are sent in order — drop the ones that already went through
+      // so resubmitting can't create duplicates of them.
+      const sentNow = done.length - sent.length;
+      if (sentNow > 0) setEntries((list) => list.slice(sentNow));
+      setSent(done);
+      const sizeOrCountError = err.message?.includes('ميجابايت') || err.message?.includes('MB') || err.message?.includes('ملفات كحد أقصى') || err.message?.includes('files');
+      if (sizeOrCountError) setError(err.message);
+      else if (done.length > 0) setError(t('publicReport.partialSendErrorReport', { names: done.map((d) => d.studentName).join(t('publicReport.listSeparator')) }));
+      else setError(t('publicReport.genericSendError'));
     } finally {
       setLoading(false);
     }
   };
 
+  const multiple = entries.length > 1;
+
   return (
     <form onSubmit={handleSubmit} className="w-full max-w-xl bg-white p-5 md:p-6 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100 space-y-6">
       {error && <div className="bg-red-50 text-red-600 p-4 rounded-xl text-sm border border-red-100">{error}</div>}
-
-      <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3 flex items-start gap-2">
-        <ShieldCheck className="w-4 h-4 shrink-0 mt-0.5" />
-        {t('publicReport.identityNotice')}
-      </div>
-
-      <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-700">{t('techSupportForm.studentSection')}</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.studentNameFull')} <span className="text-red-500">*</span></label>
-            <input type="text" name="studentName" value={formData.studentName} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.nationalCivilIdLabel')} <span className="text-red-500">*</span></label>
-            <input type="text" name="nationalId" value={formData.nationalId} onChange={handleChange} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
-          </div>
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')} <span className="text-red-500">*</span></label>
-          <select name="branch" value={formData.branch} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-            <option value="">{t('complaintForm.selectBranch')}</option>
-            {branches.map((b) => <option key={b.id} value={b.id}>{t(`businessData.branches.${b.id}`, b.name)}</option>)}
-          </select>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.stageLabel')} <span className="text-red-500">*</span></label>
-            <select name="stage" value={formData.stage} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              <option value="">{t('complaintForm.selectStage')}</option>
-              {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.gradeLabel')} <span className="text-red-500">*</span></label>
-            <select name="grade" value={formData.grade} onChange={handleChange} required disabled={!formData.stage} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white disabled:text-slate-400 disabled:bg-slate-50">
-              <option value="">{t('techSupportForm.selectClass')}</option>
-              {classOptionsForStage(formData.stage).map((g) => <option key={g} value={g}>{g}</option>)}
-            </select>
-          </div>
-        </div>
-      </div>
 
       <div className="space-y-4">
         <h3 className="text-sm font-bold text-slate-700">{t('complaintForm.parentSection')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.name')} <span className="text-red-500">*</span></label>
-            <input type="text" name="parentName" value={formData.parentName} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+            <input type="text" name="parentName" value={parent.parentName} onChange={handleParentChange} required className={inputCls} />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.relationLabel')}</label>
-            <select name="relation" value={formData.relation} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
+            <select name="relation" value={parent.relation} onChange={handleParentChange} className={selectCls}>
               {RELATIONS.map((r) => <option key={r} value={r}>{t(`techSupportForm.relations.${r}`, r)}</option>)}
             </select>
           </div>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.phoneRegisteredLabel')} <span className="text-red-500">*</span></label>
-          <input type="tel" name="parentPhone" value={formData.parentPhone} onChange={handleChange} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+          <input type="tel" name="parentPhone" value={parent.parentPhone} onChange={handleParentChange} required dir="ltr" className={inputCls} />
         </div>
       </div>
 
-      <div className="space-y-4">
-        <h3 className="text-sm font-bold text-slate-700">{t('techSupportForm.problemDetailsSection')}</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.problemTypeLabel')} <span className="text-red-500">*</span></label>
-            <select name="problemType" value={formData.problemType} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              <option value="">{t('techSupportForm.selectProblemType')}</option>
-              {problemTypes.map((pt) => <option key={pt.id} value={pt.id}>{t(`businessData.problemTypes.${pt.id}`, pt.name)}</option>)}
-            </select>
+      {entries.map((entry, idx) => {
+        const onChange = handleEntryChange(entry.key);
+        return (
+          <div key={entry.key} className={multiple ? 'space-y-6 border border-slate-200 rounded-2xl p-4' : 'space-y-6'}>
+            {multiple && (
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h3 className="text-sm font-bold text-primary">{t('publicReport.entryTitle', { n: idx + 1 })}</h3>
+                {idx > 0 && (
+                  <button type="button" onClick={() => removeEntry(entry.key)} className="flex items-center gap-1 text-xs text-slate-500 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 transition-colors">
+                    <X className="w-3.5 h-3.5" />
+                    {t('publicReport.removeEntry')}
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-slate-700">{t('techSupportForm.studentSection')}</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.studentNameFull')} <span className="text-red-500">*</span></label>
+                  <input type="text" name="studentName" value={entry.studentName} onChange={onChange} required className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.nationalCivilIdLabel')} <span className="text-red-500">*</span></label>
+                  <input type="text" name="nationalId" value={entry.nationalId} onChange={onChange} required dir="ltr" className={inputCls} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')} <span className="text-red-500">*</span></label>
+                  <select name="branch" value={entry.branch} onChange={onChange} required className={selectCls}>
+                    <option value="">{t('complaintForm.selectBranch')}</option>
+                    {branches.map((b) => <option key={b.id} value={b.id}>{t(`businessData.branches.${b.id}`, b.name)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.departmentLabel')} <span className="text-red-500">*</span></label>
+                  <select name="department" value={entry.department} onChange={onChange} required className={selectCls}>
+                    <option value="">{t('complaintForm.selectDepartment')}</option>
+                    {departments.map((d) => <option key={d.id} value={d.id}>{t(`businessData.departments.${d.id}`, d.name)}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.stageLabel')} <span className="text-red-500">*</span></label>
+                  <select name="stage" value={entry.stage} onChange={onChange} required className={selectCls}>
+                    <option value="">{t('complaintForm.selectStage')}</option>
+                    {STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.gradeLabel')} <span className="text-red-500">*</span></label>
+                  <select name="grade" value={entry.grade} onChange={onChange} required disabled={!entry.stage} className={`${selectCls} disabled:text-slate-400 disabled:bg-slate-50`}>
+                    <option value="">{t('techSupportForm.selectClass')}</option>
+                    {classOptionsForStage(entry.stage).map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-sm font-bold text-slate-700">{t('techSupportForm.problemDetailsSection')}</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.problemTypeLabel')} <span className="text-red-500">*</span></label>
+                  <select name="problemType" value={entry.problemType} onChange={onChange} required className={selectCls}>
+                    <option value="">{t('techSupportForm.selectProblemType')}</option>
+                    {problemTypes.map((pt) => <option key={pt.id} value={pt.id}>{t(`businessData.problemTypes.${pt.id}`, pt.name)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.platformLabel')} <span className="text-red-500">*</span></label>
+                  <select name="platform" value={entry.platform} onChange={onChange} required className={selectCls}>
+                    <option value="">{t('techSupportForm.selectPlatform')}</option>
+                    {platforms.map((p) => <option key={p.id} value={p.id}>{t(`businessData.platforms.${p.id}`, p.name)}</option>)}
+                  </select>
+                </div>
+              </div>
+              {isParentRelated(entry.problemType, entry.platform, problemTypes, platforms) && (
+                <ParentNationalIdField value={entry.parentNationalId} onChange={onChange} inputCls={inputCls} />
+              )}
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.platformLinkLabel')}</label>
+                <input type="text" name="platformLink" value={entry.platformLink} onChange={onChange} dir="ltr" placeholder="https://..." className={inputCls} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.additionalNotesLabel')}</label>
+                <textarea name="details" value={entry.details} onChange={onChange} rows={3} placeholder={t('techSupportForm.additionalNotesPlaceholder')} className={`${inputCls} py-3 resize-none`} />
+              </div>
+
+              <AttachmentUploader files={entry.files} onAdd={(files) => addFiles(entry.key, files)} onRemove={(i) => removeFile(entry.key, i)} />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.platformLabel')} <span className="text-red-500">*</span></label>
-            <select name="platform" value={formData.platform} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white">
-              <option value="">{t('techSupportForm.selectPlatform')}</option>
-              {platforms.map((p) => <option key={p.id} value={p.id}>{t(`businessData.platforms.${p.id}`, p.name)}</option>)}
-            </select>
-          </div>
+        );
+      })}
+
+      {entries.length < MAX_ENTRIES && (
+        <div className="bg-sky-50 border border-sky-100 rounded-xl p-3 space-y-2">
+          <p className="text-xs text-slate-600">{t('publicReport.siblingHintReport')}</p>
+          <button type="button" onClick={addEntry} className="w-full px-4 py-2.5 border-2 border-dashed border-primary/40 text-primary rounded-xl text-sm font-medium hover:bg-primary/5 transition-colors flex items-center justify-center gap-2">
+            <Plus className="w-4 h-4" />
+            {t('publicReport.addSiblingReport')}
+          </button>
         </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.platformLinkLabel')}</label>
-          <input type="text" name="platformLink" value={formData.platformLink} onChange={handleChange} dir="ltr" placeholder="https://..." className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('techSupportForm.additionalNotesLabel')}</label>
-          <textarea
-            name="details"
-            value={formData.details}
-            onChange={handleChange}
-            rows={3}
-            placeholder={t('techSupportForm.additionalNotesPlaceholder')}
-            className="w-full border border-slate-200 rounded-xl px-4 py-3 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm resize-none"
-          />
-        </div>
-      </div>
+      )}
 
       <button
         type="submit"
@@ -164,7 +266,7 @@ export default function PublicTechSupportFields({ initialBranch, onSuccess }) {
         className="w-full px-4 py-3 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-70"
       >
         {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-        {loading ? t('publicReport.sending') : t('publicReport.submitReport')}
+        {loading ? t('publicReport.sending') : multiple ? t('publicReport.submitReportMulti', { count: entries.length }) : t('publicReport.submitReport')}
       </button>
     </form>
   );

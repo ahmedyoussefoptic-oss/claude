@@ -30,16 +30,18 @@ export default function PublicReportForm() {
   }, []);
 
   const [kind, setKind] = useState(initialType);
-  const [saved, setSaved] = useState(null); // { id, kind }
-  const [linkCopied, setLinkCopied] = useState(false);
+  const [saved, setSaved] = useState(null); // { items: [{ id, studentName? }], kind }
+  const [copiedId, setCopiedId] = useState(null);
 
   const activeKind = saved?.kind || kind;
+  const items = saved?.items || [];
+  const multiple = items.length > 1;
 
-  const copyLink = async () => {
+  const copyLink = async (id) => {
     try {
-      await navigator.clipboard.writeText(trackingLink(saved.id));
-      setLinkCopied(true);
-      setTimeout(() => setLinkCopied(false), 2000);
+      await navigator.clipboard.writeText(trackingLink(id));
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
     } catch {
       // Clipboard API unavailable — the link is shown as text anyway.
     }
@@ -64,26 +66,39 @@ export default function PublicReportForm() {
             <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-7 h-7" />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 mb-1">{t(`publicReport.kinds.${activeKind}.successTitle`)}</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-1">
+              {multiple ? t(activeKind === 'COMPLAINT' ? 'publicReport.multiSuccessTitle' : 'publicReport.multiSuccessTitleReport', { count: items.length }) : t(`publicReport.kinds.${activeKind}.successTitle`)}
+            </h2>
             <p className="text-sm text-slate-500 mb-6">{t('publicReport.reviewSoon')}</p>
 
-            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 mb-4">
-              <p className="text-xs text-slate-500 mb-1">{t(`publicReport.kinds.${activeKind}.idLabel`)}</p>
-              <p className="text-lg font-bold text-slate-900 font-mono" dir="ltr">{saved.id}</p>
-            </div>
-
             <p className="text-sm text-slate-600 mb-2">{t('publicReport.keepLink')}</p>
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-xl p-3 mb-6">
-              <span className="flex-1 text-xs text-slate-600 truncate text-left" dir="ltr">{trackingLink(saved.id)}</span>
-              <button onClick={copyLink} className="shrink-0 p-2 text-slate-500 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors" title={t('publicReport.copyLink')}>
-                {linkCopied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-              </button>
+            <div className="space-y-3 mb-6">
+              {items.map((item) => (
+                <div key={item.id} className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+                  {multiple && item.studentName && <p className="text-sm font-bold text-slate-800 mb-2">{item.studentName}</p>}
+                  <p className="text-xs text-slate-500 mb-1">{t(`publicReport.kinds.${activeKind}.idLabel`)}</p>
+                  <p className="text-lg font-bold text-slate-900 font-mono" dir="ltr">{item.id}</p>
+                  <div className="flex items-center gap-2 bg-white border border-slate-100 rounded-xl p-2 mt-3">
+                    <span className="flex-1 text-xs text-slate-600 truncate text-left" dir="ltr">{trackingLink(item.id)}</span>
+                    <button onClick={() => copyLink(item.id)} className="shrink-0 p-2 text-slate-500 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors" title={t('publicReport.copyLink')}>
+                      {copiedId === item.id ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {multiple && (
+                    <Link to={`/track?id=${item.id}`} className="inline-block mt-2 text-sm font-medium text-primary hover:underline">
+                      {t(`publicReport.kinds.${activeKind}.trackCta`)}
+                    </Link>
+                  )}
+                </div>
+              ))}
             </div>
 
             <div className="flex flex-col gap-2">
-              <Link to={`/track?id=${saved.id}`} className="w-full px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-dark transition-colors">
-                {t(`publicReport.kinds.${activeKind}.trackCta`)}
-              </Link>
+              {!multiple && (
+                <Link to={`/track?id=${items[0].id}`} className="w-full px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-dark transition-colors">
+                  {t(`publicReport.kinds.${activeKind}.trackCta`)}
+                </Link>
+              )}
               <button onClick={() => setSaved(null)} className="w-full px-4 py-2.5 text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 font-medium text-sm transition-colors">
                 {t(`publicReport.kinds.${activeKind}.anotherCta`)}
               </button>
@@ -96,7 +111,8 @@ export default function PublicReportForm() {
               <p className="text-slate-500 text-sm">{t(`publicReport.kinds.${kind}.pageSubtitle`)}</p>
             </div>
 
-            <div className="w-full max-w-xl grid grid-cols-3 gap-2 mb-6">
+            <p className="w-full max-w-xl text-sm font-medium text-slate-700 mb-2">{t('publicReport.chooseKind')}</p>
+            <div className="w-full max-w-xl grid grid-cols-3 gap-2 mb-3">
               {KIND_IDS.map((id) => {
                 const Icon = KIND_ICONS[id];
                 return (
@@ -104,20 +120,26 @@ export default function PublicReportForm() {
                     key={id}
                     type="button"
                     onClick={() => setKind(id)}
-                    className={`flex flex-col items-center gap-1.5 px-3 py-3 rounded-xl border text-sm font-medium transition-colors ${
+                    className={`flex flex-col items-center gap-1 px-2 py-3 rounded-xl border text-sm font-medium transition-colors ${
                       kind === id ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
                     }`}
                   >
                     <Icon className="w-5 h-5" />
                     {t(`publicReport.kinds.${id}.name`)}
+                    <span className={`text-[11px] font-normal leading-tight text-center ${kind === id ? 'text-white/85' : 'text-slate-400'}`}>
+                      {t(`publicReport.kinds.${id}.tabHint`)}
+                    </span>
                   </button>
                 );
               })}
             </div>
+            <div className="w-full max-w-xl bg-sky-50 border border-sky-100 text-slate-700 text-sm leading-relaxed rounded-xl p-3 mb-6">
+              {t(`publicReport.kinds.${kind}.includes`)}
+            </div>
 
-            {kind === 'COMPLAINT' && <PublicComplaintFields initialBranch={initialBranch} onSuccess={(id) => setSaved({ id, kind: 'COMPLAINT' })} />}
-            {kind === 'LOST_FOUND' && <PublicLostFoundFields initialBranch={initialBranch} onSuccess={(id) => setSaved({ id, kind: 'LOST_FOUND' })} />}
-            {kind === 'TECH_SUPPORT' && <PublicTechSupportFields initialBranch={initialBranch} onSuccess={(id) => setSaved({ id, kind: 'TECH_SUPPORT' })} />}
+            {kind === 'COMPLAINT' && <PublicComplaintFields initialBranch={initialBranch} onSuccess={(sentItems) => setSaved({ items: sentItems, kind: 'COMPLAINT' })} />}
+            {kind === 'LOST_FOUND' && <PublicLostFoundFields initialBranch={initialBranch} onSuccess={(id) => setSaved({ items: [{ id }], kind: 'LOST_FOUND' })} />}
+            {kind === 'TECH_SUPPORT' && <PublicTechSupportFields initialBranch={initialBranch} onSuccess={(sentItems) => setSaved({ items: sentItems, kind: 'TECH_SUPPORT' })} />}
           </>
         )}
       </main>

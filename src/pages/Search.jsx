@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { complaintHasType } from '../config/complaintTypes';
 import { useTranslation } from 'react-i18next';
 import { Search as SearchIcon, Loader2, ChevronLeft, Download, Star } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
@@ -91,7 +92,7 @@ export default function Search() {
       if (filters.branch && c.branch !== filters.branch) return false;
       if (filters.status && c.status !== filters.status) return false;
       if (filters.priority && c.priority !== filters.priority) return false;
-      if (filters.complaintType && c.complaintType !== filters.complaintType) return false;
+      if (filters.complaintType && !complaintHasType(c, filters.complaintType)) return false;
       if (filters.from) {
         const createdAt = c.createdAt?.toDate?.();
         if (!createdAt || createdAt < new Date(filters.from)) return false;

@@ -18,12 +18,17 @@ import { ar, enUS } from 'date-fns/locale';
 const NOTIFICATION_TARGET_PATH = {
   IT_ASSIGNED: '/tech-support',
   IT_ESCALATED: '/tech-support',
+  IT_INTERNAL_COMMENT_ADDED: '/tech-support',
   LF_ASSIGNED: '/lost-found',
   ASSIGNED: '/complaints',
   URGENT_CREATED: '/complaints',
   ESCALATED: '/complaints',
   SOLVED_NOTIFY_RECEIVER: '/complaints',
   SLA_WARNING: '/complaints',
+  INTERNAL_COMMENT_ADDED: '/complaints',
+  VISIT_ARRIVED: '/complaints',
+  REOPENED: '/complaints',
+  IT_REOPENED: '/tech-support',
 };
 
 function playChime() {

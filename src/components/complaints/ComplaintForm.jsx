@@ -5,13 +5,16 @@ import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/fi
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
+import { messageSentFields } from '../../utils/messageSent';
 import { useBranches, useDepartments, useComplaintTypes, useSubTypes } from '../../hooks/useOrgData';
 import { useUsers } from '../../hooks/useUsers';
 import { waLink, buildReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { STAGES } from '../../config/complaintTypes';
+import { classOptionsForStage } from '../../config/techSupport';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
+import ExtraTypesEditor, { cleanExtraTypes } from './ExtraTypesEditor';
 
 const PRIORITY_IDS = ['NORMAL', 'HIGH', 'URGENT'];
 
@@ -26,7 +29,7 @@ const SOURCES = [
 
 export default function ComplaintForm({ onClose }) {
   const { t } = useTranslation();
-  const { user } = useAuthStore();
+  const { user, userData } = useAuthStore();
   const fileInputRef = useRef(null);
   const branches = useBranches();
   const departments = useDepartments();
@@ -47,6 +50,7 @@ export default function ComplaintForm({ onClose }) {
     grade: '',
     complaintType: '',
     subType: '',
+    extraTypes: [],
     subject: '',
     priority: 'NORMAL',
     source: 'CENTER_CALL',
@@ -64,7 +68,7 @@ export default function ComplaintForm({ onClose }) {
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
 
-  const assigneeOptions = eligibleAssignees(staff, { branch: formData.branch, complaintType: formData.complaintType });
+  const assigneeOptions = eligibleAssignees(staff, { branch: formData.branch, complaintType: formData.complaintType, stage: formData.stage, curriculum: formData.department });
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -72,6 +76,7 @@ export default function ComplaintForm({ onClose }) {
       ...prev,
       [name]: value,
       ...(name === 'complaintType' ? { subType: '' } : {}),
+      ...(name === 'stage' ? { grade: '' } : {}),
     }));
   };
 
@@ -84,7 +89,6 @@ export default function ComplaintForm({ onClose }) {
       studentName: student.name || prev.studentName,
       studentId: student.nationalId || prev.studentId,
       branch: student.branch || prev.branch,
-      grade: [student.stageName, student.gradeName, student.className].filter(Boolean).join(' - ') || prev.grade,
       parentPhone: student.mobile || prev.parentPhone,
     }));
     setStudentSuggestions([]);
@@ -198,6 +202,7 @@ export default function ComplaintForm({ onClose }) {
 
       const newComplaint = {
         ...formData,
+        extraTypes: cleanExtraTypes(formData.extraTypes, formData.complaintType),
         complaintId,
         receiver: user.uid,
         status: 'RECEIVED',
@@ -271,7 +276,7 @@ export default function ComplaintForm({ onClose }) {
               href={waLink(savedComplaint.parentPhone, buildReceiptMessage(savedComplaint, templates.receipt))}
               target="_blank"
               rel="noreferrer"
-              onClick={() => updateDoc(doc(db, 'complaints', savedComplaint.id), { receiptMessageSentAt: serverTimestamp() })}
+              onClick={() => updateDoc(doc(db, 'complaints', savedComplaint.id), messageSentFields('receipt', user, userData))}
               className="w-full px-4 py-2.5 bg-[#25D366] text-white rounded-xl text-sm font-medium hover:brightness-95 transition-all flex items-center justify-center gap-2 mb-3"
             >
               <MessageCircle className="w-4 h-4" />
@@ -395,7 +400,10 @@ export default function ComplaintForm({ onClose }) {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.gradeLabel')} <span className="text-red-500">*</span></label>
-                  <input type="text" name="grade" value={formData.grade} onChange={handleChange} required className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+                  <select name="grade" value={formData.grade} onChange={handleChange} required disabled={!formData.stage} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white disabled:text-slate-400 disabled:bg-slate-50">
+                    <option value="">{t('techSupportForm.selectClass')}</option>
+                    {classOptionsForStage(formData.stage).map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
                 </div>
               </div>
             </div>
@@ -418,6 +426,17 @@ export default function ComplaintForm({ onClose }) {
                     <option value="">{t('common.select')}</option>
                     {subTypes.filter(s => s.parentType === formData.complaintType).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                   </select>
+                </div>
+                <div className="md:col-span-4 md:order-last">
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.extraTypesLabel')}</label>
+                  <ExtraTypesEditor
+                    value={formData.extraTypes}
+                    onChange={(extraTypes) => setFormData((prev) => ({ ...prev, extraTypes }))}
+                    primaryType={formData.complaintType}
+                    complaintTypes={complaintTypes}
+                    subTypes={subTypes}
+                    selectCls="w-full border border-slate-200 rounded-xl px-4 py-2.5 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm"
+                  />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.priorityLabel')} <span className="text-red-500">*</span></label>

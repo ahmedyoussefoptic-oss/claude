@@ -4,12 +4,27 @@ import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../config/firebase';
 import { ROLES, ROLE_LABELS } from '../config/roles';
-import { useBranches } from '../hooks/useOrgData';
+import { useBranches, useDepartments } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
 import { userBranches } from '../utils/scope';
+import { STAGES } from '../config/complaintTypes';
 import { Users as UsersIcon, Plus, Loader2, Mail, Lock, Phone, Briefcase, User as UserIcon, Pencil, Trash2, KeyRound, X, SlidersHorizontal, RotateCcw } from 'lucide-react';
 
 const DEPARTMENT_IDS = ['ADMINISTRATIVE', 'ACADEMIC', 'BEHAVIORAL', 'IT'];
+
+// Collapses a user's grade list into ranges in STAGES order for display,
+// e.g. [G1, G2, G3, G4, G5, G9] -> "G1–G5، G9".
+function formatStages(stages, sep) {
+  const idx = [...new Set(stages)].map((st) => STAGES.indexOf(st)).filter((i) => i >= 0).sort((a, b) => a - b);
+  const parts = [];
+  for (let i = 0; i < idx.length; i++) {
+    let j = i;
+    while (j + 1 < idx.length && idx[j + 1] === idx[j] + 1) j++;
+    parts.push(j > i ? `${STAGES[idx[i]]}–${STAGES[idx[j]]}` : STAGES[idx[i]]);
+    i = j;
+  }
+  return parts.join(sep);
+}
 
 const emptyForm = {
   name: '',
@@ -23,6 +38,10 @@ const emptyForm = {
   branches: [],
   access: 'branch',
   perms: { edit: false, delete: false, users: false },
+  isPrincipal: false,
+  isQuality: false,
+  stages: [],
+  curricula: [],
 };
 
 export default function Users() {
@@ -36,6 +55,8 @@ export default function Users() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const branches = useBranches();
+  const curriculumOptions = useDepartments();
+  const curriculumName = (id) => curriculumOptions.find((d) => d.id === id)?.name || id;
 
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -78,6 +99,10 @@ export default function Users() {
       branches: userBranches(u),
       access: u.access === 'all' ? 'all' : 'branch',
       perms: { edit: !!u.perms?.edit, delete: !!u.perms?.delete, users: !!u.perms?.users },
+      isPrincipal: u.isPrincipal === true,
+      isQuality: u.isQuality === true,
+      stages: Array.isArray(u.stages) ? u.stages : [],
+      curricula: Array.isArray(u.curricula) ? u.curricula : [],
     });
     setError(null);
     setShowForm(true);
@@ -111,6 +136,10 @@ export default function Users() {
           branches,
           access: form.access,
           perms: form.perms,
+          isPrincipal: form.isPrincipal,
+          isQuality: form.isQuality,
+          stages: form.stages,
+          curricula: form.curricula,
         });
       } else {
         // Delegates to a Cloud Function (Admin SDK) so creating a new staff
@@ -128,6 +157,10 @@ export default function Users() {
           branches,
           access: form.access,
           perms: form.perms,
+          isPrincipal: form.isPrincipal,
+          isQuality: form.isQuality,
+          stages: form.stages,
+          curricula: form.curricula,
         });
       }
       setShowForm(false);
@@ -389,6 +422,86 @@ export default function Users() {
               </p>
             </div>
 
+            <div className="md:col-span-2">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium text-slate-700">{t('users.stagesLabel')}</label>
+                {form.stages.length > 0 && (
+                  <button type="button" onClick={() => setForm((p) => ({ ...p, stages: [] }))} className="text-xs text-primary hover:underline">
+                    {t('users.stagesClear')}
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5 border border-slate-200 rounded-xl p-3 bg-white">
+                {STAGES.map((st) => {
+                  const on = form.stages.includes(st);
+                  return (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setForm((p) => ({
+                        ...p,
+                        stages: on ? p.stages.filter((x) => x !== st) : STAGES.filter((x) => x === st || p.stages.includes(x)),
+                      }))}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${on ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:border-primary'}`}
+                      dir="ltr"
+                    >
+                      {st}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {form.stages.length ? t('users.stagesSelected', { list: formatStages(form.stages, listSep) }) : t('users.stagesAll')}
+                {' '}{t('users.stagesHint')}
+              </p>
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('users.curriculaLabel')}</label>
+              <div className="flex flex-wrap gap-x-5 gap-y-2 border border-slate-200 rounded-xl p-3 bg-white">
+                {curriculumOptions.map((d) => (
+                  <label key={d.id} className="flex items-center gap-2 text-sm text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={form.curricula.includes(d.id)}
+                      onChange={(e) => setForm((p) => ({
+                        ...p,
+                        curricula: e.target.checked ? [...p.curricula, d.id] : p.curricula.filter((id) => id !== d.id),
+                      }))}
+                    />
+                    {d.name}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {form.curricula.length ? t('users.curriculaSelected', { list: form.curricula.map(curriculumName).join(listSep) }) : t('users.curriculaAll')}
+              </p>
+            </div>
+
+            <div className="md:col-span-2 bg-amber-50 border border-amber-100 rounded-xl p-4">
+              <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                <input
+                  type="checkbox"
+                  checked={form.isPrincipal}
+                  onChange={(e) => setForm((p) => ({ ...p, isPrincipal: e.target.checked }))}
+                />
+                🏫 {t('users.isPrincipalLabel')}
+              </label>
+              <p className="text-xs text-slate-600 mt-2">{t('users.isPrincipalHint')}</p>
+            </div>
+
+            <div className="md:col-span-2 bg-emerald-50 border border-emerald-100 rounded-xl p-4">
+              <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                <input
+                  type="checkbox"
+                  checked={form.isQuality}
+                  onChange={(e) => setForm((p) => ({ ...p, isQuality: e.target.checked }))}
+                />
+                ✅ {t('users.isQualityLabel')}
+              </label>
+              <p className="text-xs text-slate-600 mt-2">{t('users.isQualityHint')}</p>
+            </div>
+
             <div className="md:col-span-2 mt-2 flex gap-3">
               <button
                 type="submit"
@@ -482,9 +595,29 @@ export default function Users() {
                       <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
                         {roleName(u.role)}
                       </span>
+                      {u.isPrincipal && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 mr-1 mt-1">
+                          🏫 {t('users.principalTag')}
+                        </span>
+                      )}
+                      {u.isQuality && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 mr-1 mt-1">
+                          ✅ {t('users.qualityTag')}
+                        </span>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
                       {u.department ? departmentName(u.department) : '—'}
+                      {Array.isArray(u.stages) && u.stages.length > 0 && (
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          {t('users.stagesShort')}: <span dir="ltr">{formatStages(u.stages, ', ')}</span>
+                        </div>
+                      )}
+                      {Array.isArray(u.curricula) && u.curricula.length > 0 && (
+                        <div className="text-xs text-slate-400 mt-0.5">
+                          {t('users.curriculaShort')}: {u.curricula.map(curriculumName).join(listSep)}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-sm text-slate-500">
                       {u.access === 'all'

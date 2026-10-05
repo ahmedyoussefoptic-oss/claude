@@ -40,7 +40,10 @@
     "sendReceiptWhatsApp": "إرسال رسالة الاستلام عبر واتساب",
     "sendResolutionWhatsApp": "إرسال رسالة الحل عبر واتساب",
     "shareWithStaff": "مشاركة مع موظف عبر واتساب",
-    "user": "مستخدم"
+    "hasInternalComment": "يوجد تعليق داخلي",
+    "user": "مستخدم",
+    "allDepartments": "كل الأقسام",
+    "noDepartment": "بدون قسم"
   },
   "nav": {
     "dashboard": "الرئيسية",
@@ -53,7 +56,9 @@
     "users": "المستخدمين",
     "settings": "الإعدادات",
     "archive": "أرشيف المحذوفات",
-    "logout": "تسجيل الخروج"
+    "logout": "تسجيل الخروج",
+    "studentRecords": "سجل الطلاب",
+    "branchQr": "QR زيارات الفروع"
   },
   "app": {
     "brand": "المكتشف العالمية",
@@ -131,7 +136,8 @@
       "SOLVED": "تم الحل",
       "CLOSED": "مغلقة",
       "REJECTED": "مرفوضة",
-      "ESCALATED": "مصعدة"
+      "ESCALATED": "مصعدة",
+      "ESCALATED_RESOLVED": "مصعدة وتم حلها"
     },
     "lostFound": {
       "UNCLAIMED": "بانتظار المطالبة",
@@ -159,7 +165,8 @@
       "OPEN": "مفتوحة",
       "OVERDUE": "متأخرة",
       "ESCALATED": "مصعدة",
-      "CLOSED": "مغلقة"
+      "CLOSED": "مغلقة",
+      "VISITS": "زيارات الفروع"
     },
     "studentParent": "الطالب / ولي الأمر",
     "parentMessages": "رسائل ولي الأمر",
@@ -226,7 +233,12 @@
     "dictationInProgress": "جارٍ الاستماع...",
     "dictationUnsupported": "الإملاء الصوتي غير مدعوم في هذا المتصفح.",
     "dictationError": "تعذّر التعرف على الصوت. حاول مرة أخرى.",
-    "recordingUploadFailedAlert": "تم حفظ الحل، لكن تعذّر رفع التسجيل الصوتي: {{message}}"
+    "recordingUploadFailedAlert": "تم حفظ الحل، لكن تعذّر رفع التسجيل الصوتي: {{message}}",
+    "editDetailsBtn": "تعديل البيانات",
+    "convertToTechBtn": "تحويل إلى بلاغ تقني",
+    "attachSolutionFile": "إرفاق صورة أو ملف للحل",
+    "solutionAttachmentsLabel": "مرفقات الحل:",
+    "solutionFileUploadFailedAlert": "تم حفظ الحل، لكن تعذّر رفع الملف: {{name}}"
   },
   "complaintForm": {
     "priorities": {
@@ -272,7 +284,10 @@
     "saving": "جاري الحفظ...",
     "saveBtn": "حفظ الملاحظة",
     "recordingFilePrefix": "تسجيل_صوتي_",
-    "attachmentUploadFailedTitle": "تم حفظ الملاحظة، لكن تعذّر رفع المرفقات التالية:"
+    "attachmentUploadFailedTitle": "تم حفظ الملاحظة، لكن تعذّر رفع المرفقات التالية:",
+    "extraTypesLabel": "تصنيفات إضافية (إن وُجد أكثر من شق للملاحظة)",
+    "addExtraType": "إضافة تصنيف آخر",
+    "extraTypeSelect": "اختر التصنيف..."
   },
   "assigneeSelect": {
     "roleTagAdmin": "مدير النظام",
@@ -288,13 +303,17 @@
     "assignedToLogLabel": "المسندة إليهم:",
     "addedLogLabel": "أُضيف:",
     "removedLogLabel": "أُزيل:",
-    "noChangeAlert": "لم يطرأ أي تغيير على الإسناد."
+    "noChangeAlert": "لم يطرأ أي تغيير على الإسناد.",
+    "gradeTag": "مسؤول عن الصف",
+    "curriculumTag": "مسؤول عن القسم"
   },
   "messageStatus": {
     "receiptSent": "أُرسلت رسالة الاستلام لولي الأمر",
     "receiptNotSent": "لم تُرسل رسالة الاستلام بعد",
     "resolutionSent": "أُرسلت رسالة النتيجة/الحل لولي الأمر",
-    "resolutionNotSent": "لم تُرسل رسالة النتيجة/الحل بعد"
+    "resolutionNotSent": "لم تُرسل رسالة النتيجة/الحل بعد",
+    "receiptSentBy": "أرسل رسالة الاستلام: {{name}}",
+    "resolutionSentBy": "أرسل رسالة الحل: {{name}}"
   },
   "lostFoundCommon": {
     "reportTypes": {
@@ -335,7 +354,8 @@
     "followUpPlaceholder": "أضف ملاحظة متابعة...",
     "followUpLog": "سجل المتابعة",
     "deleteFinal": "حذف البلاغ نهائياً",
-    "deleteReasonPrompt": "اكتب سبب حذف البلاغ نهائياً (إلزامي):"
+    "deleteReasonPrompt": "اكتب سبب حذف البلاغ نهائياً (إلزامي):",
+    "studentLabel": "الطالب"
   },
   "lostFoundForm": {
     "successTitle": "تم حفظ السجل بنجاح",
@@ -367,6 +387,8 @@
     "kinds": {
       "COMPLAINT": {
         "name": "ملاحظة",
+        "tabHint": "شكوى أو اقتراح",
+        "includes": "تشمل: الأمور الأكاديمية (الدرجات، الواجبات، المعلمين)، والإدارية (الرسوم، النقل، الزي، الشهادات)، والسلوكية (تعامل الطلاب، التنمّر)، وأي اقتراح أو شكوى عامة.",
         "pageTitle": "تقديم ملاحظة",
         "pageSubtitle": "يرجى تعبئة البيانات التالية بدقة، وسيتم التواصل معكم في أقرب وقت.",
         "idLabel": "رقم الملاحظة",
@@ -376,6 +398,8 @@
       },
       "LOST_FOUND": {
         "name": "مفقودات",
+        "tabHint": "غرض مفقود أو معثور عليه",
+        "includes": "تشمل: أي غرض فقده الطالب أو عُثر عليه داخل المدرسة أو الحافلة — مثل حقيبة، ملابس، نظارة، قارورة ماء، أدوات مدرسية.",
         "pageTitle": "الإبلاغ عن مفقودات",
         "pageSubtitle": "سجّلوا غرضاً فقدتموه أو عثرتم عليه داخل المدرسة.",
         "idLabel": "رقم البلاغ",
@@ -385,6 +409,8 @@
       },
       "TECH_SUPPORT": {
         "name": "مشكلة تقنية",
+        "tabHint": "مشكلة دخول المنصات",
+        "includes": "تشمل: تعذّر الدخول إلى المنصات التعليمية (misedu، كلاسيرا) — مثل نسيان كلمة المرور، اسم مستخدم غير صحيح، حساب موقوف أو غير موجود، تغيّر رقم الجوال.",
         "pageTitle": "الإبلاغ عن مشكلة تقنية",
         "pageSubtitle": "مشكلات الوصول إلى المنصات التعليمية (تعذّر تسجيل الدخول).",
         "idLabel": "رقم البلاغ",
@@ -393,6 +419,7 @@
         "anotherCta": "تقديم بلاغ آخر"
       }
     },
+    "chooseKind": "اختر نوع الطلب المناسب:",
     "reviewSoon": "سيتم مراجعته والتواصل معكم في أقرب وقت.",
     "keepLink": "احتفظوا برابط المتابعة التالي لمعرفة الحالة لاحقاً:",
     "copyLink": "نسخ الرابط",
@@ -408,13 +435,25 @@
     "oneFile": "ملف واحد، بحد أقصى {{max}} ميجابايت لكل ملف",
     "itemPhotoOptional": "صورة الغرض (اختياري)",
     "reporterNameRequiredAlert": "يرجى إدخال اسم ورقم جوال المُبلّغ عن الفقدان.",
-    "identityNotice": "سيتحقق أحد مختصي تقنية المعلومات من مطابقة البيانات قبل إرسال أي بيانات دخول — يرجى تعبئة الرقم المسجّل لدى المدرسة بدقة.",
     "submitComplaint": "إرسال الملاحظة",
+    "submitComplaintMulti": "إرسال الملاحظات ({{count}})",
+    "addSibling": "إضافة ملاحظة لأخ / أخت",
+    "siblingHint": "إذا كان لديكم أكثر من ابن أو ابنة في المدرسة، يمكنكم إضافة ملاحظة لكل منهم وإرسالها معاً — تحصل كل ملاحظة على رقم متابعة خاص بها.",
+    "entryTitle": "الطالب {{n}}",
+    "removeEntry": "حذف",
+    "multiSuccessTitle": "تم إرسال {{count}} ملاحظات بنجاح",
+    "partialSendError": "تم إرسال ملاحظة: {{names}}، وتعذّر إرسال الباقي. يرجى الضغط على إرسال مرة أخرى.",
+    "listSeparator": "، ",
     "submitReport": "إرسال البلاغ",
-    "parentPhoneWhatsApp": "رقم الجوال (واتساب)"
+    "parentPhoneWhatsApp": "رقم الجوال (واتساب)",
+    "addSiblingReport": "إضافة بلاغ لأخ / أخت",
+    "siblingHintReport": "إذا كانت المشكلة لدى أكثر من ابن أو ابنة، يمكنكم إضافة بلاغ لكل منهم وإرسالها معاً — يحصل كل بلاغ على رقم متابعة خاص به.",
+    "submitReportMulti": "إرسال البلاغات ({{count}})",
+    "multiSuccessTitleReport": "تم إرسال {{count}} بلاغات بنجاح",
+    "partialSendErrorReport": "تم إرسال بلاغ: {{names}}، وتعذّر إرسال الباقي. يرجى الضغط على إرسال مرة أخرى.",
+    "extraTypesLabel": "هل تشمل الملاحظة جانباً آخر؟ (اختياري)"
   },
   "techSupportForm": {
-    "identityNotice": "أؤكد أن الرقم أعلاه يطابق رقم ولي الأمر/الطالب المسجّل في نظام المدرسة. لا يُقبل البلاغ من رقم غير مطابق — عند وجود اختلاف يجب تحويل الطلب إلى شؤون الطلاب لتحديث البيانات أولاً.",
     "studentSection": "بيانات الطالب",
     "studentNameFull": "اسم الطالب رباعياً",
     "nationalCivilIdLabel": "رقم الهوية / السجل المدني",
@@ -438,7 +477,6 @@
     "additionalNotesPlaceholder": "أي تفاصيل إضافية تساعد مختص تقنية المعلومات...",
     "newTicketTitle": "بلاغ تقني جديد",
     "newTicketSubtitle": "مشكلات الوصول إلى المنصات التعليمية (تعذّر تسجيل الدخول)",
-    "identityRequiredAlert": "يجب تأكيد مطابقة رقم الجوال مع سجل الطالب قبل تسجيل البلاغ.",
     "saveError": "حدث خطأ أثناء حفظ البلاغ. يرجى المحاولة مرة أخرى.",
     "saving": "جاري الحفظ...",
     "saveBtn": "حفظ البلاغ",
@@ -446,7 +484,9 @@
     "ticketNumberLabel": "رقم البلاغ:",
     "autoAssigned": "تم إسناده تلقائياً إلى {{name}} — وصله إشعار فوري.",
     "noAutoAssign": "لم يُعثر على مختص تقنية معلومات مناسب للإسناد التلقائي — يحتاج إسناداً يدوياً.",
-    "sourceReceiverNote": "مصدر البلاغ: مركز خدمة العملاء · متلقي البلاغ: أنت (يُسجَّل تلقائياً)"
+    "sourceReceiverNote": "مصدر البلاغ: مركز خدمة العملاء · متلقي البلاغ: أنت (يُسجَّل تلقائياً)",
+    "parentNationalIdLabel": "رقم هوية ولي الأمر",
+    "parentNationalIdHint": "هذه المشكلة تخص حساب ولي الأمر نفسه، لذا نحتاج رقم هويته."
   },
   "publicLinkModal": {
     "title": "رابط تقديم بلاغ لولي الأمر",
@@ -523,10 +563,15 @@
       "TICKET_TRANSFERRED": "جاري العمل على البلاغ",
       "PROCESSING_STARTED": "بدأ المختص المعالجة",
       "CREDENTIALS_SENT": "تم إرسال الحل",
-      "CONFIRMED_CLOSED": "تم تأكيد الحل وإغلاق البلاغ",
+      "CONFIRMED_CLOSED": "تم إغلاق البلاغ",
       "TICKET_REOPENED": "تم إعادة فتح البلاغ بناءً على طلبكم",
       "TICKET_ESCALATED": "تحت متابعة الإدارة العليا",
-      "SURVEY_SUBMITTED": "تم استلام تقييمكم"
+      "SURVEY_SUBMITTED": "تم استلام تقييمكم",
+      "COMPLAINT_EDITED": "تم تحديث بيانات الملاحظة",
+      "CONVERTED_FROM_COMPLAINT": "تم تحويل طلبكم إلى الدعم التقني",
+      "TICKET_EDITED": "تم تحديث بيانات البلاغ",
+      "VISIT_CHECKED_IN": "تم تسجيل وصولكم للفرع",
+      "VISIT_MET": "تمت مقابلتكم"
     },
     "pageTitle": "بوابة متابعة الملاحظات والبلاغات",
     "pageSubtitle": "أدخل رقم الملاحظة أو البلاغ للاستعلام عن حالته الحالية.",
@@ -564,7 +609,6 @@
       "ASSIGNED": "مُسندة",
       "IN_PROGRESS": "قيد المعالجة",
       "SOLVED": "تم الحل",
-      "WAITING_CONFIRMATION": "بانتظار التأكيد",
       "CLOSED": "مغلقة"
     },
     "ticketNumber": "رقم البلاغ",
@@ -743,7 +787,23 @@
     "forStaff": "للموظف:",
     "newPasswordLabel": "كلمة المرور الجديدة",
     "savePasswordBtn": "حفظ كلمة المرور",
-    "passwordTooShort": "يجب ألا تقل كلمة المرور عن 6 أحرف."
+    "passwordTooShort": "يجب ألا تقل كلمة المرور عن 6 أحرف.",
+    "isPrincipalLabel": "مدير المدرسة / الفرع",
+    "isPrincipalHint": "يُسند إليه تلقائياً كل ما يرد من رابط البلاغات العام (ملاحظات وبلاغات تقنية) في فروعه، ويصله إشعار بكل منها. يمنحه أيضاً الاطلاع على قسم المشكلات التقنية لفروعه.",
+    "principalTag": "مدير المدرسة",
+    "stagesLabel": "الصفوف المسؤول عنها",
+    "stagesClear": "كل الصفوف",
+    "stagesAll": "بدون تحديد = مسؤول عن كل الصفوف.",
+    "stagesSelected": "مسؤول عن: {{list}}.",
+    "stagesHint": "عند الإسناد التلقائي (رابط البلاغات والمشكلات التقنية) تُسند الملاحظة لمن يغطي صف الطالب وقسمه فقط، ويظهرون أولاً في الإسناد اليدوي.",
+    "stagesShort": "الصفوف",
+    "curriculaLabel": "الأقسام / المناهج المسؤول عنها",
+    "curriculaAll": "بدون تحديد = مسؤول عن كل الأقسام.",
+    "curriculaSelected": "مسؤول عن: {{list}}.",
+    "curriculaShort": "القسم",
+    "isQualityLabel": "مسؤول الجودة",
+    "isQualityHint": "يُسند إليه تلقائياً كل الملاحظات والمشكلات التقنية في فروعه — من رابط البلاغات أو المسجّلة من الموظفين أو المحوّلة — ويصله إشعار بكل منها. يمنحه أيضاً الاطلاع على قسم المشكلات التقنية لفروعه.",
+    "qualityTag": "الجودة"
   },
   "settings": {
     "pageSubtitle": "تعديل الفروع والأقسام والتصنيفات المستخدمة في كل قوائم النظام",
@@ -790,7 +850,8 @@
     },
     "restoreDefault": "استعادة الافتراضي",
     "availableVariables": "المتغيرات المتاحة:",
-    "savedCheck": "تم الحفظ ✓"
+    "savedCheck": "تم الحفظ ✓",
+    "parentRelatedFlag": "يخص ولي الأمر"
   },
   "flowMap": {
     "title": "خريطة مسار الملاحظات",
@@ -885,19 +946,41 @@
     "studentNameColumn": "اسم الطالب",
     "studentIdColumn": "رقم الهوية",
     "studentPhoneColumn": "رقم الهاتف",
-    "stageColumn": "المرحلة"
+    "stageColumn": "المرحلة",
+    "full": {
+      "optIncludeTech": "دمج المشكلات التقنية مع الملاحظات في تقرير واحد",
+      "optShowDetails": "إظهار قائمة الملاحظات التفصيلية (للطباعة)",
+      "mergedTitle": "تقرير الملاحظات والمشكلات التقنية",
+      "escalatedOpen": "مصعدة (قيد المتابعة)",
+      "escalatedOpenSub": "تم تصعيدها ولم تُحل بعد",
+      "overdue": "متأخرة",
+      "resolutionRate": "نسبة الحل",
+      "ofTotal": "نسبة الحل {{rate}}",
+      "techSection": "المشكلات التقنية",
+      "perBranchTitle": "عدّاد الملاحظات لكل فرع",
+      "perBranchSub": "تفصيل الأعداد حسب التصنيف والحالة في كل فرع",
+      "category": "التصنيف",
+      "colTotal": "الإجمالي",
+      "totalRow": "الإجمالي",
+      "comparisonTitle": "المقارنة بين الفروع",
+      "comparisonSub": "الأعداد والنسب ومؤشرات الأداء لكل فرع جنباً إلى جنب",
+      "notResolved": "لم تُحل بعد",
+      "sharePct": "من الإجمالي",
+      "techTotalCol": "تقنية — الإجمالي",
+      "techResolvedCol": "تقنية — تم حلها",
+      "recordNumber": "الرقم",
+      "resolvedOfTotal": "{{resolved}} من {{total}}",
+      "multiCategoryNote": "{{count}} ملاحظة متعددة التصنيفات تُحسب في كل تصنيف"
+    }
   },
   "techSupportDetails": {
     "viaPublicLink": "عبر الرابط العام",
     "readOnlyNotice": "صلاحيتك اطلاع فقط على هذا البلاغ — لا تملك صلاحية التعديل.",
-    "identityNotVerifiedNotice": "لم يتم التحقق من هوية مقدّم البلاغ بعد — تحقّق من مطابقة رقم الجوال مع سجل الطالب قبل إرسال أي رسالة حل.",
-    "confirmIdentityBtn": "تأكيد مطابقة الهوية",
     "sendReceiptWhatsApp": "إرسال رسالة الاستلام عبر واتساب",
     "startProcessing": "بدء المعالجة",
     "prepareCredentialsBtn": "تجهيز رسالة الحل",
     "editResolutionBtn": "تعديل رسالة الحل",
     "sendCredentialsWhatsApp": "إرسال رسالة الحل عبر واتساب",
-    "confirmCloseBtn": "تأكيد نجاح الدخول وإغلاق البلاغ",
     "reopenBtn": "إعادة فتح البلاغ",
     "escalateBtn": "تصعيد",
     "deleteBtn": "حذف البلاغ نهائياً",
@@ -921,7 +1004,13 @@
     "reasonLabel": "السبب:",
     "toLabel": "إلى:",
     "addNotePlaceholder": "أضف ملاحظة متابعة...",
-    "addBtn": "إضافة"
+    "addBtn": "إضافة",
+    "resolutionAttachmentsLabel": "مرفقات الحل (صورة أو ملف — اختياري)",
+    "resolutionAttachmentsHint": "تُرفق في رسالة واتساب كروابط تحميل يفتحها ولي الأمر بضغطة — مثل صورة لخطوات الدخول أو ملف تعليمات.",
+    "attachmentUploadError": "تعذّر رفع المرفقات. يرجى المحاولة مرة أخرى.",
+    "resolutionLinksLabel": "روابط تُرسل لولي الأمر",
+    "linkLabelPlaceholder": "وصف الرابط (اختياري)",
+    "addLinkBtn": "إضافة رابط"
   },
   "actions": {
     "complaint": {
@@ -937,7 +1026,13 @@
       "COMPLAINT_REOPENED": "تم إعادة فتح الملاحظة",
       "SURVEY_SUBMITTED": "تم استلام تقييم ولي الأمر",
       "INTERNAL_COMMENT_ADDED": "تعليق داخلي",
-      "COMPLAINT_DELETED": "تم حذف الملاحظة"
+      "COMPLAINT_DELETED": "تم حذف الملاحظة",
+      "COMPLAINT_EDITED": "تم تعديل بيانات الملاحظة",
+      "COMPLAINT_CONVERTED": "تم تحويل الملاحظة إلى بلاغ تقني",
+      "VISIT_CHECKED_IN": "تسجيل وصول ولي الأمر للفرع",
+      "VISIT_MET": "تمت مقابلة ولي الأمر",
+      "WHATSAPP_API_SENT": "تم الإرسال لولي الأمر عبر واتساب API",
+      "WHATSAPP_API_FAILED": "تعذّر الإرسال التلقائي عبر واتساب API"
     },
     "lostFound": {
       "ITEM_REGISTERED": "تم تسجيل الغرض",
@@ -947,7 +1042,9 @@
       "ITEM_RETURNED": "تم تسليم الغرض",
       "ITEM_CLOSED": "تم إغلاق السجل",
       "NOTE_ADDED": "ملاحظة",
-      "ITEM_DELETED": "تم حذف البلاغ"
+      "ITEM_DELETED": "تم حذف البلاغ",
+      "WHATSAPP_API_FAILED": "تعذّر الإرسال التلقائي عبر واتساب API",
+      "WHATSAPP_API_SENT": "تم الإرسال لولي الأمر عبر واتساب API"
     },
     "techSupport": {
       "TICKET_CREATED": "تم تسجيل البلاغ",
@@ -957,11 +1054,182 @@
       "PROCESSING_STARTED": "بدأ المختص المعالجة",
       "CREDENTIALS_PREPARED": "تم تجهيز رسالة الحل",
       "CREDENTIALS_SENT": "تم إرسال رسالة الحل",
-      "CONFIRMED_CLOSED": "تأكيد نجاح الدخول وإغلاق البلاغ",
+      "CONFIRMED_CLOSED": "إغلاق البلاغ",
       "TICKET_REOPENED": "تم إعادة فتح البلاغ",
       "TICKET_ESCALATED": "تم تصعيد البلاغ",
       "NOTE_ADDED": "ملاحظة",
-      "TICKET_DELETED": "تم حذف البلاغ"
+      "TICKET_DELETED": "تم حذف البلاغ",
+      "CONVERTED_FROM_COMPLAINT": "تم التحويل من ملاحظة",
+      "TICKET_EDITED": "تم تعديل بيانات البلاغ",
+      "WHATSAPP_API_SENT": "تم الإرسال لولي الأمر عبر واتساب API",
+      "WHATSAPP_API_FAILED": "تعذّر الإرسال التلقائي عبر واتساب API"
     }
+  },
+  "complaintEdit": {
+    "title": "تعديل بيانات الملاحظة",
+    "saveBtn": "حفظ التعديلات",
+    "noChanges": "لم يتم تغيير أي بيانات.",
+    "saveError": "حدث خطأ أثناء حفظ التعديلات. يرجى المحاولة مرة أخرى.",
+    "fields": {
+      "parentName": "اسم ولي الأمر",
+      "parentPhone": "رقم الجوال",
+      "parentEmail": "البريد الإلكتروني",
+      "studentName": "اسم الطالب",
+      "studentId": "رقم الهوية",
+      "branch": "الفرع",
+      "department": "القسم",
+      "stage": "المرحلة",
+      "grade": "الصف",
+      "complaintType": "التصنيف",
+      "subType": "التصنيف الفرعي",
+      "subject": "عنوان الملاحظة",
+      "details": "نص الملاحظة",
+      "extraTypes": "تصنيفات إضافية"
+    }
+  },
+  "complaintConvert": {
+    "title": "تحويل الملاحظة إلى بلاغ تقني",
+    "description": "ستُنقل هذه الملاحظة ببياناتها إلى قسم حل المشكلات التقنية وتُسند لمختص تقنية المعلومات، وتُزال من سجل الملاحظات (تبقى نسخة في أرشيف المحذوفات). رقم المتابعة الذي لدى ولي الأمر يبقى صالحاً.",
+    "confirmBtn": "تحويل",
+    "converting": "جاري التحويل...",
+    "successAlert": "تم التحويل إلى بلاغ تقني رقم {{id}}",
+    "error": "تعذّر تحويل الملاحظة. يرجى المحاولة مرة أخرى.",
+    "originalGrade": "الصف المكتوب في الملاحظة: {{grade}}"
+  },
+  "techSupportEdit": {
+    "title": "تعديل بيانات البلاغ التقني",
+    "saveBtn": "حفظ التعديلات",
+    "noChanges": "لم يتم تغيير أي بيانات.",
+    "saveError": "حدث خطأ أثناء حفظ التعديلات. يرجى المحاولة مرة أخرى.",
+    "fields": {
+      "studentName": "اسم الطالب",
+      "nationalId": "رقم الهوية",
+      "branch": "الفرع",
+      "stage": "المرحلة",
+      "grade": "الصف",
+      "parentName": "اسم ولي الأمر",
+      "relation": "صلة القرابة",
+      "parentPhone": "رقم الجوال",
+      "problemType": "نوع المشكلة",
+      "platform": "المنصة",
+      "platformLink": "رابط المنصة",
+      "details": "ملاحظات إضافية",
+      "department": "القسم",
+      "parentNationalId": "رقم هوية ولي الأمر"
+    }
+  },
+  "studentRecords": {
+    "title": "سجل الطلاب",
+    "subtitle": "مرجع لكل طالب على مدار العام الدراسي: ملاحظاته وبلاغاته التقنية ومفقوداته في مكان واحد",
+    "exportExcel": "تصدير Excel",
+    "studentsCount": "طلاب لديهم سجلات",
+    "repeatedCount": "طلاب تكررت سجلاتهم",
+    "recordsCount": "إجمالي السجلات",
+    "searchPlaceholder": "ابحث باسم الطالب، رقم الهوية، أو جوال ولي الأمر...",
+    "allYears": "كل الأعوام",
+    "repeatedOnly": "المتكررة فقط",
+    "student": "الطالب",
+    "nationalId": "رقم الهوية",
+    "total": "الإجمالي",
+    "lastRecord": "آخر سجل",
+    "repeated": "متكرر",
+    "repeatedTimes": "متكرر ×{{count}}",
+    "openRecord": "فتح سجل الطالب",
+    "noResults": "لا يوجد طلاب مطابقون",
+    "totalInYear": "إجمالي السجلات — {{year}}",
+    "mostRepeated": "الأكثر تكراراً",
+    "kind": "النوع",
+    "number": "الرقم",
+    "topic": "الموضوع",
+    "sheetStudents": "الطلاب",
+    "sheetRecords": "السجلات",
+    "kinds": {
+      "complaint": "ملاحظات",
+      "tech": "بلاغات تقنية",
+      "lostFound": "مفقودات"
+    }
+  },
+  "branchVisit": {
+    "pageTitle": "تسجيل وصول ولي الأمر",
+    "pageSubtitle": "أهلاً بكم. سجّلوا بياناتكم وسبب الزيارة، وسيستقبلكم المسؤول خلال دقائق.",
+    "reasonLabel": "سبب الزيارة",
+    "reasonPlaceholder": "مثال: الاستفسار عن درجات الطالب",
+    "detailsPlaceholder": "تفاصيل إضافية (اختياري)",
+    "submit": "تسجيل الوصول",
+    "successTitle": "تم تسجيل وصولكم",
+    "successWait": "يرجى الانتظار، تم إبلاغ المسؤول وسيستقبلكم قريباً.",
+    "keepNumber": "احتفظوا برقم الملاحظة لمتابعة حالتها لاحقاً.",
+    "badgeWaiting": "ولي الأمر بانتظار المقابلة",
+    "badgeMet": "زيارة فرع — تمت المقابلة",
+    "waitingNotice": "ولي الأمر في الفرع بانتظار المقابلة",
+    "arrivedAt": "وصل الساعة {{time}} ({{ago}})",
+    "notesPlaceholder": "ملخص المقابلة والحل المتفق عليه...",
+    "notesInternalHint": "يُحفظ كتعليق داخلي — لا يظهر لولي الأمر.",
+    "solvedInMeeting": "تم حل الملاحظة خلال المقابلة",
+    "confirmBtn": "تأكيد المقابلة",
+    "notesRequired": "يرجى كتابة ملخص المقابلة والحل.",
+    "confirmError": "تعذّر تأكيد المقابلة. حاول مرة أخرى.",
+    "noPermission": "تأكيد المقابلة متاح للمسند إليهم ومدير الفرع ومن لديه صلاحية التعديل.",
+    "metNotice": "تمت مقابلة ولي الأمر بواسطة {{name}} — {{time}}"
+  },
+  "branchQr": {
+    "title": "رموز QR لزيارات الفروع",
+    "subtitle": "اطبع رمز كل فرع وضعه في الاستقبال. يمسحه ولي الأمر عند وصوله ويسجّل بياناته وسبب الزيارة، فيصل إشعار للمسؤولين ليستقبلوه.",
+    "printPoster": "طباعة الملصق",
+    "downloadPng": "تنزيل صورة الرمز",
+    "posterTitle": "أهلاً بكم — سجّلوا وصولكم",
+    "posterStep1": "امسح الرمز بكاميرا الجوال.",
+    "posterStep2": "عبّئ بيانات الطالب وسبب الزيارة.",
+    "posterStep3": "انتظر قليلاً، سيستقبلك المسؤول."
+  },
+  "waApi": {
+    "title": "الربط مع واتساب API (تقنيات)",
+    "subtitle": "الإرسال لأولياء الأمور من رقم الإشعارات الرسمي، مع زر «تواصل مع الفرع» في كل رسالة يفتح محادثة مع رقم فرع الطالب — فلا يرد ولي الأمر على رقم الـ API.",
+    "enabled": "تفعيل الإرسال عبر واتساب API",
+    "branchNumbersTitle": "رقم واتساب كل فرع",
+    "branchNumbersHint": "الرقم الذي يفتحه زر «تواصل مع الفرع». الفرع بدون رقم لا يمكن الإرسال لطلابه عبر الـ API.",
+    "templatesTitle": "أسماء القوالب المعتمدة في تقنيات",
+    "language": "رمز لغة القوالب",
+    "templateNames": {
+      "complaintReceipt": "استلام ملاحظة",
+      "complaintResolution": "حل ملاحظة",
+      "techReceipt": "استلام بلاغ تقني",
+      "techResolution": "حل بلاغ تقني",
+      "visitMet": "شكر بعد زيارة الفرع (QR)",
+      "lostFoundReceipt": "استلام بلاغ مفقودات",
+      "lostFoundReturned": "تسليم غرض مفقود"
+    },
+    "guideTitle": "نصوص القوالب المقترحة لتقديمها للاعتماد",
+    "guideIntro": "أنشئ هذه القوالب الأربعة من بوابة تقنيات (Message Templates) بنفس الأسماء أعلاه، وانتظر اعتمادها من واتساب قبل التفعيل.",
+    "guideCategory": "الفئة: UTILITY — اللغة: Arabic (ar).",
+    "guideVars": "المتغيرات بنفس الترتيب في كل القوالب: {{1}} اسم ولي الأمر، {{2}} الرقم، {{3}} اسم الطالب (أو اسم الغرض في المفقودات)، {{4}} يختلف حسب القالب (مكتوب تحت كل نص)، {{5}} رابط المتابعة.",
+    "guideButton": "أضف زراً من نوع URL باسم «تواصل مع الفرع» برابط ديناميكي (منصة Meta لا تسمح برابط wa.me مباشرة، فالزر يفتح صفحة في النظام تحوّل ولي الأمر لمحادثة الفرع):",
+    "guideButtonExample": "ومثال المتغير:",
+    "saved": "تم الحفظ",
+    "sendReceiptApi": "إرسال الاستلام (واتساب API)",
+    "sendResolutionApi": "إرسال الحل (واتساب API)",
+    "confirmSend": "سيتم إرسال الرسالة الآن عبر واتساب API إلى {{phone}}. متابعة؟",
+    "sentOk": "تم إرسال الرسالة عبر واتساب API.",
+    "sendFailed": "تعذّر الإرسال عبر واتساب API.",
+    "deptNumbersTitle": "رقم واتساب خاص بقسم (اختياري)",
+    "deptNumbersHint": "إذا كان لقسم رقم منفصل (مثل القسم البريطاني) فيُستخدم بدلاً من رقم الفرع لكل طلاب هذا القسم. اتركه فارغاً لاستخدام رقم الفرع.",
+    "deptNumberPlaceholder": "فارغ = رقم الفرع",
+    "receiptVars": "{{3}} اسم الطالب — {{4}} اسم الفرع",
+    "resolutionVars": "{{3}} اسم الطالب — {{4}} تفاصيل الحل",
+    "visitVars": "{{3}} اسم الطالب — {{4}} اسم الفرع. يُرسل بعد تأكيد المقابلة لملاحظات رمز QR.",
+    "lostReceiptVars": "{{1}} اسم المُبلِّغ — {{3}} اسم الغرض — {{4}} اسم الفرع",
+    "lostReturnedVars": "{{1}} اسم المُبلِّغ — {{3}} اسم الغرض — {{4}} «تم التسليم إلى: …»",
+    "sendVisitApi": "إرسال رسالة الشكر (واتساب API)",
+    "sendReturnedApi": "إرسال التسليم (واتساب API)",
+    "autoSend": "إرسال تلقائي",
+    "autoSendHint": "رسالة الاستلام فور تسجيل الملاحظة / البلاغ التقني / بلاغ المفقودات، ورسالة الحل فور كتابته (وإغلاق البلاغ التقني)، ورسالة الشكر فور تأكيد مقابلة الفرع، ورسالة التسليم فور تسليم الغرض. إن فشل الإرسال يُسجَّل السبب في سجل الطلب وتبقى أزرار الإرسال اليدوي متاحة.",
+    "visitAutoNote": "سيصل لولي الأمر رسالة شكر تلقائياً عبر واتساب بعد التأكيد."
+  },
+  "contactBranch": {
+    "loading": "جارٍ فتح محادثة الفرع...",
+    "openChat": "فتح محادثة واتساب مع الفرع",
+    "notFound": "تعذّر العثور على رقم التواصل لهذا الطلب.",
+    "prefill": "السلام عليكم، أتواصل بخصوص الطلب رقم {{id}}",
+    "button": "تواصل مع الفرع عبر واتساب"
   }
 }

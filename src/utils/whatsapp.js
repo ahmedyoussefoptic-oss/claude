@@ -246,3 +246,19 @@ export function buildTechSupportShareMessage(ticket, branchName, template = DEFA
     link: internalRecordLink('/tech-support', ticket.id),
   });
 }
+
+// wa.me links can only carry text, so files attached to a message are sent
+// as download links appended to it. Messages go to parents in Arabic
+// regardless of the staff member's UI language, hence the fixed label.
+export function appendAttachmentLinks(message, attachments) {
+  if (!attachments?.length) return message;
+  return `${message}\n\nالمرفقات:\n${attachments.map((a) => a.fileUrl).join('\n')}`;
+}
+
+// Extra links IT adds to a tech-support resolution (resolutionLinks:
+// [{ label, url }]) — appended to the WhatsApp message like attachments.
+export function appendResolutionLinks(message, links) {
+  const list = (links || []).filter((l) => l?.url);
+  if (!list.length) return message;
+  return `${message}\n\nروابط مفيدة:\n${list.map((l) => (l.label ? `• ${l.label}: ${l.url}` : `• ${l.url}`)).join('\n')}`;
+}

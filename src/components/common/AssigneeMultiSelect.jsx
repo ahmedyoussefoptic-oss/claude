@@ -8,18 +8,43 @@ import { userBranches } from '../../utils/scope';
 // routed to them directly when it needs executive attention. `complaintType`
 // is optional and only affects sort priority (department match first) —
 // callers with no natural "type" concept (lost & found) can omit it.
-export function eligibleAssignees(staff, { branch, complaintType } = {}) {
+// `stage` (the student's grade) and `curriculum` (the record's department —
+// AMERICAN, BRITISH, ...) are optional too: within each group, staff whose
+// grade/curriculum limits (see Users.jsx) both cover the record come first —
+// those explicitly responsible for it ahead of those with no limit — and
+// staff whose limits exclude it come last. Options explicitly responsible
+// are flagged `coversGrade` / `coversCurriculum` for visible tags.
+export function eligibleAssignees(staff, { branch, complaintType, stage, curriculum } = {}) {
+  // 0 = explicitly listed, 1 = no limit (or nothing to match), 2 = excluded.
+  const match = (list, value) => {
+    if (!value || !Array.isArray(list) || !list.length) return 1;
+    return list.includes(value) ? 0 : 2;
+  };
+  const stageRank = (u) => {
+    const s = match(u.stages, stage);
+    const c = match(u.curricula, curriculum);
+    if (s === 2 || c === 2) return 9;
+    return s + c;
+  };
   return staff
     .filter((u) =>
-      ['SPECIALIST', 'UPPER_MANAGEMENT', 'ADMIN'].includes(u.role) &&
+      (['SPECIALIST', 'UPPER_MANAGEMENT', 'ADMIN'].includes(u.role) || u.isPrincipal === true || u.isQuality === true) &&
       u.active !== false &&
       (u.access === 'all' || !branch || userBranches(u).includes(branch))
     )
     .sort((a, b) => {
-      const aMatch = a.department === complaintType ? 0 : 1;
-      const bMatch = b.department === complaintType ? 0 : 1;
+      const types = Array.isArray(complaintType) ? complaintType : [complaintType];
+      const aMatch = types.includes(a.department) ? 0 : 1;
+      const bMatch = types.includes(b.department) ? 0 : 1;
       if (aMatch !== bMatch) return aMatch - bMatch;
+      if (stageRank(a) !== stageRank(b)) return stageRank(a) - stageRank(b);
       return (a.name || '').localeCompare(b.name || '', 'ar');
+    })
+    .map((u) => {
+      if (stageRank(u) === 9) return u;
+      const coversGrade = match(u.stages, stage) === 0;
+      const coversCurriculum = match(u.curricula, curriculum) === 0;
+      return coversGrade || coversCurriculum ? { ...u, coversGrade, coversCurriculum } : u;
     });
 }
 
@@ -73,6 +98,16 @@ export default function AssigneeMultiSelect({ options, selected, onChange, place
                   className="rounded border-slate-300 text-primary focus:ring-primary/30"
                 />
                 <span className="flex-1 text-slate-800">{o.name}{o.jobTitle ? ` — ${o.jobTitle}` : ''}</span>
+                {o.coversGrade && (
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 shrink-0">
+                    {t('assigneeSelect.gradeTag')}
+                  </span>
+                )}
+                {o.coversCurriculum && (
+                  <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-sky-50 text-sky-700 shrink-0">
+                    {t('assigneeSelect.curriculumTag')}
+                  </span>
+                )}
                 {ROLE_TAGS[o.role] && (
                   <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 shrink-0">
                     {ROLE_TAGS[o.role]}

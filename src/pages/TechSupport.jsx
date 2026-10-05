@@ -1,20 +1,20 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, Plus, ChevronLeft, Loader2, Wrench, Link2 } from 'lucide-react';
+import { Search, Plus, ChevronLeft, Loader2, Wrench, Link2, MessageSquare } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import useAuthStore from '../stores/useAuthStore';
-import { useBranches, useProblemTypes } from '../hooks/useOrgData';
+import { useBranches, useDepartments, useProblemTypes } from '../hooks/useOrgData';
 import TechSupportDetails from '../components/techSupport/TechSupportDetails';
 import TechSupportForm from '../components/techSupport/TechSupportForm';
-import { TICKET_STATUS_BADGE, OPEN_TICKET_STATUSES } from '../config/techSupport';
+import { TICKET_STATUS_BADGE, OPEN_TICKET_STATUSES, isTicketOverdue } from '../config/techSupport';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { branchScopeConstraintValues } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
-const FILTER_IDS = ['ALL', 'ASSIGNED', 'IN_PROGRESS', 'SOLVED', 'WAITING_CONFIRMATION', 'CLOSED'];
+const FILTER_IDS = ['ALL', 'ASSIGNED', 'IN_PROGRESS', 'SOLVED', 'CLOSED'];
 
 export default function TechSupport() {
   const { t, i18n } = useTranslation();
@@ -22,6 +22,7 @@ export default function TechSupport() {
   const listSep = i18n.language === 'ar' ? '، ' : ', ';
   const { userData } = useAuthStore();
   const branches = useBranches();
+  const departments = useDepartments();
   const problemTypes = useProblemTypes();
   const location = useLocation();
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -31,6 +32,8 @@ export default function TechSupport() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [branchFilter, setBranchFilter] = useState('');
+  // Curriculum/section (the ticket's `department`); '__NONE__' = not set.
+  const [departmentFilter, setDepartmentFilter] = useState('');
   const [publicLinkOnly, setPublicLinkOnly] = useState(false);
 
   // Keeps the open detail drawer's ticket in sync with live Firestore data —
@@ -95,9 +98,10 @@ export default function TechSupport() {
   const filteredTickets = useMemo(() => {
     return tickets.filter((tk) => {
       if (statusFilter === 'OPEN' && !OPEN_TICKET_STATUSES.includes(tk.status)) return false;
-      if (statusFilter === 'OVERDUE' && !tk.isOverdue) return false;
+      if (statusFilter === 'OVERDUE' && !isTicketOverdue(tk)) return false;
       if (!['ALL', 'OPEN', 'OVERDUE'].includes(statusFilter) && tk.status !== statusFilter) return false;
       if (branchFilter && tk.branch !== branchFilter) return false;
+      if (departmentFilter && (tk.department || '__NONE__') !== departmentFilter) return false;
       if (publicLinkOnly && tk.source !== 'PARENT_PORTAL') return false;
       if (search) {
         const term = search.toLowerCase();
@@ -106,10 +110,11 @@ export default function TechSupport() {
       }
       return true;
     });
-  }, [tickets, search, statusFilter, branchFilter, publicLinkOnly, userData]);
+  }, [tickets, search, statusFilter, branchFilter, departmentFilter, publicLinkOnly, userData]);
 
   const problemTypeName = (id) => problemTypes.find((pt) => pt.id === id)?.name || id;
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
+  const departmentName = (id) => departments.find((d) => d.id === id)?.name || id;
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -156,6 +161,15 @@ export default function TechSupport() {
               <option value="">{t('common.allBranches')}</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
+            <select
+              value={departmentFilter}
+              onChange={(e) => setDepartmentFilter(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white text-slate-600 shrink-0"
+            >
+              <option value="">{t('common.allDepartments')}</option>
+              {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+              <option value="__NONE__">{t('common.noDepartment')}</option>
+            </select>
             <button
               type="button"
               onClick={() => setPublicLinkOnly((v) => !v)}
@@ -200,6 +214,11 @@ export default function TechSupport() {
                             <Link2 className="w-3 h-3" />
                           </span>
                         )}
+                        {tk.hasInternalComment && (
+                          <span title={t('common.hasInternalComment')} className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-600 shrink-0">
+                            <MessageSquare className="w-3 h-3" />
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -210,7 +229,10 @@ export default function TechSupport() {
                       <Wrench className="w-4 h-4 text-slate-400" />
                       {problemTypeName(tk.problemType)}
                     </td>
-                    <td className="px-6 py-4 text-slate-600">{branchName(tk.branch)}</td>
+                    <td className="px-6 py-4 text-slate-600">
+                      {branchName(tk.branch)}
+                      {tk.department && <div className="text-xs text-slate-400 mt-0.5">{departmentName(tk.department)}</div>}
+                    </td>
                     <td className="px-6 py-4 text-slate-600">{tk.assignedToNames?.join(listSep) || '—'}</td>
                     <td className="px-6 py-4 text-slate-600" dir="ltr">
                       {tk.createdAt ? format(tk.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}
@@ -222,8 +244,7 @@ export default function TechSupport() {
                     </td>
                     <td className="px-6 py-4">
                       <MessageStatusIndicators
-                        receiptSentAt={tk.receiptMessageSentAt}
-                        resolutionSentAt={tk.resolutionMessageSentAt}
+                        record={tk}
                         showResolution={['WAITING_CONFIRMATION', 'CLOSED', 'REOPENED'].includes(tk.status)}
                       />
                     </td>

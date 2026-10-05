@@ -201,8 +201,7 @@ export default function LostFound() {
                     </td>
                     <td className="px-6 py-4">
                       <MessageStatusIndicators
-                        receiptSentAt={item.receiptMessageSentAt}
-                        resolutionSentAt={item.resolutionMessageSentAt}
+                        record={item}
                         showResolution={item.status === 'RETURNED'}
                       />
                     </td>

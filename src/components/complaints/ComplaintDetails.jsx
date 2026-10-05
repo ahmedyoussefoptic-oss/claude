@@ -1,26 +1,34 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, Trash2, Star, Link2, Mic, Square, Share2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, MessageSquare, Trash2, Star, Link2, Mic, Square, Share2, Pencil, Wrench, Armchair, Handshake } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../config/firebase';
+import { db, storage, functions } from '../../config/firebase';
+import { httpsCallable } from 'firebase/functions';
 import useAuthStore from '../../stores/useAuthStore';
+import { messageSentFields } from '../../utils/messageSent';
 import { useUsers } from '../../hooks/useUsers';
-import { useBranches } from '../../hooks/useOrgData';
-import { waLink, shareLink, buildReceiptMessage, buildResolutionMessage, buildComplaintShareMessage } from '../../utils/whatsapp';
+import { useBranches, useComplaintTypes } from '../../hooks/useOrgData';
+import { waLink, shareLink, buildReceiptMessage, buildResolutionMessage, buildComplaintShareMessage, appendAttachmentLinks } from '../../utils/whatsapp';
+import { MAX_PUBLIC_FILES, MAX_PUBLIC_FILE_BYTES } from '../../utils/publicSubmission';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
+import { useWhatsAppApi } from '../../hooks/useWhatsAppApi';
 import { ROLES } from '../../config/roles';
-import { userBranches } from '../../utils/scope';
+import { userBranches, canAccessTechSupport } from '../../utils/scope';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import ErrorBoundary from '../common/ErrorBoundary';
-import { format } from 'date-fns';
+import ComplaintEditForm from './ComplaintEditForm';
+import ComplaintConvertModal from './ComplaintConvertModal';
+import { complaintStatusLabel, complaintTypesOf } from '../../config/complaintTypes';
+import { format, formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
 const FLOW_STEP_KEYS = [
   { key: 'RECEIVED', match: () => true },
   { key: 'ASSIGNED', match: (l) => ['COMPLAINT_ASSIGNED', 'COMPLAINT_TRANSFERRED'].includes(l.action) },
   { key: 'IN_PROGRESS', match: (l) => l.action === 'COMPLAINT_ACKNOWLEDGED' },
-  { key: 'SOLVED', match: (l) => l.action === 'SOLUTION_ADDED' },
+  { key: 'SOLVED', match: (l) => l.action === 'SOLUTION_ADDED' || (l.action === 'VISIT_MET' && l.metadata?.solved) },
   { key: 'CLOSED', match: (l) => l.action === 'SURVEY_SUBMITTED' || l.action === 'COMPLAINT_CLOSED' },
 ];
 
@@ -48,7 +56,6 @@ export default function ComplaintDetails({ complaint, onClose }) {
 function ComplaintDetailsInner({ complaint, onClose }) {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
-  const getStatusName = (status) => t(`statuses.complaint.${status}`, status);
   const getActionName = (action) => t(`actions.complaint.${action}`, action);
   const RATING_LABELS = { resolutionSpeed: t('ratings.resolutionSpeed'), solutionQuality: t('ratings.solutionQuality'), staffProfessionalism: t('ratings.staffProfessionalism') };
   const FLOW_STEPS = FLOW_STEP_KEYS.map((s) => ({ ...s, label: t(`complaintDetails.flowSteps.${s.key}`) }));
@@ -57,7 +64,29 @@ function ComplaintDetailsInner({ complaint, onClose }) {
   const users = useUsers();
   const branches = useBranches();
   const branchName = branches.find((b) => b.id === complaint.branch)?.name || complaint.branch;
+  const complaintTypeList = useComplaintTypes();
+  const typeName = (id) => complaintTypeList.find((ct) => ct.id === id)?.name || id;
+  const categoryRows = [{ type: complaint.complaintType, subType: complaint.subType }, ...(Array.isArray(complaint.extraTypes) ? complaint.extraTypes : [])].filter((r) => r.type);
   const templates = useMessageTemplates();
+  const waApi = useWhatsAppApi();
+  const [waSending, setWaSending] = useState(null);
+  // Sends the receipt/resolution as an approved WhatsApp Business API
+  // template (server-side, see sendWhatsAppApiMessage) — the message carries
+  // a "تواصل مع الفرع" button to the branch's own number.
+  const sendViaApi = async (event) => {
+    if (!confirm(t('waApi.confirmSend', { phone: complaint.parentPhone }))) return;
+    setWaSending(event);
+    try {
+      // The function also records the receipt/resolution "sent by" fields.
+      await httpsCallable(functions, 'sendWhatsAppApiMessage')({ kind: 'complaint', docId: complaint.id, event });
+      alert(t('waApi.sentOk'));
+    } catch (err) {
+      console.error(err);
+      alert(err.message || t('waApi.sendFailed'));
+    } finally {
+      setWaSending(null);
+    }
+  };
   const [logs, setLogs] = useState([]);
   const [reply, setReply] = useState('');
   const [loading, setLoading] = useState(false);
@@ -78,6 +107,8 @@ function ComplaintDetailsInner({ complaint, onClose }) {
   const [recording, setRecording] = useState(false);
   const [recordingError, setRecordingError] = useState(null);
   const [pendingRecording, setPendingRecording] = useState(null);
+  const [solutionFiles, setSolutionFiles] = useState([]);
+  const solutionFileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
 
@@ -180,6 +211,51 @@ function ComplaintDetailsInner({ complaint, onClose }) {
   const inScope = isAdmin || userData?.access === 'all' || userBranches(userData).includes(complaint.branch);
   const canEdit = isAdmin || (inScope && userData?.perms?.edit === true);
   const canDelete = isAdmin || (inScope && userData?.perms?.delete === true);
+  // Converting moves the record into the tech-support module, so it also
+  // needs that module's access (same rule as firestore.rules' canAccessTechSupport).
+  const canConvert = canEdit
+    && canAccessTechSupport(userData)
+    && !['SOLVED', 'CLOSED', 'REJECTED'].includes(complaint.status);
+  const navigate = useNavigate();
+  const [showEdit, setShowEdit] = useState(false);
+  const [showConvert, setShowConvert] = useState(false);
+
+  // Branch QR check-in (see BranchVisit.jsx): a parent waiting at the
+  // branch. Confirming goes through the confirmBranchVisit Cloud Function so
+  // assignees and branch principals can do it without the edit permission.
+  const [visitNotes, setVisitNotes] = useState('');
+  const [visitSolved, setVisitSolved] = useState(true);
+  const [visitSaving, setVisitSaving] = useState(false);
+  const isVisitWaiting = complaint.visitStatus === 'WAITING';
+  const canConfirmVisit = isVisitWaiting && (
+    canEdit || (complaint.assignedTo || []).includes(user?.uid) || (userData?.isPrincipal === true && inScope)
+  );
+  const handleConfirmVisit = async () => {
+    if (!visitNotes.trim()) {
+      alert(t('branchVisit.notesRequired'));
+      return;
+    }
+    setVisitSaving(true);
+    try {
+      await httpsCallable(functions, 'confirmBranchVisit')({ complaintDocId: complaint.id, notes: visitNotes, solved: visitSolved });
+      setVisitNotes('');
+      setActiveTab('internal');
+      // The thank-you WhatsApp message goes out automatically (server
+      // trigger on visitStatus -> MET) when auto-send is on.
+    } catch (err) {
+      console.error(err);
+      alert(err.message || t('branchVisit.confirmError'));
+    } finally {
+      setVisitSaving(false);
+    }
+  };
+
+  const handleConverted = ({ ticketId, ticketDocId }) => {
+    setShowConvert(false);
+    alert(t('complaintConvert.successAlert', { id: ticketId }));
+    onClose();
+    navigate(`/tech-support?openId=${ticketDocId}`);
+  };
 
   useEffect(() => {
     const q = query(
@@ -217,7 +293,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
       if (actionType === 'ACKNOWLEDGE') {
         await addLog('COMPLAINT_ACKNOWLEDGED', {}, 'IN_PROGRESS');
       } else if (actionType === 'ESCALATE') {
-        await addLog('COMPLAINT_ESCALATED', {}, 'ESCALATED');
+        await addLog('COMPLAINT_ESCALATED', {}, { status: 'ESCALATED', wasEscalated: true });
       } else if (actionType === 'SOLVE') {
         if (!reply.trim()) {
           alert(t('complaintDetails.solutionRequiredAlert'));
@@ -248,9 +324,33 @@ function ComplaintDetailsInner({ complaint, onClose }) {
             alert(t('complaintDetails.recordingUploadFailedAlert', { message: uploadErr.message }));
           }
         }
+        // Files go into the resolution WhatsApp message as download links
+        // (wa.me can't carry files). Same best-effort rule as the recording.
+        if (solutionFiles.length) {
+          const uploaded = [];
+          for (const file of solutionFiles) {
+            try {
+              const fileRef = ref(storage, `complaints/${complaint.complaintId}/${Date.now()}_${file.name}`);
+              await uploadBytes(fileRef, file);
+              uploaded.push({
+                fileName: file.name,
+                fileUrl: await getDownloadURL(fileRef),
+                mimeType: file.type,
+                size: file.size,
+                uploadedBy: user.uid,
+                createdAt: new Date().toISOString(),
+              });
+            } catch (uploadErr) {
+              console.error('Solution attachment upload failed:', file.name, uploadErr);
+              alert(t('complaintDetails.solutionFileUploadFailedAlert', { name: file.name }));
+            }
+          }
+          if (uploaded.length) updates.solutionAttachments = [...(complaint.solutionAttachments || []), ...uploaded];
+        }
         await addLog('SOLUTION_ADDED', { solutionDetails: reply }, updates);
         setReply('');
         setPendingRecording(null);
+        setSolutionFiles([]);
       } else if (actionType === 'COMMENT') {
         if (!reply.trim()) return;
         await addLog('INTERNAL_COMMENT_ADDED', { comment: reply });
@@ -341,12 +441,24 @@ function ComplaintDetailsInner({ complaint, onClose }) {
             <div className="flex items-center gap-3 mb-1">
               <h2 className="text-xl font-bold text-slate-900">{t('complaintDetails.titlePrefix')} #{complaint.complaintId}</h2>
               <span className={`px-2.5 py-1 rounded-md text-xs font-medium border ${getStatusBadge(complaint.status)}`}>
-                {getStatusName(complaint.status)}
+                {complaintStatusLabel(complaint, t)}
               </span>
               {complaint.source === 'PARENT_PORTAL' && (
                 <span className="px-2.5 py-1 rounded-md text-xs font-medium border bg-primary/10 text-primary border-primary/20 flex items-center gap-1">
                   <Link2 className="w-3 h-3" />
                   {t('complaintDetails.viaPublicLink')}
+                </span>
+              )}
+              {complaint.viaVisitQr && (
+                <span className={`px-2.5 py-1 rounded-md text-xs font-medium border flex items-center gap-1 ${isVisitWaiting ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-teal-100 text-teal-700 border-teal-200'}`}>
+                  <Armchair className="w-3 h-3" />
+                  {t(isVisitWaiting ? 'branchVisit.badgeWaiting' : 'branchVisit.badgeMet')}
+                </span>
+              )}
+              {complaint.hasInternalComment && (
+                <span className="px-2.5 py-1 rounded-md text-xs font-medium border bg-amber-100 text-amber-700 border-amber-200 flex items-center gap-1">
+                  <MessageSquare className="w-3 h-3" />
+                  {t('common.hasInternalComment')}
                 </span>
               )}
             </div>
@@ -381,6 +493,72 @@ function ComplaintDetailsInner({ complaint, onClose }) {
               {t('complaintDetails.readOnlyNotice')}
             </div>
           )}
+          {complaint.viaVisitQr && isVisitWaiting && (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 space-y-3 print:hidden">
+              <p className="text-sm font-bold text-rose-800 flex items-center gap-2">
+                <Armchair className="w-4 h-4" />
+                {t('branchVisit.waitingNotice')}
+                {complaint.visitArrivedAt && (
+                  <span className="font-normal text-rose-700">
+                    — {t('branchVisit.arrivedAt', {
+                      time: format(complaint.visitArrivedAt.toDate(), 'p', { locale: dateLocale }),
+                      ago: formatDistanceToNow(complaint.visitArrivedAt.toDate(), { addSuffix: true, locale: dateLocale }),
+                    })}
+                  </span>
+                )}
+              </p>
+              {canConfirmVisit ? (
+                <>
+                  <textarea
+                    value={visitNotes}
+                    onChange={(e) => setVisitNotes(e.target.value)}
+                    rows={3}
+                    placeholder={t('branchVisit.notesPlaceholder')}
+                    className="w-full bg-white border border-rose-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-rose-200 outline-none resize-none"
+                  />
+                  <p className="text-xs text-rose-700/80">{t('branchVisit.notesInternalHint')}</p>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="flex items-center gap-2 text-sm text-slate-700">
+                        <input type="checkbox" checked={visitSolved} onChange={(e) => setVisitSolved(e.target.checked)} />
+                        {t('branchVisit.solvedInMeeting')}
+                      </label>
+                      {waApi.enabled && waApi.autoSend !== false && complaint.parentPhone && (
+                        <p className="text-xs text-slate-500">{t('waApi.visitAutoNote')}</p>
+                      )}
+                    </div>
+                    <button
+                      disabled={visitSaving}
+                      onClick={handleConfirmVisit}
+                      className="px-4 py-2 bg-rose-600 text-white rounded-lg text-sm font-medium hover:bg-rose-700 transition-colors flex items-center gap-2 disabled:opacity-60"
+                    >
+                      {visitSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Handshake className="w-4 h-4" />}
+                      {t('branchVisit.confirmBtn')}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-rose-700">{t('branchVisit.noPermission')}</p>
+              )}
+            </div>
+          )}
+          {complaint.viaVisitQr && complaint.visitStatus === 'MET' && (
+            <div className="bg-teal-50 border border-teal-200 text-teal-800 text-sm rounded-xl p-3 flex flex-wrap items-center gap-2 print:hidden">
+              <Handshake className="w-4 h-4 shrink-0" />
+              <span className="flex-1">
+                {t('branchVisit.metNotice', {
+                  name: complaint.visitMetByName || '—',
+                  time: complaint.visitMetAt ? format(complaint.visitMetAt.toDate(), 'PP p', { locale: dateLocale }) : '',
+                })}
+              </span>
+              {waApi.enabled && complaint.parentPhone && !complaint.visitMessageSentAt && (
+                <button disabled={!!waSending} onClick={() => sendViaApi('visitMet')} className="px-3 py-1.5 bg-emerald-700 text-white rounded-lg text-xs font-medium hover:bg-emerald-800 flex items-center gap-1.5 disabled:opacity-60">
+                  {waSending === 'visitMet' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageCircle className="w-3.5 h-3.5" />}
+                  {t('waApi.sendVisitApi')}
+                </button>
+              )}
+            </div>
+          )}
           <div className="flex flex-wrap gap-2 print:hidden">
             <a
               href={shareLink(buildComplaintShareMessage(complaint, branchName, templates.complaintShare))}
@@ -391,6 +569,18 @@ function ComplaintDetailsInner({ complaint, onClose }) {
               <Share2 className="w-4 h-4" />
               {t('common.shareWithStaff')}
             </a>
+            {canEdit && (
+              <button disabled={loading} onClick={() => setShowEdit(true)} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors flex items-center gap-2">
+                <Pencil className="w-4 h-4" />
+                {t('complaintDetails.editDetailsBtn')}
+              </button>
+            )}
+            {canConvert && (
+              <button disabled={loading} onClick={() => setShowConvert(true)} className="px-4 py-2 bg-white border border-primary/40 text-primary rounded-lg text-sm font-medium hover:bg-primary/5 transition-colors flex items-center gap-2">
+                <Wrench className="w-4 h-4" />
+                {t('complaintDetails.convertToTechBtn')}
+              </button>
+            )}
             {canEdit && complaint.status === 'RECEIVED' && (
               <button disabled={loading} onClick={() => handleAction('ACKNOWLEDGE')} className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors">
                 {t('complaintDetails.acknowledge')}
@@ -421,24 +611,36 @@ function ComplaintDetailsInner({ complaint, onClose }) {
                 href={waLink(complaint.parentPhone, buildReceiptMessage(complaint, templates.receipt))}
                 target="_blank"
                 rel="noreferrer"
-                onClick={() => updateDoc(doc(db, 'complaints', complaint.id), { receiptMessageSentAt: serverTimestamp() })}
+                onClick={() => updateDoc(doc(db, 'complaints', complaint.id), messageSentFields('receipt', user, userData))}
                 className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
               >
                 <MessageCircle className="w-4 h-4" />
                 {t('common.sendReceiptWhatsApp')}
               </a>
             )}
+            {waApi.enabled && !complaint.receiptMessageSentAt && complaint.parentPhone && (
+              <button disabled={!!waSending} onClick={() => sendViaApi('receipt')} className="px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm font-medium hover:bg-emerald-800 transition-all flex items-center gap-2 disabled:opacity-60">
+                {waSending === 'receipt' ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                {t('waApi.sendReceiptApi')}
+              </button>
+            )}
             {['SOLVED', 'CLOSED'].includes(complaint.status) && complaint.solutionDetails && complaint.parentPhone && (
               <a
-                href={waLink(complaint.parentPhone, buildResolutionMessage(complaint, complaint.solutionDetails, templates.resolution))}
+                href={waLink(complaint.parentPhone, appendAttachmentLinks(buildResolutionMessage(complaint, complaint.solutionDetails, templates.resolution), complaint.solutionAttachments))}
                 target="_blank"
                 rel="noreferrer"
-                onClick={() => updateDoc(doc(db, 'complaints', complaint.id), { resolutionMessageSentAt: serverTimestamp() })}
+                onClick={() => updateDoc(doc(db, 'complaints', complaint.id), messageSentFields('resolution', user, userData))}
                 className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
               >
                 <MessageCircle className="w-4 h-4" />
                 {t('common.sendResolutionWhatsApp')}
               </a>
+            )}
+            {waApi.enabled && ['SOLVED', 'CLOSED'].includes(complaint.status) && complaint.solutionDetails && complaint.parentPhone && (
+              <button disabled={!!waSending} onClick={() => sendViaApi('resolution')} className="px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm font-medium hover:bg-emerald-800 transition-all flex items-center gap-2 disabled:opacity-60">
+                {waSending === 'resolution' ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                {t('waApi.sendResolutionApi')}
+              </button>
             )}
             {canDelete && (
               <button disabled={loading} onClick={handleDelete} className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors flex items-center gap-2 mr-auto">
@@ -525,7 +727,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
               )}
               <div className="space-y-3">
                 <AssigneeMultiSelect
-                  options={eligibleAssignees(users, { branch: complaint.branch, complaintType: complaint.complaintType })}
+                  options={eligibleAssignees(users, { branch: complaint.branch, complaintType: complaintTypesOf(complaint), stage: complaint.stage, curriculum: complaint.department })}
                   selected={selectedAssignees}
                   onChange={setSelectedAssignees}
                   placeholder={t('complaintDetails.selectStaffPlaceholder')}
@@ -572,9 +774,12 @@ function ComplaintDetailsInner({ complaint, onClose }) {
           <div className="bg-white p-5 rounded-xl border border-slate-100 shadow-sm">
             <div className="flex items-center justify-between mb-3 gap-2">
               <h3 className="font-bold text-slate-900 text-lg">{complaint.subject || t('complaintDetails.basicDetails')}</h3>
-              <div className="flex gap-1.5 shrink-0">
-                <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded whitespace-nowrap">{complaint.complaintType}</span>
-                {complaint.subType && <span className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded whitespace-nowrap">{complaint.subType}</span>}
+              <div className="flex flex-wrap justify-end gap-1.5">
+                {categoryRows.map((r, i) => (
+                  <span key={`${r.type}-${i}`} className={`text-xs px-2 py-1 rounded whitespace-nowrap ${i === 0 ? 'bg-primary/10 text-primary' : 'bg-slate-100 text-slate-600'}`}>
+                    {[typeName(r.type), r.subType].filter(Boolean).join(' — ')}
+                  </span>
+                ))}
               </div>
             </div>
             <p className="text-slate-600 leading-relaxed text-sm whitespace-pre-wrap">
@@ -598,6 +803,19 @@ function ComplaintDetailsInner({ complaint, onClose }) {
                         <span dir="ltr">{file.fileName}</span>
                       </a>
                     )
+                  ))}
+                </div>
+              </div>
+            )}
+            {complaint.solutionAttachments?.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <h4 className="text-sm font-medium text-slate-700 mb-2">{t('complaintDetails.solutionAttachmentsLabel')}</h4>
+                <div className="flex flex-wrap gap-2">
+                  {complaint.solutionAttachments.map((file) => (
+                    <a key={file.fileUrl} href={file.fileUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-lg text-sm text-emerald-700 hover:bg-emerald-100 transition-colors">
+                      <Paperclip className="w-4 h-4" />
+                      <span dir="ltr">{file.fileName}</span>
+                    </a>
                   ))}
                 </div>
               </div>
@@ -638,6 +856,17 @@ function ComplaintDetailsInner({ complaint, onClose }) {
                       {log.metadata?.reason && (
                         <div className="mt-2 p-3 bg-red-50 text-red-800 rounded-lg text-sm border border-red-100">
                           <strong>{t('complaintDetails.reasonLabel')}</strong> {log.metadata.reason}
+                        </div>
+                      )}
+                      {log.metadata?.changes?.length > 0 && (
+                        <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200 space-y-1">
+                          {log.metadata.changes.map((c) => (
+                            <p key={c.field}>
+                              <strong>{t(`complaintEdit.fields.${c.field}`, c.field)}:</strong>{' '}
+                              <span className="text-red-700 line-through">{c.from || '—'}</span>{' ← '}
+                              <span className="text-emerald-700">{c.to || '—'}</span>
+                            </p>
+                          ))}
                         </div>
                       )}
                       {log.metadata?.toUserNames?.length > 0 && (
@@ -699,6 +928,44 @@ function ComplaintDetailsInner({ complaint, onClose }) {
                   {dictating ? t('complaintDetails.stopDictation') : t('complaintDetails.startDictation')}
                 </button>
               )}
+              <button
+                type="button"
+                onClick={() => solutionFileInputRef.current?.click()}
+                className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+              >
+                <Paperclip className="w-3.5 h-3.5" />
+                {t('complaintDetails.attachSolutionFile')}
+              </button>
+              <input
+                ref={solutionFileInputRef}
+                type="file"
+                multiple
+                accept="image/*,.pdf,.doc,.docx"
+                className="hidden"
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files || []);
+                  e.target.value = '';
+                  const oversized = picked.find((f) => f.size > MAX_PUBLIC_FILE_BYTES);
+                  if (oversized) {
+                    alert(t('publicReport.fileSizeError', { name: oversized.name, max: (MAX_PUBLIC_FILE_BYTES / 1024 / 1024).toFixed(0) }));
+                    return;
+                  }
+                  if (solutionFiles.length + picked.length > MAX_PUBLIC_FILES) {
+                    alert(t('publicReport.maxFilesError', { count: MAX_PUBLIC_FILES }));
+                    return;
+                  }
+                  setSolutionFiles((prev) => [...prev, ...picked]);
+                }}
+              />
+              {solutionFiles.map((file, i) => (
+                <span key={`${file.name}-${i}`} className="inline-flex items-center gap-1.5 text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
+                  <Paperclip className="w-3 h-3" />
+                  <span dir="ltr">{file.name}</span>
+                  <button type="button" onClick={() => setSolutionFiles((prev) => prev.filter((_, j) => j !== i))} className="hover:text-red-600">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              ))}
               {pendingRecording && (
                 <span className="inline-flex items-center gap-1.5 text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full">
                   <Mic className="w-3 h-3" />
@@ -738,6 +1005,8 @@ function ComplaintDetailsInner({ complaint, onClose }) {
         </div>
 
       </div>
+      {showEdit && <ComplaintEditForm complaint={complaint} onClose={() => setShowEdit(false)} />}
+      {showConvert && <ComplaintConvertModal complaint={complaint} onClose={() => setShowConvert(false)} onConverted={handleConverted} />}
     </div>
   );
 }

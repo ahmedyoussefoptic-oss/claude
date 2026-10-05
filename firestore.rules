@@ -52,7 +52,16 @@ service cloud.firestore {
     // parent's call and log the ticket before it ever reaches IT.
     function canAccessTechSupport() {
       return isAdmin() ||
-        (myDoc() != null && (myDoc().get('department', null) == 'IT' || myDoc().get('role', null) == 'CUSTOMER_SERVICE'));
+        (myDoc() != null && (
+          myDoc().get('department', null) == 'IT' ||
+          myDoc().get('role', null) == 'CUSTOMER_SERVICE' ||
+          // School principals are auto-assigned every public-link ticket in
+          // their branch (see findPublicAssignees in functions/index.js).
+          myDoc().get('isPrincipal', false) == true ||
+          // Quality officers are auto-assigned every complaint and ticket
+          // in their branches (see findAutoAssignees).
+          myDoc().get('isQuality', false) == true
+        ));
     }
 
     // A narrow allowance for the public parent-tracking portal: an

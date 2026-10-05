@@ -1,16 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle, Link2, UserPlus, Trash2 } from 'lucide-react';
+import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle, Link2, UserPlus, Trash2, GraduationCap } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { db, functions } from '../../config/firebase';
+import { httpsCallable } from 'firebase/functions';
 import useAuthStore from '../../stores/useAuthStore';
+import { messageSentFields } from '../../utils/messageSent';
 import { useUsers } from '../../hooks/useUsers';
-import { useBranches, useItemCategories } from '../../hooks/useOrgData';
+import { useBranches, useDepartments, useItemCategories } from '../../hooks/useOrgData';
 import { ITEM_STATUS_BADGE } from '../../config/lostFound';
 import { ROLES } from '../../config/roles';
 import { userBranches } from '../../utils/scope';
 import { waLink, buildLostFoundReceiptMessage, buildLostFoundResolutionMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
+import { useWhatsAppApi } from '../../hooks/useWhatsAppApi';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import ErrorBoundary from '../common/ErrorBoundary';
 import { format } from 'date-fns';
@@ -34,6 +37,22 @@ function LostFoundDetailsInner({ item, onClose }) {
   const branches = useBranches();
   const itemCategories = useItemCategories();
   const templates = useMessageTemplates();
+  const waApi = useWhatsAppApi();
+  const [waSending, setWaSending] = useState(null);
+  const sendViaApi = async (event) => {
+    if (!confirm(t('waApi.confirmSend', { phone: item.reporterPhone }))) return;
+    setWaSending(event);
+    try {
+      // The function also records the receipt/resolution "sent by" fields.
+      await httpsCallable(functions, 'sendWhatsAppApiMessage')({ kind: 'lostFound', docId: item.id, event });
+      alert(t('waApi.sentOk'));
+    } catch (err) {
+      console.error(err);
+      alert(err.message || t('waApi.sendFailed'));
+    } finally {
+      setWaSending(null);
+    }
+  };
   const [logs, setLogs] = useState([]);
   const [note, setNote] = useState('');
   const [returnedTo, setReturnedTo] = useState('');
@@ -154,6 +173,9 @@ function LostFoundDetailsInner({ item, onClose }) {
   const reportTypeName = t(`lostFoundCommon.reportTypes.${item.reportType}`, item.reportType);
   const categoryName = itemCategories.find((c) => c.id === item.category)?.name || item.category;
   const branchName = branches.find((b) => b.id === item.branch)?.name || item.branch;
+  const departments = useDepartments();
+  const departmentName = item.department ? (departments.find((d) => d.id === item.department)?.name || item.department) : '';
+  const hasStudent = item.studentName || item.studentId || item.stage || item.grade || item.department;
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex justify-end">
@@ -191,12 +213,18 @@ function LostFoundDetailsInner({ item, onClose }) {
                 href={waLink(item.reporterPhone, buildLostFoundReceiptMessage(item, templates.lostFoundReceipt))}
                 target="_blank"
                 rel="noreferrer"
-                onClick={() => updateDoc(doc(db, 'lostFoundItems', item.id), { receiptMessageSentAt: serverTimestamp() })}
+                onClick={() => updateDoc(doc(db, 'lostFoundItems', item.id), messageSentFields('receipt', user, userData))}
                 className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
               >
                 <MessageCircle className="w-4 h-4" />
                 {t('common.sendReceiptWhatsApp')}
               </a>
+            )}
+            {waApi.enabled && !item.receiptMessageSentAt && item.reporterPhone && (
+              <button disabled={!!waSending} onClick={() => sendViaApi('receipt')} className="px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm font-medium hover:bg-emerald-800 transition-all flex items-center gap-2 disabled:opacity-60">
+                {waSending === 'receipt' ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                {t('waApi.sendReceiptApi')}
+              </button>
             )}
             {canEdit && item.status === 'UNCLAIMED' && (
               <button disabled={loading} onClick={() => handleAction('MATCH')} className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors">
@@ -213,12 +241,18 @@ function LostFoundDetailsInner({ item, onClose }) {
                 href={waLink(item.reporterPhone, buildLostFoundResolutionMessage(item, templates.lostFoundResolution))}
                 target="_blank"
                 rel="noreferrer"
-                onClick={() => updateDoc(doc(db, 'lostFoundItems', item.id), { resolutionMessageSentAt: serverTimestamp() })}
+                onClick={() => updateDoc(doc(db, 'lostFoundItems', item.id), messageSentFields('resolution', user, userData))}
                 className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
               >
                 <MessageCircle className="w-4 h-4" />
                 {t('common.sendResolutionWhatsApp')}
               </a>
+            )}
+            {waApi.enabled && item.status === 'RETURNED' && item.reporterPhone && (
+              <button disabled={!!waSending} onClick={() => sendViaApi('returned')} className="px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm font-medium hover:bg-emerald-800 transition-all flex items-center gap-2 disabled:opacity-60">
+                {waSending === 'returned' ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                {t('waApi.sendReturnedApi')}
+              </button>
             )}
             {canDelete && (
               <button disabled={loading} onClick={handleDelete} className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors flex items-center gap-2 mr-auto">
@@ -278,6 +312,19 @@ function LostFoundDetailsInner({ item, onClose }) {
               </div>
             </div>
           </div>
+
+          {hasStudent && (
+            <div className="bg-white p-4 rounded-xl border border-slate-100 flex items-start gap-3 shadow-sm">
+              <div className="w-10 h-10 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+                <GraduationCap className="w-5 h-5" />
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 mb-0.5">{t('lostFoundDetails.studentLabel')}</p>
+                <p className="font-medium text-slate-900">{item.studentName || '—'}{item.studentId && <span className="text-sm text-slate-500 font-normal mr-2" dir="ltr">{item.studentId}</span>}</p>
+                <p className="text-sm text-slate-500 mt-1">{[departmentName, item.stage, item.grade].filter(Boolean).join(' — ') || '—'}</p>
+              </div>
+            </div>
+          )}
 
           {item.reporterName && (
             <div className="bg-white p-4 rounded-xl border border-slate-100 flex items-start gap-3 shadow-sm">

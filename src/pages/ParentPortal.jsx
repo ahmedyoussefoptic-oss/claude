@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, Loader2, CheckCircle2, Star, Send } from 'lucide-react';
+import { Search, Loader2, CheckCircle2, Star, Send, MessageCircle } from 'lucide-react';
 import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../config/firebase';
@@ -21,7 +21,9 @@ import LanguageSwitcher from '../components/common/LanguageSwitcher';
 const TYPE_CONFIG = {
   complaint: { collection: 'complaints', surveyStatus: 'SOLVED', allowReopen: true },
   lostFound: { collection: 'lostFoundItems', surveyStatus: 'RETURNED', allowReopen: false },
-  techSupport: { collection: null, surveyStatus: 'WAITING_CONFIRMATION', allowReopen: true },
+  // Tech tickets close as soon as the resolution is sent (no waiting on the
+  // parent), so the optional rating/reopen is offered on the closed ticket.
+  techSupport: { collection: null, surveyStatus: 'CLOSED', allowReopen: true },
 };
 
 const RATING_KEYS = ['resolutionSpeed', 'solutionQuality', 'staffProfessionalism'];
@@ -73,7 +75,7 @@ export default function ParentPortal() {
       const { data } = await trackComplaint({ complaintId: ticketId.trim() });
 
       setResult(data);
-      if (data.satisfactionRate || data.status === 'CLOSED') {
+      if (data.rated || (data.status === 'CLOSED' && data.type !== 'techSupport')) {
         setSurveyDone(true);
       }
     } catch (err) {
@@ -230,6 +232,17 @@ export default function ParentPortal() {
                   <h2 className="text-xl font-bold text-slate-900 font-mono">#{result.complaintId}</h2>
                   {(result.studentName || result.itemName) && (
                     <p className="text-sm text-slate-500 mt-1">{result.studentName || result.itemName}</p>
+                  )}
+                  {result.contactNumber && (
+                    <a
+                      href={`https://wa.me/${result.contactNumber}?text=${encodeURIComponent(t('contactBranch.prefill', { id: result.complaintId }))}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1.5 mt-3 px-3 py-1.5 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      {t('contactBranch.button')}
+                    </a>
                   )}
                 </div>
                 <span className="px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-100 text-amber-800 border border-amber-200">

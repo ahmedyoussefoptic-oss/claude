@@ -1,13 +1,14 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
-import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive } from 'lucide-react';
+import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode } from 'lucide-react';
 import { useState } from 'react';
 import NotificationBell from './NotificationBell';
 import Watermark from '../common/Watermark';
 import SystemCredit from '../common/SystemCredit';
 import LanguageSwitcher from '../common/LanguageSwitcher';
 import logo from '../../assets/logo.png';
+import { canAccessTechSupport } from '../../utils/scope';
 
 export default function AppLayout() {
   const { t } = useTranslation();
@@ -27,6 +28,7 @@ export default function AppLayout() {
     { name: t('nav.lostFound'), path: '/lost-found', icon: PackageSearch },
     { name: t('nav.flowMap'), path: '/flow-map', icon: Map },
     { name: t('nav.advancedSearch'), path: '/search', icon: Search },
+    { name: t('nav.studentRecords'), path: '/students', icon: GraduationCap },
     { name: t('nav.reports'), path: '/reports', icon: FileBarChart },
   ];
 
@@ -34,12 +36,15 @@ export default function AppLayout() {
   // access is restricted to the IT department's own specialists, admins,
   // and Customer Service (they're the ones who take the parent's call and
   // log the ticket in the first place, before it reaches IT).
-  if (role === 'ADMIN' || role === 'CUSTOMER_SERVICE' || userData?.department === 'IT') {
+  if (canAccessTechSupport(userData)) {
     navItems.splice(3, 0, { name: t('nav.techSupport'), path: '/tech-support', icon: Wrench });
   }
 
   if (role === 'ADMIN' || userData?.perms?.users) {
     navItems.push({ name: t('nav.users'), path: '/users', icon: User });
+  }
+  if (role === 'ADMIN' || userData?.isPrincipal) {
+    navItems.push({ name: t('nav.branchQr'), path: '/branch-qr', icon: QrCode });
   }
   if (role === 'ADMIN') {
     navItems.push({ name: t('nav.settings'), path: '/settings', icon: Settings });
