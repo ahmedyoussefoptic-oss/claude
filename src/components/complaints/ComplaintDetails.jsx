@@ -287,6 +287,23 @@ function ComplaintDetailsInner({ complaint, onClose }) {
     }
   };
 
+  // Files picked for a solution (final or partial) go to Storage; a failed
+  // upload never blocks saving the solution text.
+  const uploadSolutionFiles = async () => {
+    const uploaded = [];
+    for (const file of solutionFiles) {
+      try {
+        const fileRef = ref(storage, `complaints/${complaint.complaintId}/${Date.now()}_${file.name}`);
+        await uploadBytes(fileRef, file);
+        uploaded.push({ fileName: file.name, fileUrl: await getDownloadURL(fileRef), mimeType: file.type, size: file.size, uploadedBy: user.uid, createdAt: new Date().toISOString() });
+      } catch (uploadErr) {
+        console.error('Solution attachment upload failed:', file.name, uploadErr);
+        alert(t('complaintDetails.solutionFileUploadFailedAlert', { name: file.name }));
+      }
+    }
+    return uploaded;
+  };
+
   const handleAction = async (actionType) => {
     setLoading(true);
     try {
@@ -294,12 +311,37 @@ function ComplaintDetailsInner({ complaint, onClose }) {
         await addLog('COMPLAINT_ACKNOWLEDGED', {}, 'IN_PROGRESS');
       } else if (actionType === 'ESCALATE') {
         await addLog('COMPLAINT_ESCALATED', {}, { status: 'ESCALATED', wasEscalated: true });
-      } else if (actionType === 'SOLVE') {
+      } else if (actionType === 'PARTIAL') {
+        // One assignee's part of a multi-part complaint — kept in the
+        // activity log (any assignee may add one) and merged into the final
+        // solution when the complaint is solved.
         if (!reply.trim()) {
+          alert(t('complaintDetails.partialRequiredAlert'));
+          return;
+        }
+        const files = await uploadSolutionFiles();
+        await addLog('PARTIAL_SOLUTION_ADDED', { partialSolution: reply.trim(), ...(files.length ? { attachments: files } : {}) });
+        setReply('');
+        setSolutionFiles([]);
+      } else if (actionType === 'SOLVE') {
+        if (!reply.trim() && partialSolutions.length === 0) {
           alert(t('complaintDetails.solutionRequiredAlert'));
           return;
         }
-        const updates = { status: 'SOLVED', solutionDetails: reply, solvedAt: serverTimestamp() };
+        // Several responsible staff may each have added their part: the
+        // final solution lists every part (and this one, if written).
+        const myName = userData?.name || t('common.user');
+        const parts = partialSolutions.map((p) => ({ byName: p.actorName || '', text: p.metadata.partialSolution }));
+        if (reply.trim()) parts.push({ byName: myName, text: reply.trim() });
+        const combined = partialSolutions.length ? parts.map((p) => `• ${p.byName}: ${p.text}`).join('\n') : reply.trim();
+        const partialFiles = partialSolutions.flatMap((p) => p.metadata.attachments || []);
+        const updates = {
+          status: 'SOLVED',
+          solutionDetails: combined,
+          solvedAt: serverTimestamp(),
+          ...(partialSolutions.length ? { solutions: parts } : {}),
+          ...(partialFiles.length ? { solutionAttachments: [...(complaint.solutionAttachments || []), ...partialFiles] } : {}),
+        };
         // A failed recording upload (e.g. a Storage rule rejecting the
         // file) must not block marking the complaint solved — the solution
         // text is what matters most; the recording is best-effort.
@@ -327,27 +369,10 @@ function ComplaintDetailsInner({ complaint, onClose }) {
         // Files go into the resolution WhatsApp message as download links
         // (wa.me can't carry files). Same best-effort rule as the recording.
         if (solutionFiles.length) {
-          const uploaded = [];
-          for (const file of solutionFiles) {
-            try {
-              const fileRef = ref(storage, `complaints/${complaint.complaintId}/${Date.now()}_${file.name}`);
-              await uploadBytes(fileRef, file);
-              uploaded.push({
-                fileName: file.name,
-                fileUrl: await getDownloadURL(fileRef),
-                mimeType: file.type,
-                size: file.size,
-                uploadedBy: user.uid,
-                createdAt: new Date().toISOString(),
-              });
-            } catch (uploadErr) {
-              console.error('Solution attachment upload failed:', file.name, uploadErr);
-              alert(t('complaintDetails.solutionFileUploadFailedAlert', { name: file.name }));
-            }
-          }
-          if (uploaded.length) updates.solutionAttachments = [...(complaint.solutionAttachments || []), ...uploaded];
+          const uploaded = await uploadSolutionFiles();
+          if (uploaded.length) updates.solutionAttachments = [...(updates.solutionAttachments || complaint.solutionAttachments || []), ...uploaded];
         }
-        await addLog('SOLUTION_ADDED', { solutionDetails: reply }, updates);
+        await addLog('SOLUTION_ADDED', { solutionDetails: combined }, updates);
         setReply('');
         setPendingRecording(null);
         setSolutionFiles([]);
@@ -421,6 +446,21 @@ function ComplaintDetailsInner({ complaint, onClose }) {
 
   // Filter logs for general timeline vs internal
   const timelineLogs = logs.filter(l => l.action !== 'INTERNAL_COMMENT_ADDED');
+  // Partial solutions of the current round (after the latest reopen),
+  // oldest first — merged into the final solution on solve.
+  const lastReopenMs = Math.max(0, ...logs.filter((l) => l.action === 'COMPLAINT_REOPENED').map((l) => l.createdAt?.toMillis?.() || 0));
+  const partialSolutions = logs
+    .filter((l) => l.action === 'PARTIAL_SOLUTION_ADDED' && (l.createdAt?.toMillis?.() || Date.now()) > lastReopenMs)
+    .slice()
+    .reverse();
+  const isAssignee = normalizedAssignedTo.includes(user?.uid);
+  const isOpen = !['SOLVED', 'CLOSED', 'REJECTED'].includes(complaint.status);
+  const canAddPartial = isOpen && (canEdit || isAssignee);
+  const pendingNames = normalizedAssignedTo
+    .map((id, i) => ({ id, name: normalizedAssignedToNames[i] }))
+    .filter((a) => !partialSolutions.some((p) => p.actorId === a.id))
+    .map((a) => a.name)
+    .filter(Boolean);
   const internalLogs = logs.filter(l => l.action === 'INTERNAL_COMMENT_ADDED');
 
   // Derive the complaint's flow-map progress from its activity log, most
@@ -822,6 +862,37 @@ function ComplaintDetailsInner({ complaint, onClose }) {
             )}
           </div>
 
+          {(partialSolutions.length > 0 || (isOpen && normalizedAssignedTo.length > 1)) && (
+            <div id="partial-solutions" className="bg-white p-5 rounded-xl border border-teal-100 shadow-sm space-y-3">
+              <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-teal-600" />
+                {t('complaintDetails.partialSolutionsTitle')}
+                <span className="text-xs font-normal text-slate-500">({partialSolutions.length})</span>
+              </h3>
+              {partialSolutions.length === 0 && <p className="text-sm text-slate-500">{t('complaintDetails.partialSolutionsEmpty')}</p>}
+              {partialSolutions.map((p) => (
+                <div key={p.id} className="bg-teal-50 border border-teal-100 rounded-lg p-3">
+                  <div className="flex justify-between gap-2 mb-1">
+                    <p className="font-medium text-teal-900 text-sm">{p.actorName}</p>
+                    <p className="text-xs text-teal-700/70" dir="ltr">{p.createdAt ? format(p.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}</p>
+                  </div>
+                  <p className="text-sm text-teal-900 whitespace-pre-wrap">{p.metadata?.partialSolution}</p>
+                  {p.metadata?.attachments?.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {p.metadata.attachments.map((f) => (
+                        <a key={f.fileUrl} href={f.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 text-xs bg-white border border-teal-200 px-2 py-1 rounded-lg text-teal-700"><Paperclip className="w-3.5 h-3.5" /><span dir="ltr">{f.fileName}</span></a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+              {isOpen && pendingNames.length > 0 && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2">{t('complaintDetails.pendingSolutionsFrom', { names: pendingNames.join(listSep) })}</p>
+              )}
+              {isOpen && partialSolutions.length > 0 && <p className="text-xs text-slate-500">{t('complaintDetails.combinedOnSolveHint')}</p>}
+            </div>
+          )}
+
           {/* Tabs */}
           <div>
             <div className="flex gap-4 border-b border-slate-200 mb-4 px-1">
@@ -849,8 +920,13 @@ function ComplaintDetailsInner({ complaint, onClose }) {
                       </div>
                       <p className="text-sm text-slate-600 mb-1">{t('complaintDetails.by')} {log.actorName || t('complaintDetails.system')}</p>
                       {log.metadata?.solutionDetails && (
-                        <div className="mt-2 p-3 bg-emerald-50 text-emerald-800 rounded-lg text-sm border border-emerald-100">
+                        <div className="mt-2 p-3 bg-emerald-50 text-emerald-800 rounded-lg text-sm border border-emerald-100 whitespace-pre-wrap">
                           <strong>{t('complaintDetails.solutionLabel')}</strong> {log.metadata.solutionDetails}
+                        </div>
+                      )}
+                      {log.metadata?.partialSolution && (
+                        <div className="mt-2 p-3 bg-teal-50 text-teal-800 rounded-lg text-sm border border-teal-100 whitespace-pre-wrap">
+                          {log.metadata.partialSolution}
                         </div>
                       )}
                       {log.metadata?.reason && (
@@ -904,7 +980,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
 
         {/* Action Bar */}
         <div className="bg-white border-t border-slate-200 p-4 print:hidden">
-          {activeTab === 'history' && canEdit && (
+          {activeTab === 'history' && (canEdit || canAddPartial) && (
             <div className="flex flex-wrap items-center gap-2 mb-2">
               <button
                 type="button"
@@ -996,10 +1072,17 @@ function ComplaintDetailsInner({ complaint, onClose }) {
                 <Send className="w-4 h-4 -scale-x-100" />
               </button>
             ) : (
-              <button disabled={loading || !canEdit} onClick={() => handleAction('SOLVE')} className="px-6 h-[52px] bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50">
-                {t('complaintDetails.solveBtn')}
-                <CheckCircle2 className="w-4 h-4" />
-              </button>
+              <div className="flex gap-2">
+                {canAddPartial && (
+                  <button disabled={loading} onClick={() => handleAction('PARTIAL')} className="px-4 h-[52px] bg-white border border-teal-300 text-teal-700 rounded-xl hover:bg-teal-50 font-medium transition-colors flex items-center gap-2" title={t('complaintDetails.addPartialHint')}>
+                    {t('complaintDetails.addPartialBtn')}
+                  </button>
+                )}
+                <button disabled={loading || !canEdit} onClick={() => handleAction('SOLVE')} className="px-6 h-[52px] bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium transition-colors shadow-sm flex items-center gap-2 disabled:opacity-50">
+                  {t('complaintDetails.solveBtn')}
+                  <CheckCircle2 className="w-4 h-4" />
+                </button>
+              </div>
             )}
           </div>
         </div>

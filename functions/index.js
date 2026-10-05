@@ -308,6 +308,25 @@ exports.notifyComplaintInternalComment = onDocumentCreated("complaints/{complain
     await handleReopen("complaint", "complaints", event.params.complaintId, "complaintId", "الملاحظة");
     return;
   }
+  // One assignee added their part of the solution: tell the others, and
+  // move a still-"received" complaint into progress.
+  if (log?.action === "PARTIAL_SOLUTION_ADDED") {
+    const ref = db.collection("complaints").doc(event.params.complaintId);
+    const snap = await ref.get();
+    if (!snap.exists) return;
+    const c = snap.data();
+    if (c.status === "RECEIVED") await ref.update({ status: "IN_PROGRESS", updatedAt: Timestamp.now() });
+    const recipients = (c.assignedTo || []).filter((uid) => uid !== log.actorId);
+    if (recipients.length) {
+      await notifyUsers(recipients, {
+        title: "حل جزئي جديد",
+        body: `أضاف ${log.actorName || "أحد المسؤولين"} حله على الملاحظة رقم ${c.complaintId}.`,
+        complaintId: event.params.complaintId,
+        type: "PARTIAL_SOLUTION_ADDED",
+      });
+    }
+    return;
+  }
   if (!log || log.action !== "INTERNAL_COMMENT_ADDED") return;
   await notifyInternalComment("complaints", event.params.complaintId, log, {
     titleLabel: "الملاحظة",
@@ -864,7 +883,7 @@ exports.trackComplaint = onCall(async (request) => {
   const logsSnapshot = await db.collection(`${match.collection}/${doc.id}/activityLog`).orderBy("createdAt", "desc").get();
   const history = logsSnapshot.docs
     .map((d) => d.data())
-    .filter((l) => !["INTERNAL_COMMENT_ADDED", "NOTE_ADDED", "WHATSAPP_API_SENT", "WHATSAPP_API_FAILED"].includes(l.action))
+    .filter((l) => !["INTERNAL_COMMENT_ADDED", "NOTE_ADDED", "WHATSAPP_API_SENT", "WHATSAPP_API_FAILED", "PARTIAL_SOLUTION_ADDED"].includes(l.action))
     .map((l) => ({
       action: l.action,
       createdAtMillis: l.createdAt?.toMillis?.() ?? null,

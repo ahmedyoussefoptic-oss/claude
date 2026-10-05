@@ -244,7 +244,14 @@
     "convertToTechBtn": "تحويل إلى بلاغ تقني",
     "attachSolutionFile": "إرفاق صورة أو ملف للحل",
     "solutionAttachmentsLabel": "مرفقات الحل:",
-    "solutionFileUploadFailedAlert": "تم حفظ الحل، لكن تعذّر رفع الملف: {{name}}"
+    "solutionFileUploadFailedAlert": "تم حفظ الحل، لكن تعذّر رفع الملف: {{name}}",
+    "addPartialBtn": "إضافة حلي",
+    "addPartialHint": "أضف الجزء الذي يخصك من الحل دون إغلاق الملاحظة",
+    "partialRequiredAlert": "يرجى كتابة حلك أولاً.",
+    "partialSolutionsTitle": "حلول المسؤولين",
+    "partialSolutionsEmpty": "لم يُضف أي مسؤول حله بعد. كل مسند إليه يكتب حله ويضغط «إضافة حلي».",
+    "pendingSolutionsFrom": "لم يُضف حله بعد: {{names}}",
+    "combinedOnSolveHint": "عند الضغط على «حل الملاحظة» تُدمج كل هذه الحلول في الحل النهائي."
   },
   "complaintForm": {
     "priorities": {
@@ -1040,7 +1047,8 @@
       "VISIT_CHECKED_IN": "تسجيل وصول ولي الأمر للفرع",
       "VISIT_MET": "تمت مقابلة ولي الأمر",
       "WHATSAPP_API_SENT": "تم الإرسال لولي الأمر عبر واتساب API",
-      "WHATSAPP_API_FAILED": "تعذّر الإرسال التلقائي عبر واتساب API"
+      "WHATSAPP_API_FAILED": "تعذّر الإرسال التلقائي عبر واتساب API",
+      "PARTIAL_SOLUTION_ADDED": "تمت إضافة حل جزئي"
     },
     "lostFound": {
       "ITEM_REGISTERED": "تم تسجيل الغرض",

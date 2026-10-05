@@ -244,7 +244,14 @@
     "convertToTechBtn": "Convert to tech ticket",
     "attachSolutionFile": "Attach an image or file to the solution",
     "solutionAttachmentsLabel": "Solution attachments:",
-    "solutionFileUploadFailedAlert": "The solution was saved, but this file could not be uploaded: {{name}}"
+    "solutionFileUploadFailedAlert": "The solution was saved, but this file could not be uploaded: {{name}}",
+    "addPartialBtn": "Add my part",
+    "addPartialHint": "Add your part of the solution without closing the feedback",
+    "partialRequiredAlert": "Please write your part of the solution first.",
+    "partialSolutionsTitle": "Solutions from responsible staff",
+    "partialSolutionsEmpty": "No one has added their part yet. Each assignee writes theirs and taps “Add my part”.",
+    "pendingSolutionsFrom": "Not added yet: {{names}}",
+    "combinedOnSolveHint": "“Solve” merges all of these into the final solution."
   },
   "complaintForm": {
     "priorities": {
@@ -1040,7 +1047,8 @@
       "VISIT_CHECKED_IN": "Parent checked in at branch",
       "VISIT_MET": "Parent met",
       "WHATSAPP_API_SENT": "Sent to parent via WhatsApp API",
-      "WHATSAPP_API_FAILED": "Automatic WhatsApp API send failed"
+      "WHATSAPP_API_FAILED": "Automatic WhatsApp API send failed",
+      "PARTIAL_SOLUTION_ADDED": "Partial solution added"
     },
     "lostFound": {
       "ITEM_REGISTERED": "Item registered",
