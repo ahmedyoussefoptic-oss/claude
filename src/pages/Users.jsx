@@ -328,6 +328,9 @@ export default function Users() {
                   <option key={r} value={r}>{roleName(r)}</option>
                 ))}
               </select>
+              {form.role === ROLES.RECEPTIONIST && (
+                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg p-2 mt-1.5">{t('users.receptionistHint')}</p>
+              )}
             </div>
             <div className="md:col-span-2">
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.branch')}</label>

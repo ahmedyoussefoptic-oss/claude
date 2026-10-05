@@ -17,6 +17,7 @@ import PublicReportForm from './pages/PublicReportForm';
 import BranchVisit from './pages/BranchVisit';
 import ContactBranch from './pages/ContactBranch';
 import BranchQrCodes from './pages/BranchQrCodes';
+import BranchVisits from './pages/BranchVisits';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
 import DeletedComplaints from './pages/DeletedComplaints';
@@ -60,6 +61,7 @@ function App() {
               <Users />
             </ProtectedRoute>
           } />
+          <Route path="visits" element={<BranchVisits />} />
           <Route path="branch-qr" element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN]} allowPrincipal>
               <BranchQrCodes />

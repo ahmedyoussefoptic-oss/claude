@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FileText, Clock, AlertTriangle, CheckCircle2, Download, Plus, Star, Gauge, Repeat, Wrench, ShieldAlert, PackageSearch, PackageCheck, GraduationCap, Briefcase, AlertOctagon, Link2 } from 'lucide-react';
+import { FileText, Clock, AlertTriangle, CheckCircle2, Download, Plus, Star, Gauge, Repeat, Wrench, ShieldAlert, PackageSearch, PackageCheck, GraduationCap, Briefcase, AlertOctagon, Link2, Armchair, Handshake, CalendarDays } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import StatCard from '../components/dashboard/StatCard';
@@ -200,6 +200,20 @@ export default function Dashboard() {
   };
 
   const typeName = (id) => complaintTypes.find((t) => t.id === id)?.name || id;
+
+  // Branch QR check-ins (BranchVisit.jsx): who's waiting at a branch now,
+  // and today's visits / meetings.
+  const visitStats = useMemo(() => {
+    const visits = complaints.filter((c) => c.viaVisitQr);
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const today = visits.filter((c) => (c.visitArrivedAt?.toMillis?.() || 0) >= start.getTime());
+    return {
+      waiting: visits.filter((c) => c.visitStatus === 'WAITING').length,
+      today: today.length,
+      metToday: today.filter((c) => c.visitStatus === 'MET').length,
+    };
+  }, [complaints]);
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
   const getStatusName = (status) => t(`statuses.complaint.${status}`, status);
 
@@ -315,6 +329,34 @@ export default function Dashboard() {
             icon={AlertOctagon}
             gradient="from-rose-500 to-pink-600"
             to="/complaints?type=BEHAVIORAL"
+          />
+        </div>
+      </div>
+
+      <div>
+        <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">{t('dashboard.branchVisitsTitle')}</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCard
+            title={t('dashboard.visitsWaiting')}
+            value={visitStats.waiting.toString()}
+            sub={t('dashboard.visitsWaitingSub')}
+            icon={Armchair}
+            gradient="from-rose-500 to-red-600"
+            to="/visits"
+          />
+          <StatCard
+            title={t('dashboard.visitsToday')}
+            value={visitStats.today.toString()}
+            icon={CalendarDays}
+            gradient="from-sky-500 to-blue-600"
+            to="/visits"
+          />
+          <StatCard
+            title={t('dashboard.visitsMetToday')}
+            value={visitStats.metToday.toString()}
+            icon={Handshake}
+            gradient="from-emerald-500 to-teal-600"
+            to="/visits"
           />
         </div>
       </div>

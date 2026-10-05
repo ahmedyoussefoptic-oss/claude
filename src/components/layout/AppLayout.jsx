@@ -1,7 +1,7 @@
-import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
-import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode } from 'lucide-react';
+import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair } from 'lucide-react';
 import { useState } from 'react';
 import NotificationBell from './NotificationBell';
 import Watermark from '../common/Watermark';
@@ -22,7 +22,9 @@ export default function AppLayout() {
     navigate('/login');
   };
 
-  const navItems = [
+  // Reception staff see nothing but the branch QR visits page.
+  const isReceptionist = role === 'RECEPTIONIST';
+  const navItems = isReceptionist ? [{ name: t('nav.branchVisits'), path: '/visits', icon: Armchair }] : [
     { name: t('nav.dashboard'), path: '/dashboard', icon: LayoutDashboard },
     { name: t('nav.complaints'), path: '/complaints', icon: FileText },
     { name: t('nav.lostFound'), path: '/lost-found', icon: PackageSearch },
@@ -30,13 +32,14 @@ export default function AppLayout() {
     { name: t('nav.advancedSearch'), path: '/search', icon: Search },
     { name: t('nav.studentRecords'), path: '/students', icon: GraduationCap },
     { name: t('nav.reports'), path: '/reports', icon: FileBarChart },
+    { name: t('nav.branchVisits'), path: '/visits', icon: Armchair },
   ];
 
   // Tech Support tickets can hold national IDs and account credentials, so
   // access is restricted to the IT department's own specialists, admins,
   // and Customer Service (they're the ones who take the parent's call and
   // log the ticket in the first place, before it reaches IT).
-  if (canAccessTechSupport(userData)) {
+  if (!isReceptionist && canAccessTechSupport(userData)) {
     navItems.splice(3, 0, { name: t('nav.techSupport'), path: '/tech-support', icon: Wrench });
   }
 
@@ -53,6 +56,9 @@ export default function AppLayout() {
 
   if (!user) {
     return <Outlet />;
+  }
+  if (isReceptionist && location.pathname !== '/visits') {
+    return <Navigate to="/visits" replace />;
   }
 
   return (

@@ -58,7 +58,8 @@
     "archive": "أرشيف المحذوفات",
     "logout": "تسجيل الخروج",
     "studentRecords": "سجل الطلاب",
-    "branchQr": "QR زيارات الفروع"
+    "branchQr": "QR زيارات الفروع",
+    "branchVisits": "زيارات الفروع"
   },
   "app": {
     "brand": "المكتشف العالمية",
@@ -126,7 +127,12 @@
       "behavioral": "سلوكية",
       "lostFound": "المفقودات",
       "techSupport": "الدعم الفني"
-    }
+    },
+    "branchVisitsTitle": "زيارات الفروع (QR)",
+    "visitsWaiting": "بانتظار المقابلة الآن",
+    "visitsWaitingSub": "أولياء أمور في الفروع حالياً",
+    "visitsToday": "زيارات اليوم",
+    "visitsMetToday": "تمت مقابلتهم اليوم"
   },
   "statuses": {
     "complaint": {
@@ -738,7 +744,8 @@
     "UPPER_MANAGEMENT": "الإدارة العليا",
     "DEPARTMENT_MANAGER": "مدير القسم",
     "SPECIALIST": "مختص حل الملاحظات",
-    "CUSTOMER_SERVICE": "خدمة العملاء"
+    "CUSTOMER_SERVICE": "خدمة العملاء",
+    "RECEPTIONIST": "موظف استقبال"
   },
   "users": {
     "pageTitle": "إدارة المستخدمين",
@@ -803,7 +810,8 @@
     "curriculaShort": "القسم",
     "isQualityLabel": "مسؤول الجودة",
     "isQualityHint": "يُسند إليه تلقائياً كل الملاحظات والمشكلات التقنية في فروعه — من رابط البلاغات أو المسجّلة من الموظفين أو المحوّلة — ويصله إشعار بكل منها. يمنحه أيضاً الاطلاع على قسم المشكلات التقنية لفروعه.",
-    "qualityTag": "الجودة"
+    "qualityTag": "الجودة",
+    "receptionistHint": "موظف الاستقبال يطّلع فقط على زيارات أولياء الأمور المسجّلة برمز QR في فروعه (من ينتظر، ومنذ متى، ومن قابله)، ولا يرى الملاحظات أو المشكلات التقنية أو المفقودات."
   },
   "settings": {
     "pageSubtitle": "تعديل الفروع والأقسام والتصنيفات المستخدمة في كل قوائم النظام",
@@ -1231,5 +1239,30 @@
     "notFound": "تعذّر العثور على رقم التواصل لهذا الطلب.",
     "prefill": "السلام عليكم، أتواصل بخصوص الطلب رقم {{id}}",
     "button": "تواصل مع الفرع عبر واتساب"
+  },
+  "branchVisits": {
+    "title": "زيارات الفروع",
+    "subtitle": "أولياء الأمور الذين سجّلوا وصولهم برمز QR في الفرع",
+    "waitingNow": "بانتظار المقابلة الآن",
+    "today": "زيارات اليوم",
+    "metToday": "تمت مقابلتهم اليوم",
+    "avgWait": "متوسط الانتظار اليوم",
+    "minutes_one": "{{count}} دقيقة",
+    "minutes_other": "{{count}} دقيقة",
+    "rangeToday": "اليوم",
+    "rangeAll": "كل الزيارات",
+    "statusAll": "الكل",
+    "statusWaiting": "بانتظار المقابلة",
+    "statusMet": "تمت المقابلة",
+    "empty": "لا توجد زيارات",
+    "studentLine": "الطالب/ة: {{student}} ({{grade}}) — {{branch}}",
+    "reason": "سبب الزيارة",
+    "assigned": "المسؤولون",
+    "arrived": "وصل الساعة {{time}}",
+    "waitingFor_one": "ينتظر منذ {{count}} دقيقة",
+    "waitingFor_other": "ينتظر منذ {{count}} دقيقة",
+    "metBy": "قابله {{name}} الساعة {{time}}",
+    "waited_one": "انتظر {{count}} دقيقة",
+    "waited_other": "انتظر {{count}} دقيقة"
   }
 }

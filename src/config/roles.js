@@ -4,6 +4,8 @@ export const ROLES = {
   DEPARTMENT_MANAGER: 'DEPARTMENT_MANAGER',
   SPECIALIST: 'SPECIALIST',
   CUSTOMER_SERVICE: 'CUSTOMER_SERVICE',
+  // Branch reception desk: sees only the branch QR visits (/visits).
+  RECEPTIONIST: 'RECEPTIONIST',
 };
 
 export const ROLE_LABELS = {
@@ -12,4 +14,5 @@ export const ROLE_LABELS = {
   [ROLES.DEPARTMENT_MANAGER]: 'مدير القسم',
   [ROLES.SPECIALIST]: 'مختص حل الملاحظات',
   [ROLES.CUSTOMER_SERVICE]: 'خدمة العملاء',
+  [ROLES.RECEPTIONIST]: 'موظف استقبال',
 };

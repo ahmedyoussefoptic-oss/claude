@@ -39,6 +39,11 @@ service cloud.firestore {
         u.get('branch', null) == branch
       );
     }
+    // Branch reception desk (role RECEPTIONIST): may only list the branch
+    // QR visit records (complaints with viaVisitQr) — nothing else.
+    function isReceptionist() {
+      return myDoc() != null && myDoc().get('role', null) == 'RECEPTIONIST';
+    }
     function canEditRecord(branch) {
       return isAdmin() || (myPerm('edit') && inMyScope(branch));
     }
@@ -181,7 +186,10 @@ service cloud.firestore {
       allow get: if true;
       // Listing requires authentication AND being in scope of the branch —
       // callers must filter their query by `branch` for this to resolve.
-      allow list: if isAuthenticated() && (isAdmin() || inMyScope(resource.data.branch));
+      allow list: if isAuthenticated() && (isAdmin() || (
+        inMyScope(resource.data.branch) &&
+        (!isReceptionist() || resource.data.get('viaVisitQr', false) == true)
+      ));
       // Creating complaints is allowed by public (via form) or authenticated staff
       allow create: if true;
       // Staff can update within their branch scope + edit permission; the
@@ -232,7 +240,7 @@ service cloud.firestore {
     // Lost & Found items collection
     match /lostFoundItems/{itemId} {
       allow get: if true;
-      allow list: if isAuthenticated() && (isAdmin() || inMyScope(resource.data.branch));
+      allow list: if isAuthenticated() && !isReceptionist() && (isAdmin() || inMyScope(resource.data.branch));
       allow create: if true;
       allow update: if (isAuthenticated() && canEditRecord(resource.data.branch)) ||
         isParentSurveyUpdate('RETURNED', ['CLOSED'], ['satisfactionRate', 'satisfactionDetails', 'parentFeedback', 'status', 'closedAt', 'updatedAt']);
@@ -276,7 +284,7 @@ service cloud.firestore {
     // national ID or name and auto-fill the rest; only an admin may bulk
     // import/edit it (see Settings > import).
     match /students/{studentId} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && !isReceptionist();
       allow write: if isAdmin();
     }
 

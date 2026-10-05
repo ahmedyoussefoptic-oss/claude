@@ -58,7 +58,8 @@
     "archive": "Deleted Archive",
     "logout": "Log Out",
     "studentRecords": "Student Records",
-    "branchQr": "Branch visit QR"
+    "branchQr": "Branch visit QR",
+    "branchVisits": "Branch visits"
   },
   "app": {
     "brand": "Al Moktashef International",
@@ -126,7 +127,12 @@
       "behavioral": "Behavioral",
       "lostFound": "Lost & Found",
       "techSupport": "Tech Support"
-    }
+    },
+    "branchVisitsTitle": "Branch visits (QR)",
+    "visitsWaiting": "Waiting to be met now",
+    "visitsWaitingSub": "Parents at the branches right now",
+    "visitsToday": "Visits today",
+    "visitsMetToday": "Met today"
   },
   "statuses": {
     "complaint": {
@@ -738,7 +744,8 @@
     "UPPER_MANAGEMENT": "Upper Management",
     "DEPARTMENT_MANAGER": "Department Manager",
     "SPECIALIST": "Complaint Resolution Specialist",
-    "CUSTOMER_SERVICE": "Customer Service"
+    "CUSTOMER_SERVICE": "Customer Service",
+    "RECEPTIONIST": "Receptionist"
   },
   "users": {
     "pageTitle": "User Management",
@@ -803,7 +810,8 @@
     "curriculaShort": "Section",
     "isQualityLabel": "Quality officer",
     "isQualityHint": "Automatically assigned every feedback record and tech ticket in their branches — from the public link, staff entry, or conversion — with a notification for each. Also grants access to the Tech Support section for those branches.",
-    "qualityTag": "Quality"
+    "qualityTag": "Quality",
+    "receptionistHint": "A receptionist only sees parents' QR check-ins at their branches (who is waiting, for how long, and who met them) — not feedback, tech tickets or lost & found."
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",
@@ -1231,5 +1239,30 @@
     "notFound": "Couldn't find a contact number for this request.",
     "prefill": "Hello, I'm contacting you about request {{id}}",
     "button": "Contact the branch on WhatsApp"
+  },
+  "branchVisits": {
+    "title": "Branch visits",
+    "subtitle": "Parents who checked in at the branch with the QR code",
+    "waitingNow": "Waiting now",
+    "today": "Visits today",
+    "metToday": "Met today",
+    "avgWait": "Average wait today",
+    "minutes_one": "{{count}} min",
+    "minutes_other": "{{count}} min",
+    "rangeToday": "Today",
+    "rangeAll": "All visits",
+    "statusAll": "All",
+    "statusWaiting": "Waiting",
+    "statusMet": "Met",
+    "empty": "No visits",
+    "studentLine": "Student: {{student}} ({{grade}}) — {{branch}}",
+    "reason": "Reason",
+    "assigned": "Responsible",
+    "arrived": "Arrived {{time}}",
+    "waitingFor_one": "Waiting {{count}} min",
+    "waitingFor_other": "Waiting {{count}} min",
+    "metBy": "Met by {{name}} at {{time}}",
+    "waited_one": "waited {{count}} min",
+    "waited_other": "waited {{count}} min"
   }
 }
