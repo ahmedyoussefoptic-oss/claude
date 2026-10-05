@@ -330,19 +330,12 @@ exports.notifyTechSupportInternalComment = onDocumentCreated("techSupportTickets
   });
 });
 
-// Helper to add working hours skipping weekends (Fri/Sat)
-function addWorkingHours(startDate, hoursToAdd) {
-  let currentDate = new Date(startDate.getTime());
-  let remainingHours = hoursToAdd;
-
-  while (remainingHours > 0) {
-    currentDate.setHours(currentDate.getHours() + 1);
-    const day = currentDate.getDay(); // 0 = Sunday, 5 = Friday, 6 = Saturday
-    if (day !== 5 && day !== 6) {
-      remainingHours--;
-    }
-  }
-  return currentDate;
+// SLA hours and working-time rules live in settings/sla (Settings page);
+// due dates count only working time — see ./businessTime.js.
+const { normalizeSla, businessMs, addBusinessMs } = require("./businessTime");
+async function loadSla() {
+  const snap = await db.collection("settings").doc("sla").get();
+  return normalizeSla(snap.exists ? snap.data() : null);
 }
 
 // 1. Calculate Initial SLA when Complaint is Created + email the parent a receipt confirmation
@@ -396,12 +389,10 @@ exports.calculateInitialSLA = onDocumentCreated({ document: "complaints/{complai
 
   if (data.dueDate) return; // Already has due date
 
+  const sla = await loadSla();
   const priority = data.priority || 'NORMAL';
-  let hours = 48;
-  if (priority === 'URGENT') hours = 6;
-  if (priority === 'HIGH') hours = 24;
-
-  const dueDate = addWorkingHours(new Date(), hours);
+  const hours = Number(sla.complaintHours[priority] ?? sla.complaintHours.NORMAL) || 48;
+  const dueDate = new Date(addBusinessMs(Date.now(), hours * 3600 * 1000, sla));
 
   return snap.ref.update({
     dueDate: Timestamp.fromDate(dueDate),
@@ -429,7 +420,8 @@ exports.calculateItTicketSla = onDocumentCreated({ document: "techSupportTickets
   await autoSendWa("techSupport", snap.ref, "receipt");
 
   if (data.dueDate) return;
-  const dueDate = addWorkingHours(new Date(), 4);
+  const sla = await loadSla();
+  const dueDate = new Date(addBusinessMs(Date.now(), (Number(sla.techHours) || 4) * 3600 * 1000, sla));
   return snap.ref.update({ dueDate: Timestamp.fromDate(dueDate) });
 });
 
@@ -620,11 +612,12 @@ exports.handleSlaStatusChanges = onDocumentUpdated({ document: "complaints/{comp
     const currentDueDate = after.dueDate;
 
     if (pausedAt && currentDueDate) {
-      const now = Date.now();
-      const pausedTimeMs = now - pausedAt.toMillis();
-      
-      const newDueDateMs = currentDueDate.toMillis() + pausedTimeMs;
-      
+      // Whatever working time was left when the wait started is granted
+      // again from now (time outside working hours never counted anyway).
+      const sla = await loadSla();
+      const remaining = businessMs(pausedAt.toMillis(), currentDueDate.toMillis(), sla);
+      const newDueDateMs = addBusinessMs(Date.now(), remaining, sla);
+
       return event.data.after.ref.update({
         dueDate: Timestamp.fromMillis(newDueDateMs),
         slaPausedAt: null,
@@ -766,7 +759,7 @@ exports.scheduledSlaEngine = onSchedule("every 1 hours", async (event) => {
           action: "TICKET_ESCALATED",
           actorId: "SYSTEM",
           actorName: "النظام",
-          metadata: { info: `تجاوز مدة الإغلاق المعتمدة (4 ساعات) — تصعيد مستوى ${level}` },
+          metadata: { info: `تجاوز مدة الإغلاق المعتمدة — تصعيد مستوى ${level}` },
           createdAt: now,
         });
 

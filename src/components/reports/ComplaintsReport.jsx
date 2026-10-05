@@ -5,6 +5,7 @@ import { formatDuration } from '../../utils/duration';
 import { isEscalatedResolved, complaintStatusLabel, complaintHasType, complaintTypesLabel } from '../../config/complaintTypes';
 import { isTicketEscalatedResolved } from '../../config/techSupport';
 import { complaintMetrics, ticketMetrics } from '../../utils/reportMetrics';
+import { useSlaSettings, elapsedMs } from '../../utils/businessTime';
 
 const TYPE_ICONS = { ACADEMIC: GraduationCap, ADMINISTRATIVE: Briefcase, BEHAVIORAL: AlertOctagon };
 const TYPE_GRADIENTS = { ACADEMIC: 'from-indigo-500 to-violet-600', ADMINISTRATIVE: 'from-cyan-500 to-teal-600', BEHAVIORAL: 'from-rose-500 to-pink-600' };
@@ -45,8 +46,9 @@ export default function ComplaintsReport({
 }) {
   const { t } = useTranslation();
   const listSep = t('publicReport.listSeparator');
-  const m = complaintMetrics(complaints);
-  const tm = ticketMetrics(tickets);
+  const sla = useSlaSettings();
+  const m = complaintMetrics(complaints, sla);
+  const tm = ticketMetrics(tickets, sla);
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
   const typeName = (id) => complaintTypes.find((ct) => ct.id === id)?.name || id;
   const dur = (ms) => formatDuration(ms, t);
@@ -59,16 +61,16 @@ export default function ComplaintsReport({
       return {
         id: b.id,
         name: b.name,
-        m: complaintMetrics(bc),
-        tm: ticketMetrics(bt),
-        types: complaintTypes.map((ct) => ({ ...ct, m: complaintMetrics(bc.filter((c) => complaintHasType(c, ct.id))) })),
+        m: complaintMetrics(bc, sla),
+        tm: ticketMetrics(bt, sla),
+        types: complaintTypes.map((ct) => ({ ...ct, m: complaintMetrics(bc.filter((c) => complaintHasType(c, ct.id)), sla) })),
       };
     })
     .filter((r) => r.m.total + r.tm.total > 0)
     .sort((a, b) => (b.m.total + b.tm.total) - (a.m.total + a.tm.total));
   const maxBranchTotal = Math.max(1, ...branchRows.map((r) => r.m.total));
 
-  const byType = complaintTypes.map((ct) => ({ ...ct, m: complaintMetrics(complaints.filter((c) => complaintHasType(c, ct.id))) })).filter((ct) => ct.m.total > 0);
+  const byType = complaintTypes.map((ct) => ({ ...ct, m: complaintMetrics(complaints.filter((c) => complaintHasType(c, ct.id)), sla) })).filter((ct) => ct.m.total > 0);
   const subTypeCounts = {};
   complaints.forEach((c) => {
     [{ type: c.complaintType, subType: c.subType }, ...(c.extraTypes || [])].forEach((r) => {
@@ -371,7 +373,7 @@ export default function ComplaintsReport({
                   <td className="py-1.5 px-2 text-slate-600">{complaintTypesLabel(c, typeName, listSep)}</td>
                   <td className="py-1.5 px-2 text-slate-600">{c.assignedToNames?.join(listSep) || '—'}</td>
                   <td className={`py-1.5 px-2 ${isEscalatedResolved(c) ? 'text-teal-700 font-medium' : 'text-slate-600'}`}>{complaintStatusLabel(c, t)}</td>
-                  <td className="py-1.5 px-2 text-slate-600">{c.solvedAt && c.createdAt ? dur(c.solvedAt.toMillis() - c.createdAt.toMillis()) : '—'}</td>
+                  <td className="py-1.5 px-2 text-slate-600">{c.solvedAt && c.createdAt ? dur(elapsedMs(c.createdAt, c.solvedAt, sla)) : '—'}</td>
                   <td className="py-1.5 px-2 text-slate-600">{c.studentName || '—'}</td>
                   <td className="py-1.5 px-2 text-slate-600">{c.stage || '—'}</td>
                 </tr>
@@ -386,7 +388,7 @@ export default function ComplaintsReport({
                   <td className={`py-1.5 px-2 ${isTicketEscalatedResolved(tk) ? 'text-teal-700 font-medium' : 'text-slate-600'}`}>
                     {isTicketEscalatedResolved(tk) ? t('statuses.complaint.ESCALATED_RESOLVED') : t(`statuses.techSupport.${tk.status}`, tk.status)}
                   </td>
-                  <td className="py-1.5 px-2 text-slate-600">{tk.resolutionMessageSentAt && tk.createdAt ? dur(tk.resolutionMessageSentAt.toMillis() - tk.createdAt.toMillis()) : '—'}</td>
+                  <td className="py-1.5 px-2 text-slate-600">{tk.resolutionMessageSentAt && tk.createdAt ? dur(elapsedMs(tk.createdAt, tk.resolutionMessageSentAt, sla)) : '—'}</td>
                   <td className="py-1.5 px-2 text-slate-600">{tk.studentName || '—'}</td>
                   <td className="py-1.5 px-2 text-slate-600">{tk.stage || '—'}</td>
                 </tr>

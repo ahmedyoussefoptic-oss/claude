@@ -12,6 +12,7 @@ import MessageStatusIndicators from '../components/common/MessageStatusIndicator
 import { normalizeAssignees } from '../utils/assignees';
 import { branchScopeConstraintValues } from '../utils/scope';
 import { formatDuration } from '../utils/duration';
+import { useSlaSettings, elapsedMs } from '../utils/businessTime';
 import { studentKey } from '../utils/studentKey';
 import { isComplaintOverdue, complaintStatusLabel, complaintHasType, complaintTypesOf } from '../config/complaintTypes';
 import { format } from 'date-fns';
@@ -28,6 +29,7 @@ export default function ComplaintsList() {
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
   const { userData } = useAuthStore();
   const branches = useBranches();
+  const sla = useSlaSettings();
   const departments = useDepartments();
   const complaintTypes = useComplaintTypes();
   const location = useLocation();
@@ -419,7 +421,7 @@ export default function ComplaintsList() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-slate-600" dir="ltr">
-                      {c.solvedAt && c.createdAt ? formatDuration(c.solvedAt.toMillis() - c.createdAt.toMillis(), t) : '—'}
+                      {c.solvedAt && c.createdAt ? formatDuration(elapsedMs(c.createdAt, c.solvedAt, sla), t) : '—'}
                     </td>
                     <td className="px-6 py-4">
                       <MessageStatusIndicators

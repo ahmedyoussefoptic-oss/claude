@@ -16,6 +16,7 @@ import logo from '../assets/logo.png';
 import { Printer, FileSpreadsheet, RotateCcw, Star } from 'lucide-react';
 import ComplaintsReport from '../components/reports/ComplaintsReport';
 import { complaintMetrics, ticketMetrics } from '../utils/reportMetrics';
+import { useSlaSettings, elapsedMs, businessMs } from '../utils/businessTime';
 import { canAccessTechSupport } from '../utils/scope';
 import { complaintStatusLabel, complaintHasType, complaintTypesLabel } from '../config/complaintTypes';
 
@@ -68,6 +69,7 @@ export default function Reports() {
   const [includeTech, setIncludeTech] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const mergeTech = includeTech && canSeeTech;
+  const sla = useSlaSettings();
 
   // Keeps the open detail drawer's complaint in sync with live Firestore
   // data — otherwise it stays frozen at whatever it was when first opened.
@@ -201,10 +203,10 @@ export default function Reports() {
     // is sent, independent of whether/when the parent later confirms it.
     const resolvedDocs = ticketResults.filter((tk) => tk.resolutionMessageSentAt && tk.createdAt);
     const avgResolutionMs = resolvedDocs.length
-      ? resolvedDocs.reduce((sum, tk) => sum + (tk.resolutionMessageSentAt.toMillis() - tk.createdAt.toMillis()), 0) / resolvedDocs.length
+      ? resolvedDocs.reduce((sum, tk) => sum + businessMs(tk.createdAt.toMillis(), tk.resolutionMessageSentAt.toMillis(), sla), 0) / resolvedDocs.length
       : null;
     return { total, resolved, inProgress, overdue, avgResolutionMs };
-  }, [ticketResults]);
+  }, [ticketResults, sla]);
 
   const byProblemType = useMemo(
     () => problemTypes.map((pt) => ({ ...pt, count: ticketResults.filter((tk) => tk.problemType === pt.id).length })).filter((pt) => pt.count > 0),
@@ -288,8 +290,8 @@ export default function Reports() {
     const wb = XLSX.utils.book_new();
 
     if (reportType === 'COMPLAINTS') {
-      const m = complaintMetrics(results);
-      const tm = ticketMetrics(mergeTech ? ticketResults : []);
+      const m = complaintMetrics(results, sla);
+      const tm = ticketMetrics(mergeTech ? ticketResults : [], sla);
       const pctText = (v) => (v == null ? '—' : `${v}%`);
       const satText = (v) => (v == null ? '—' : v.toFixed(1));
       const summaryRows = [
@@ -335,9 +337,9 @@ export default function Reports() {
           [t('reports.full.overdue')]: mm.overdue,
           [t('statuses.complaint.REJECTED')]: mm.rejected,
         });
-        complaintTypes.forEach((ct) => perBranch.push(row(ct.name, complaintMetrics(bc.filter((c) => complaintHasType(c, ct.id))))));
-        if (mergeTech) perBranch.push(row(t('dashboard.categories.techSupport'), ticketMetrics(bt)));
-        const bm = complaintMetrics(bc);
+        complaintTypes.forEach((ct) => perBranch.push(row(ct.name, complaintMetrics(bc.filter((c) => complaintHasType(c, ct.id)), sla))));
+        if (mergeTech) perBranch.push(row(t('dashboard.categories.techSupport'), ticketMetrics(bt, sla)));
+        const bm = complaintMetrics(bc, sla);
         comparison.push({
           [t('common.branch')]: b.name,
           [t('reports.full.colTotal')]: bm.total,
@@ -350,7 +352,7 @@ export default function Reports() {
           [t('reports.avgResolutionTime')]: formatDuration(bm.avgResolutionMs, t),
           [t('dashboard.slaCompliance')]: pctText(bm.slaCompliance),
           [t('reports.satisfactionAvg')]: satText(bm.satisfaction),
-          ...(mergeTech ? { [t('reports.full.techTotalCol')]: bt.length, [t('reports.full.techResolvedCol')]: ticketMetrics(bt).resolved } : {}),
+          ...(mergeTech ? { [t('reports.full.techTotalCol')]: bt.length, [t('reports.full.techResolvedCol')]: ticketMetrics(bt, sla).resolved } : {}),
         });
       });
       if (perBranch.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(perBranch), sheetName(t('reports.full.perBranchTitle')));
@@ -373,7 +375,7 @@ export default function Reports() {
             [t('complaintForm.subTypeLabel')]: c.subType || '',
             [t('reports.specialistShort')]: c.assignedToNames?.join(listSep) || '',
             [t('common.status')]: complaintStatusLabel(c, t),
-            [t('reports.resolutionTime')]: c.solvedAt && c.createdAt ? formatDuration(c.solvedAt.toMillis() - c.createdAt.toMillis(), t) : '',
+            [t('reports.resolutionTime')]: c.solvedAt && c.createdAt ? formatDuration(elapsedMs(c.createdAt, c.solvedAt, sla), t) : '',
             [t('reports.studentNameColumn')]: c.studentName || '',
             [t('reports.stageColumn')]: c.stage || '',
           })),
@@ -385,7 +387,7 @@ export default function Reports() {
             [t('complaintForm.subTypeLabel')]: problemTypeName(tk.problemType),
             [t('reports.specialistShort')]: tk.assignedToNames?.join(listSep) || '',
             [t('common.status')]: t(`statuses.techSupport.${tk.status}`, tk.status),
-            [t('reports.resolutionTime')]: tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(tk.resolutionMessageSentAt.toMillis() - tk.createdAt.toMillis(), t) : '',
+            [t('reports.resolutionTime')]: tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(elapsedMs(tk.createdAt, tk.resolutionMessageSentAt, sla), t) : '',
             [t('reports.studentNameColumn')]: tk.studentName || '',
             [t('reports.stageColumn')]: tk.stage || '',
           })) : []),
@@ -426,7 +428,7 @@ export default function Reports() {
         [t('techSupportList.problemType')]: problemTypeName(tk.problemType),
         [t('reports.specialistShort')]: tk.assignedToNames?.join(listSep) || '',
         [t('common.status')]: t(`statuses.techSupport.${tk.status}`, tk.status),
-        [t('reports.resolutionTime')]: tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(tk.resolutionMessageSentAt.toMillis() - tk.createdAt.toMillis(), t) : '',
+        [t('reports.resolutionTime')]: tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(elapsedMs(tk.createdAt, tk.resolutionMessageSentAt, sla), t) : '',
         [t('techSupportDetails.student')]: tk.studentName || '',
         [t('reports.stageColumn')]: tk.stage || '',
       })));
@@ -743,7 +745,7 @@ export default function Reports() {
                     <td className="py-2 text-slate-600">{problemTypeName(tk.problemType)}</td>
                     <td className="py-2 text-slate-600">{tk.assignedToNames?.join(listSep) || '—'}</td>
                     <td className="py-2 text-slate-600">{t(`statuses.techSupport.${tk.status}`, tk.status)}</td>
-                    <td className="py-2 text-slate-600">{tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(tk.resolutionMessageSentAt.toMillis() - tk.createdAt.toMillis(), t) : '—'}</td>
+                    <td className="py-2 text-slate-600">{tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(elapsedMs(tk.createdAt, tk.resolutionMessageSentAt, sla), t) : '—'}</td>
                     <td className="py-2 text-slate-600">{tk.studentName || '—'}</td>
                     <td className="py-2 text-slate-600">{tk.stage || '—'}</td>
                   </tr>

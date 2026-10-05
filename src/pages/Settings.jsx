@@ -14,6 +14,7 @@ import {
 } from '../hooks/useOrgData';
 import { useMessageTemplates } from '../hooks/useMessageTemplates';
 import WhatsAppApiSettings from '../components/settings/WhatsAppApiSettings';
+import SlaSettings from '../components/settings/SlaSettings';
 import { parseStudentRows, upsertStudents } from '../utils/students';
 import { DEFAULT_TEMPLATES, TEMPLATE_PLACEHOLDERS } from '../utils/whatsapp';
 import {
@@ -559,6 +560,7 @@ export default function Settings() {
       <EditableList title={t('settings.platformsTitle')} icon={Monitor} items={platforms} collectionName="platforms" flag={{ key: 'parentRelated', label: t('settings.parentRelatedFlag') }} />
       <EditableList title={t('settings.itemCategoriesTitle')} icon={Package} items={itemCategories} collectionName="itemCategories" />
       <StudentImport />
+      <SlaSettings />
       <MessageTemplatesEditor />
       <WhatsAppApiSettings />
     </div>

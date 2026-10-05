@@ -13,6 +13,7 @@ import ComplaintForm from '../components/complaints/ComplaintForm';
 import PublicLinkModal from '../components/common/PublicLinkModal';
 import { branchScopeConstraintValues, canAccessTechSupport } from '../utils/scope';
 import { isComplaintOverdue, complaintHasType, complaintTypesOf } from '../config/complaintTypes';
+import { useSlaSettings, businessMs } from '../utils/businessTime';
 
 // Generic branch-scoped live-count hook shared by the tech-support and
 // lost-found KPI cards below — same scoping rule as the complaints query.
@@ -102,9 +103,6 @@ export default function Dashboard() {
       setComplaints(docs);
 
       const resolved = docs.filter(c => c.solvedAt && c.createdAt);
-      const avgResolutionMs = resolved.length
-        ? resolved.reduce((sum, c) => sum + (c.solvedAt.toMillis() - c.createdAt.toMillis()), 0) / resolved.length
-        : null;
 
       const withDueDate = resolved.filter(c => c.dueDate);
       const withinSla = withDueDate.filter(c => c.solvedAt.toMillis() <= c.dueDate.toMillis());
@@ -120,7 +118,6 @@ export default function Dashboard() {
         inProgress: docs.filter(c => c.status === 'IN_PROGRESS' || c.status === 'RECEIVED').length,
         overdue: docs.filter(isComplaintOverdue).length,
         solved: docs.filter(c => c.status === 'SOLVED' || c.status === 'CLOSED').length,
-        avgResolution: avgResolutionMs,
         slaCompliance,
         satisfaction,
         satisfactionCount: rated.length,
@@ -134,6 +131,13 @@ export default function Dashboard() {
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
+
+  // Average resolution time, counting only working time when Settings say so.
+  const sla = useSlaSettings();
+  const avgResolution = useMemo(() => {
+    const resolved = complaints.filter((c) => c.solvedAt && c.createdAt);
+    return resolved.length ? resolved.reduce((sum, c) => sum + businessMs(c.createdAt.toMillis(), c.solvedAt.toMillis(), sla), 0) / resolved.length : null;
+  }, [complaints, sla]);
 
   const branchChartData = useMemo(() => {
     return branches
@@ -282,7 +286,7 @@ export default function Dashboard() {
         />
         <StatCard
           title={t('dashboard.avgResolution')}
-          value={stats.avgResolution != null ? formatDuration(stats.avgResolution, i18n.language) : '—'}
+          value={avgResolution != null ? formatDuration(avgResolution, i18n.language) : '—'}
           sub={t('dashboard.sinceReceipt')}
           icon={Clock}
           gradient="from-cyan-500 to-sky-600"

@@ -1264,5 +1264,32 @@
     "metBy": "Met by {{name}} at {{time}}",
     "waited_one": "waited {{count}} min",
     "waited_other": "waited {{count}} min"
+  },
+  "slaSettings": {
+    "title": "Resolution time (SLA) & working hours",
+    "subtitle": "How long feedback and tech tickets may take, and how time is counted.",
+    "targetsTitle": "Allowed resolution time (hours)",
+    "complaintPriority": "Feedback — {{priority}}",
+    "techTickets": "Tech ticket",
+    "hoursUnit": "Hours are counted per the rules below. Past the deadline a record becomes overdue and is escalated automatically.",
+    "businessOnly": "Stop counting time outside official working hours",
+    "businessOnlyHint": "Only time between the start and end of the working day, on working days, counts. Anything arriving in the evening or on a day off starts counting at the next working day. Also applies to the resolution time shown in lists, reports and the dashboard.",
+    "workStart": "Work starts",
+    "workEnd": "Work ends",
+    "workDays": "Working days",
+    "days": {
+      "0": "Sun",
+      "1": "Mon",
+      "2": "Tue",
+      "3": "Wed",
+      "4": "Thu",
+      "5": "Fri",
+      "6": "Sat"
+    },
+    "exampleBusiness": "A working day = {{perDay}} hours, so {{hours}} hours for normal feedback ≈ {{days}} working days.",
+    "exampleAllDay": "Not enabled: every hour of a working day counts (24h); only days off are skipped.",
+    "appliesNote": "Changes apply to new feedback and tickets, and when a deadline is recalculated after waiting for a parent. Deadlines of currently open records don't change.",
+    "noDaysError": "Choose at least one working day.",
+    "hoursError": "Work must end after it starts."
   }
 }
