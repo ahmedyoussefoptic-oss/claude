@@ -434,6 +434,11 @@ export default function ComplaintsList() {
                     <td className="px-6 py-4 text-slate-600">
                       {branchName(c.branch)}
                       {c.department && <div className="text-xs text-slate-400 mt-0.5">{departmentName(c.department)}</div>}
+                      {(c.stage || c.grade) && (
+                        <div className="mt-1 inline-flex items-center gap-1 text-[11px] font-medium text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded" dir="ltr">
+                          {[c.stage, c.grade].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-slate-600" dir="ltr">
                       {c.createdAt ? format(c.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}
