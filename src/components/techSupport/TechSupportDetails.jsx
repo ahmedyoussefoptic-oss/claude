@@ -19,6 +19,7 @@ import { useWhatsAppApi } from '../../hooks/useWhatsAppApi';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import ErrorBoundary from '../common/ErrorBoundary';
 import TechSupportEditForm from './TechSupportEditForm';
+import RecordViewers from '../common/RecordViewers';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -328,6 +329,7 @@ function TechSupportDetailsInner({ ticket, onClose }) {
                 </span>
               )}
             </div>
+            <RecordViewers kind="techSupport" docId={ticket.id} />
             <p className="text-sm text-slate-500 flex items-center gap-2">
               <Clock className="w-4 h-4" />
               {ticket.createdAt ? format(ticket.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}

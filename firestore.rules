@@ -207,6 +207,12 @@ service cloud.firestore {
         allow create: if true;
         allow update, delete: if isAdmin();
       }
+
+      // Who opened the record (written by markRecordViewed only).
+      match /views/{uid} {
+        allow read: if isAuthenticated() && !isReceptionist();
+        allow write: if false;
+      }
     }
 
     // Deleted-complaints archive — a full snapshot is written here the
@@ -276,6 +282,10 @@ service cloud.firestore {
       match /activityLog/{logId} {
         allow read, create: if canAccessTechSupport();
         allow update, delete: if isAdmin();
+      }
+      match /views/{uid} {
+        allow read: if canAccessTechSupport();
+        allow write: if false;
       }
     }
 

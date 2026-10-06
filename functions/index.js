@@ -1927,3 +1927,72 @@ async function autoSendWa(kind, ref, event) {
 if (WA_API_ENABLED) {
   exports.sendWhatsAppApiMessage = sendWhatsAppApiMessage;
 }
+
+// "Who has seen this record": called each time a staff member opens a
+// complaint or tech ticket. The first open per person creates
+// {record}/views/{uid} and notifies admins, the branch's principals and
+// quality officers, whoever logged the record and the other assignees;
+// later opens only bump lastAt/count.
+exports.markRecordViewed = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  }
+  const { kind, docId } = request.data || {};
+  const cfg = {
+    complaint: { collection: "complaints", idField: "complaintId", label: "الملاحظة", type: "VIEWED" },
+    techSupport: { collection: "techSupportTickets", idField: "ticketId", label: "البلاغ التقني", type: "IT_VIEWED" },
+  }[kind];
+  if (!cfg || typeof docId !== "string" || !docId) {
+    throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  }
+  const uid = request.auth.uid;
+  const callerDoc = await db.collection("users").doc(uid).get();
+  const caller = callerDoc.data();
+  if (!callerDoc.exists || caller.active === false) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  }
+  const ref = db.collection(cfg.collection).doc(docId);
+  const snap = await ref.get();
+  if (!snap.exists) return { first: false };
+  const record = snap.data();
+
+  const isAdminCaller = caller.role === "ADMIN";
+  const inScope = caller.access === "all" || (caller.branches || []).includes(record.branch) || caller.branch === record.branch;
+  const isAssignee = (record.assignedTo || []).includes(uid);
+  if (!(isAdminCaller || inScope || isAssignee)) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية الاطلاع على هذا السجل.");
+  }
+
+  const now = Timestamp.now();
+  const viewRef = ref.collection("views").doc(uid);
+  const first = await db.runTransaction(async (tx) => {
+    const v = await tx.get(viewRef);
+    if (v.exists) {
+      tx.update(viewRef, { lastAt: now, count: FieldValue.increment(1) });
+      return false;
+    }
+    tx.set(viewRef, { uid, name: caller.name || caller.email || "", role: caller.role || null, firstAt: now, lastAt: now, count: 1 });
+    return true;
+  });
+
+  if (first) {
+    const users = await loadActiveUsers();
+    const inBranch = (u) => u.access === "all" || (u.branches || []).includes(record.branch) || u.branch === record.branch;
+    const recipients = new Set([
+      ...users.filter((u) => u.role === "ADMIN").map((u) => u.id),
+      ...users.filter((u) => (u.isPrincipal === true || u.isQuality === true) && inBranch(u)).map((u) => u.id),
+      ...(record.receiver ? [record.receiver] : []),
+      ...(record.assignedTo || []),
+    ]);
+    recipients.delete(uid);
+    if (recipients.size) {
+      await notifyUsers([...recipients], {
+        title: `اطّلاع على ${cfg.label}`,
+        body: `${caller.name || "أحد الموظفين"} اطّلع على ${cfg.label} رقم ${record[cfg.idField]}.`,
+        complaintId: docId,
+        type: cfg.type,
+      });
+    }
+  }
+  return { first };
+});

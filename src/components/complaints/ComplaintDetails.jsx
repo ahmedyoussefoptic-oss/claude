@@ -20,6 +20,7 @@ import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiS
 import ErrorBoundary from '../common/ErrorBoundary';
 import ComplaintEditForm from './ComplaintEditForm';
 import ComplaintConvertModal from './ComplaintConvertModal';
+import RecordViewers from '../common/RecordViewers';
 import { complaintStatusLabel, complaintTypesOf } from '../../config/complaintTypes';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
@@ -506,6 +507,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
               <Clock className="w-4 h-4" />
               {complaint.createdAt ? format(complaint.createdAt.toDate(), 'PP p', { locale: dateLocale }) : ''}
             </p>
+            <RecordViewers kind="complaint" docId={complaint.id} />
           </div>
           <div className="flex items-center gap-1">
             <button

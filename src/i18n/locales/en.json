@@ -1299,5 +1299,10 @@
     "appliesNote": "Changes apply to new feedback and tickets, and when a deadline is recalculated after waiting for a parent. Deadlines of currently open records don't change.",
     "noDaysError": "Choose at least one working day.",
     "hoursError": "Work must end after it starts."
+  },
+  "recordViewers": {
+    "seenBy_one": "Seen by {{count}}:",
+    "seenBy_other": "Seen by {{count}}:",
+    "detail": "First seen: {{first}} — last seen: {{last}} — times: {{count}}"
   }
 }

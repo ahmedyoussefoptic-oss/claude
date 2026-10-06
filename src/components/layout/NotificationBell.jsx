@@ -27,6 +27,8 @@ const NOTIFICATION_TARGET_PATH = {
   SLA_WARNING: '/complaints',
   INTERNAL_COMMENT_ADDED: '/complaints',
   VISIT_ARRIVED: '/complaints',
+  VIEWED: '/complaints',
+  IT_VIEWED: '/tech-support',
   PARTIAL_SOLUTION_ADDED: '/complaints',
   REOPENED: '/complaints',
   IT_REOPENED: '/tech-support',
