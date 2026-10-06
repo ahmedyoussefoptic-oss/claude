@@ -13,19 +13,21 @@ import LanguageSwitcher from '../common/LanguageSwitcher';
 import logo from '../../assets/logo.png';
 import { canAccessTechSupport, canSeeTrips, tripsAccessOf } from '../../utils/scope';
 
+const ownerClaimTried = new Set();
+
 export default function AppLayout() {
   const { t } = useTranslation();
   const { user, userData, role, logout, refreshUserData } = useAuthStore();
   const caps = useAdminPermissions();
 
   // The system owner's account is recognised server-side by its sign-in
-  // email (claimSystemOwner); other admins get a harmless refusal. Once per session.
+  // email (claimSystemOwner); anyone else gets a harmless refusal. Once per
+  // page load and account.
   useEffect(() => {
-    if (!user || role !== 'ADMIN' || isOwner(userData)) return;
-    const key = `ownerClaim:${user.uid}`;
-    try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch { /* storage unavailable */ }
+    if (!user || !userData || isOwner(userData) || ownerClaimTried.has(user.uid)) return;
+    ownerClaimTried.add(user.uid);
     httpsCallable(functions, 'claimSystemOwner')().then(() => refreshUserData()).catch(() => {});
-  }, [user, role, userData, refreshUserData]);
+  }, [user, userData, refreshUserData]);
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
