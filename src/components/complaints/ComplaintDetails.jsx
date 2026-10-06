@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAdminPermissions, adminCan } from '../../config/adminPermissions';
 import { useNavigate } from 'react-router-dom';
 import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, MessageSquare, Trash2, Star, Link2, Mic, Square, Share2, Pencil, Wrench, Armchair, Handshake } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -207,12 +208,14 @@ function ComplaintDetailsInner({ complaint, onClose }) {
   }, [complaint.id]);
 
   const isAdmin = userData?.role === ROLES.ADMIN;
+
+  const adminCaps = useAdminPermissions();
   // Mirrors firestore.rules' canEditRecord/canDeleteRecord: a branch-scoped
   // holder of the edit/delete permission only gets it for their own branch
   // — otherwise the buttons render but every write is rejected server-side.
   const inScope = isAdmin || userData?.access === 'all' || userBranches(userData).includes(complaint.branch);
   const canEdit = isAdmin || (inScope && userData?.perms?.edit === true);
-  const canDelete = isAdmin || (inScope && userData?.perms?.delete === true);
+  const canDelete = isAdmin ? adminCan(userData, adminCaps, 'delete') : (inScope && userData?.perms?.delete === true);
   // Converting moves the record into the tech-support module, so it also
   // needs that module's access (same rule as firestore.rules' canAccessTechSupport).
   const canConvert = canEdit

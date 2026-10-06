@@ -4,6 +4,7 @@ import { collection, onSnapshot, doc, updateDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../config/firebase';
 import { ROLES, ROLE_LABELS } from '../config/roles';
+import { useAdminPermissions, adminCan, isOwner } from '../config/adminPermissions';
 import { useBranches, useDepartments } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
 import { userBranches } from '../utils/scope';
@@ -53,7 +54,12 @@ export default function Users() {
   const listSep = i18n.language === 'ar' ? '، ' : ', ';
   const roleName = (r) => t(`roles.${r}`, ROLE_LABELS[r] || r);
   const departmentName = (id) => t(`users.departments.${id}`, id);
-  const { user: currentUser } = useAuthStore();
+  const { user: currentUser, userData: me } = useAuthStore();
+  const caps = useAdminPermissions();
+  // Only the system owner (or admins the owner allows) manage admin
+  // accounts; nobody but the owner touches the owner's account.
+  const canManageAdmins = adminCan(me, caps, 'manageAdmins');
+  const canActOn = (u) => (isOwner(u) ? isOwner(me) && u.id === currentUser?.uid : u.role !== ROLES.ADMIN || canManageAdmins || u.id === currentUser?.uid);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -337,7 +343,7 @@ export default function Users() {
                 onChange={(e) => handleRoleChange(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary bg-white"
               >
-                {Object.values(ROLES).map((r) => (
+                {Object.values(ROLES).filter((r) => r !== ROLES.ADMIN || canManageAdmins || form.role === ROLES.ADMIN).map((r) => (
                   <option key={r} value={r}>{roleName(r)}</option>
                 ))}
               </select>
@@ -653,9 +659,13 @@ export default function Users() {
                       {u.phone && <div>{u.phone}</div>}
                     </td>
                     <td className="px-6 py-4 text-sm">
-                      <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
-                        {roleName(u.role)}
-                      </span>
+                      {isOwner(u) ? (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">👑 {t('roles.OWNER')}</span>
+                      ) : (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                          {roleName(u.role)}
+                        </span>
+                      )}
                       {u.isPrincipal && (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 mr-1 mt-1">
                           🏫 {t('users.principalTag')}
@@ -698,15 +708,21 @@ export default function Users() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm whitespace-nowrap">
-                      <button onClick={() => openEditForm(u)} className="p-2 text-slate-500 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors" title={t('common.edit')}>
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => openResetPassword(u)} className="p-2 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title={t('users.resetPasswordTitle')}>
-                        <KeyRound className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => handleDelete(u)} className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={t('common.delete')}>
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canActOn(u) ? (
+                        <>
+                          <button onClick={() => openEditForm(u)} className="p-2 text-slate-500 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors" title={t('common.edit')}>
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => openResetPassword(u)} className="p-2 text-slate-500 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors" title={t('users.resetPasswordTitle')}>
+                            <KeyRound className="w-4 h-4" />
+                          </button>
+                          {!isOwner(u) && (
+                            <button onClick={() => handleDelete(u)} className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title={t('common.delete')}>
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </>
+                      ) : <span className="text-xs text-slate-400">{t('users.protectedAccount')}</span>}
                     </td>
                   </tr>
                 ))}

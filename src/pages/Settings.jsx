@@ -16,6 +16,10 @@ import { useMessageTemplates } from '../hooks/useMessageTemplates';
 import WhatsAppApiSettings from '../components/settings/WhatsAppApiSettings';
 import SlaSettings from '../components/settings/SlaSettings';
 import AppointmentSettings from '../components/settings/AppointmentSettings';
+import SettingsGate from '../components/settings/SettingsGate';
+import OwnerSettings from '../components/settings/OwnerSettings';
+import useAuthStore from '../stores/useAuthStore';
+import { isOwner } from '../config/adminPermissions';
 import { parseStudentRows, upsertStudents } from '../utils/students';
 import { DEFAULT_TEMPLATES, TEMPLATE_PLACEHOLDERS } from '../utils/whatsapp';
 import {
@@ -559,8 +563,10 @@ export default function Settings() {
   const problemTypes = useProblemTypes();
   const platforms = usePlatforms();
   const itemCategories = useItemCategories();
+  const { userData } = useAuthStore();
 
   return (
+    <SettingsGate>
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
@@ -569,6 +575,8 @@ export default function Settings() {
         </h1>
         <p className="text-slate-500 mt-1">{t('settings.pageSubtitle')}</p>
       </div>
+
+      {isOwner(userData) && <OwnerSettings />}
 
       <EditableList title={t('settings.branchesTitle')} icon={Building2} items={branches} collectionName="branches" />
       <EditableList title={t('settings.departmentsTitle')} icon={GraduationCap} items={departments} collectionName="departments" />
@@ -583,5 +591,6 @@ export default function Settings() {
       <MessageTemplatesEditor />
       <WhatsAppApiSettings />
     </div>
+    </SettingsGate>
   );
 }

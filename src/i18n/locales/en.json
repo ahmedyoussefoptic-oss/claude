@@ -766,7 +766,8 @@
     "DEPARTMENT_MANAGER": "Department Manager",
     "SPECIALIST": "Complaint Resolution Specialist",
     "CUSTOMER_SERVICE": "Customer Service",
-    "RECEPTIONIST": "Receptionist"
+    "RECEPTIONIST": "Receptionist",
+    "OWNER": "System Owner"
   },
   "users": {
     "pageTitle": "User Management",
@@ -849,7 +850,8 @@
     "tripsAccessTag": {
       "tripsOnly": "Trips only",
       "none": "No trips"
-    }
+    },
+    "protectedAccount": "Protected account"
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",
@@ -1745,5 +1747,44 @@
       "thanks": "Thank you, your rating was received.",
       "verifyTitle": "Rate the trip — student details"
     }
+  },
+  "ownerSettings": {
+    "title": "System owner settings",
+    "subtitle": "Visible only to you as the system owner.",
+    "adminCapsTitle": "System admin permissions",
+    "adminCapsHint": "What other “system admin” accounts may do. As the system owner you always have every permission, and nobody can edit or delete your account.",
+    "caps": {
+      "settings": "Open and change Settings",
+      "users": "Manage users",
+      "manageAdmins": "Manage other system admin accounts",
+      "archive": "View the deleted-records archive",
+      "delete": "Delete complaints, tickets and lost items"
+    },
+    "capsHint": {
+      "settings": "Branches, sections, categories, student roster, WhatsApp, SLA and appointments.",
+      "users": "Add, edit and delete staff and reset their passwords.",
+      "manageAdmins": "Add a system admin account, or edit, delete or reset the password of another system admin.",
+      "archive": "The deleted-records archive page.",
+      "delete": "Delete records (a copy is kept in the archive)."
+    },
+    "pwTitle": "Settings password",
+    "pwOnHint": "Settings are password-protected; the password is asked on entry (valid for an hour). Change or remove it with the current password.",
+    "pwOffHint": "Set a password every admin (you included) must enter before opening Settings.",
+    "pwCurrent": "Current password",
+    "pwNew": "New password",
+    "pwConfirm": "Confirm password",
+    "pwSet": "Enable password",
+    "pwChange": "Change password",
+    "pwRemove": "Remove password",
+    "pwTooShort": "Password must be at least 6 characters.",
+    "pwMismatch": "Passwords don't match.",
+    "pwSaved": "Settings password saved.",
+    "pwRemoved": "Settings password removed.",
+    "lockedTitle": "Settings are locked",
+    "lockedHint": "Enter the Settings password to continue.",
+    "unlock": "Unlock",
+    "unlockedUntil": "Settings unlocked for about {{minutes}} minutes.",
+    "lockNow": "Lock now",
+    "noSettingsAccess": "You don't have access to Settings."
   }
 }

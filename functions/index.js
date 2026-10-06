@@ -57,6 +57,32 @@ const OPEN_STATUSES = ["RECEIVED", "IN_PROGRESS", "WAITING_PARENT_RESPONSE", "ES
 const OPEN_TICKET_STATUSES = ["NEW", "ASSIGNED", "IN_PROGRESS", "SOLVED", "REOPENED"];
 const OPEN_LOST_FOUND_STATUSES = ["UNCLAIMED", "MATCHED"];
 
+// ---------------------------------------------------------------------------
+// System owner ("منشئ النظام") and system-admin capabilities.
+// The owner is the one account whose sign-in email matches
+// SYSTEM_OWNER_EMAIL (functions/.env); claimSystemOwner marks it isOwner.
+// The owner always has every power; what other ADMIN accounts may do is set
+// by the owner in settings/adminPermissions (missing key = allowed).
+// Mirrored in firestore.rules (isOwner / adminPerm) and
+// src/config/adminPermissions.js.
+// ---------------------------------------------------------------------------
+const ADMIN_CAPS = ["settings", "users", "manageAdmins", "archive", "delete"];
+async function loadAdminCaps() {
+  const snap = await db.collection("settings").doc("adminPermissions").get();
+  const data = snap.exists ? snap.data() : {};
+  return Object.fromEntries(ADMIN_CAPS.map((c) => [c, data[c] !== false]));
+}
+function callerCan(caller, cap, caps) {
+  if (!caller) return false;
+  if (caller.isOwner === true) return true;
+  return caller.role === "ADMIN" && caps[cap] !== false;
+}
+// May this caller manage staff accounts at all (ADMIN by capability, others
+// by their perms.users)?
+function canManageUsers(caller, caps) {
+  return caller.role === "ADMIN" ? callerCan(caller, "users", caps) : caller.perms?.users === true;
+}
+
 // Removes a staff account (Firebase Auth + Firestore profile) via the Admin
 // SDK. Only callers who are ADMIN or hold the `users` permission may call
 // this. Refuses to delete: yourself, or a staff member with open complaints
@@ -67,8 +93,8 @@ exports.deleteStaffUser = onCall(async (request) => {
   }
   const callerDoc = await db.collection("users").doc(request.auth.uid).get();
   const caller = callerDoc.data();
-  const isAdminCaller = callerDoc.exists && caller.role === "ADMIN";
-  if (!callerDoc.exists || !(isAdminCaller || caller.perms?.users)) {
+  const caps = await loadAdminCaps();
+  if (!callerDoc.exists || !canManageUsers(caller, caps)) {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
@@ -79,13 +105,14 @@ exports.deleteStaffUser = onCall(async (request) => {
   if (uid === request.auth.uid) {
     throw new HttpsError("failed-precondition", "لا يمكن حذف المستخدم الذي تعمل باسمه حالياً.");
   }
-  // A "manage users" holder (non-admin) may never delete an admin account —
-  // only a real admin can remove another admin.
-  if (!isAdminCaller) {
-    const targetDoc = await db.collection("users").doc(uid).get();
-    if (targetDoc.exists && targetDoc.data().role === "ADMIN") {
-      throw new HttpsError("permission-denied", "لا يمكن حذف حساب مدير النظام.");
-    }
+  // The owner's account can't be deleted; an admin account only by the
+  // owner or an admin allowed to manage admins.
+  const targetDoc = await db.collection("users").doc(uid).get();
+  if (targetDoc.exists && targetDoc.data().isOwner === true) {
+    throw new HttpsError("permission-denied", "لا يمكن حذف حساب منشئ النظام.");
+  }
+  if (targetDoc.exists && targetDoc.data().role === "ADMIN" && !callerCan(caller, "manageAdmins", caps)) {
+    throw new HttpsError("permission-denied", "لا يمكن حذف حساب مدير النظام.");
   }
 
   const openComplaints = (
@@ -141,14 +168,18 @@ exports.createStaffUser = onCall(async (request) => {
 
   const callerDoc = await db.collection("users").doc(request.auth.uid).get();
   const caller = callerDoc.data();
-  const isAdminCaller = callerDoc.exists && caller.role === "ADMIN";
-  if (!callerDoc.exists || !(isAdminCaller || caller.perms?.users)) {
+  const caps = await loadAdminCaps();
+  const isAdminCaller = callerDoc.exists && caller.role === "ADMIN" && callerCan(caller, "users", caps);
+  if (!callerDoc.exists || !canManageUsers(caller, caps)) {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
   const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, stages, curricula, notificationPrefs, notificationChannels, tripsAccess } = request.data || {};
   if (!name || !email || !password || !role) {
     throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
+  }
+  if (role === "ADMIN" && !callerCan(caller, "manageAdmins", caps)) {
+    throw new HttpsError("permission-denied", "إضافة حساب بصلاحية مدير النظام متاحة لمنشئ النظام فقط.");
   }
   // A "manage users" holder (non-admin) may create staff accounts, but can
   // never grant admin-equivalent power — otherwise perms.users is a full
@@ -209,12 +240,22 @@ exports.resetStaffPassword = onCall(async (request) => {
   }
   const callerDoc = await db.collection("users").doc(request.auth.uid).get();
   const caller = callerDoc.data();
-  const isAdminCaller = callerDoc.exists && caller.role === "ADMIN";
-  if (!callerDoc.exists || !(isAdminCaller || caller.perms?.users)) {
+  const caps = await loadAdminCaps();
+  const isAdminCaller = callerDoc.exists && caller.role === "ADMIN" && callerCan(caller, "users", caps);
+  if (!callerDoc.exists || !canManageUsers(caller, caps)) {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
   const { uid, newPassword } = request.data || {};
+  {
+    const target = (await db.collection("users").doc(uid || "-").get()).data();
+    if (target?.isOwner === true && uid !== request.auth.uid) {
+      throw new HttpsError("permission-denied", "لا يمكن تغيير كلمة مرور منشئ النظام.");
+    }
+    if (target?.role === "ADMIN" && uid !== request.auth.uid && !callerCan(caller, "manageAdmins", caps)) {
+      throw new HttpsError("permission-denied", "لا يمكن إعادة تعيين كلمة مرور مدير النظام.");
+    }
+  }
   if (!uid || !newPassword) {
     throw new HttpsError("invalid-argument", "معرّف الموظف وكلمة المرور الجديدة مطلوبان.");
   }
@@ -3242,4 +3283,107 @@ exports.getStudentTrips = onCall(async (request) => {
   }
   out.sort((a, b) => (a.date < b.date ? 1 : -1));
   return { trips: out };
+});
+
+// --- System owner ------------------------------------------------------------
+// Marks the caller as the system owner when their sign-in email is the one
+// configured in SYSTEM_OWNER_EMAIL — the only way isOwner is ever set
+// (firestore.rules never lets a client write it).
+exports.claimSystemOwner = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const ownerEmail = String(process.env.SYSTEM_OWNER_EMAIL || "").trim().toLowerCase();
+  const email = String(request.auth.token.email || "").trim().toLowerCase();
+  if (!ownerEmail || email !== ownerEmail) throw new HttpsError("permission-denied", "غير مصرح.");
+  const ref = db.collection("users").doc(request.auth.uid);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("failed-precondition", "لا يوجد ملف مستخدم لهذا الحساب.");
+  const others = await db.collection("users").where("isOwner", "==", true).get();
+  const batch = db.batch();
+  others.docs.filter((d) => d.id !== ref.id).forEach((d) => batch.update(d.ref, { isOwner: FieldValue.delete() }));
+  batch.update(ref, {
+    isOwner: true,
+    role: "ADMIN",
+    access: "all",
+    active: true,
+    tripsAccess: "all",
+    perms: { edit: true, delete: true, users: true, trips: true, tripFinance: true },
+  });
+  await batch.commit();
+  await auth.setCustomUserClaims(request.auth.uid, { ...(snap.data().claims || {}), role: "ADMIN" });
+  return { ok: true };
+});
+
+// --- Settings password ---------------------------------------------------------
+// The owner may protect the Settings page with a password. The hash lives in
+// secureConfig/settingsLock (never readable by clients); settings/security
+// only says whether the lock is on. Entering the password writes
+// settingsUnlocks/<uid> with an expiry, which firestore.rules checks on every
+// write to the settings collections.
+const SETTINGS_UNLOCK_MINUTES = 60;
+const hashPassword = (password, salt) => crypto.scryptSync(String(password), salt, 64).toString("hex");
+async function verifySettingsPassword(password) {
+  const snap = await db.collection("secureConfig").doc("settingsLock").get();
+  if (!snap.exists) return true;
+  const { salt, hash } = snap.data();
+  const candidate = Buffer.from(hashPassword(password || "", salt), "hex");
+  const stored = Buffer.from(hash, "hex");
+  return candidate.length === stored.length && crypto.timingSafeEqual(candidate, stored);
+}
+async function adminCaller(request) {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const snap = await db.collection("users").doc(request.auth.uid).get();
+  const u = snap.data();
+  if (!snap.exists || u.active === false || u.role !== "ADMIN") throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
+  return { uid: request.auth.uid, ...u };
+}
+
+exports.setSettingsPassword = onCall(async (request) => {
+  const caller = await adminCaller(request);
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "تغيير كلمة سر الإعدادات متاح لمنشئ النظام فقط.");
+  const { current, next } = request.data || {};
+  const lockSnap = await db.collection("settings").doc("security").get();
+  if (lockSnap.exists && lockSnap.data().lockEnabled && !(await verifySettingsPassword(current))) {
+    throw new HttpsError("permission-denied", "كلمة السر الحالية غير صحيحة.");
+  }
+  const now = Timestamp.now();
+  if (!next) {
+    await db.collection("secureConfig").doc("settingsLock").delete();
+    await db.collection("settings").doc("security").set({ lockEnabled: false, updatedAt: now, updatedByName: caller.name || "" });
+    return { lockEnabled: false };
+  }
+  if (typeof next !== "string" || next.length < 6) throw new HttpsError("invalid-argument", "يجب ألا تقل كلمة السر عن 6 أحرف.");
+  const salt = crypto.randomBytes(16).toString("hex");
+  await db.collection("secureConfig").doc("settingsLock").set({ salt, hash: hashPassword(next, salt), updatedAt: now });
+  await db.collection("settings").doc("security").set({ lockEnabled: true, updatedAt: now, updatedByName: caller.name || "" });
+  // Changing the password ends every open unlock except the owner's own.
+  const unlocks = await db.collection("settingsUnlocks").get();
+  const batch = db.batch();
+  unlocks.docs.filter((d) => d.id !== caller.uid).forEach((d) => batch.delete(d.ref));
+  batch.set(db.collection("settingsUnlocks").doc(caller.uid), { expiresAt: Timestamp.fromMillis(Date.now() + SETTINGS_UNLOCK_MINUTES * 60000) });
+  await batch.commit();
+  return { lockEnabled: true };
+});
+
+exports.unlockSettings = onCall(async (request) => {
+  const caller = await adminCaller(request);
+  const caps = await loadAdminCaps();
+  if (!callerCan(caller, "settings", caps)) throw new HttpsError("permission-denied", "لا تملك صلاحية الدخول إلى الإعدادات.");
+  const guardRef = db.collection("secureConfig").doc(`unlockAttempts_${caller.uid}`);
+  const guard = (await guardRef.get()).data() || {};
+  const recent = guard.lastAt && Date.now() - guard.lastAt.toMillis() < 15 * 60000;
+  if (recent && (guard.failures || 0) >= 5) throw new HttpsError("resource-exhausted", "محاولات كثيرة خاطئة، حاول بعد 15 دقيقة.");
+  if (!(await verifySettingsPassword(request.data?.password))) {
+    await guardRef.set({ failures: (recent ? guard.failures || 0 : 0) + 1, lastAt: Timestamp.now() });
+    throw new HttpsError("permission-denied", "كلمة السر غير صحيحة.");
+  }
+  if (guard.failures) await guardRef.delete();
+  const expiresAt = Timestamp.fromMillis(Date.now() + SETTINGS_UNLOCK_MINUTES * 60000);
+  await db.collection("settingsUnlocks").doc(caller.uid).set({ expiresAt });
+  return { expiresAt: expiresAt.toMillis() };
+});
+
+exports.lockSettings = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  await db.collection("settingsUnlocks").doc(request.auth.uid).delete();
+  return { ok: true };
 });

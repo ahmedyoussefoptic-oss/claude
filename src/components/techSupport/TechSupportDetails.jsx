@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAdminPermissions, adminCan } from '../../config/adminPermissions';
 import { X, Clock, CheckCircle2, User, Phone, MapPin, Loader2, Trash2, UserPlus, MessageCircle, MessageSquare, ShieldCheck, Link2, Share2, Pencil, Paperclip, Plus } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
@@ -63,11 +64,13 @@ function TechSupportDetailsInner({ ticket, onClose }) {
   }, [ticket.id]);
 
   const isAdmin = userData?.role === ROLES.ADMIN;
+
+  const adminCaps = useAdminPermissions();
   // Mirrors firestore.rules' canEditRecord/canDeleteRecord: a branch-scoped
   // holder of the edit/delete permission only gets it for their own branch.
   const inScope = isAdmin || userData?.access === 'all' || userBranches(userData).includes(ticket.branch);
   const canEdit = isAdmin || (inScope && userData?.perms?.edit === true);
-  const canDelete = isAdmin || (inScope && userData?.perms?.delete === true);
+  const canDelete = isAdmin ? adminCan(userData, adminCaps, 'delete') : (inScope && userData?.perms?.delete === true);
 
   useEffect(() => {
     const q = query(collection(db, `techSupportTickets/${ticket.id}/activityLog`), orderBy('createdAt', 'desc'));

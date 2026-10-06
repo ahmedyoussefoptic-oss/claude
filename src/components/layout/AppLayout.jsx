@@ -2,7 +2,10 @@ import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
 import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { httpsCallable } from 'firebase/functions';
+import { functions } from '../../config/firebase';
+import { useAdminPermissions, adminCan, isOwner } from '../../config/adminPermissions';
 import NotificationBell from './NotificationBell';
 import Watermark from '../common/Watermark';
 import SystemCredit from '../common/SystemCredit';
@@ -12,7 +15,17 @@ import { canAccessTechSupport, canSeeTrips, tripsAccessOf } from '../../utils/sc
 
 export default function AppLayout() {
   const { t } = useTranslation();
-  const { user, userData, role, logout } = useAuthStore();
+  const { user, userData, role, logout, refreshUserData } = useAuthStore();
+  const caps = useAdminPermissions();
+
+  // The system owner's account is recognised server-side by its sign-in
+  // email (claimSystemOwner); other admins get a harmless refusal. Once per session.
+  useEffect(() => {
+    if (!user || role !== 'ADMIN' || isOwner(userData)) return;
+    const key = `ownerClaim:${user.uid}`;
+    try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, '1'); } catch { /* storage unavailable */ }
+    httpsCallable(functions, 'claimSystemOwner')().then(() => refreshUserData()).catch(() => {});
+  }, [user, role, userData, refreshUserData]);
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -47,14 +60,16 @@ export default function AppLayout() {
     navItems.splice(3, 0, { name: t('nav.techSupport'), path: '/tech-support', icon: Wrench });
   }
 
-  if (!tripsOnly && (role === 'ADMIN' || userData?.perms?.users)) {
+  if (!tripsOnly && (role === 'ADMIN' ? adminCan(userData, caps, 'users') : userData?.perms?.users)) {
     navItems.push({ name: t('nav.users'), path: '/users', icon: User });
   }
   if (!tripsOnly && (role === 'ADMIN' || userData?.isPrincipal)) {
     navItems.push({ name: t('nav.branchQr'), path: '/branch-qr', icon: QrCode });
   }
-  if (role === 'ADMIN') {
+  if (adminCan(userData, caps, 'settings')) {
     navItems.push({ name: t('nav.settings'), path: '/settings', icon: Settings });
+  }
+  if (adminCan(userData, caps, 'archive')) {
     navItems.push({ name: t('nav.archive'), path: '/deleted-complaints', icon: Archive });
   }
 
@@ -88,7 +103,7 @@ export default function AppLayout() {
           </div>
           <div>
             <p className="text-sm font-medium text-slate-900">{userData?.name || user.email}</p>
-            <p className="text-xs text-slate-500 capitalize">{role}</p>
+            <p className={`text-xs ${isOwner(userData) ? 'text-amber-600 font-bold' : 'text-slate-500'}`}>{isOwner(userData) ? t('roles.OWNER') : t(`roles.${role}`, { defaultValue: role || '' })}</p>
           </div>
         </div>
 

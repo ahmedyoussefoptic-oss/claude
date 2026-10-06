@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useAdminPermissions, adminCan } from '../../config/adminPermissions';
 import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle, Link2, UserPlus, Trash2, GraduationCap } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db, functions } from '../../config/firebase';
@@ -65,11 +66,13 @@ function LostFoundDetailsInner({ item, onClose }) {
   }, [item.id]);
 
   const isAdmin = userData?.role === ROLES.ADMIN;
+
+  const adminCaps = useAdminPermissions();
   // Mirrors firestore.rules' canEditRecord/canDeleteRecord: a branch-scoped
   // holder of the edit/delete permission only gets it for their own branch.
   const inScope = isAdmin || userData?.access === 'all' || userBranches(userData).includes(item.branch);
   const canEdit = isAdmin || (inScope && userData?.perms?.edit === true);
-  const canDelete = isAdmin || (inScope && userData?.perms?.delete === true);
+  const canDelete = isAdmin ? adminCan(userData, adminCaps, 'delete') : (inScope && userData?.perms?.delete === true);
 
   useEffect(() => {
     const q = query(

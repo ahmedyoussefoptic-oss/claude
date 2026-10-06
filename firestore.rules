@@ -56,11 +56,33 @@ service cloud.firestore {
     function canSeeTrips() {
       return isAuthenticated() && !isReceptionist() && tripsAccess() != 'none';
     }
+    // System owner ("منشئ النظام", set only by the claimSystemOwner function)
+    // always has every power; other ADMIN accounts have the capabilities the
+    // owner leaves on in settings/adminPermissions (missing = allowed).
+    function isOwner() {
+      return myDoc() != null && myDoc().get('isOwner', false) == true;
+    }
+    function adminPerm(cap) {
+      let p = /databases/$(database)/documents/settings/adminPermissions;
+      return isOwner() || (isAdmin() && (!exists(p) || get(p).data.get(cap, true) == true));
+    }
+    // When the owner sets a Settings password (settings/security.lockEnabled),
+    // writes to the settings collections need a fresh unlock written by the
+    // unlockSettings function.
+    function settingsUnlocked() {
+      let lock = /databases/$(database)/documents/settings/security;
+      let unlock = /databases/$(database)/documents/settingsUnlocks/$(request.auth.uid);
+      return !exists(lock) || get(lock).data.get('lockEnabled', false) != true ||
+        (exists(unlock) && get(unlock).data.expiresAt > request.time);
+    }
+    function canWriteSettings() {
+      return adminPerm('settings') && settingsUnlocked();
+    }
     function canEditRecord(branch) {
       return isAdmin() || (myPerm('edit') && inMyScope(branch));
     }
     function canDeleteRecord(branch) {
-      return isAdmin() || (myPerm('delete') && inMyScope(branch));
+      return adminPerm('delete') || (!isAdmin() && myPerm('delete') && inMyScope(branch));
     }
 
     // Tech-support tickets hold national IDs and account credentials, so
@@ -125,14 +147,25 @@ service cloud.firestore {
       // Admins may do anything. A "manage users" holder may only create or
       // touch OTHER staff accounts, may never grant admin-equivalent power,
       // and may never act on an existing admin's account.
-      allow create: if isAdmin() || (myPerm('users') && !grantsAdminPower(request.resource.data));
-      allow delete: if isAdmin() || (
-        myPerm('users') && request.auth.uid != userId && resource.data.role != 'ADMIN'
+      // isOwner is never written by a client, and the owner's account can
+      // only be changed by the owner. Admin accounts are managed by the owner
+      // or admins allowed to (adminPermissions.manageAdmins).
+      allow create: if request.resource.data.get('isOwner', false) != true && (
+        (adminPerm('users') && (request.resource.data.role != 'ADMIN' || adminPerm('manageAdmins'))) ||
+        (!isAdmin() && myPerm('users') && !grantsAdminPower(request.resource.data))
       );
-      allow update: if isAdmin() || (
-        myPerm('users') && request.auth.uid != userId &&
-        resource.data.role != 'ADMIN' && !grantsAdminPower(request.resource.data)
+      allow delete: if resource.data.get('isOwner', false) != true && request.auth.uid != userId && (
+        (adminPerm('users') && (resource.data.role != 'ADMIN' || adminPerm('manageAdmins'))) ||
+        (!isAdmin() && myPerm('users') && resource.data.role != 'ADMIN')
+      );
+      allow update: if request.resource.data.get('isOwner', false) == resource.data.get('isOwner', false) && ((
+        (resource.data.get('isOwner', false) != true || request.auth.uid == userId) &&
+        adminPerm('users') &&
+        ((resource.data.role != 'ADMIN' && request.resource.data.role != 'ADMIN') || adminPerm('manageAdmins') || request.auth.uid == userId)
       ) || (
+        !isAdmin() && myPerm('users') && request.auth.uid != userId &&
+        resource.data.role != 'ADMIN' && !grantsAdminPower(request.resource.data)
+      )) || (
         // A signed-in user may rename themselves and manage their own push
         // notification tokens, but never touch the security-relevant fields
         // (role/branch/access/perms) on their own doc — otherwise any
@@ -145,13 +178,13 @@ service cloud.firestore {
     // Branches collection
     match /branches/{branchId} {
       allow read: if true; // Branches can be read by public (for complaint form)
-      allow write: if isAdmin();
+      allow write: if canWriteSettings();
     }
 
     // Departments collection
     match /departments/{departmentId} {
       allow read: if true; // Departments can be read by public (for complaint form)
-      allow write: if isAdmin();
+      allow write: if canWriteSettings();
     }
 
     // Editable classification lists (complaint types/sub-types, tech-support
@@ -160,23 +193,23 @@ service cloud.firestore {
     // admin-only write.
     match /complaintTypes/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if canWriteSettings();
     }
     match /complaintSubTypes/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if canWriteSettings();
     }
     match /problemTypes/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if canWriteSettings();
     }
     match /platforms/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if canWriteSettings();
     }
     match /itemCategories/{id} {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if canWriteSettings();
     }
 
     // Misc system settings (e.g. editable WhatsApp message templates) —
@@ -184,7 +217,17 @@ service cloud.firestore {
     // edit the wording.
     match /settings/{docId} {
       allow read: if isAuthenticated();
-      allow write: if isAdmin();
+      // adminPermissions: owner only; security: Cloud Functions only.
+      allow write: if docId == 'adminPermissions' ? isOwner() : (docId != 'security' && canWriteSettings());
+    }
+    // Settings password: unlocks are written by unlockSettings, the hash
+    // (secureConfig) is never readable by clients.
+    match /settingsUnlocks/{uid} {
+      allow read: if isAuthenticated() && request.auth.uid == uid;
+      allow write: if false;
+    }
+    match /secureConfig/{id} {
+      allow read, write: if false;
     }
 
     // Complaints collection
@@ -288,7 +331,7 @@ service cloud.firestore {
     // already did. Immutable once written — even an admin cannot edit or
     // remove an archive entry, matching the activityLog's append-only intent.
     match /deletedComplaints/{archiveId} {
-      allow read: if isAdmin();
+      allow read: if adminPerm('archive');
       allow create: if isAuthenticated() && canDeleteRecord(request.resource.data.complaint.branch);
       allow update, delete: if false;
     }
@@ -297,12 +340,12 @@ service cloud.firestore {
     // Lost & Found items (see LostFoundDetails.jsx's handleDelete) and
     // tech-support tickets (see TechSupportDetails.jsx's handleDelete).
     match /deletedLostFoundItems/{archiveId} {
-      allow read: if isAdmin();
+      allow read: if adminPerm('archive');
       allow create: if isAuthenticated() && canDeleteRecord(request.resource.data.item.branch);
       allow update, delete: if false;
     }
     match /deletedTechSupportTickets/{archiveId} {
-      allow read: if isAdmin();
+      allow read: if adminPerm('archive');
       allow create: if canAccessTechSupport() && canDeleteRecord(request.resource.data.ticket.branch);
       allow update, delete: if false;
     }
@@ -359,7 +402,7 @@ service cloud.firestore {
     // import/edit it (see Settings > import).
     match /students/{studentId} {
       allow read: if isAuthenticated() && !isReceptionist() && !isTripsOnly();
-      allow write: if isAdmin();
+      allow write: if canWriteSettings();
     }
 
     // Notifications collection — created only by Cloud Functions (Admin SDK,
@@ -370,9 +413,16 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
-    // Other collections
-    match /{document=**} {
-      allow read, write: if isAdmin();
+    // Other collections — admins only, and never the collections matched
+    // explicitly above (rules OR together, so a blanket admin rule would
+    // override their restrictions: archives, settings lock, owner account).
+    match /{collection}/{document=**} {
+      allow read, write: if isAdmin() && !(collection in [
+        'users', 'branches', 'departments', 'complaintTypes', 'complaintSubTypes', 'problemTypes', 'platforms',
+        'itemCategories', 'settings', 'settingsUnlocks', 'secureConfig', 'complaints', 'trips', 'tripVerify',
+        'appointments', 'deletedComplaints', 'deletedLostFoundItems', 'deletedTechSupportTickets', 'lostFoundItems',
+        'techSupportTickets', 'students', 'notifications'
+      ]);
     }
   }
 }

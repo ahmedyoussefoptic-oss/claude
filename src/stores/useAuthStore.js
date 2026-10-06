@@ -27,6 +27,14 @@ const useAuthStore = create((set) => ({
     set({ user: null, role: null, userData: null, loading: false });
   },
 
+  // Re-reads the signed-in user's profile (e.g. after claimSystemOwner).
+  refreshUserData: async () => {
+    const current = auth.currentUser;
+    if (!current) return;
+    const snap = await getDoc(doc(db, 'users', current.uid));
+    if (snap.exists()) set({ userData: snap.data(), role: snap.data().role || null });
+  },
+
   initialize: () => {
     return onAuthStateChanged(auth, async (user) => {
       if (user) {
