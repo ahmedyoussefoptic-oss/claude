@@ -215,6 +215,46 @@ service cloud.firestore {
       }
     }
 
+    // School trips — every write goes through Cloud Functions (saveTrip,
+    // tripAction, submitTripConsent, reviewTripPayment, ...). Staff read the
+    // trips of their branches; the per-student enrollments (health notes,
+    // payment receipts) only those who manage, approve, finance or
+    // supervise the trip.
+    function tripInScope(trip) {
+      let u = myDoc();
+      return u != null && (
+        u.get('access', 'branch') == 'all' ||
+        trip.branches.hasAny(u.get('branches', [])) ||
+        u.get('branch', null) in trip.branches ||
+        request.auth.uid in trip.get('supervisors', [])
+      );
+    }
+    function canSeeTripEnrollments(trip) {
+      return isAdmin() || request.auth.uid in trip.get('supervisors', []) || (
+        tripInScope(trip) &&
+        (myPerm('trips') || myPerm('tripFinance') || myDoc().get('isPrincipal', false) == true)
+      );
+    }
+    match /trips/{tripId} {
+      allow get: if isAuthenticated() && !isReceptionist() && (isAdmin() || tripInScope(resource.data));
+      allow list: if isAdmin();
+      allow write: if false;
+      match /enrollments/{studentId} {
+        allow read: if isAuthenticated() && !isReceptionist() &&
+          canSeeTripEnrollments(get(/databases/$(database)/documents/trips/$(tripId)).data);
+        allow write: if false;
+      }
+      match /activityLog/{logId} {
+        allow read: if isAuthenticated() && !isReceptionist() &&
+          (isAdmin() || tripInScope(get(/databases/$(database)/documents/trips/$(tripId)).data));
+        allow write: if false;
+      }
+    }
+    // Failed parent-verification counters (submitTripConsent) — server only.
+    match /tripVerify/{id} {
+      allow read, write: if false;
+    }
+
     // School visit appointment bookings — written only by Cloud Functions.
     match /appointments/{id} {
       allow read: if isAuthenticated();

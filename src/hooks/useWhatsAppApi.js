@@ -16,6 +16,7 @@ export const DEFAULT_WA_API = {
     lostFoundReturned: 'lostfound_returned',
     appointmentConfirmed: 'appointment_confirmed',
     appointmentRescheduled: 'appointment_rescheduled',
+    tripNotice: 'trip_notice',
   },
 };
 

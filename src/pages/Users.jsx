@@ -38,7 +38,7 @@ const emptyForm = {
   role: ROLES.CUSTOMER_SERVICE,
   branches: [],
   access: 'branch',
-  perms: { edit: false, delete: false, users: false },
+  perms: { edit: false, delete: false, users: false, trips: false, tripFinance: false },
   isPrincipal: false,
   isQuality: false,
   notificationPrefs: {},
@@ -101,7 +101,7 @@ export default function Users() {
       role: u.role || ROLES.CUSTOMER_SERVICE,
       branches: userBranches(u),
       access: u.access === 'all' ? 'all' : 'branch',
-      perms: { edit: !!u.perms?.edit, delete: !!u.perms?.delete, users: !!u.perms?.users },
+      perms: { edit: !!u.perms?.edit, delete: !!u.perms?.delete, users: !!u.perms?.users, trips: !!u.perms?.trips, tripFinance: !!u.perms?.tripFinance },
       isPrincipal: u.isPrincipal === true,
       isQuality: u.isQuality === true,
       notificationPrefs: u.notificationPrefs || {},
@@ -118,7 +118,7 @@ export default function Users() {
       ...prev,
       role,
       ...(role === ROLES.ADMIN
-        ? { access: 'all', perms: { edit: true, delete: true, users: true } }
+        ? { access: 'all', perms: { edit: true, delete: true, users: true, trips: true, tripFinance: true } }
         : {}),
     }));
   };
@@ -427,6 +427,24 @@ export default function Users() {
                     onChange={(e) => setForm((p) => ({ ...p, perms: { ...p.perms, users: e.target.checked } }))}
                   />
                   👥 {t('users.permManageUsers')}
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={!!form.perms.trips}
+                    disabled={isAdminRole}
+                    onChange={(e) => setForm((p) => ({ ...p, perms: { ...p.perms, trips: e.target.checked } }))}
+                  />
+                  🚌 {t('users.permTrips')}
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={!!form.perms.tripFinance}
+                    disabled={isAdminRole}
+                    onChange={(e) => setForm((p) => ({ ...p, perms: { ...p.perms, tripFinance: e.target.checked } }))}
+                  />
+                  💳 {t('users.permTripFinance')}
                 </label>
               </div>
               <p className="text-xs text-slate-500 mt-2">

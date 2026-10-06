@@ -1,7 +1,7 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
-import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair } from 'lucide-react';
+import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus } from 'lucide-react';
 import { useState } from 'react';
 import NotificationBell from './NotificationBell';
 import Watermark from '../common/Watermark';
@@ -33,6 +33,7 @@ export default function AppLayout() {
     { name: t('nav.studentRecords'), path: '/students', icon: GraduationCap },
     { name: t('nav.reports'), path: '/reports', icon: FileBarChart },
     { name: t('nav.branchVisits'), path: '/visits', icon: Armchair },
+    { name: t('nav.trips'), path: '/trips', icon: Bus },
   ];
 
   // Tech Support tickets can hold national IDs and account credentials, so

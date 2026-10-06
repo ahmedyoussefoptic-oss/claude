@@ -1,5 +1,5 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
-const { onDocumentUpdated, onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentUpdated, onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
@@ -180,6 +180,8 @@ exports.createStaffUser = onCall(async (request) => {
       edit: !!perms?.edit,
       delete: !!perms?.delete,
       users: !!perms?.users,
+      trips: !!perms?.trips,
+      tripFinance: !!perms?.tripFinance,
     },
     phone: phone || null,
     jobTitle: jobTitle || null,
@@ -250,6 +252,7 @@ const NOTIFICATION_CATEGORIES = {
   visit: ["VISIT_ARRIVED"],
   viewed: ["VIEWED", "IT_VIEWED"],
   appointment: ["APPOINTMENT_REQUESTED"],
+  trips: ["TRIP_APPROVAL_REQUESTED", "TRIP_DECIDED", "TRIP_RECEIPT"],
 };
 const categoryOfType = (type) => Object.keys(NOTIFICATION_CATEGORIES).find((c) => NOTIFICATION_CATEGORIES[c].includes(type));
 
@@ -2284,4 +2287,673 @@ exports.uploadStaffFile = onCall(async (request) => {
   }
   const uploaded = await uploadPublicAttachment(getStorage().bucket(), `${folder}/${recordId}`, file);
   return { ...uploaded, uploadedBy: request.auth.uid, createdAt: new Date().toISOString() };
+});
+
+// ---------------------------------------------------------------------------
+// School trips — staff tab /trips, public consent page /trip/<tripCode>.
+// Everything is read/written here with the Admin SDK; firestore.rules only
+// lets staff read trips in their branches (and the enrollments when they
+// manage, approve, finance or supervise the trip).
+//
+// Who does what (perms are set per user on the Users page):
+//   manage   — admin, perms.trips (activities coordinator), branch principal
+//   approve  — admin, principal of every branch the trip covers
+//   finance  — admin, perms.tripFinance (receipts, cash payments)
+//   supervise — the above + the trip's supervisors (boarding list)
+// ---------------------------------------------------------------------------
+const TRIP_STAGES = ["KG1", "KG2", "KG3", "G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8", "G9", "G10", "G11", "G12", "SEN"];
+const TRIP_PAY_METHODS = ["BANK", "RECEPTION"];
+const TRIP_EDITABLE = ["DRAFT", "PENDING_APPROVAL", "OPEN", "CLOSED"];
+const TRIP_PUBLIC = ["OPEN", "CLOSED", "COMPLETED"];
+// Roster "stage_name" (curriculum) → section id used on trips/complaints.
+// Kindergarten has no section of its own, so it matches any section.
+const STUDENT_SECTIONS = { "أمريكي": "AMERICAN", "بريطاني": "BRITISH", "تربية خاصة": "SPECIAL_EDUCATION" };
+
+// Roster grade_name ("Grade 5", "KG 2", "SEN") → STAGES id (G5, KG2, SEN).
+function studentGrade(s) {
+  const g = String(s.gradeName || "").trim();
+  let m = /^grade\s*(\d{1,2})$/i.exec(g);
+  if (m) return `G${Number(m[1])}`;
+  m = /^kg\s*([1-3])$/i.exec(g);
+  if (m) return `KG${m[1]}`;
+  if (/^sen$/i.test(g)) return "SEN";
+  return TRIP_STAGES.includes(g.toUpperCase()) ? g.toUpperCase() : "";
+}
+const studentSection = (s) => STUDENT_SECTIONS[String(s.stageName || "").trim()] || "";
+const normalizeDigits = (v) => String(v || "").replace(/[٠-٩۰-۹]/g, (d) => String(d.charCodeAt(0) & 0xf)).replace(/\s+/g, "");
+
+// Branch code of a roster row. Rows imported before their branch name
+// matched a branch exactly have an empty `branch`, so fall back to the name
+// with or without the "فرع " prefix.
+async function branchResolver() {
+  const snap = await db.collection("branches").get();
+  const byName = new Map();
+  snap.docs.forEach((d) => {
+    const name = String(d.data().name || "").trim();
+    byName.set(name, d.id);
+    byName.set(name.replace(/^فرع\s+/, ""), d.id);
+  });
+  return (s) => s.branch || byName.get(String(s.branchName || "").trim().replace(/^فرع\s+/, "")) || "";
+}
+
+function tripTargets(trip, s, branchOf) {
+  if (!(trip.branches || []).includes(branchOf(s))) return false;
+  if ((trip.stages || []).length && !trip.stages.includes(studentGrade(s))) return false;
+  const section = studentSection(s);
+  if ((trip.departments || []).length && section && !trip.departments.includes(section)) return false;
+  return true;
+}
+
+// All roster students a trip is aimed at (branch, grade and section).
+async function tripRoster(trip) {
+  const branchOf = await branchResolver();
+  const snap = await db.collection("students").get();
+  return snap.docs.map((d) => d.data()).filter((s) => s.nationalId && tripTargets(trip, s, branchOf)).map((s) => ({
+    id: String(s.nationalId),
+    name: s.name || "",
+    grade: studentGrade(s),
+    className: s.className || "",
+    branch: branchOf(s),
+    section: studentSection(s),
+    mobile: s.mobile || "",
+  }));
+}
+
+// The status a parent / finance sees for one student.
+function enrollmentStatus(e, fee) {
+  if (!e) return "NO_RESPONSE";
+  if (e.decision === "DECLINED") return "DECLINED";
+  if (!(fee > 0) || e.payStatus === "PAID") return "CONFIRMED";
+  if (e.payStatus === "REVIEW") return "RECEIPT_REVIEW";
+  if (e.payStatus === "REJECTED") return "RECEIPT_REJECTED";
+  return "AWAITING_PAYMENT";
+}
+
+async function tripCaller(request) {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const snap = await db.collection("users").doc(request.auth.uid).get();
+  const u = snap.data();
+  if (!snap.exists || u.active === false || u.role === "RECEPTIONIST") {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية الوصول إلى الرحلات.");
+  }
+  return { uid: request.auth.uid, ...u };
+}
+const callerAll = (u) => u.role === "ADMIN" || u.access === "all";
+const callerHasBranch = (u, b) => callerAll(u) || (u.branches || []).includes(b) || u.branch === b;
+const tripPerm = {
+  manage: (u, branches) => u.role === "ADMIN" || ((u.perms?.trips || u.isPrincipal) && branches.some((b) => callerHasBranch(u, b))),
+  approve: (u, branches) => u.role === "ADMIN" || (u.isPrincipal === true && branches.every((b) => callerHasBranch(u, b))),
+  finance: (u, branches) => u.role === "ADMIN" || (u.perms?.tripFinance === true && branches.some((b) => callerHasBranch(u, b))),
+};
+tripPerm.supervise = (u, branches, trip) => tripPerm.manage(u, branches) || tripPerm.finance(u, branches) || (trip.supervisors || []).includes(u.uid);
+tripPerm.view = (u, branches, trip) => tripPerm.supervise(u, branches, trip) || tripPerm.approve(u, branches) || (u.isPrincipal === true && branches.some((b) => callerHasBranch(u, b)));
+
+async function loadTrip(id, caller, perm) {
+  if (typeof id !== "string" || !id) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  const ref = db.collection("trips").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "لم يتم العثور على الرحلة.");
+  const trip = snap.data();
+  if (caller && perm && !tripPerm[perm](caller, trip.branches || [], trip)) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء على هذه الرحلة.");
+  }
+  return { ref, trip };
+}
+
+function tripLog(ref, action, actor, metadata = {}) {
+  return ref.collection("activityLog").add({ action, actorId: actor?.uid || null, actorName: actor?.name || AUTO_ACTOR, metadata, createdAt: Timestamp.now() });
+}
+
+// "الثلاثاء 3 نوفمبر 2026" from a "YYYY-MM-DD" day.
+function formatTripDay(day) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day || "");
+  if (!m) return day || "";
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    .format(new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12)));
+}
+const tripWhen = (trip) => `${formatTripDay(trip.date)}${trip.departTime ? `، ${trip.departTime}${trip.returnTime ? ` – ${trip.returnTime}` : ""}` : ""}`;
+const riyadhDay = (offsetDays = 0) => new Date(Date.now() + APPT_TZ_MS + offsetDays * APPT_DAY).toISOString().slice(0, 10);
+
+const str = (v, max = 500) => String(v == null ? "" : v).trim().slice(0, max);
+function cleanTrip(input) {
+  const d = input || {};
+  const time = (v) => (/^\d{2}:\d{2}$/.test(v || "") ? v : "");
+  const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v || "") ? v : "");
+  const list = (v, allowed) => (Array.isArray(v) ? [...new Set(v.map((x) => String(x)))].filter((x) => !allowed || allowed.includes(x)) : []);
+  const trip = {
+    title: str(d.title, 120),
+    destination: str(d.destination, 200),
+    objective: str(d.objective, 1000),
+    date: day(d.date),
+    departTime: time(d.departTime),
+    returnTime: time(d.returnTime),
+    meetingPoint: str(d.meetingPoint, 200),
+    branches: list(d.branches).slice(0, 30),
+    departments: list(d.departments),
+    stages: list(d.stages, TRIP_STAGES),
+    capacity: Math.max(0, Math.floor(Number(d.capacity) || 0)),
+    fee: Math.max(0, Math.round((Number(d.fee) || 0) * 100) / 100),
+    payDeadline: day(d.payDeadline),
+    payMethods: list(d.payMethods, TRIP_PAY_METHODS),
+    bankDetails: str(d.bankDetails, 600),
+    refundPolicy: str(d.refundPolicy, 1000),
+    requirements: str(d.requirements, 1000),
+    supervisors: list(d.supervisors).slice(0, 30),
+    buses: Math.max(0, Math.floor(Number(d.buses) || 0)),
+    notes: str(d.notes, 1000),
+  };
+  if (!trip.title || !trip.destination || !trip.date || !trip.branches.length) {
+    throw new HttpsError("invalid-argument", "أكمل اسم الرحلة والوجهة والتاريخ والفروع.");
+  }
+  if (trip.payDeadline && trip.payDeadline > trip.date) {
+    throw new HttpsError("invalid-argument", "آخر موعد للموافقة يجب أن يكون قبل تاريخ الرحلة أو في نفس اليوم.");
+  }
+  if (trip.fee > 0 && !trip.payMethods.length) {
+    throw new HttpsError("invalid-argument", "اختر طريقة دفع واحدة على الأقل.");
+  }
+  if (!trip.payDeadline) trip.payDeadline = trip.date;
+  return trip;
+}
+
+async function newTripCode() {
+  const year = riyadhDay().slice(0, 4);
+  for (let i = 0; i < 8; i++) {
+    const code = `TRP-${year}-${crypto.randomInt(10000, 100000)}`;
+    const dup = await db.collection("trips").where("tripCode", "==", code).limit(1).get();
+    if (dup.empty) return code;
+  }
+  throw new HttpsError("internal", "تعذّر إنشاء رقم للرحلة، حاول مرة أخرى.");
+}
+
+// Trips in the caller's branches (or that they supervise), newest first.
+// Done here rather than as a client query because a trip spans several
+// branches, which rules can't match against the caller's branch list.
+exports.listTrips = onCall(async (request) => {
+  const caller = await tripCaller(request);
+  const snap = await db.collection("trips").orderBy("date", "desc").limit(400).get();
+  const trips = snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .filter((t) => callerAll(caller) || (t.branches || []).some((b) => callerHasBranch(caller, b)) || (t.supervisors || []).includes(caller.uid))
+    .map((t) => ({
+      ...t,
+      createdAt: t.createdAt?.toMillis?.() || null,
+      updatedAt: t.updatedAt?.toMillis?.() || null,
+      approvedAt: t.approvedAt?.toMillis?.() || null,
+      announcedAt: t.announcedAt?.toMillis?.() || null,
+    }));
+  return { trips };
+});
+
+exports.saveTrip = onCall(async (request) => {
+  const caller = await tripCaller(request);
+  const { id } = request.data || {};
+  const trip = cleanTrip(request.data?.trip);
+  const outOfScope = trip.branches.filter((b) => !callerHasBranch(caller, b));
+  if (!tripPerm.manage(caller, trip.branches) || outOfScope.length) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية إنشاء رحلات لهذه الفروع.");
+  }
+  const now = Timestamp.now();
+  if (!id) {
+    const ref = db.collection("trips").doc();
+    const tripCode = await newTripCode();
+    await ref.set({
+      ...trip, tripCode, status: "DRAFT", stats: {},
+      createdBy: caller.uid, createdByName: caller.name || "", createdAt: now, updatedAt: now,
+    });
+    await tripLog(ref, "TRIP_CREATED", caller);
+    return { id: ref.id, tripCode };
+  }
+  const { ref, trip: current } = await loadTrip(id, caller, "manage");
+  if (!TRIP_EDITABLE.includes(current.status)) {
+    throw new HttpsError("failed-precondition", "لا يمكن تعديل رحلة منتهية أو ملغاة.");
+  }
+  await ref.update({ ...trip, updatedAt: now, updatedBy: caller.uid, updatedByName: caller.name || "" });
+  await tripLog(ref, "TRIP_UPDATED", caller);
+  return { id, tripCode: current.tripCode };
+});
+
+// Uids of the principals (or, if a branch has none, the admins) who
+// approve trips for these branches.
+async function tripApprovers(branches) {
+  const users = await loadActiveUsers();
+  const principals = users.filter((u) => u.isPrincipal === true && branches.some((b) => callerHasBranch(u, b)));
+  return (principals.length ? principals : users.filter((u) => u.role === "ADMIN")).map((u) => u.id);
+}
+
+const TRIP_TRANSITIONS = {
+  submit: { from: ["DRAFT"], to: "PENDING_APPROVAL", perm: "manage" },
+  approve: { from: ["PENDING_APPROVAL"], to: "OPEN", perm: "approve" },
+  reject: { from: ["PENDING_APPROVAL"], to: "DRAFT", perm: "approve", reason: true },
+  close: { from: ["OPEN"], to: "CLOSED", perm: "manage" },
+  reopen: { from: ["CLOSED"], to: "OPEN", perm: "manage" },
+  complete: { from: ["OPEN", "CLOSED"], to: "COMPLETED", perm: "manage" },
+  cancel: { from: ["DRAFT", "PENDING_APPROVAL", "OPEN", "CLOSED"], to: "CANCELLED", perm: "manage", reason: true },
+};
+
+exports.tripAction = onCall(async (request) => {
+  const caller = await tripCaller(request);
+  const { id, action } = request.data || {};
+  const reason = str(request.data?.reason, 500);
+  const rule = TRIP_TRANSITIONS[action];
+  if (!rule) throw new HttpsError("invalid-argument", "إجراء غير معروف.");
+  const { ref, trip } = await loadTrip(id, caller, rule.perm);
+  if (!rule.from.includes(trip.status)) throw new HttpsError("failed-precondition", "لا يمكن تنفيذ هذا الإجراء في حالة الرحلة الحالية.");
+  if (rule.reason && !reason) throw new HttpsError("invalid-argument", "اكتب السبب.");
+
+  const now = Timestamp.now();
+  const update = { status: rule.to, updatedAt: now };
+  if (action === "submit") Object.assign(update, { submittedAt: now, rejectionReason: FieldValue.delete() });
+  if (action === "approve") Object.assign(update, { approvedAt: now, approvedBy: caller.uid, approvedByName: caller.name || "" });
+  if (action === "reject") Object.assign(update, { rejectionReason: reason, rejectedByName: caller.name || "" });
+  if (action === "cancel") Object.assign(update, { cancelReason: reason, cancelledByName: caller.name || "" });
+  await ref.update(update);
+  await tripLog(ref, `TRIP_${action.toUpperCase()}`, caller, reason ? { reason } : {});
+
+  const title = `رحلة ${trip.title}`;
+  if (action === "submit") {
+    await notifyUsers(await tripApprovers(trip.branches || []), { title: "رحلة بانتظار الاعتماد", body: `${title} — ${formatTripDay(trip.date)} (${caller.name || ""})`, complaintId: id, type: "TRIP_APPROVAL_REQUESTED" });
+  } else if (action === "approve" || action === "reject") {
+    await notifyUsers([trip.createdBy].filter((u) => u && u !== caller.uid), {
+      title: action === "approve" ? "تم اعتماد الرحلة" : "لم تُعتمد الرحلة",
+      body: action === "approve" ? `${title} — ${caller.name || ""}` : `${title}: ${reason}`,
+      complaintId: id, type: "TRIP_DECIDED",
+    });
+  }
+  return { ok: true, status: rule.to };
+});
+
+// The roster a trip targets, for the students / finance / boarding views.
+exports.getTripRoster = onCall(async (request) => {
+  const caller = await tripCaller(request);
+  const { trip } = await loadTrip(request.data?.id, caller, "view");
+  const roster = await tripRoster(trip);
+  // Phones stay server-side; staff see who has one.
+  return { students: roster.map(({ mobile, ...s }) => ({ ...s, hasMobile: !!toIntlNumber(mobile) })) };
+});
+
+// --- WhatsApp (one "tripNotice" template for every trip message) ----------
+// Same five body variables as the other templates: {{1}} student, {{2}}
+// trip title, {{3}} date and time, {{4}} the message, {{5}} trip page link —
+// plus the usual "contact the branch" button, here /contact/BR-<branch>[-<section>].
+async function waTripSettings() {
+  if (!WA_API_ENABLED) return null;
+  const snap = await db.collection("settings").doc("whatsappApi").get();
+  const settings = snap.exists ? snap.data() : {};
+  if (!settings.enabled || !(settings.templates || {}).tripNotice) return null;
+  return settings;
+}
+
+async function sendTripNotice({ settings, trip, phone, studentName, branch, section, line }) {
+  const to = toIntlNumber(phone);
+  if (!to) throw new Error("لا يوجد رقم جوال لولي الأمر.");
+  const payload = {
+    to,
+    type: "template",
+    template: { name: settings.templates.tripNotice, language: { code: settings.language || "ar" } },
+    components: [
+      {
+        type: "body",
+        parameters: [studentName, trip.title, tripWhen(trip), line, `${PUBLIC_APP_URL}/trip/${trip.tripCode}`].map((v) => ({ type: "text", text: waParam(v) })),
+      },
+      { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: `BR-${branch || (trip.branches || [])[0] || ""}${section ? `-${section}` : ""}` }] },
+    ],
+  };
+  const response = await fetch(TAQNYAT_MESSAGES_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TAQNYAT_WA_TOKEN.value()}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    console.error("Taqnyat trip notice failed", response.status, text.slice(0, 300));
+    throw new Error(`تعذّر الإرسال عبر واتساب API (رمز ${response.status}).`);
+  }
+}
+
+// Sends to many parents a few at a time; never throws.
+async function sendTripNotices(settings, trip, recipients, lineFor) {
+  let sent = 0;
+  let failed = 0;
+  const queue = [...recipients];
+  const worker = async () => {
+    for (let r = queue.shift(); r; r = queue.shift()) {
+      try {
+        await sendTripNotice({ settings, trip, phone: r.mobile, studentName: r.name, branch: r.branch, section: r.section, line: lineFor(r) });
+        sent++;
+      } catch (err) {
+        failed++;
+        console.error("trip notice", trip.tripCode, err.message);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, worker));
+  return { sent, failed };
+}
+
+const feeText = (trip) => (trip.fee > 0 ? `الرسوم ${trip.fee} ريال، وآخر موعد للموافقة والدفع ${formatTripDay(trip.payDeadline)}` : `الرحلة مجانية، وآخر موعد للموافقة ${formatTripDay(trip.payDeadline)}`);
+const TRIP_LINES = {
+  announce: (trip) => `ندعوكم للاطلاع على الرحلة والموافقة على مشاركة الطالب/ة. ${feeText(trip)}.`,
+  remindPending: (trip) => `نذكّركم بالرد على دعوة الرحلة قبل ${formatTripDay(trip.payDeadline)}.`,
+  remindPayment: (trip) => `نذكّركم بإكمال سداد رسوم الرحلة (${trip.fee} ريال) قبل ${formatTripDay(trip.payDeadline)}.`,
+  eve: (trip) => [`نذكّركم بموعد الرحلة غداً`, trip.meetingPoint ? `التجمع في ${trip.meetingPoint}${trip.departTime ? ` الساعة ${trip.departTime}` : ""}` : "", trip.requirements ? `المتطلبات: ${trip.requirements}` : ""].filter(Boolean).join(". ") + ".",
+  paid: () => "تم قبول سند الدفع وتأكيد مشاركة الطالب/ة في الرحلة.",
+  cash: () => "تم استلام رسوم الرحلة وتأكيد مشاركة الطالب/ة.",
+  rejected: (trip, reason) => `لم يتم قبول سند الدفع: ${reason}. يرجى إعادة إرفاق السند من رابط الرحلة.`,
+  freeConfirmed: () => "تم تسجيل موافقتكم وتأكيد مشاركة الطالب/ة في الرحلة.",
+};
+
+// Announcement (audience "all") or a reminder to those who haven't
+// answered / haven't paid (audience "pending").
+exports.sendTripAnnouncement = onCall({ secrets: WA_SECRETS, timeoutSeconds: 540 }, async (request) => {
+  const caller = await tripCaller(request);
+  const { ref, trip } = await loadTrip(request.data?.id, caller, "manage");
+  const audience = request.data?.audience === "pending" ? "pending" : "all";
+  if (trip.status !== "OPEN") throw new HttpsError("failed-precondition", "الإعلان متاح للرحلات المعتمدة والمفتوح تسجيلها فقط.");
+  const settings = await waTripSettings();
+  if (!settings) throw new HttpsError("failed-precondition", "فعّل واتساب API وأضف اسم قالب «إشعار رحلة» في الإعدادات.");
+
+  const roster = (await tripRoster(trip)).filter((s) => toIntlNumber(s.mobile));
+  const enrollSnap = await ref.collection("enrollments").get();
+  const byId = new Map(enrollSnap.docs.map((d) => [d.id, d.data()]));
+  const recipients = audience === "all" ? roster : roster.filter((s) => {
+    const st = enrollmentStatus(byId.get(s.id), trip.fee);
+    return st === "NO_RESPONSE" || st === "AWAITING_PAYMENT" || st === "RECEIPT_REJECTED";
+  });
+  const result = await sendTripNotices(settings, trip, recipients, (s) => {
+    if (audience === "all") return TRIP_LINES.announce(trip);
+    return byId.get(s.id) ? TRIP_LINES.remindPayment(trip) : TRIP_LINES.remindPending(trip);
+  });
+  const now = Timestamp.now();
+  await ref.update(audience === "all"
+    ? { announcedAt: now, announcedCount: FieldValue.increment(result.sent) }
+    : { lastReminderAt: now });
+  await tripLog(ref, audience === "all" ? "TRIP_ANNOUNCED" : "TRIP_REMINDED", caller, { ...result, total: recipients.length });
+  return { ...result, total: recipients.length };
+});
+
+// --- Public parent page ---------------------------------------------------
+async function tripByCode(code) {
+  const tripCode = String(code || "").trim().toUpperCase();
+  if (!/^TRP-\d{4}-\d{5}$/.test(tripCode)) throw new HttpsError("not-found", "الرابط غير صحيح.");
+  const snap = await db.collection("trips").where("tripCode", "==", tripCode).limit(1).get();
+  if (snap.empty || !TRIP_PUBLIC.includes(snap.docs[0].data().status)) throw new HttpsError("not-found", "هذه الرحلة غير متاحة.");
+  return { ref: snap.docs[0].ref, trip: snap.docs[0].data() };
+}
+
+async function publicTripView(trip) {
+  const branchSnaps = await db.getAll(...(trip.branches || []).map((b) => db.collection("branches").doc(b)));
+  return {
+    tripCode: trip.tripCode, title: trip.title, destination: trip.destination, objective: trip.objective,
+    date: trip.date, dateLabel: formatTripDay(trip.date), departTime: trip.departTime, returnTime: trip.returnTime,
+    meetingPoint: trip.meetingPoint, stages: trip.stages || [], fee: trip.fee, payDeadline: trip.payDeadline,
+    payDeadlineLabel: formatTripDay(trip.payDeadline), payMethods: trip.payMethods || [], bankDetails: trip.bankDetails,
+    refundPolicy: trip.refundPolicy, requirements: trip.requirements, status: trip.status,
+    branchNames: branchSnaps.map((s, i) => (s.exists ? s.data().name : trip.branches[i])),
+    registrationOpen: trip.status === "OPEN" && riyadhDay() <= trip.payDeadline,
+  };
+}
+
+exports.getPublicTrip = onCall(async (request) => {
+  const { trip } = await tripByCode(request.data?.tripCode);
+  return publicTripView(trip);
+});
+
+// The parent proves who they are with the student's national ID and the
+// last 4 digits of the mobile number registered for that student. Failed
+// attempts are counted per trip+student to stop guessing.
+async function verifyTripParent(tripRef, trip, studentIdRaw, last4Raw) {
+  const studentId = normalizeDigits(studentIdRaw);
+  const last4 = normalizeDigits(last4Raw);
+  if (!/^\d{5,15}$/.test(studentId) || !/^\d{4}$/.test(last4)) {
+    throw new HttpsError("invalid-argument", "أدخل رقم هوية الطالب وآخر 4 أرقام من الجوال.");
+  }
+  const guardRef = db.collection("tripVerify").doc(`${tripRef.id}_${studentId}`);
+  const guard = (await guardRef.get()).data() || {};
+  const recent = guard.lastAt && Date.now() - guard.lastAt.toMillis() < 3600 * 1000;
+  if (recent && (guard.failures || 0) >= 8) {
+    throw new HttpsError("resource-exhausted", "محاولات كثيرة، حاول بعد ساعة أو تواصل مع الفرع.");
+  }
+  const fail = async (message) => {
+    await guardRef.set({ failures: (recent ? guard.failures || 0 : 0) + 1, lastAt: Timestamp.now() });
+    throw new HttpsError("not-found", message);
+  };
+  const studentSnap = await db.collection("students").doc(studentId).get();
+  if (!studentSnap.exists) return fail("لم يتم العثور على الطالب. تأكد من رقم الهوية.");
+  const s = studentSnap.data();
+  const mobile = normalizeDigits(s.mobile).replace(/\D/g, "");
+  if (!mobile || mobile.slice(-4) !== last4) return fail("البيانات غير مطابقة لسجل الطالب. تأكد من آخر 4 أرقام من جوال ولي الأمر المسجل في المدرسة.");
+  const branchOf = await branchResolver();
+  if (!tripTargets(trip, s, branchOf)) throw new HttpsError("failed-precondition", "هذه الرحلة غير مخصصة لصف الطالب أو فرعه.");
+  if (guard.failures) await guardRef.delete();
+  return { studentId, student: s, branch: branchOf(s), grade: studentGrade(s), section: studentSection(s) };
+}
+
+const publicEnrollment = (e, trip) => (e ? {
+  decision: e.decision, payMethod: e.payMethod || null, payStatus: e.payStatus || null,
+  payRejectReason: e.payRejectReason || "", status: enrollmentStatus(e, trip.fee),
+  healthNotes: e.healthNotes || "", emergencyPhone: e.emergencyPhone || "",
+  receiptName: e.receipt?.fileName || "",
+} : null);
+
+exports.verifyTripStudent = onCall(async (request) => {
+  const { ref, trip } = await tripByCode(request.data?.tripCode);
+  const v = await verifyTripParent(ref, trip, request.data?.studentId, request.data?.last4);
+  const e = await ref.collection("enrollments").doc(v.studentId).get();
+  return { studentName: v.student.name || "", grade: v.grade, className: v.student.className || "", enrollment: publicEnrollment(e.exists ? e.data() : null, trip) };
+});
+
+// Finance staff of the branch; the trip's creator when there are none.
+async function tripFinanceUsers(branch, trip) {
+  const users = await loadActiveUsers();
+  const finance = users.filter((u) => u.role !== "ADMIN" && u.perms?.tripFinance === true && callerHasBranch(u, branch)).map((u) => u.id);
+  return finance.length ? finance : [trip.createdBy];
+}
+
+exports.submitTripConsent = onCall(async (request) => {
+  const d = request.data || {};
+  const { ref, trip } = await tripByCode(d.tripCode);
+  if (trip.status !== "OPEN" || riyadhDay() > trip.payDeadline) {
+    throw new HttpsError("failed-precondition", "انتهى موعد التسجيل في هذه الرحلة. للاستفسار تواصل مع الفرع.");
+  }
+  const v = await verifyTripParent(ref, trip, d.studentId, d.last4);
+  const decision = d.decision === "DECLINED" ? "DECLINED" : d.decision === "APPROVED" ? "APPROVED" : null;
+  if (!decision) throw new HttpsError("invalid-argument", "اختر الموافقة أو الاعتذار.");
+  if (decision === "APPROVED" && d.agree !== true) throw new HttpsError("invalid-argument", "يجب الإقرار بالاطلاع على تعليمات الرحلة.");
+  const paid = trip.fee > 0 && decision === "APPROVED";
+  const payMethod = paid ? (TRIP_PAY_METHODS.includes(d.payMethod) && (trip.payMethods || []).includes(d.payMethod) ? d.payMethod : null) : null;
+  if (paid && !payMethod) throw new HttpsError("invalid-argument", "اختر طريقة الدفع.");
+
+  const enrollRef = ref.collection("enrollments").doc(v.studentId);
+  const existing = (await enrollRef.get()).data();
+  if (existing && existing.payStatus === "PAID") {
+    throw new HttpsError("failed-precondition", "تم تأكيد المشاركة ودفع الرسوم. لأي تعديل تواصل مع الفرع.");
+  }
+  let receipt = existing?.receipt || null;
+  if (paid && payMethod === "BANK" && d.receipt) {
+    receipt = await uploadPublicAttachment(getStorage().bucket(), `trips/${ref.id}/receipts/${v.studentId}`, d.receipt);
+  }
+  // A new receipt goes to finance; without one, a receipt already under
+  // review (or already rejected) keeps its state; otherwise awaiting payment.
+  let payStatus = null;
+  if (paid) {
+    if (payMethod === "BANK" && d.receipt) payStatus = "REVIEW";
+    else if (payMethod === "BANK" && receipt && ["REVIEW", "REJECTED"].includes(existing?.payStatus)) payStatus = existing.payStatus;
+    else payStatus = "AWAITING";
+  }
+
+  const now = Timestamp.now();
+  const record = {
+    studentId: v.studentId, studentName: v.student.name || "", branch: v.branch, grade: v.grade, section: v.section,
+    className: v.student.className || "", parentPhone: v.student.mobile || "",
+    decision, payMethod, payStatus, receipt: payMethod === "BANK" ? receipt : null,
+    healthNotes: str(d.healthNotes, 500), emergencyPhone: str(d.emergencyPhone, 30),
+    payRejectReason: payStatus === "REVIEW" ? "" : existing?.payRejectReason || "",
+    source: "parent", updatedAt: now, ...(existing ? {} : { submittedAt: now }),
+  };
+  await db.runTransaction(async (tx) => {
+    if (decision === "APPROVED" && trip.capacity > 0 && existing?.decision !== "APPROVED") {
+      const approved = await tx.get(ref.collection("enrollments").where("decision", "==", "APPROVED"));
+      if (approved.size >= trip.capacity) throw new HttpsError("resource-exhausted", "اكتمل العدد المحدد للرحلة. للاستفسار تواصل مع الفرع.");
+    }
+    tx.set(enrollRef, record, { merge: true });
+  });
+  await tripLog(ref, "TRIP_CONSENT", null, { studentId: v.studentId, studentName: record.studentName, decision, payMethod, payStatus });
+
+  if (payStatus === "REVIEW") {
+    await notifyUsers(await tripFinanceUsers(v.branch, trip), { title: "سند دفع رحلة بانتظار المراجعة", body: `${record.studentName} — ${trip.title}`, complaintId: ref.id, type: "TRIP_RECEIPT" });
+  }
+  const saved = { ...existing, ...record };
+  return { enrollment: publicEnrollment(saved, trip) };
+});
+
+// --- Staff: payment review, manual consent, boarding ----------------------
+exports.reviewTripPayment = onCall({ secrets: WA_SECRETS }, async (request) => {
+  const caller = await tripCaller(request);
+  const { id, studentId, action } = request.data || {};
+  const note = str(request.data?.note, 300);
+  const { ref, trip } = await loadTrip(id, caller, "finance");
+  if (!["accept", "reject", "cash"].includes(action) || typeof studentId !== "string") throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  if (action === "reject" && !note) throw new HttpsError("invalid-argument", "اكتب سبب رفض السند.");
+  const enrollRef = ref.collection("enrollments").doc(studentId);
+  const snap = await enrollRef.get();
+  if (!snap.exists || snap.data().decision !== "APPROVED") throw new HttpsError("failed-precondition", "لا توجد موافقة لهذا الطالب.");
+  const e = snap.data();
+  if (action === "accept" && !e.receipt) throw new HttpsError("failed-precondition", "لا يوجد سند مرفق.");
+
+  const now = Timestamp.now();
+  await enrollRef.update({
+    payStatus: action === "reject" ? "REJECTED" : "PAID",
+    ...(action === "cash" ? { payMethod: "RECEPTION", cashReceiptNo: note } : {}),
+    payRejectReason: action === "reject" ? note : "",
+    paidAmount: action === "reject" ? 0 : trip.fee,
+    reviewedBy: caller.uid, reviewedByName: caller.name || "", reviewedAt: now, updatedAt: now,
+  });
+  await tripLog(ref, `TRIP_PAYMENT_${action.toUpperCase()}`, caller, { studentId, studentName: e.studentName, note });
+
+  let messageSent = false;
+  const settings = await waTripSettings();
+  if (settings && settings.autoSend !== false && e.parentPhone) {
+    try {
+      const line = action === "reject" ? TRIP_LINES.rejected(trip, note) : action === "cash" ? TRIP_LINES.cash() : TRIP_LINES.paid();
+      await sendTripNotice({ settings, trip, phone: e.parentPhone, studentName: e.studentName, branch: e.branch, section: e.section, line });
+      messageSent = true;
+    } catch (err) {
+      console.error("trip payment notice", err.message);
+    }
+  }
+  return { ok: true, messageSent };
+});
+
+// A consent taken by phone or on paper, recorded by the coordinator / finance.
+exports.staffSetTripEnrollment = onCall(async (request) => {
+  const caller = await tripCaller(request);
+  const d = request.data || {};
+  const { ref, trip } = await loadTrip(d.id, caller, "supervise");
+  if (!(tripPerm.manage(caller, trip.branches || []) || tripPerm.finance(caller, trip.branches || []))) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية تسجيل الموافقات.");
+  }
+  if (!["OPEN", "CLOSED"].includes(trip.status)) throw new HttpsError("failed-precondition", "التسجيل متاح للرحلات المعتمدة فقط.");
+  const studentId = normalizeDigits(d.studentId);
+  const roster = await tripRoster(trip);
+  const s = roster.find((x) => x.id === studentId);
+  if (!s) throw new HttpsError("not-found", "الطالب ليس ضمن الصفوف المستهدفة.");
+  const enrollRef = ref.collection("enrollments").doc(studentId);
+  if (d.remove === true) {
+    await enrollRef.delete();
+    await tripLog(ref, "TRIP_ENROLLMENT_REMOVED", caller, { studentId, studentName: s.name });
+    return { ok: true };
+  }
+  const decision = d.decision === "DECLINED" ? "DECLINED" : "APPROVED";
+  const payMethod = decision === "APPROVED" && trip.fee > 0 ? (TRIP_PAY_METHODS.includes(d.payMethod) ? d.payMethod : "RECEPTION") : null;
+  const existing = (await enrollRef.get()).data();
+  const now = Timestamp.now();
+  const record = {
+    studentId, studentName: s.name, branch: s.branch, grade: s.grade, section: s.section, className: s.className, parentPhone: s.mobile,
+    decision, payMethod,
+    payStatus: !payMethod ? null
+      : existing?.payStatus === "PAID" ? "PAID"
+        : payMethod === "BANK" && existing?.receipt && ["REVIEW", "REJECTED"].includes(existing.payStatus) ? existing.payStatus
+          : "AWAITING",
+    healthNotes: str(d.healthNotes, 500), emergencyPhone: str(d.emergencyPhone, 30),
+    source: "staff", recordedBy: caller.uid, recordedByName: caller.name || "", updatedAt: now, ...(existing ? {} : { submittedAt: now }),
+  };
+  await db.runTransaction(async (tx) => {
+    if (decision === "APPROVED" && trip.capacity > 0 && existing?.decision !== "APPROVED") {
+      const approved = await tx.get(ref.collection("enrollments").where("decision", "==", "APPROVED"));
+      if (approved.size >= trip.capacity) throw new HttpsError("resource-exhausted", "اكتمل العدد المحدد للرحلة.");
+    }
+    tx.set(enrollRef, record, { merge: true });
+  });
+  await tripLog(ref, "TRIP_CONSENT_BY_STAFF", caller, { studentId, studentName: s.name, decision, payMethod });
+  return { ok: true };
+});
+
+exports.setTripBoarding = onCall(async (request) => {
+  const caller = await tripCaller(request);
+  const { id, studentId, field, value } = request.data || {};
+  const { ref, trip } = await loadTrip(id, caller, "supervise");
+  if (!["boarded", "returned"].includes(field) || typeof studentId !== "string" || ![true, false, null].includes(value)) {
+    throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  }
+  const enrollRef = ref.collection("enrollments").doc(studentId);
+  const snap = await enrollRef.get();
+  if (!snap.exists || enrollmentStatus(snap.data(), trip.fee) !== "CONFIRMED") throw new HttpsError("failed-precondition", "الطالب غير مؤكد في هذه الرحلة.");
+  await enrollRef.update({ [field]: value, [`${field}At`]: Timestamp.now(), [`${field}ByName`]: caller.name || "" });
+  return { ok: true };
+});
+
+// Keeps trip.stats (counts and money collected) in step with enrollments.
+exports.onTripEnrollmentWritten = onDocumentWritten("trips/{tripId}/enrollments/{studentId}", async (event) => {
+  const ref = db.collection("trips").doc(event.params.tripId);
+  const tripSnap = await ref.get();
+  if (!tripSnap.exists) return;
+  const fee = tripSnap.data().fee || 0;
+  const snap = await ref.collection("enrollments").get();
+  const stats = { responses: 0, approved: 0, declined: 0, confirmed: 0, review: 0, awaiting: 0, rejected: 0, collected: 0, boarded: 0 };
+  snap.docs.forEach((d) => {
+    const e = d.data();
+    stats.responses++;
+    const st = enrollmentStatus(e, fee);
+    if (e.decision === "APPROVED") stats.approved++;
+    if (st === "DECLINED") stats.declined++;
+    if (st === "CONFIRMED") stats.confirmed++;
+    if (st === "RECEIPT_REVIEW") stats.review++;
+    if (st === "AWAITING_PAYMENT") stats.awaiting++;
+    if (st === "RECEIPT_REJECTED") stats.rejected++;
+    if (e.payStatus === "PAID") stats.collected += Number(e.paidAmount ?? fee) || 0;
+    if (e.boarded === true) stats.boarded++;
+  });
+  await ref.update({ stats });
+});
+
+// Daily reminders (when auto-send is on): two days before the deadline to
+// parents who haven't answered or paid, and the evening before the trip to
+// the confirmed ones.
+exports.tripReminders = onSchedule({ schedule: "0 16 * * *", timeZone: "Asia/Riyadh", secrets: WA_SECRETS, timeoutSeconds: 540 }, async () => {
+  const settings = await waTripSettings();
+  if (!settings || settings.autoSend === false) return;
+  const inTwoDays = riyadhDay(2);
+  const tomorrow = riyadhDay(1);
+  const open = await db.collection("trips").where("status", "in", ["OPEN", "CLOSED"]).get();
+  for (const doc of open.docs) {
+    const trip = doc.data();
+    const deadlineDue = trip.status === "OPEN" && trip.payDeadline === inTwoDays && !trip.deadlineReminderAt;
+    const eveDue = trip.date === tomorrow && !trip.eveReminderAt;
+    if (!deadlineDue && !eveDue) continue;
+    const roster = (await tripRoster(trip)).filter((s) => toIntlNumber(s.mobile));
+    const enrollSnap = await doc.ref.collection("enrollments").get();
+    const byId = new Map(enrollSnap.docs.map((d) => [d.id, d.data()]));
+    if (deadlineDue) {
+      const pending = roster.filter((s) => ["NO_RESPONSE", "AWAITING_PAYMENT", "RECEIPT_REJECTED"].includes(enrollmentStatus(byId.get(s.id), trip.fee)));
+      const result = await sendTripNotices(settings, trip, pending, (s) => (byId.get(s.id) ? TRIP_LINES.remindPayment(trip) : TRIP_LINES.remindPending(trip)));
+      await doc.ref.update({ deadlineReminderAt: Timestamp.now() });
+      await tripLog(doc.ref, "TRIP_REMINDED", null, { ...result, total: pending.length, kind: "deadline" });
+    }
+    if (eveDue) {
+      const confirmed = roster.filter((s) => enrollmentStatus(byId.get(s.id), trip.fee) === "CONFIRMED");
+      const result = await sendTripNotices(settings, trip, confirmed, () => TRIP_LINES.eve(trip));
+      await doc.ref.update({ eveReminderAt: Timestamp.now() });
+      await tripLog(doc.ref, "TRIP_REMINDED", null, { ...result, total: confirmed.length, kind: "eve" });
+    }
+  }
 });

@@ -7,7 +7,7 @@ import { useBranches, useDepartments, ensureSeeded } from '../../hooks/useOrgDat
 import { useWhatsAppApi, DEFAULT_WA_API } from '../../hooks/useWhatsAppApi';
 import { toWhatsAppNumber } from '../../utils/whatsapp';
 
-const TEMPLATE_KEYS = ['complaintReceipt', 'complaintResolution', 'techReceipt', 'techResolution', 'visitMet', 'appointmentConfirmed', 'appointmentRescheduled', 'lostFoundReceipt', 'lostFoundReturned'];
+const TEMPLATE_KEYS = ['complaintReceipt', 'complaintResolution', 'techReceipt', 'techResolution', 'visitMet', 'appointmentConfirmed', 'appointmentRescheduled', 'lostFoundReceipt', 'lostFoundReturned', 'tripNotice'];
 
 // Suggested template bodies to submit for approval in the Taqnyat portal.
 // All four share the same variables (see sendWhatsAppApiMessage):
@@ -25,13 +25,14 @@ const SUGGESTED = {
   appointmentConfirmed: `مرحباً {{1}}،\nتم تأكيد موعد زيارتكم للمدرسة بخصوص الملاحظة رقم {{2}} الخاصة بالطالب/ة {{3}}.\nالموعد: {{4}}\nعند وصولكم امسحوا رمز QR في الاستقبال واختاروا «لدي موعد مسبق» وأدخلوا رقم الملاحظة.\nللمتابعة: {{5}}\n\n${NOTICE}`,
   appointmentRescheduled: `مرحباً {{1}}،\nبخصوص طلب زيارتكم للمدرسة (الملاحظة رقم {{2}} للطالب/ة {{3}})، نعتذر عن الموعد المطلوب، وتم تحديد موعد بديل:\n{{4}}\nعند وصولكم امسحوا رمز QR في الاستقبال واختاروا «لدي موعد مسبق» وأدخلوا رقم الملاحظة.\nللمتابعة: {{5}}\n\n${NOTICE}`,
   lostFoundReturned: `مرحباً {{1}}،\nنفيدكم بتسليم الغرض ({{3}}) الخاص ببلاغكم رقم {{2}}.\n{{4}}\nنسعد بتقييمكم للخدمة عبر الرابط: {{5}}\n\n${NOTICE}`,
+  tripNotice: `ولي أمر الطالب/ة {{1}}،\nبخصوص رحلة «{{2}}» يوم {{3}}:\n{{4}}\nتفاصيل الرحلة والموافقة: {{5}}\n\n${NOTICE}`,
 };
 
 // Per-template meaning of {{3}}/{{4}} shown under each suggested text.
 const VAR_HINT = {
   complaintReceipt: 'receiptVars', techReceipt: 'receiptVars',
   complaintResolution: 'resolutionVars', techResolution: 'resolutionVars',
-  visitMet: 'visitVars', appointmentConfirmed: 'appointmentVars', appointmentRescheduled: 'appointmentVars', lostFoundReceipt: 'lostReceiptVars', lostFoundReturned: 'lostReturnedVars',
+  visitMet: 'visitVars', appointmentConfirmed: 'appointmentVars', appointmentRescheduled: 'appointmentVars', lostFoundReceipt: 'lostReceiptVars', lostFoundReturned: 'lostReturnedVars', tripNotice: 'tripVars',
 };
 
 function CopyBox({ text }) {

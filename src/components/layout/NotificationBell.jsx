@@ -34,6 +34,9 @@ const NOTIFICATION_TARGET_PATH = {
   PARTIAL_SOLUTION_ADDED: '/complaints',
   REOPENED: '/complaints',
   IT_REOPENED: '/tech-support',
+  TRIP_APPROVAL_REQUESTED: '/trips',
+  TRIP_DECIDED: '/trips',
+  TRIP_RECEIPT: '/trips',
 };
 
 function playChime() {

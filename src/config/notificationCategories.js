@@ -13,5 +13,6 @@ export const NOTIFICATION_CATEGORIES = [
   { id: 'visit', types: ['VISIT_ARRIVED'] },
   { id: 'viewed', types: ['VIEWED', 'IT_VIEWED'] },
   { id: 'appointment', types: ['APPOINTMENT_REQUESTED'] },
+  { id: 'trips', types: ['TRIP_APPROVAL_REQUESTED', 'TRIP_DECIDED', 'TRIP_RECEIPT'] },
 ];
 export const NOTIFICATION_CHANNELS = ['push', 'email'];

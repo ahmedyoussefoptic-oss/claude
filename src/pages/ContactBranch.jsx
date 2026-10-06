@@ -3,7 +3,9 @@ import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
 import { Loader2, MessageCircle } from 'lucide-react';
-import { functions } from '../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { functions, db } from '../config/firebase';
+import { toWhatsAppNumber } from '../utils/whatsapp';
 import logo from '../assets/logo.png';
 
 // Target of the "تواصل مع الفرع" button in the WhatsApp API templates
@@ -21,6 +23,18 @@ export default function ContactBranch() {
   useEffect(() => {
     (async () => {
       try {
+        // Trip messages carry BR-<branch>[-<section>] instead of a record
+        // number; both docs are publicly readable.
+        const br = /^BR-([A-Za-z0-9_]+)(?:-([A-Za-z0-9_]+))?$/.exec(id || '');
+        if (br) {
+          const [branchSnap, deptSnap] = await Promise.all([getDoc(doc(db, 'branches', br[1])), br[2] ? getDoc(doc(db, 'departments', br[2])) : null]);
+          const number = toWhatsAppNumber(deptSnap?.data()?.whatsappNumber || '') || toWhatsAppNumber(branchSnap.data()?.whatsappNumber || '');
+          if (!number) throw new Error('no number');
+          const url = `https://wa.me/${number}?text=${encodeURIComponent(t('contactBranch.prefillTrip'))}`;
+          setLink(url);
+          window.location.replace(url);
+          return;
+        }
         const { data } = await httpsCallable(functions, 'trackComplaint')({ complaintId: id || '' });
         if (!data.contactNumber) throw new Error('no number');
         const url = `https://wa.me/${data.contactNumber}?text=${encodeURIComponent(t('contactBranch.prefill', { id: data.complaintId }))}`;
