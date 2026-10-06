@@ -146,7 +146,7 @@ exports.createStaffUser = onCall(async (request) => {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
-  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, stages, curricula } = request.data || {};
+  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, stages, curricula, notificationPrefs, notificationChannels } = request.data || {};
   if (!name || !email || !password || !role) {
     throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
   }
@@ -186,6 +186,8 @@ exports.createStaffUser = onCall(async (request) => {
     department: department || null,
     isPrincipal: isPrincipal === true,
     isQuality: isQuality === true,
+    notificationPrefs: notificationPrefs && typeof notificationPrefs === "object" ? notificationPrefs : {},
+    notificationChannels: notificationChannels && typeof notificationChannels === "object" ? notificationChannels : {},
     stages: Array.isArray(stages) ? stages.filter((st) => typeof st === "string") : [],
     curricula: Array.isArray(curricula) ? curricula.filter((c) => typeof c === "string") : [],
     active: active !== false,
@@ -234,9 +236,34 @@ exports.resetStaffPassword = onCall(async (request) => {
 
 // Creates in-app notification documents for a list of recipient user ids.
 // Read by the NotificationBell UI (src/components/layout/NotificationBell.jsx).
+// Notification categories a user (or an admin for them) can switch off —
+// mirrors src/config/notificationCategories.js. notificationPrefs on the
+// user doc holds { [category]: false } for the ones turned off.
+const NOTIFICATION_CATEGORIES = {
+  assigned: ["ASSIGNED", "IT_ASSIGNED", "LF_ASSIGNED"],
+  escalation: ["ESCALATED", "IT_ESCALATED", "URGENT_CREATED"],
+  slaWarning: ["SLA_WARNING"],
+  internalComment: ["INTERNAL_COMMENT_ADDED", "IT_INTERNAL_COMMENT_ADDED"],
+  partialSolution: ["PARTIAL_SOLUTION_ADDED"],
+  solved: ["SOLVED_NOTIFY_RECEIVER"],
+  reopened: ["REOPENED", "IT_REOPENED"],
+  visit: ["VISIT_ARRIVED"],
+  viewed: ["VIEWED", "IT_VIEWED"],
+};
+const categoryOfType = (type) => Object.keys(NOTIFICATION_CATEGORIES).find((c) => NOTIFICATION_CATEGORIES[c].includes(type));
+
 async function notifyUsers(userIds, { title, body, complaintId, type }) {
-  const uniqueIds = [...new Set(userIds)].filter(Boolean);
+  let uniqueIds = [...new Set(userIds)].filter(Boolean);
   if (uniqueIds.length === 0) return;
+
+  // Drop recipients who switched this kind of notification off.
+  const category = categoryOfType(type);
+  if (category) {
+    const docs = await db.getAll(...uniqueIds.map((id) => db.collection("users").doc(id)));
+    const off = new Set(docs.filter((d) => d.exists && (d.data().notificationPrefs || {})[category] === false).map((d) => d.id));
+    uniqueIds = uniqueIds.filter((id) => !off.has(id));
+    if (uniqueIds.length === 0) return;
+  }
 
   const now = Timestamp.now();
   const batch = db.batch();
@@ -537,6 +564,7 @@ exports.emailOnNotification = onDocumentCreated({ document: "notifications/{noti
   const userDoc = await db.collection("users").doc(data.userId).get();
   const email = userDoc.exists ? userDoc.data().email : null;
   if (!email) return;
+  if ((userDoc.data().notificationChannels || {}).email === false) return;
 
   await sendEmail(email, data.title, `${data.body}\n\nhttps://mis-complaints.web.app/complaints`);
 });
@@ -553,6 +581,7 @@ exports.pushOnNotification = onDocumentCreated("notifications/{notificationId}",
   const userDoc = await userRef.get();
   const tokens = userDoc.exists ? (userDoc.data().fcmTokens || []) : [];
   if (tokens.length === 0) return;
+  if ((userDoc.data().notificationChannels || {}).push === false) return;
 
   const response = await messaging.sendEachForMulticast({
     tokens,

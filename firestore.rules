@@ -126,7 +126,7 @@ service cloud.firestore {
         // (role/branch/access/perms) on their own doc — otherwise any
         // account could grant itself admin rights.
         isAuthenticated() && request.auth.uid == userId &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'fcmTokens'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'fcmTokens', 'notificationPrefs', 'notificationChannels'])
       );
     }
 

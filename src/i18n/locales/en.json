@@ -1314,5 +1314,40 @@
     "seenBy_one": "Seen by {{count}}:",
     "seenBy_other": "Seen by {{count}}:",
     "detail": "First seen: {{first}} — last seen: {{last}} — times: {{count}}"
+  },
+  "notificationPrefs": {
+    "title": "Notifications",
+    "enableAll": "Enable all",
+    "disableAll": "Disable all",
+    "myPrefs": "My settings",
+    "myPrefsTitle": "My notification settings",
+    "categories": {
+      "assigned": "Assignments",
+      "escalation": "Escalations & urgent",
+      "slaWarning": "Deadline reminders",
+      "internalComment": "Internal comments",
+      "partialSolution": "Partial solutions",
+      "solved": "Feedback I logged is solved",
+      "reopened": "Reopened",
+      "visit": "Parent arrived at branch",
+      "viewed": "Record views"
+    },
+    "hints": {
+      "assigned": "When feedback, a tech ticket or lost item is assigned to you",
+      "escalation": "Manual or SLA escalation, and urgent feedback",
+      "slaWarning": "Two hours before the deadline",
+      "internalComment": "An internal comment on a record assigned to you",
+      "partialSolution": "A colleague adds their part to shared feedback",
+      "solved": "When feedback you logged is solved",
+      "reopened": "When a record assigned to you is reopened",
+      "visit": "A parent checked in with the QR code",
+      "viewed": "When a staff member opens a record for the first time"
+    },
+    "channelsTitle": "Delivery (in addition to the in-app bell)",
+    "channels": {
+      "push": "Phone alerts",
+      "email": "Email"
+    },
+    "channelsHint": "Enabled notifications always appear in the bell. Choose whether they also reach phone and email."
   }
 }

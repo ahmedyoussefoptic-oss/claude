@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Bell, BellRing, BellOff } from 'lucide-react';
+import { Bell, BellRing, BellOff, Settings2, X, Loader2 } from 'lucide-react';
+import NotificationPrefsEditor from '../common/NotificationPrefsEditor';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNotifications } from '../../hooks/useNotifications';
@@ -84,7 +85,29 @@ export default function NotificationBell() {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const { user, userData } = useAuthStore();
+  const [prefsOpen, setPrefsOpen] = useState(false);
+  const [prefsDraft, setPrefsDraft] = useState({ prefs: {}, channels: {} });
+  const [prefsSaving, setPrefsSaving] = useState(false);
+  const openPrefs = () => {
+    setPrefsDraft({ prefs: userData?.notificationPrefs || {}, channels: userData?.notificationChannels || {} });
+    setOpen(false);
+    setPrefsOpen(true);
+  };
+  const savePrefs = async () => {
+    if (!user) return;
+    setPrefsSaving(true);
+    try {
+      await updateDoc(doc(db, 'users', user.uid), { notificationPrefs: prefsDraft.prefs, notificationChannels: prefsDraft.channels });
+      // userData is loaded once at sign-in — keep it in step with what was saved.
+      useAuthStore.setState((st) => ({ userData: { ...st.userData, notificationPrefs: prefsDraft.prefs, notificationChannels: prefsDraft.channels } }));
+      setPrefsOpen(false);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setPrefsSaving(false);
+    }
+  };
   const notifications = useNotifications();
   const [open, setOpen] = useState(false);
   const [pushPermission, setPushPermission] = useState(() => (pushSupported() ? Notification.permission : 'unsupported'));
@@ -193,7 +216,13 @@ export default function NotificationBell() {
       {open && (
         <div className="absolute left-0 mt-2 w-80 max-h-96 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-50">
           <div className="px-4 py-3 border-b border-slate-100">
-            <p className="font-bold text-sm text-slate-900">{t('notifications.title')}</p>
+            <div className="flex items-center justify-between">
+              <p className="font-bold text-sm text-slate-900">{t('notifications.title')}</p>
+              <button onClick={openPrefs} className="flex items-center gap-1 text-xs text-slate-500 hover:text-primary" title={t('notificationPrefs.title')}>
+                <Settings2 className="w-3.5 h-3.5" />
+                {t('notificationPrefs.myPrefs')}
+              </button>
+            </div>
             {pushPermission === 'default' && (
               <button
                 onClick={handleEnablePush}
@@ -235,6 +264,25 @@ export default function NotificationBell() {
               ))}
             </ul>
           )}
+        </div>
+      )}
+      {prefsOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 z-[120] flex items-center justify-center p-4" onMouseDown={(e) => { if (e.target === e.currentTarget) setPrefsOpen(false); }}>
+          <div className="w-full max-w-xl bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between">
+              <p className="font-bold text-slate-900">{t('notificationPrefs.myPrefsTitle')}</p>
+              <button onClick={() => setPrefsOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-5 max-h-[70vh] overflow-y-auto">
+              <NotificationPrefsEditor prefs={prefsDraft.prefs} channels={prefsDraft.channels} onChange={setPrefsDraft} />
+            </div>
+            <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
+              <button onClick={() => setPrefsOpen(false)} className="px-4 py-2 text-sm rounded-xl border border-slate-300 bg-white">{t('common.cancel')}</button>
+              <button onClick={savePrefs} disabled={prefsSaving} className="px-5 py-2 text-sm rounded-xl bg-primary text-white font-medium flex items-center gap-2 disabled:opacity-60">
+                {prefsSaving && <Loader2 className="w-4 h-4 animate-spin" />}{t('common.save')}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

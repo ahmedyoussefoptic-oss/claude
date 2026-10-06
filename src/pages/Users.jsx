@@ -8,6 +8,7 @@ import { useBranches, useDepartments } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
 import { userBranches } from '../utils/scope';
 import { STAGES } from '../config/complaintTypes';
+import NotificationPrefsEditor from '../components/common/NotificationPrefsEditor';
 import { Users as UsersIcon, Plus, Loader2, Mail, Lock, Phone, Briefcase, User as UserIcon, Pencil, Trash2, KeyRound, X, SlidersHorizontal, RotateCcw } from 'lucide-react';
 
 const DEPARTMENT_IDS = ['ADMINISTRATIVE', 'ACADEMIC', 'BEHAVIORAL', 'IT'];
@@ -40,6 +41,8 @@ const emptyForm = {
   perms: { edit: false, delete: false, users: false },
   isPrincipal: false,
   isQuality: false,
+  notificationPrefs: {},
+  notificationChannels: {},
   stages: [],
   curricula: [],
 };
@@ -101,6 +104,8 @@ export default function Users() {
       perms: { edit: !!u.perms?.edit, delete: !!u.perms?.delete, users: !!u.perms?.users },
       isPrincipal: u.isPrincipal === true,
       isQuality: u.isQuality === true,
+      notificationPrefs: u.notificationPrefs || {},
+      notificationChannels: u.notificationChannels || {},
       stages: Array.isArray(u.stages) ? u.stages : [],
       curricula: Array.isArray(u.curricula) ? u.curricula : [],
     });
@@ -138,6 +143,8 @@ export default function Users() {
           perms: form.perms,
           isPrincipal: form.isPrincipal,
           isQuality: form.isQuality,
+          notificationPrefs: form.notificationPrefs,
+          notificationChannels: form.notificationChannels,
           stages: form.stages,
           curricula: form.curricula,
         });
@@ -159,6 +166,8 @@ export default function Users() {
           perms: form.perms,
           isPrincipal: form.isPrincipal,
           isQuality: form.isQuality,
+          notificationPrefs: form.notificationPrefs,
+          notificationChannels: form.notificationChannels,
           stages: form.stages,
           curricula: form.curricula,
         });
@@ -503,6 +512,14 @@ export default function Users() {
                 ✅ {t('users.isQualityLabel')}
               </label>
               <p className="text-xs text-slate-600 mt-2">{t('users.isQualityHint')}</p>
+            </div>
+
+            <div className="md:col-span-2 bg-slate-50 border border-slate-100 rounded-xl p-4">
+              <NotificationPrefsEditor
+                prefs={form.notificationPrefs}
+                channels={form.notificationChannels}
+                onChange={({ prefs, channels }) => setForm((p) => ({ ...p, notificationPrefs: prefs, notificationChannels: channels }))}
+              />
             </div>
 
             <div className="md:col-span-2 mt-2 flex gap-3">
