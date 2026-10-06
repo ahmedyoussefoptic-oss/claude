@@ -10,6 +10,7 @@ import { ar, enUS } from 'date-fns/locale';
 import logo from '../assets/logo.png';
 import Watermark from '../components/common/Watermark';
 import SystemCredit from '../components/common/SystemCredit';
+import { formatAppointment } from '../components/appointments/AppointmentPicker';
 import LanguageSwitcher from '../components/common/LanguageSwitcher';
 
 // Each trackable record type: which collection its survey update targets
@@ -232,6 +233,13 @@ export default function ParentPortal() {
                   <h2 className="text-xl font-bold text-slate-900 font-mono">#{result.complaintId}</h2>
                   {(result.studentName || result.itemName) && (
                     <p className="text-sm text-slate-500 mt-1">{result.studentName || result.itemName}</p>
+                  )}
+                  {result.appointment && (
+                    <div className="mt-3 bg-sky-50 border border-sky-100 rounded-xl p-3">
+                      <p className="text-xs text-slate-500">{t('appointments.parentCardTitle')}</p>
+                      <p className="font-bold text-slate-900">{formatAppointment(result.appointment.startMillis, i18n.language)}</p>
+                      <p className="text-xs mt-0.5 text-sky-800">{t(`appointments.parentStatus.${result.appointment.status}`, '')}</p>
+                    </div>
                   )}
                   {result.contactNumber && (
                     <a

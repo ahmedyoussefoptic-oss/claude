@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Upload, Save, Loader2, CheckCircle2, MessageCircle, Mic, Square } from 'lucide-react';
 import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../config/firebase';
+import { db, storage, functions } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { messageSentFields } from '../../utils/messageSent';
 import { useBranches, useDepartments, useComplaintTypes, useSubTypes } from '../../hooks/useOrgData';
@@ -15,6 +15,9 @@ import { STAGES } from '../../config/complaintTypes';
 import { classOptionsForStage } from '../../config/techSupport';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import ExtraTypesEditor, { cleanExtraTypes } from './ExtraTypesEditor';
+import AppointmentPicker from '../appointments/AppointmentPicker';
+import { isAppointmentCategory } from '../../config/appointments';
+import { httpsCallable } from 'firebase/functions';
 
 const PRIORITY_IDS = ['NORMAL', 'HIGH', 'URGENT'];
 
@@ -51,6 +54,7 @@ export default function ComplaintForm({ onClose }) {
     complaintType: '',
     subType: '',
     extraTypes: [],
+    appointmentSlot: null,
     subject: '',
     priority: 'NORMAL',
     source: 'CENTER_CALL',
@@ -77,8 +81,10 @@ export default function ComplaintForm({ onClose }) {
       [name]: value,
       ...(name === 'complaintType' ? { subType: '' } : {}),
       ...(name === 'stage' ? { grade: '' } : {}),
+      ...(['complaintType', 'subType', 'branch'].includes(name) ? { appointmentSlot: null } : {}),
     }));
   };
+  const wantsAppointment = isAppointmentCategory(formData.complaintType, formData.subType, complaintTypes, subTypes);
 
   const [studentSuggestions, setStudentSuggestions] = useState([]);
   const studentNameSearchTimer = useRef(null);
@@ -200,8 +206,9 @@ export default function ComplaintForm({ onClose }) {
       const now = serverTimestamp();
       const assignees = formData.assignedTo.map((id) => staff.find((u) => u.id === id)).filter(Boolean);
 
+      const { appointmentSlot, ...formFields } = formData;
       const newComplaint = {
-        ...formData,
+        ...formFields,
         extraTypes: cleanExtraTypes(formData.extraTypes, formData.complaintType),
         complaintId,
         receiver: user.uid,
@@ -234,7 +241,18 @@ export default function ComplaintForm({ onClose }) {
         });
       }
 
+      // Book the requested visit slot (server checks it's still free).
+      let appointmentError = null;
+      if (wantsAppointment && appointmentSlot) {
+        try {
+          await httpsCallable(functions, 'requestAppointment')({ complaintDocId: docRef.id, slot: appointmentSlot });
+        } catch (apptErr) {
+          appointmentError = apptErr.message;
+        }
+      }
+
       setSavedComplaint({
+        appointmentError,
         id: docRef.id,
         complaintId,
         parentName: formData.parentName,
@@ -258,6 +276,7 @@ export default function ComplaintForm({ onClose }) {
             <CheckCircle2 className="w-7 h-7" />
           </div>
           <h2 className="text-lg font-bold text-slate-900 mb-1">{t('complaintForm.successTitle')}</h2>
+          {savedComplaint.appointmentError && <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-lg p-2 mb-2">{t('appointments.bookFailed', { message: savedComplaint.appointmentError })}</p>}
           <p className="text-sm text-slate-500 mb-6">{t('complaintForm.complaintNumberLabel')} <span className="font-mono font-bold text-slate-900" dir="ltr">{savedComplaint.complaintId}</span></p>
 
           {savedComplaint.failedFiles?.length > 0 && (
@@ -427,6 +446,11 @@ export default function ComplaintForm({ onClose }) {
                     {subTypes.filter(s => s.parentType === formData.complaintType).map(s => <option key={s.id} value={s.name}>{s.name}</option>)}
                   </select>
                 </div>
+                {wantsAppointment && (
+                  <div className="md:col-span-4 md:order-last">
+                    <AppointmentPicker branch={formData.branch} value={formData.appointmentSlot} onChange={(ms) => setFormData((prev) => ({ ...prev, appointmentSlot: ms }))} required={false} />
+                  </div>
+                )}
                 <div className="md:col-span-4 md:order-last">
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.extraTypesLabel')}</label>
                   <ExtraTypesEditor

@@ -7,7 +7,7 @@ import { useBranches, useDepartments, ensureSeeded } from '../../hooks/useOrgDat
 import { useWhatsAppApi, DEFAULT_WA_API } from '../../hooks/useWhatsAppApi';
 import { toWhatsAppNumber } from '../../utils/whatsapp';
 
-const TEMPLATE_KEYS = ['complaintReceipt', 'complaintResolution', 'techReceipt', 'techResolution', 'visitMet', 'lostFoundReceipt', 'lostFoundReturned'];
+const TEMPLATE_KEYS = ['complaintReceipt', 'complaintResolution', 'techReceipt', 'techResolution', 'visitMet', 'appointmentConfirmed', 'appointmentRescheduled', 'lostFoundReceipt', 'lostFoundReturned'];
 
 // Suggested template bodies to submit for approval in the Taqnyat portal.
 // All four share the same variables (see sendWhatsAppApiMessage):
@@ -22,6 +22,8 @@ const SUGGESTED = {
   techResolution: `مرحباً {{1}}،\nبخصوص بلاغكم التقني رقم {{2}} الخاص بالطالب/ة {{3}}:\n{{4}}\nلتأكيد الحل أو تقييم الخدمة: {{5}}\n\n${NOTICE}`,
   visitMet: `مرحباً {{1}}،\nشكراً لزيارتكم {{4}}، وقد تمت مقابلتكم بخصوص الملاحظة رقم {{2}} الخاصة بالطالب/ة {{3}}.\nنسعد بتقييمكم للزيارة ومتابعة الملاحظة عبر الرابط: {{5}}\n\n${NOTICE}`,
   lostFoundReceipt: `مرحباً {{1}}،\nتم تسجيل بلاغكم رقم {{2}} عن ({{3}}) في {{4}}، وسيتم التواصل معكم عند وجود مستجدات.\nلمتابعة حالة البلاغ: {{5}}\n\n${NOTICE}`,
+  appointmentConfirmed: `مرحباً {{1}}،\nتم تأكيد موعد زيارتكم للمدرسة بخصوص الملاحظة رقم {{2}} الخاصة بالطالب/ة {{3}}.\nالموعد: {{4}}\nعند وصولكم امسحوا رمز QR في الاستقبال واختاروا «لدي موعد مسبق» وأدخلوا رقم الملاحظة.\nللمتابعة: {{5}}\n\n${NOTICE}`,
+  appointmentRescheduled: `مرحباً {{1}}،\nبخصوص طلب زيارتكم للمدرسة (الملاحظة رقم {{2}} للطالب/ة {{3}})، نعتذر عن الموعد المطلوب، وتم تحديد موعد بديل:\n{{4}}\nعند وصولكم امسحوا رمز QR في الاستقبال واختاروا «لدي موعد مسبق» وأدخلوا رقم الملاحظة.\nللمتابعة: {{5}}\n\n${NOTICE}`,
   lostFoundReturned: `مرحباً {{1}}،\nنفيدكم بتسليم الغرض ({{3}}) الخاص ببلاغكم رقم {{2}}.\n{{4}}\nنسعد بتقييمكم للخدمة عبر الرابط: {{5}}\n\n${NOTICE}`,
 };
 
@@ -29,7 +31,7 @@ const SUGGESTED = {
 const VAR_HINT = {
   complaintReceipt: 'receiptVars', techReceipt: 'receiptVars',
   complaintResolution: 'resolutionVars', techResolution: 'resolutionVars',
-  visitMet: 'visitVars', lostFoundReceipt: 'lostReceiptVars', lostFoundReturned: 'lostReturnedVars',
+  visitMet: 'visitVars', appointmentConfirmed: 'appointmentVars', appointmentRescheduled: 'appointmentVars', lostFoundReceipt: 'lostReceiptVars', lostFoundReturned: 'lostReturnedVars',
 };
 
 function CopyBox({ text }) {

@@ -21,6 +21,7 @@ import ErrorBoundary from '../common/ErrorBoundary';
 import ComplaintEditForm from './ComplaintEditForm';
 import ComplaintConvertModal from './ComplaintConvertModal';
 import RecordViewers from '../common/RecordViewers';
+import AppointmentPanel from '../appointments/AppointmentPanel';
 import { complaintStatusLabel, complaintTypesOf } from '../../config/complaintTypes';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
@@ -535,6 +536,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
               {t('complaintDetails.readOnlyNotice')}
             </div>
           )}
+          <AppointmentPanel complaint={complaint} branchName={branchName} />
           {complaint.viaVisitQr && isVisitWaiting && (
             <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 space-y-3 print:hidden">
               <p className="text-sm font-bold text-rose-800 flex items-center gap-2">

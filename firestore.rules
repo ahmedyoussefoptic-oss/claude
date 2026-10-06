@@ -215,6 +215,12 @@ service cloud.firestore {
       }
     }
 
+    // School visit appointment bookings — written only by Cloud Functions.
+    match /appointments/{id} {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+
     // Deleted-complaints archive — a full snapshot is written here the
     // moment a complaint is deleted (see ComplaintDetails.jsx's handleDelete),
     // so nothing is ever truly gone without a trace. Admin-only read, per the

@@ -9,6 +9,8 @@ import { classOptionsForStage } from '../../config/techSupport';
 import { MAX_PUBLIC_FILES, MAX_PUBLIC_FILE_BYTES, fileToBase64 } from '../../utils/publicSubmission';
 import AttachmentUploader from './AttachmentUploader';
 import ExtraTypesEditor, { cleanExtraTypes } from '../complaints/ExtraTypesEditor';
+import AppointmentPicker from '../appointments/AppointmentPicker';
+import { isAppointmentCategory } from '../../config/appointments';
 
 const MAX_ENTRIES = 5;
 
@@ -24,6 +26,7 @@ const emptyEntry = (branch) => ({
   complaintType: '',
   subType: '',
   extraTypes: [],
+  appointmentSlot: null,
   subject: '',
   details: '',
   files: [],
@@ -65,7 +68,7 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
 
   const handleEntryChange = (key) => (e) => {
     const { name, value } = e.target;
-    updateEntry(key, { [name]: value, ...(name === 'complaintType' ? { subType: '' } : {}), ...(name === 'stage' ? { grade: '' } : {}) });
+    updateEntry(key, { [name]: value, ...(name === 'complaintType' ? { subType: '' } : {}), ...(name === 'stage' ? { grade: '' } : {}), ...(['complaintType', 'subType', 'branch'].includes(name) ? { appointmentSlot: null } : {}) });
   };
 
   // Siblings usually attend the same branch, so it's carried over as a
@@ -95,10 +98,16 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
     setEntries((list) => list.map((en) => (en.key === key ? { ...en, files: en.files.filter((_, i) => i !== index) } : en)));
   };
 
+  const wantsAppointment = (en) => !visit && isAppointmentCategory(en.complaintType, en.subType, complaintTypes, subTypes);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
+    if (entries.some((en) => wantsAppointment(en) && !en.appointmentSlot)) {
+      setError(t('appointments.pickRequired'));
+      return;
+    }
+    setLoading(true);
     const submitPublicComplaint = httpsCallable(functions, 'submitPublicComplaint');
     const done = [...sent];
     try {
@@ -111,7 +120,8 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
             base64Data: await fileToBase64(file),
           }))
         );
-        const result = await submitPublicComplaint({ ...parent, ...fields, extraTypes: cleanExtraTypes(fields.extraTypes, fields.complaintType), attachments, ...(visit ? { visit: true } : {}) });
+        const { appointmentSlot, ...plain } = fields;
+        const result = await submitPublicComplaint({ ...parent, ...plain, extraTypes: cleanExtraTypes(fields.extraTypes, fields.complaintType), attachments, ...(visit ? { visit: true } : {}), ...(wantsAppointment(entry) && appointmentSlot ? { appointmentSlot } : {}) });
         done.push({ id: result.data.complaintId, studentName: entry.studentName });
       }
       onSuccess(done);
@@ -237,6 +247,9 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
                   </select>
                 </div>
               </div>
+              {wantsAppointment(entry) && (
+                <AppointmentPicker branch={entry.branch} value={entry.appointmentSlot} onChange={(ms) => updateEntry(entry.key, { appointmentSlot: ms })} />
+              )}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('publicReport.extraTypesLabel')}</label>
                 <ExtraTypesEditor

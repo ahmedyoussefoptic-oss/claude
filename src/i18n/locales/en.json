@@ -43,7 +43,8 @@
     "hasInternalComment": "Has an internal comment",
     "user": "User",
     "allDepartments": "All sections",
-    "noDepartment": "No section"
+    "noDepartment": "No section",
+    "back": "Back"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -591,7 +592,9 @@
       "CONVERTED_FROM_COMPLAINT": "Your request was transferred to tech support",
       "TICKET_EDITED": "Ticket details updated",
       "VISIT_CHECKED_IN": "You checked in at the branch",
-      "VISIT_MET": "Meeting held"
+      "VISIT_MET": "Meeting held",
+      "APPOINTMENT_CONFIRMED": "Your visit is confirmed",
+      "APPOINTMENT_RESCHEDULED": "An alternative visit time was set"
     },
     "pageTitle": "Feedback & Reports Tracking Portal",
     "pageSubtitle": "Enter your feedback or report number to check its current status.",
@@ -876,7 +879,8 @@
     "restoreDefault": "Restore default",
     "availableVariables": "Available variables:",
     "savedCheck": "Saved ✓",
-    "parentRelatedFlag": "Parent's account"
+    "parentRelatedFlag": "Parent's account",
+    "appointmentFlag": "Visit appointment"
   },
   "flowMap": {
     "title": "Complaint Flow Map",
@@ -1058,7 +1062,10 @@
       "VISIT_MET": "Parent met",
       "WHATSAPP_API_SENT": "Sent to parent via WhatsApp API",
       "WHATSAPP_API_FAILED": "Automatic WhatsApp API send failed",
-      "PARTIAL_SOLUTION_ADDED": "Partial solution added"
+      "PARTIAL_SOLUTION_ADDED": "Partial solution added",
+      "APPOINTMENT_REQUESTED": "Visit appointment requested",
+      "APPOINTMENT_CONFIRMED": "Visit appointment confirmed",
+      "APPOINTMENT_RESCHEDULED": "Alternative visit time set"
     },
     "lostFound": {
       "ITEM_REGISTERED": "Item registered",
@@ -1196,7 +1203,17 @@
     "notesRequired": "Please write the meeting summary and solution.",
     "confirmError": "Could not confirm the meeting. Please try again.",
     "noPermission": "Assignees, the branch principal, and staff with edit permission can confirm the meeting.",
-    "metNotice": "Parent met by {{name}} — {{time}}"
+    "metNotice": "Parent met by {{name}} — {{time}}",
+    "haveAppointment": "I have an appointment",
+    "haveAppointmentHint": "Check in with your feedback number",
+    "walkIn": "Visit without appointment",
+    "walkInHint": "Enter your details and visit reason",
+    "apptNumberLabel": "Feedback number used to book",
+    "apptLast4Label": "Last 4 digits of the parent's phone",
+    "apptSubmit": "Check in",
+    "apptError": "Couldn't check in.",
+    "apptDoneTitle": "You're checked in for your appointment",
+    "apptDoneBody": "Appointment {{when}} — student {{student}}."
   },
   "branchQr": {
     "title": "Branch visit QR codes",
@@ -1223,7 +1240,9 @@
       "techResolution": "Tech ticket resolution",
       "visitMet": "Thank-you after branch visit (QR)",
       "lostFoundReceipt": "Lost & found receipt",
-      "lostFoundReturned": "Lost item returned"
+      "lostFoundReturned": "Lost item returned",
+      "appointmentConfirmed": "Visit appointment confirmed",
+      "appointmentRescheduled": "Visit appointment changed"
     },
     "guideTitle": "Suggested template texts to submit for approval",
     "guideIntro": "Create these four templates in the Taqnyat portal (Message Templates) with the names above, and wait for WhatsApp approval before enabling.",
@@ -1249,7 +1268,8 @@
     "sendReturnedApi": "Send handover (WhatsApp API)",
     "autoSend": "Automatic sending",
     "autoSendHint": "Receipt as soon as a feedback / tech ticket / lost-item report is logged, resolution as soon as it's written (closing the tech ticket), thank-you once a branch meeting is confirmed, and handover once an item is returned. If sending fails, the reason is logged on the record and the manual send buttons remain available.",
-    "visitAutoNote": "The parent will automatically get a WhatsApp thank-you after confirming."
+    "visitAutoNote": "The parent will automatically get a WhatsApp thank-you after confirming.",
+    "appointmentVars": "{{3}} student name — {{4}} time and branch. Sent when the principal confirms or sets another time."
   },
   "contactBranch": {
     "loading": "Opening the branch chat...",
@@ -1330,7 +1350,8 @@
       "solved": "Feedback I logged is solved",
       "reopened": "Reopened",
       "visit": "Parent arrived at branch",
-      "viewed": "Record views"
+      "viewed": "Record views",
+      "appointment": "Visit appointment requests"
     },
     "hints": {
       "assigned": "When feedback, a tech ticket or lost item is assigned to you",
@@ -1341,7 +1362,8 @@
       "solved": "When feedback you logged is solved",
       "reopened": "When a record assigned to you is reopened",
       "visit": "A parent checked in with the QR code",
-      "viewed": "When a staff member opens a record for the first time"
+      "viewed": "When a staff member opens a record for the first time",
+      "appointment": "A parent requested a visit slot that needs confirming"
     },
     "channelsTitle": "Delivery (in addition to the in-app bell)",
     "channels": {
@@ -1349,5 +1371,53 @@
       "email": "Email"
     },
     "channelsHint": "Enabled notifications always appear in the bell. Choose whether they also reach phone and email."
+  },
+  "appointments": {
+    "pickLabel": "Choose the visit day and time",
+    "pickBranchFirst": "Choose the branch first to see free slots.",
+    "loading": "Loading free slots...",
+    "noSlots": "No free slots at this branch right now.",
+    "loadError": "Couldn't load slots.",
+    "freeCount_one": "{{count}} free",
+    "freeCount_other": "{{count}} free",
+    "chosen": "Chosen: {{when}}",
+    "pickRequired": "Please choose a visit slot from the available times.",
+    "bookFailed": "Feedback saved, but the slot couldn't be booked: {{message}}",
+    "panelTitle": "School visit appointment",
+    "noSlotYet": "No slot set yet.",
+    "originallyRequested": "Requested by the parent: {{when}}",
+    "decidedBy": "by {{name}}",
+    "confirmBtn": "Confirm appointment",
+    "otherSlotBtn": "Propose another time",
+    "setSlotBtn": "Set an appointment",
+    "saveOtherSlot": "Save and notify the parent",
+    "sendToParent": "Send appointment to parent (WhatsApp)",
+    "sentAuto": "Sent automatically via WhatsApp API",
+    "checkInHint": "On arrival the parent scans the reception QR, picks “I have an appointment” and enters the feedback number; the visit then appears in Branch visits.",
+    "parentMessage": "Hello {{parent}},\nYour visit to {{branch}} is confirmed: {{when}}\nFeedback no. {{id}}.\nOn arrival scan the reception QR code, choose “I have an appointment” and enter the feedback number.\nTrack: {{link}}",
+    "status": {
+      "REQUESTED": "Awaiting school confirmation",
+      "CONFIRMED": "Confirmed",
+      "CHECKED_IN": "Parent arrived",
+      "CANCELLED": "Cancelled"
+    },
+    "parentCardTitle": "Your visit appointment",
+    "parentStatus": {
+      "REQUESTED": "Awaiting the school's confirmation",
+      "CONFIRMED": "Confirmed — scan the QR code on arrival",
+      "CHECKED_IN": "You've checked in"
+    }
+  },
+  "appointmentSettings": {
+    "title": "School visit appointments",
+    "subtitle": "When parents can book a visit; they only see free slots.",
+    "days": "Visit days",
+    "start": "From",
+    "end": "To",
+    "slotMinutes": "Slot length (minutes)",
+    "capacity": "Visits per slot",
+    "daysAhead": "Bookable days ahead",
+    "minNoticeHours": "Minimum notice (hours)",
+    "categoryHint": "The slot picker appears for a category or sub-category flagged “Visit appointment” in the category lists above, or a sub-category whose name contains «موعد»."
   }
 }

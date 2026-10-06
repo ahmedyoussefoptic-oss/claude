@@ -12,5 +12,6 @@ export const NOTIFICATION_CATEGORIES = [
   { id: 'reopened', types: ['REOPENED', 'IT_REOPENED'] },
   { id: 'visit', types: ['VISIT_ARRIVED'] },
   { id: 'viewed', types: ['VIEWED', 'IT_VIEWED'] },
+  { id: 'appointment', types: ['APPOINTMENT_REQUESTED'] },
 ];
 export const NOTIFICATION_CHANNELS = ['push', 'email'];

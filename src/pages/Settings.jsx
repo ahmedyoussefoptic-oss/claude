@@ -15,6 +15,7 @@ import {
 import { useMessageTemplates } from '../hooks/useMessageTemplates';
 import WhatsAppApiSettings from '../components/settings/WhatsAppApiSettings';
 import SlaSettings from '../components/settings/SlaSettings';
+import AppointmentSettings from '../components/settings/AppointmentSettings';
 import { parseStudentRows, upsertStudents } from '../utils/students';
 import { DEFAULT_TEMPLATES, TEMPLATE_PLACEHOLDERS } from '../utils/whatsapp';
 import {
@@ -441,6 +442,16 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
     }
   };
 
+  // "Visit appointment" sub-types show the slot picker on the forms.
+  const toggleAppointment = async (item) => {
+    try {
+      await ensureSeeded('complaintSubTypes');
+      await setDoc(doc(db, 'complaintSubTypes', item.id), { appointment: !item.appointment }, { merge: true });
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   const handleDeactivate = async (item) => {
     if (!confirm(t('settings.hideConfirm', { name: item.name }))) return;
     try {
@@ -514,6 +525,13 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
             ) : (
               <>
                 <span className="flex-1 text-sm text-slate-800">{item.name}</span>
+                <button
+                  type="button"
+                  onClick={() => toggleAppointment(item)}
+                  className={`text-xs px-2 py-1 rounded-full border transition-colors ${item.appointment ? 'bg-sky-100 text-sky-800 border-sky-200' : 'bg-white text-slate-400 border-slate-200 hover:text-slate-600'}`}
+                >
+                  {item.appointment ? '✓ ' : ''}{t('settings.appointmentFlag')}
+                </button>
                 <button onClick={() => startEdit(item)} className="p-1.5 text-slate-500 hover:text-primary hover:bg-primary/10 rounded-lg" title={t('settings.editNameTitle')}>
                   <Pencil className="w-4 h-4" />
                 </button>
@@ -554,13 +572,14 @@ export default function Settings() {
 
       <EditableList title={t('settings.branchesTitle')} icon={Building2} items={branches} collectionName="branches" />
       <EditableList title={t('settings.departmentsTitle')} icon={GraduationCap} items={departments} collectionName="departments" />
-      <EditableList title={t('settings.complaintTypesTitle')} icon={Tag} items={complaintTypes} collectionName="complaintTypes" />
+      <EditableList title={t('settings.complaintTypesTitle')} icon={Tag} items={complaintTypes} collectionName="complaintTypes" flag={{ key: 'appointment', label: t('settings.appointmentFlag') }} />
       <SubTypesEditor complaintTypes={complaintTypes} subTypes={subTypes} />
       <EditableList title={t('settings.problemTypesTitle')} icon={Wrench} items={problemTypes} collectionName="problemTypes" flag={{ key: 'parentRelated', label: t('settings.parentRelatedFlag') }} />
       <EditableList title={t('settings.platformsTitle')} icon={Monitor} items={platforms} collectionName="platforms" flag={{ key: 'parentRelated', label: t('settings.parentRelatedFlag') }} />
       <EditableList title={t('settings.itemCategoriesTitle')} icon={Package} items={itemCategories} collectionName="itemCategories" />
       <StudentImport />
       <SlaSettings />
+      <AppointmentSettings />
       <MessageTemplatesEditor />
       <WhatsAppApiSettings />
     </div>

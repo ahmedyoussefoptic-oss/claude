@@ -249,6 +249,7 @@ const NOTIFICATION_CATEGORIES = {
   reopened: ["REOPENED", "IT_REOPENED"],
   visit: ["VISIT_ARRIVED"],
   viewed: ["VIEWED", "IT_VIEWED"],
+  appointment: ["APPOINTMENT_REQUESTED"],
 };
 const categoryOfType = (type) => Object.keys(NOTIFICATION_CATEGORIES).find((c) => NOTIFICATION_CATEGORIES[c].includes(type));
 
@@ -912,7 +913,7 @@ exports.trackComplaint = onCall(async (request) => {
   const logsSnapshot = await db.collection(`${match.collection}/${doc.id}/activityLog`).orderBy("createdAt", "desc").get();
   const history = logsSnapshot.docs
     .map((d) => d.data())
-    .filter((l) => !["INTERNAL_COMMENT_ADDED", "NOTE_ADDED", "WHATSAPP_API_SENT", "WHATSAPP_API_FAILED", "PARTIAL_SOLUTION_ADDED"].includes(l.action))
+    .filter((l) => !["INTERNAL_COMMENT_ADDED", "NOTE_ADDED", "WHATSAPP_API_SENT", "WHATSAPP_API_FAILED", "PARTIAL_SOLUTION_ADDED", "APPOINTMENT_REQUESTED"].includes(l.action))
     .map((l) => ({
       action: l.action,
       createdAtMillis: l.createdAt?.toMillis?.() ?? null,
@@ -930,6 +931,7 @@ exports.trackComplaint = onCall(async (request) => {
     // Branch/section WhatsApp number for the /contact/<number> page that
     // the WhatsApp API templates' "تواصل مع الفرع" button opens.
     contactNumber: (await contactNumberFor(data)) || null,
+    appointment: data.appointment && data.appointment.start ? { status: data.appointment.status, startMillis: data.appointment.start.toMillis(), rescheduled: !!data.appointment.rescheduled } : null,
     history,
   };
 });
@@ -1230,7 +1232,16 @@ exports.submitPublicComplaint = onCall(async (request) => {
     curriculum: data.department,
   });
   const now = Timestamp.now();
-  const docRef = await db.collection("complaints").add({
+  // A "school visit appointment" request carries the slot the parent picked;
+  // reserve it before creating the record so a slot taken meanwhile fails
+  // cleanly and the parent can pick another.
+  const docRef = db.collection("complaints").doc();
+  let appointment = null;
+  if (typeof data.appointmentSlot === "number" && !isVisit) {
+    appointment = await reserveAppointment({ branch: data.branch, startMs: data.appointmentSlot, complaintDocId: docRef.id, complaintId });
+  }
+  await docRef.set({
+    ...(appointment ? { appointment } : {}),
     parentName: data.parentName.trim(),
     parentPhone: data.parentPhone.trim(),
     parentEmail: (data.parentEmail || "").trim(),
@@ -1275,6 +1286,9 @@ exports.submitPublicComplaint = onCall(async (request) => {
       metadata: { toUserIds: assignees.map((a) => a.id), toUserNames: assignees.map((a) => a.name), addedNames: assignees.map((a) => a.name) },
       createdAt: now,
     });
+  }
+  if (appointment) {
+    await onAppointmentRequested(docRef.id, { branch: data.branch, complaintId, studentName: data.studentName.trim() }, appointment, "ولي الأمر (نموذج إلكتروني)");
   }
 
   return { complaintId };
@@ -1713,7 +1727,7 @@ exports.backfillWasEscalated = onSchedule("every 30 minutes", async () => {
 const TAQNYAT_MESSAGES_URL = "https://api.taqnyat.sa/wa/v2/messages/";
 const PUBLIC_APP_URL = "https://mis-complaints.web.app";
 const WA_TEMPLATE_KEYS = {
-  complaint: { receipt: "complaintReceipt", resolution: "complaintResolution", visitMet: "visitMet" },
+  complaint: { receipt: "complaintReceipt", resolution: "complaintResolution", visitMet: "visitMet", appointmentConfirmed: "appointmentConfirmed", appointmentRescheduled: "appointmentRescheduled" },
   techSupport: { receipt: "techReceipt", resolution: "techResolution" },
   lostFound: { receipt: "lostFoundReceipt", returned: "lostFoundReturned" },
 };
@@ -1766,6 +1780,11 @@ async function sendWaTemplate({ kind, ref, record, event, actorId, actorName, se
   let fourth;
   if (event === "receipt") {
     fourth = branch.name || record.branch;
+  } else if (event === "appointmentConfirmed" || event === "appointmentRescheduled") {
+    if (!record.appointment || !record.appointment.start) {
+      throw new HttpsError("failed-precondition", "لا يوجد موعد زيارة لهذه الملاحظة.");
+    }
+    fourth = `${formatRiyadh(record.appointment.start.toMillis())} — ${branch.name || record.branch}`;
   } else if (event === "visitMet") {
     // Thank-you after a branch QR visit (see confirmBranchVisit).
     if (record.visitStatus !== "MET") {
@@ -1844,7 +1863,7 @@ async function sendWaTemplate({ kind, ref, record, event, actorId, actorName, se
   // so a sender without edit permission (an assignee) still records it.
   // A tech-support resolution's fields (and closing the ticket) are left to
   // the client's existing handleResolutionSent flow.
-  const sentPrefix = { receipt: "receipt", resolution: "resolution", returned: "resolution", visitMet: "visit" }[event];
+  const sentPrefix = { receipt: "receipt", resolution: "resolution", returned: "resolution", visitMet: "visit", appointmentConfirmed: "appointment", appointmentRescheduled: "appointment" }[event];
   if (!(kind === "techSupport" && event === "resolution")) {
     const sentNow = Timestamp.now();
     await ref.update({
@@ -2024,4 +2043,226 @@ exports.markRecordViewed = onCall(async (request) => {
     }
   }
   return { first };
+});
+
+// ---------------------------------------------------------------------------
+// School visit appointments. A parent asking for a visit appointment picks
+// one of the free slots (settings/appointments: working days and hours,
+// slot length, visitors per slot, how far ahead, minimum notice); the branch
+// principal confirms it or proposes another slot, the parent is messaged,
+// and on arrival they check in at the branch QR page with the feedback
+// number — which turns the record into a waiting branch visit.
+// Bookings live in `appointments` (one doc per reservation).
+// ---------------------------------------------------------------------------
+const APPT_TZ_MS = 3 * 3600 * 1000; // Asia/Riyadh, no DST
+const APPT_DAY = 24 * 3600 * 1000;
+const ACTIVE_APPT = ["REQUESTED", "CONFIRMED", "CHECKED_IN"];
+
+function normalizeAppointments(d) {
+  const x = d || {};
+  return {
+    days: Array.isArray(x.days) && x.days.length ? x.days : [0, 1, 2, 3, 4],
+    start: x.start || "08:00",
+    end: x.end || "13:00",
+    slotMinutes: Number(x.slotMinutes) > 0 ? Number(x.slotMinutes) : 30,
+    capacity: Number(x.capacity) > 0 ? Number(x.capacity) : 1,
+    daysAhead: Number(x.daysAhead) > 0 ? Number(x.daysAhead) : 14,
+    minNoticeHours: Number(x.minNoticeHours) >= 0 ? Number(x.minNoticeHours) : 12,
+  };
+}
+async function loadAppointmentSettings() {
+  const snap = await db.collection("settings").doc("appointments").get();
+  return normalizeAppointments(snap.exists ? snap.data() : null);
+}
+const hhmmToMin = (v, f) => { const m = /^(\d{1,2}):(\d{2})$/.exec(v || ""); return m ? Number(m[1]) * 60 + Number(m[2]) : f; };
+
+// Every bookable slot start (UTC ms) inside the booking window.
+function appointmentSlots(cfg, nowMs = Date.now()) {
+  const from = nowMs + cfg.minNoticeHours * 3600 * 1000;
+  const to = nowMs + cfg.daysAhead * APPT_DAY;
+  const a = hhmmToMin(cfg.start, 480), b = hhmmToMin(cfg.end, 780);
+  const out = [];
+  for (let d = Math.floor((nowMs + APPT_TZ_MS) / APPT_DAY) * APPT_DAY; d - APPT_TZ_MS <= to; d += APPT_DAY) {
+    if (!cfg.days.includes(new Date(d).getUTCDay())) continue;
+    for (let m = a; m + cfg.slotMinutes <= b; m += cfg.slotMinutes) {
+      const startMs = d + m * 60000 - APPT_TZ_MS;
+      if (startMs >= from && startMs <= to) out.push(startMs);
+    }
+  }
+  return out;
+}
+
+function formatRiyadh(ms) {
+  return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", {
+    timeZone: "Asia/Riyadh", weekday: "long", day: "numeric", month: "long", hour: "numeric", minute: "2-digit",
+  }).format(new Date(ms));
+}
+
+// Reserves one slot (transaction: re-counts bookings so two parents can't
+// take the last place at once). Returns the complaint's `appointment` map.
+async function reserveAppointment({ branch, startMs, complaintDocId, complaintId, cancelId }) {
+  if (typeof branch !== "string" || !branch) throw new HttpsError("invalid-argument", "يرجى اختيار الفرع أولاً.");
+  const cfg = await loadAppointmentSettings();
+  if (!appointmentSlots(cfg).includes(startMs)) {
+    throw new HttpsError("failed-precondition", "هذا الموعد غير متاح، يرجى اختيار موعد آخر.");
+  }
+  const start = Timestamp.fromMillis(startMs);
+  const apptRef = db.collection("appointments").doc();
+  await db.runTransaction(async (tx) => {
+    const taken = await tx.get(db.collection("appointments").where("branch", "==", branch).where("start", "==", start));
+    const active = taken.docs.filter((d) => ACTIVE_APPT.includes(d.data().status) && d.id !== cancelId).length;
+    if (active >= cfg.capacity) {
+      throw new HttpsError("failed-precondition", "تم حجز هذا الموعد للتو، يرجى اختيار موعد آخر.");
+    }
+    tx.set(apptRef, { branch, start, complaintDocId, complaintId, status: "REQUESTED", createdAt: Timestamp.now() });
+    if (cancelId) tx.update(db.collection("appointments").doc(cancelId), { status: "CANCELLED", cancelledAt: Timestamp.now() });
+  });
+  return { id: apptRef.id, start, requestedStart: start, status: "REQUESTED" };
+}
+
+async function onAppointmentRequested(complaintDocId, record, appointment, actorName) {
+  const now = Timestamp.now();
+  await db.collection(`complaints/${complaintDocId}/activityLog`).add({
+    action: "APPOINTMENT_REQUESTED",
+    actorId: null,
+    actorName,
+    metadata: { when: formatRiyadh(appointment.start.toMillis()) },
+    createdAt: now,
+  });
+  const users = await loadActiveUsers();
+  const principals = users.filter((u) => u.isPrincipal === true && (u.access === "all" || (u.branches || []).includes(record.branch) || u.branch === record.branch));
+  await notifyUsers(principals.map((u) => u.id), {
+    title: "طلب موعد زيارة",
+    body: `ولي أمر الطالب/ة ${record.studentName || ""} يطلب زيارة ${formatRiyadh(appointment.start.toMillis())} — الملاحظة رقم ${record.complaintId}. يرجى التأكيد أو اقتراح موعد آخر.`,
+    complaintId: complaintDocId,
+    type: "APPOINTMENT_REQUESTED",
+  });
+}
+
+// Free slots for a branch (public: used by the parent's form and by staff).
+exports.getAvailableSlots = onCall(async (request) => {
+  const { branch } = request.data || {};
+  if (typeof branch !== "string" || !branch) throw new HttpsError("invalid-argument", "يرجى اختيار الفرع أولاً.");
+  const cfg = await loadAppointmentSettings();
+  const slots = appointmentSlots(cfg);
+  const snap = await db.collection("appointments").where("branch", "==", branch).get();
+  const counts = {};
+  snap.docs.forEach((d) => {
+    const a = d.data();
+    if (ACTIVE_APPT.includes(a.status) && a.start) counts[a.start.toMillis()] = (counts[a.start.toMillis()] || 0) + 1;
+  });
+  return { slots: slots.filter((ms) => (counts[ms] || 0) < cfg.capacity), slotMinutes: cfg.slotMinutes };
+});
+
+function canManageAppointment(caller, record, uid) {
+  if (caller.role === "ADMIN") return true;
+  const inScope = caller.access === "all" || (caller.branches || []).includes(record.branch) || caller.branch === record.branch;
+  return inScope && (caller.isPrincipal === true || caller.perms?.edit === true || (record.assignedTo || []).includes(uid));
+}
+
+// Staff-created requests (and records without a slot yet): book a slot.
+exports.requestAppointment = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const { complaintDocId, slot } = request.data || {};
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  if (!callerDoc.exists || caller.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  const ref = db.collection("complaints").doc(String(complaintDocId || ""));
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "لم يتم العثور على الملاحظة.");
+  const record = snap.data();
+  const inScope = caller.role === "ADMIN" || caller.access === "all" || (caller.branches || []).includes(record.branch) || caller.branch === record.branch;
+  if (!inScope) throw new HttpsError("permission-denied", "لا تملك صلاحية على هذا الفرع.");
+  if (record.appointment && ACTIVE_APPT.includes(record.appointment.status)) throw new HttpsError("failed-precondition", "لهذه الملاحظة موعد قائم.");
+  const appointment = await reserveAppointment({ branch: record.branch, startMs: Number(slot), complaintDocId: ref.id, complaintId: record.complaintId });
+  await ref.update({ appointment, updatedAt: Timestamp.now() });
+  await onAppointmentRequested(ref.id, record, appointment, caller.name || "مستخدم");
+  return { ok: true };
+});
+
+// Principal (or staff with edit permission) confirms the requested slot, or
+// moves it to another free slot — either way the parent is messaged.
+exports.decideAppointment = onCall({ secrets: WA_SECRETS }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const { complaintDocId, action, slot } = request.data || {};
+  if (!["confirm", "reschedule"].includes(action)) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  if (!callerDoc.exists || caller.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  const ref = db.collection("complaints").doc(String(complaintDocId || ""));
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "لم يتم العثور على الملاحظة.");
+  const record = snap.data();
+  if (!canManageAppointment(caller, record, request.auth.uid)) throw new HttpsError("permission-denied", "تأكيد المواعيد لمدير المدرسة أو من لديه صلاحية التعديل.");
+
+  const now = Timestamp.now();
+  const actorName = caller.name || "مستخدم";
+  let appointment;
+  if (action === "confirm") {
+    if (!record.appointment || record.appointment.status !== "REQUESTED") throw new HttpsError("failed-precondition", "لا يوجد موعد بانتظار التأكيد.");
+    appointment = { ...record.appointment, status: "CONFIRMED", decidedAt: now, decidedBy: request.auth.uid, decidedByName: actorName };
+    if (record.appointment.id) await db.collection("appointments").doc(record.appointment.id).update({ status: "CONFIRMED" });
+  } else {
+    const reserved = await reserveAppointment({
+      branch: record.branch, startMs: Number(slot), complaintDocId: ref.id, complaintId: record.complaintId,
+      cancelId: record.appointment && ACTIVE_APPT.includes(record.appointment.status) ? record.appointment.id : undefined,
+    });
+    await db.collection("appointments").doc(reserved.id).update({ status: "CONFIRMED" });
+    appointment = {
+      ...reserved,
+      requestedStart: (record.appointment && record.appointment.requestedStart) || reserved.start,
+      status: "CONFIRMED", rescheduled: true, decidedAt: now, decidedBy: request.auth.uid, decidedByName: actorName,
+    };
+  }
+  await ref.update({ appointment, updatedAt: now, ...(record.status === "RECEIVED" ? { status: "IN_PROGRESS" } : {}) });
+  await ref.collection("activityLog").add({
+    action: action === "confirm" ? "APPOINTMENT_CONFIRMED" : "APPOINTMENT_RESCHEDULED",
+    actorId: request.auth.uid,
+    actorName,
+    metadata: { when: formatRiyadh(appointment.start.toMillis()) },
+    createdAt: now,
+  });
+  await autoSendWa("complaint", ref, action === "confirm" ? "appointmentConfirmed" : "appointmentRescheduled");
+  return { ok: true, when: formatRiyadh(appointment.start.toMillis()) };
+});
+
+// Parent arrives for a confirmed appointment and checks in from the branch
+// QR page with the feedback number + last 4 digits of their phone.
+exports.checkInAppointment = onCall(async (request) => {
+  const complaintId = String((request.data || {}).complaintId || "").trim().toUpperCase();
+  const last4 = String((request.data || {}).phoneLast4 || "").replace(/\D/g, "");
+  const branch = (request.data || {}).branch;
+  if (!complaintId || last4.length !== 4) throw new HttpsError("invalid-argument", "يرجى إدخال رقم الملاحظة وآخر 4 أرقام من الجوال.");
+  const snap = await db.collection("complaints").where("complaintId", "==", complaintId).limit(1).get();
+  if (snap.empty) throw new HttpsError("not-found", "لم يتم العثور على ملاحظة بهذا الرقم.");
+  const doc = snap.docs[0];
+  const c = doc.data();
+  if (!toIntlNumber(c.parentPhone).endsWith(last4)) throw new HttpsError("permission-denied", "آخر 4 أرقام لا تطابق رقم الجوال المسجل.");
+  const appt = c.appointment;
+  if (!appt || !appt.start) throw new HttpsError("failed-precondition", "لا يوجد موعد زيارة لهذه الملاحظة.");
+  if (appt.status === "CHECKED_IN") return { already: true, studentName: c.studentName, when: formatRiyadh(appt.start.toMillis()) };
+  if (appt.status !== "CONFIRMED") throw new HttpsError("failed-precondition", "موعدكم لم يُؤكد بعد من إدارة المدرسة.");
+  if (branch && branch !== c.branch) throw new HttpsError("failed-precondition", "هذا الموعد في فرع آخر.");
+  const dayOf = (ms) => Math.floor((ms + APPT_TZ_MS) / APPT_DAY);
+  if (dayOf(appt.start.toMillis()) !== dayOf(Date.now())) {
+    throw new HttpsError("failed-precondition", `موعدكم ${formatRiyadh(appt.start.toMillis())}، وليس اليوم.`);
+  }
+  const now = Timestamp.now();
+  await doc.ref.update({
+    appointment: { ...appt, status: "CHECKED_IN", checkedInAt: now },
+    viaVisitQr: true, visitStatus: "WAITING", visitArrivedAt: now, updatedAt: now,
+  });
+  if (appt.id) await db.collection("appointments").doc(appt.id).update({ status: "CHECKED_IN" });
+  await doc.ref.collection("activityLog").add({
+    action: "VISIT_CHECKED_IN", actorId: null, actorName: "ولي الأمر (وصول لموعد عبر QR)", metadata: { appointment: true }, createdAt: now,
+  });
+  const users = await loadActiveUsers();
+  const principals = users.filter((u) => u.isPrincipal === true && (u.access === "all" || (u.branches || []).includes(c.branch) || u.branch === c.branch)).map((u) => u.id);
+  await notifyUsers([...(c.assignedTo || []), ...principals], {
+    title: "ولي أمر وصل لموعده",
+    body: `ولي أمر الطالب/ة ${c.studentName} وصل إلى الفرع لموعده (${formatRiyadh(appt.start.toMillis())}) — الملاحظة رقم ${c.complaintId}.`,
+    complaintId: doc.id,
+    type: "VISIT_ARRIVED",
+  });
+  return { ok: true, studentName: c.studentName, when: formatRiyadh(appt.start.toMillis()) };
 });
