@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FileText, Clock, AlertTriangle, CheckCircle2, Download, Plus, Star, Gauge, Repeat, Wrench, ShieldAlert, PackageSearch, PackageCheck, GraduationCap, Briefcase, AlertOctagon, Link2, Armchair, Handshake, CalendarDays } from 'lucide-react';
+import { FileText, Clock, AlertTriangle, CheckCircle2, Download, Plus, Star, Gauge, Repeat, Wrench, ShieldAlert, PackageSearch, PackageCheck, GraduationCap, Briefcase, AlertOctagon, Link2, Armchair, Handshake, CalendarDays, UserX } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import StatCard from '../components/dashboard/StatCard';
@@ -68,6 +68,7 @@ export default function Dashboard() {
   const techStats = useMemo(() => ({
     open: techTickets.filter((t) => OPEN_TICKET_STATUSES.includes(t.status)).length,
     overdue: techTickets.filter(isTicketOverdue).length,
+    unassigned: techTickets.filter((t) => OPEN_TICKET_STATUSES.includes(t.status) && !(t.assignedTo || []).length).length,
   }), [techTickets]);
   const lostFoundStats = useMemo(() => ({
     unclaimed: lostFoundItems.filter((i) => i.status === 'UNCLAIMED').length,
@@ -117,6 +118,7 @@ export default function Dashboard() {
         total: docs.length,
         inProgress: docs.filter(c => c.status === 'IN_PROGRESS' || c.status === 'RECEIVED').length,
         overdue: docs.filter(isComplaintOverdue).length,
+        unassigned: docs.filter(c => !['SOLVED', 'CLOSED', 'REJECTED'].includes(c.status) && !(Array.isArray(c.assignedTo) ? c.assignedTo.length : c.assignedTo)).length,
         solved: docs.filter(c => c.status === 'SOLVED' || c.status === 'CLOSED').length,
         slaCompliance,
         satisfaction,
@@ -244,7 +246,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <StatCard
           title={t('dashboard.totalComplaints')}
           value={stats.total.toString()}
@@ -272,6 +274,14 @@ export default function Dashboard() {
           icon={CheckCircle2}
           gradient="from-emerald-500 to-teal-600"
           to="/complaints?filter=RESOLVED"
+        />
+        <StatCard
+          title={t('dashboard.unassigned')}
+          value={(stats.unassigned || 0).toString()}
+          sub={t('dashboard.unassignedSub')}
+          icon={UserX}
+          gradient={stats.unassigned ? 'from-red-600 to-rose-700' : 'from-slate-400 to-slate-500'}
+          to="/complaints?filter=UNASSIGNED"
         />
       </div>
 
@@ -376,6 +386,13 @@ export default function Dashboard() {
                 icon={Wrench}
                 gradient="from-violet-500 to-purple-600"
                 to="/tech-support?filter=OPEN"
+              />
+              <StatCard
+                title={t('dashboard.unassignedTech')}
+                value={techStats.unassigned.toString()}
+                icon={UserX}
+                gradient={techStats.unassigned ? 'from-red-600 to-rose-700' : 'from-slate-400 to-slate-500'}
+                to="/tech-support?filter=UNASSIGNED"
               />
               <StatCard
                 title={t('dashboard.overdueTechTickets')}

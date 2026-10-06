@@ -18,7 +18,7 @@ import { isComplaintOverdue, complaintStatusLabel, complaintHasType, complaintTy
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
-const QUICK_FILTER_IDS = ['ALL', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'OVERDUE', 'SOLVED', 'CLOSED', 'VISITS'];
+const QUICK_FILTER_IDS = ['ALL', 'OPEN', 'UNASSIGNED', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'OVERDUE', 'SOLVED', 'CLOSED', 'VISITS'];
 
 // Recognized but not shown as a tab — only reachable via a dashboard KPI
 // link (?filter=ACTIVE / RESOLVED / REOPENED), same list underneath.
@@ -29,6 +29,8 @@ const LINK_ONLY_FILTERS = ['ACTIVE', 'RESOLVED', 'REOPENED'];
 const QUICK_MATCH = {
   ALL: () => true,
   OPEN: (c) => !['SOLVED', 'CLOSED', 'REJECTED'].includes(c.status),
+  // Still open and nobody is assigned to it.
+  UNASSIGNED: (c) => !['SOLVED', 'CLOSED', 'REJECTED'].includes(c.status) && !(c.assignedTo || []).length,
   // Assigned to someone but nobody has acknowledged it yet.
   ASSIGNED: (c) => c.status === 'RECEIVED' && (c.assignedTo || []).length > 0,
   IN_PROGRESS: (c) => ['IN_PROGRESS', 'WAITING_PARENT_RESPONSE'].includes(c.status),
@@ -270,7 +272,7 @@ export default function ComplaintsList() {
                 className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${quickFilter === id ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
               >
                 {t(`complaintsList.quickFilters.${id}`)}
-                <span className={`mr-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold tabular-nums ${quickFilter === id ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600'}`}>{quickCounts[id]}</span>
+                <span className={`mr-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold tabular-nums ${quickFilter === id ? 'bg-white/25 text-white' : id === 'UNASSIGNED' && quickCounts[id] > 0 ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-600'}`}>{quickCounts[id]}</span>
                 {id === 'VISITS' && waitingVisits > 0 && (
                   <span className="mr-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[11px] font-bold">{waitingVisits}</span>
                 )}

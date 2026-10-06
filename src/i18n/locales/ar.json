@@ -132,7 +132,10 @@
     "visitsWaiting": "بانتظار المقابلة الآن",
     "visitsWaitingSub": "أولياء أمور في الفروع حالياً",
     "visitsToday": "زيارات اليوم",
-    "visitsMetToday": "تمت مقابلتهم اليوم"
+    "visitsMetToday": "تمت مقابلتهم اليوم",
+    "unassigned": "غير مسندة",
+    "unassignedSub": "ملاحظات مفتوحة بلا مسؤول",
+    "unassignedTech": "بلاغات تقنية غير مسندة"
   },
   "statuses": {
     "complaint": {
@@ -169,6 +172,7 @@
     "quickFilters": {
       "ALL": "الكل",
       "OPEN": "مفتوحة",
+      "UNASSIGNED": "غير مسندة",
       "ASSIGNED": "مسندة",
       "IN_PROGRESS": "قيد المعالجة",
       "ESCALATED": "مصعدة",
@@ -627,7 +631,8 @@
       "SOLVED": "تم الحل",
       "CLOSED": "مغلقة",
       "OPEN": "مفتوحة",
-      "OVERDUE": "متأخرة / مصعدة"
+      "OVERDUE": "متأخرة / مصعدة",
+      "UNASSIGNED": "غير مسندة"
     },
     "ticketNumber": "رقم البلاغ",
     "problemType": "نوع المشكلة",

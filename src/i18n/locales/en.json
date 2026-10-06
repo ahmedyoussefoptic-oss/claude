@@ -132,7 +132,10 @@
     "visitsWaiting": "Waiting to be met now",
     "visitsWaitingSub": "Parents at the branches right now",
     "visitsToday": "Visits today",
-    "visitsMetToday": "Met today"
+    "visitsMetToday": "Met today",
+    "unassigned": "Unassigned",
+    "unassignedSub": "Open feedback with no one assigned",
+    "unassignedTech": "Unassigned tech tickets"
   },
   "statuses": {
     "complaint": {
@@ -169,6 +172,7 @@
     "quickFilters": {
       "ALL": "All",
       "OPEN": "Open",
+      "UNASSIGNED": "Unassigned",
       "ASSIGNED": "Assigned",
       "IN_PROGRESS": "In progress",
       "ESCALATED": "Escalated",
@@ -627,7 +631,8 @@
       "SOLVED": "Solved",
       "CLOSED": "Closed",
       "OPEN": "Open",
-      "OVERDUE": "Overdue / escalated"
+      "OVERDUE": "Overdue / escalated",
+      "UNASSIGNED": "Unassigned"
     },
     "ticketNumber": "Ticket #",
     "problemType": "Problem Type",

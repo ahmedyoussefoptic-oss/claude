@@ -14,8 +14,8 @@ import { branchScopeConstraintValues } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
-const FILTER_IDS = ['ALL', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'OVERDUE', 'SOLVED', 'CLOSED'];
-const matchesStatus = (tk, id) => (id === 'ALL' ? true : id === 'OPEN' ? OPEN_TICKET_STATUSES.includes(tk.status) : id === 'OVERDUE' ? isTicketOverdue(tk) : tk.status === id);
+const FILTER_IDS = ['ALL', 'OPEN', 'UNASSIGNED', 'ASSIGNED', 'IN_PROGRESS', 'OVERDUE', 'SOLVED', 'CLOSED'];
+const matchesStatus = (tk, id) => (id === 'ALL' ? true : id === 'OPEN' ? OPEN_TICKET_STATUSES.includes(tk.status) : id === 'UNASSIGNED' ? OPEN_TICKET_STATUSES.includes(tk.status) && !(tk.assignedTo || []).length : id === 'OVERDUE' ? isTicketOverdue(tk) : tk.status === id);
 
 export default function TechSupport() {
   const { t, i18n } = useTranslation();
@@ -154,7 +154,7 @@ export default function TechSupport() {
                 className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${statusFilter === id ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
               >
                 {t(`techSupportList.filters.${id}`)}
-                <span className={`mr-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold tabular-nums ${statusFilter === id ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600'}`}>{statusCounts[id]}</span>
+                <span className={`mr-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold tabular-nums ${statusFilter === id ? 'bg-white/25 text-white' : id === 'UNASSIGNED' && statusCounts[id] > 0 ? 'bg-red-500 text-white' : 'bg-slate-100 text-slate-600'}`}>{statusCounts[id]}</span>
               </button>
             ))}
             <select
