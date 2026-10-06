@@ -3,11 +3,11 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, MessageSquare, Trash2, Star, Link2, Mic, Square, Share2, Pencil, Wrench, Armchair, Handshake } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage, functions } from '../../config/firebase';
+import { db, functions } from '../../config/firebase';
 import { httpsCallable } from 'firebase/functions';
 import useAuthStore from '../../stores/useAuthStore';
 import { messageSentFields } from '../../utils/messageSent';
+import { uploadStaffFile } from '../../utils/uploadStaffFile';
 import { useUsers } from '../../hooks/useUsers';
 import { useBranches, useComplaintTypes } from '../../hooks/useOrgData';
 import { waLink, shareLink, buildReceiptMessage, buildResolutionMessage, buildComplaintShareMessage, appendAttachmentLinks } from '../../utils/whatsapp';
@@ -295,12 +295,10 @@ function ComplaintDetailsInner({ complaint, onClose }) {
     const uploaded = [];
     for (const file of solutionFiles) {
       try {
-        const fileRef = ref(storage, `complaints/${complaint.complaintId}/${Date.now()}_${file.name}`);
-        await uploadBytes(fileRef, file);
-        uploaded.push({ fileName: file.name, fileUrl: await getDownloadURL(fileRef), mimeType: file.type, size: file.size, uploadedBy: user.uid, createdAt: new Date().toISOString() });
+        uploaded.push(await uploadStaffFile('complaints', complaint.complaintId, file));
       } catch (uploadErr) {
         console.error('Solution attachment upload failed:', file.name, uploadErr);
-        alert(t('complaintDetails.solutionFileUploadFailedAlert', { name: file.name }));
+        alert(`${t('complaintDetails.solutionFileUploadFailedAlert', { name: file.name })}\n${uploadErr.message || ''}`);
       }
     }
     return uploaded;
@@ -349,20 +347,8 @@ function ComplaintDetailsInner({ complaint, onClose }) {
         // text is what matters most; the recording is best-effort.
         if (pendingRecording) {
           try {
-            const fileRef = ref(storage, `complaints/${complaint.complaintId}/${pendingRecording.name}`);
-            await uploadBytes(fileRef, pendingRecording);
-            const url = await getDownloadURL(fileRef);
-            updates.attachments = [
-              ...(complaint.attachments || []),
-              {
-                fileName: pendingRecording.name,
-                fileUrl: url,
-                mimeType: pendingRecording.type,
-                size: pendingRecording.size,
-                uploadedBy: user.uid,
-                createdAt: new Date().toISOString(),
-              },
-            ];
+            const rec = await uploadStaffFile('complaints', complaint.complaintId, pendingRecording, pendingRecording.name);
+            updates.attachments = [...(complaint.attachments || []), rec];
           } catch (uploadErr) {
             console.error('Solution recording upload failed:', uploadErr);
             alert(t('complaintDetails.recordingUploadFailedAlert', { message: uploadErr.message }));

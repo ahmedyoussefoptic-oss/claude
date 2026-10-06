@@ -2266,3 +2266,22 @@ exports.checkInAppointment = onCall(async (request) => {
   });
   return { ok: true, studentName: c.studentName, when: formatRiyadh(appt.start.toMillis()) };
 });
+
+// Staff file uploads (solution files and voice notes, attachments on a
+// new complaint, lost-item photos). Done with the Admin SDK — like the
+// public-link and tech-support uploads — so they don't depend on Firebase
+// Storage security rules, which client-side uploads were tripping over.
+const STAFF_UPLOAD_FOLDERS = ["complaints", "lostFoundItems"];
+exports.uploadStaffFile = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const { folder, recordId, file } = request.data || {};
+  if (!STAFF_UPLOAD_FOLDERS.includes(folder) || typeof recordId !== "string" || !/^[A-Za-z0-9-]{3,40}$/.test(recordId)) {
+    throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  }
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  if (!callerDoc.exists || callerDoc.data().active === false || callerDoc.data().role === "RECEPTIONIST") {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية رفع الملفات.");
+  }
+  const uploaded = await uploadPublicAttachment(getStorage().bucket(), `${folder}/${recordId}`, file);
+  return { ...uploaded, uploadedBy: request.auth.uid, createdAt: new Date().toISOString() };
+});

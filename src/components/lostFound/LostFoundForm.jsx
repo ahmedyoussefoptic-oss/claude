@@ -2,10 +2,10 @@ import { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Upload, Save, Loader2, CheckCircle2, MessageCircle } from 'lucide-react';
 import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../../config/firebase';
+import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { messageSentFields } from '../../utils/messageSent';
+import { uploadStaffFile } from '../../utils/uploadStaffFile';
 import { useUsers } from '../../hooks/useUsers';
 import { useBranches, useDepartments, useItemCategories } from '../../hooks/useOrgData';
 import { STAGES } from '../../config/complaintTypes';
@@ -96,9 +96,7 @@ export default function LostFoundForm({ onClose }) {
 
       let photoUrl = null;
       if (photo) {
-        const fileRef = ref(storage, `lostFoundItems/${itemCode}/${photo.name}`);
-        await uploadBytes(fileRef, photo);
-        photoUrl = await getDownloadURL(fileRef);
+        photoUrl = (await uploadStaffFile('lostFoundItems', itemCode, photo)).fileUrl;
       }
 
       const now = serverTimestamp();

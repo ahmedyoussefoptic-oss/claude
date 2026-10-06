@@ -2,10 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, Upload, Save, Loader2, CheckCircle2, MessageCircle, Mic, Square } from 'lucide-react';
 import { collection, addDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage, functions } from '../../config/firebase';
+import { db, functions } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { messageSentFields } from '../../utils/messageSent';
+import { uploadStaffFile } from '../../utils/uploadStaffFile';
 import { useBranches, useDepartments, useComplaintTypes, useSubTypes } from '../../hooks/useOrgData';
 import { useUsers } from '../../hooks/useUsers';
 import { waLink, buildReceiptMessage } from '../../utils/whatsapp';
@@ -186,17 +186,7 @@ export default function ComplaintForm({ onClose }) {
       const failedFiles = [];
       for (const file of files) {
         try {
-          const fileRef = ref(storage, `complaints/${complaintId}/${file.name}`);
-          await uploadBytes(fileRef, file);
-          const url = await getDownloadURL(fileRef);
-          uploadedAttachments.push({
-            fileName: file.name,
-            fileUrl: url,
-            mimeType: file.type,
-            size: file.size,
-            uploadedBy: user.uid,
-            createdAt: new Date().toISOString(),
-          });
+          uploadedAttachments.push(await uploadStaffFile('complaints', complaintId, file));
         } catch (uploadErr) {
           console.error('Attachment upload failed:', file.name, uploadErr);
           failedFiles.push({ name: file.name, message: uploadErr.message });
