@@ -146,7 +146,7 @@ exports.createStaffUser = onCall(async (request) => {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
-  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, stages, curricula, notificationPrefs, notificationChannels } = request.data || {};
+  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, stages, curricula, notificationPrefs, notificationChannels, tripsAccess } = request.data || {};
   if (!name || !email || !password || !role) {
     throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
   }
@@ -192,6 +192,7 @@ exports.createStaffUser = onCall(async (request) => {
     notificationChannels: notificationChannels && typeof notificationChannels === "object" ? notificationChannels : {},
     stages: Array.isArray(stages) ? stages.filter((st) => typeof st === "string") : [],
     curricula: Array.isArray(curricula) ? curricula.filter((c) => typeof c === "string") : [],
+    tripsAccess: ["tripsOnly", "none"].includes(tripsAccess) && role !== "ADMIN" ? tripsAccess : "all",
     active: active !== false,
     createdAt: Timestamp.now(),
     createdBy: request.auth.uid,
@@ -1089,7 +1090,9 @@ async function findPublicAssignees(branch, department, stage, curriculum) {
 // officers (`isQuality`), who are auto-assigned every complaint and tech
 // ticket in their branches regardless of grade/curriculum.
 async function findAutoAssignees({ branch, departments, stage, curriculum, users: preloaded }) {
-  const users = preloaded || await loadActiveUsers();
+  // Staff limited to the trips section (tripsAccess "tripsOnly") never get
+  // complaints or tickets.
+  const users = (preloaded || await loadActiveUsers()).filter((u) => u.tripsAccess !== "tripsOnly");
   const inBranch = (u) => (u.branches || []).includes(branch) || u.branch === branch;
   const covers = (u) => coversStage(u, stage) && coversCurriculum(u, curriculum);
   const specialists = [];
@@ -1117,7 +1120,7 @@ async function loadActiveUsers() {
 }
 
 function qualityOfficers(users, branch) {
-  return users.filter((u) => u.isQuality === true && (u.access === "all" || (u.branches || []).includes(branch) || u.branch === branch));
+  return users.filter((u) => u.isQuality === true && u.tripsAccess !== "tripsOnly" && (u.access === "all" || (u.branches || []).includes(branch) || u.branch === branch));
 }
 
 // Every category a complaint carries: the primary complaintType plus any
@@ -2305,6 +2308,8 @@ const TRIP_STAGES = ["KG1", "KG2", "KG3", "G1", "G2", "G3", "G4", "G5", "G6", "G
 const TRIP_PAY_METHODS = ["BANK", "RECEPTION"];
 const TRIP_EDITABLE = ["DRAFT", "PENDING_APPROVAL", "OPEN", "CLOSED"];
 const TRIP_PUBLIC = ["OPEN", "CLOSED", "COMPLETED"];
+const TRIP_DECLINE_REASONS = ["COST", "TIMING", "FAMILY", "HEALTH", "OTHER"];
+const TRIP_RATINGS = ["organization", "safety", "benefit", "cost"];
 // Roster "stage_name" (curriculum) → section id used on trips/complaints.
 // Kindergarten has no section of its own, so it matches any section.
 const STUDENT_SECTIONS = { "أمريكي": "AMERICAN", "بريطاني": "BRITISH", "تربية خاصة": "SPECIAL_EDUCATION" };
@@ -2373,7 +2378,7 @@ async function tripCaller(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   const snap = await db.collection("users").doc(request.auth.uid).get();
   const u = snap.data();
-  if (!snap.exists || u.active === false || u.role === "RECEPTIONIST") {
+  if (!snap.exists || u.active === false || u.role === "RECEPTIONIST" || (u.role !== "ADMIN" && u.tripsAccess === "none")) {
     throw new HttpsError("permission-denied", "لا تملك صلاحية الوصول إلى الرحلات.");
   }
   return { uid: request.auth.uid, ...u };
@@ -2515,7 +2520,7 @@ exports.saveTrip = onCall(async (request) => {
 // Uids of the principals (or, if a branch has none, the admins) who
 // approve trips for these branches.
 async function tripApprovers(branches) {
-  const users = await loadActiveUsers();
+  const users = (await loadActiveUsers()).filter((u) => u.tripsAccess !== "none");
   const principals = users.filter((u) => u.isPrincipal === true && branches.some((b) => callerHasBranch(u, b)));
   return (principals.length ? principals : users.filter((u) => u.role === "ADMIN")).map((u) => u.id);
 }
@@ -2530,7 +2535,7 @@ const TRIP_TRANSITIONS = {
   cancel: { from: ["DRAFT", "PENDING_APPROVAL", "OPEN", "CLOSED"], to: "CANCELLED", perm: "manage", reason: true },
 };
 
-exports.tripAction = onCall(async (request) => {
+exports.tripAction = onCall({ secrets: WA_SECRETS, timeoutSeconds: 300 }, async (request) => {
   const caller = await tripCaller(request);
   const { id, action } = request.data || {};
   const reason = str(request.data?.reason, 500);
@@ -2550,6 +2555,10 @@ exports.tripAction = onCall(async (request) => {
   await tripLog(ref, `TRIP_${action.toUpperCase()}`, caller, reason ? { reason } : {});
 
   const title = `رحلة ${trip.title}`;
+  if (action === "complete") {
+    const settings = await waTripSettings();
+    if (settings && settings.autoSend !== false) await sendTripSurveys(ref, { ...trip, status: "COMPLETED" }, settings, null);
+  }
   if (action === "submit") {
     await notifyUsers(await tripApprovers(trip.branches || []), { title: "رحلة بانتظار الاعتماد", body: `${title} — ${formatTripDay(trip.date)} (${caller.name || ""})`, complaintId: id, type: "TRIP_APPROVAL_REQUESTED" });
   } else if (action === "approve" || action === "reject") {
@@ -2690,6 +2699,7 @@ async function publicTripView(trip) {
     refundPolicy: trip.refundPolicy, requirements: trip.requirements, status: trip.status,
     branchNames: branchSnaps.map((s, i) => (s.exists ? s.data().name : trip.branches[i])),
     registrationOpen: trip.status === "OPEN" && riyadhDay() <= trip.payDeadline,
+    surveyOpen: trip.status === "COMPLETED",
   };
 }
 
@@ -2728,8 +2738,11 @@ async function verifyTripParent(tripRef, trip, studentIdRaw, last4Raw) {
   return { studentId, student: s, branch: branchOf(s), grade: studentGrade(s), section: studentSection(s) };
 }
 
+// A confirmed student not marked absent at boarding.
+const tookPart = (e, trip) => enrollmentStatus(e, trip.fee) === "CONFIRMED" && e.boarded !== false;
+
 const publicEnrollment = (e, trip) => (e ? {
-  decision: e.decision, payMethod: e.payMethod || null, payStatus: e.payStatus || null,
+  decision: e.decision, declineReason: e.declineReason || null, payMethod: e.payMethod || null, payStatus: e.payStatus || null,
   payRejectReason: e.payRejectReason || "", status: enrollmentStatus(e, trip.fee),
   healthNotes: e.healthNotes || "", emergencyPhone: e.emergencyPhone || "",
   receiptName: e.receipt?.fileName || "",
@@ -2738,13 +2751,18 @@ const publicEnrollment = (e, trip) => (e ? {
 exports.verifyTripStudent = onCall(async (request) => {
   const { ref, trip } = await tripByCode(request.data?.tripCode);
   const v = await verifyTripParent(ref, trip, request.data?.studentId, request.data?.last4);
-  const e = await ref.collection("enrollments").doc(v.studentId).get();
-  return { studentName: v.student.name || "", grade: v.grade, className: v.student.className || "", enrollment: publicEnrollment(e.exists ? e.data() : null, trip) };
+  const [e, survey] = await Promise.all([ref.collection("enrollments").doc(v.studentId).get(), ref.collection("surveys").doc(v.studentId).get()]);
+  return {
+    studentName: v.student.name || "", grade: v.grade, className: v.student.className || "",
+    enrollment: publicEnrollment(e.exists ? e.data() : null, trip),
+    participated: e.exists && tookPart(e.data(), trip),
+    surveyDone: survey.exists,
+  };
 });
 
 // Finance staff of the branch; the trip's creator when there are none.
 async function tripFinanceUsers(branch, trip) {
-  const users = await loadActiveUsers();
+  const users = (await loadActiveUsers()).filter((u) => u.tripsAccess !== "none");
   const finance = users.filter((u) => u.role !== "ADMIN" && u.perms?.tripFinance === true && callerHasBranch(u, branch)).map((u) => u.id);
   return finance.length ? finance : [trip.createdBy];
 }
@@ -2758,6 +2776,7 @@ exports.submitTripConsent = onCall(async (request) => {
   const v = await verifyTripParent(ref, trip, d.studentId, d.last4);
   const decision = d.decision === "DECLINED" ? "DECLINED" : d.decision === "APPROVED" ? "APPROVED" : null;
   if (!decision) throw new HttpsError("invalid-argument", "اختر الموافقة أو الاعتذار.");
+  const declineReason = decision === "DECLINED" && TRIP_DECLINE_REASONS.includes(d.declineReason) ? d.declineReason : null;
   if (decision === "APPROVED" && d.agree !== true) throw new HttpsError("invalid-argument", "يجب الإقرار بالاطلاع على تعليمات الرحلة.");
   const paid = trip.fee > 0 && decision === "APPROVED";
   const payMethod = paid ? (TRIP_PAY_METHODS.includes(d.payMethod) && (trip.payMethods || []).includes(d.payMethod) ? d.payMethod : null) : null;
@@ -2785,7 +2804,7 @@ exports.submitTripConsent = onCall(async (request) => {
   const record = {
     studentId: v.studentId, studentName: v.student.name || "", branch: v.branch, grade: v.grade, section: v.section,
     className: v.student.className || "", parentPhone: v.student.mobile || "",
-    decision, payMethod, payStatus, receipt: payMethod === "BANK" ? receipt : null,
+    decision, declineReason, payMethod, payStatus, receipt: payMethod === "BANK" ? receipt : null,
     healthNotes: str(d.healthNotes, 500), emergencyPhone: str(d.emergencyPhone, 30),
     payRejectReason: payStatus === "REVIEW" ? "" : existing?.payRejectReason || "",
     source: "parent", updatedAt: now, ...(existing ? {} : { submittedAt: now }),
@@ -2864,12 +2883,13 @@ exports.staffSetTripEnrollment = onCall(async (request) => {
     return { ok: true };
   }
   const decision = d.decision === "DECLINED" ? "DECLINED" : "APPROVED";
+  const declineReason = decision === "DECLINED" && TRIP_DECLINE_REASONS.includes(d.declineReason) ? d.declineReason : null;
   const payMethod = decision === "APPROVED" && trip.fee > 0 ? (TRIP_PAY_METHODS.includes(d.payMethod) ? d.payMethod : "RECEPTION") : null;
   const existing = (await enrollRef.get()).data();
   const now = Timestamp.now();
   const record = {
     studentId, studentName: s.name, branch: s.branch, grade: s.grade, section: s.section, className: s.className, parentPhone: s.mobile,
-    decision, payMethod,
+    decision, declineReason, payMethod,
     payStatus: !payMethod ? null
       : existing?.payStatus === "PAID" ? "PAID"
         : payMethod === "BANK" && existing?.receipt && ["REVIEW", "REJECTED"].includes(existing.payStatus) ? existing.payStatus
@@ -2956,4 +2976,270 @@ exports.tripReminders = onSchedule({ schedule: "0 16 * * *", timeZone: "Asia/Riy
       await tripLog(doc.ref, "TRIP_REMINDED", null, { ...result, total: confirmed.length, kind: "eve" });
     }
   }
+});
+
+// --- Trip day: arrival notice and incidents --------------------------------
+const riyadhClock = () => new Intl.DateTimeFormat("ar-SA-u-nu-latn", { timeZone: "Asia/Riyadh", hour: "numeric", minute: "2-digit" }).format(new Date());
+
+// "وصلنا": tells the parents of the students on the trip (boarded, or all
+// confirmed when boarding wasn't taken) that the trip is back.
+exports.announceTripArrival = onCall({ secrets: WA_SECRETS, timeoutSeconds: 300 }, async (request) => {
+  const caller = await tripCaller(request);
+  const { ref, trip } = await loadTrip(request.data?.id, caller, "supervise");
+  if (!["OPEN", "CLOSED", "COMPLETED"].includes(trip.status)) throw new HttpsError("failed-precondition", "الرحلة غير معتمدة.");
+  if (trip.date !== riyadhDay()) throw new HttpsError("failed-precondition", "إشعار الوصول متاح يوم الرحلة فقط.");
+  const snap = await ref.collection("enrollments").get();
+  const confirmed = snap.docs.map((d) => d.data()).filter((e) => enrollmentStatus(e, trip.fee) === "CONFIRMED");
+  const anyBoarding = confirmed.some((e) => e.boarded === true);
+  const onTrip = confirmed.filter((e) => (anyBoarding ? e.boarded === true : e.boarded !== false));
+  const time = riyadhClock();
+  const settings = await waTripSettings();
+  let result = { sent: 0, failed: 0 };
+  if (settings) {
+    const recipients = onTrip.filter((e) => toIntlNumber(e.parentPhone)).map((e) => ({ name: e.studentName, mobile: e.parentPhone, branch: e.branch, section: e.section }));
+    result = await sendTripNotices(settings, trip, recipients, () => `وصلت الرحلة إلى الفرع الساعة ${time}، ويمكنكم استلام الطالب/ة.`);
+  }
+  await ref.update({ arrivedAt: Timestamp.now(), arrivedByName: caller.name || "", arrivalNotified: result.sent });
+  await tripLog(ref, "TRIP_ARRIVED", caller, { ...result, total: onTrip.length, time });
+  return { ...result, total: onTrip.length, whatsapp: !!settings };
+});
+
+// A note about one student during the trip (health, behaviour, incident) —
+// kept on the enrollment and shown in the student record.
+exports.addTripIncident = onCall(async (request) => {
+  const caller = await tripCaller(request);
+  const { ref } = await loadTrip(request.data?.id, caller, "supervise");
+  const studentId = normalizeDigits(request.data?.studentId);
+  const note = str(request.data?.note, 500);
+  if (!studentId || !note) throw new HttpsError("invalid-argument", "اكتب الملاحظة.");
+  const enrollRef = ref.collection("enrollments").doc(studentId);
+  const snap = await enrollRef.get();
+  if (!snap.exists) throw new HttpsError("not-found", "الطالب غير مسجل في هذه الرحلة.");
+  await enrollRef.update({ incidents: FieldValue.arrayUnion({ note, at: Timestamp.now(), byId: caller.uid, byName: caller.name || "" }) });
+  await tripLog(ref, "TRIP_INCIDENT", caller, { studentId, studentName: snap.data().studentName, note });
+  return { ok: true };
+});
+
+// --- Parent survey after the trip ------------------------------------------
+// Sent (automatically on completion when auto-send is on, or manually) to
+// the parents of the students who took part and haven't answered yet; the
+// survey itself is on the trip page.
+async function sendTripSurveys(ref, trip, settings, actor) {
+  const [enrollSnap, surveySnap] = await Promise.all([ref.collection("enrollments").get(), ref.collection("surveys").get()]);
+  const answered = new Set(surveySnap.docs.map((d) => d.id));
+  const recipients = enrollSnap.docs.map((d) => d.data())
+    .filter((e) => tookPart(e, trip) && !answered.has(e.studentId) && toIntlNumber(e.parentPhone))
+    .map((e) => ({ name: e.studentName, mobile: e.parentPhone, branch: e.branch, section: e.section }));
+  const result = await sendTripNotices(settings, trip, recipients, () => "نشكركم على مشاركة الطالب/ة في الرحلة، ونسعد بتقييمكم لها (أقل من دقيقة) عبر رابط الرحلة.");
+  await ref.update({ surveySentAt: Timestamp.now() });
+  await tripLog(ref, "TRIP_SURVEY_SENT", actor, { ...result, total: recipients.length });
+  return { ...result, total: recipients.length };
+}
+
+exports.sendTripSurvey = onCall({ secrets: WA_SECRETS, timeoutSeconds: 540 }, async (request) => {
+  const caller = await tripCaller(request);
+  const { ref, trip } = await loadTrip(request.data?.id, caller, "manage");
+  if (trip.status !== "COMPLETED") throw new HttpsError("failed-precondition", "يُرسل الاستبيان بعد تسجيل تنفيذ الرحلة.");
+  const settings = await waTripSettings();
+  if (!settings) throw new HttpsError("failed-precondition", "فعّل واتساب API وأضف اسم قالب «إشعار رحلة» في الإعدادات.");
+  return sendTripSurveys(ref, trip, settings, caller);
+});
+
+function surveyAverage(ratings) {
+  const values = TRIP_RATINGS.map((k) => ratings[k]).filter((v) => v >= 1);
+  return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+}
+
+// Low ratings or "wouldn't recommend" become a complaint assigned to the
+// trip's coordinator (the branch quality officers are added by the
+// complaint triggers, which also send the parent the usual receipt).
+async function openComplaintFromSurvey(ref, trip, e, survey) {
+  const users = await loadActiveUsers();
+  const coordinator = users.find((u) => u.id === trip.createdBy);
+  const labels = { organization: "التنظيم", safety: "السلامة والإشراف", benefit: "الفائدة التعليمية", cost: "مناسبة التكلفة" };
+  const complaintId = `COM-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const now = Timestamp.now();
+  const docRef = db.collection("complaints").doc();
+  await docRef.set({
+    parentName: `ولي أمر ${e.studentName}`,
+    parentPhone: e.parentPhone || "",
+    parentEmail: "",
+    studentName: e.studentName,
+    studentId: e.studentId,
+    branch: e.branch,
+    department: e.section || "",
+    stage: e.grade || "",
+    grade: e.className || "",
+    complaintType: "ADMINISTRATIVE",
+    subType: "",
+    extraTypes: [],
+    subject: `تقييم سلبي لرحلة: ${trip.title}`,
+    details: [
+      `رحلة ${trip.title} (${trip.tripCode}) — ${formatTripDay(trip.date)}`,
+      ...TRIP_RATINGS.map((k) => `${labels[k]}: ${survey.ratings[k]} من 5`),
+      `هل ينصح بتكرار الرحلة: ${survey.recommend ? "نعم" : "لا"}`,
+      survey.comment ? `تعليق ولي الأمر: ${survey.comment}` : "",
+    ].filter(Boolean).join("\n"),
+    complaintId,
+    priority: "NORMAL",
+    source: "TRIP_SURVEY",
+    tripId: ref.id,
+    receiver: null,
+    status: "RECEIVED",
+    attachments: [],
+    assignedTo: coordinator ? [coordinator.id] : [],
+    assignedToNames: coordinator ? [coordinator.name || ""] : [],
+    assignedAt: coordinator ? now : null,
+    reopened: false,
+    isOverdue: false,
+    createdAt: now,
+    updatedAt: now,
+  });
+  await docRef.collection("activityLog").add({ action: "COMPLAINT_CREATED", actorId: null, actorName: "ولي الأمر (استبيان رحلة مدرسية)", createdAt: now });
+  return complaintId;
+}
+
+exports.submitTripSurvey = onCall(async (request) => {
+  const d = request.data || {};
+  const { ref, trip } = await tripByCode(d.tripCode);
+  if (trip.status !== "COMPLETED") throw new HttpsError("failed-precondition", "الاستبيان متاح بعد تنفيذ الرحلة.");
+  const v = await verifyTripParent(ref, trip, d.studentId, d.last4);
+  const enrollSnap = await ref.collection("enrollments").doc(v.studentId).get();
+  if (!enrollSnap.exists || !tookPart(enrollSnap.data(), trip)) throw new HttpsError("failed-precondition", "الاستبيان لأولياء أمور الطلاب المشاركين في الرحلة.");
+  const surveyRef = ref.collection("surveys").doc(v.studentId);
+  if ((await surveyRef.get()).exists) throw new HttpsError("already-exists", "تم استلام تقييمكم لهذه الرحلة مسبقاً، شكراً لكم.");
+  const ratings = {};
+  for (const k of TRIP_RATINGS) {
+    const n = Math.round(Number(d.ratings?.[k]));
+    if (!(n >= 1 && n <= 5)) throw new HttpsError("invalid-argument", "قيّم جميع البنود من 1 إلى 5.");
+    ratings[k] = n;
+  }
+  if (typeof d.recommend !== "boolean") throw new HttpsError("invalid-argument", "أجب عن سؤال تكرار الرحلة.");
+  const e = enrollSnap.data();
+  const survey = {
+    studentId: v.studentId, studentName: e.studentName, branch: e.branch, grade: e.grade, section: e.section || "",
+    ratings, average: Math.round(surveyAverage(ratings) * 100) / 100, recommend: d.recommend, comment: str(d.comment, 1000),
+    createdAt: Timestamp.now(),
+  };
+  if (survey.average <= 2.5 || !survey.recommend) {
+    survey.complaintId = await openComplaintFromSurvey(ref, trip, e, survey);
+  }
+  await surveyRef.set(survey);
+
+  // Trip-level averages for the trip card and reports.
+  const all = (await ref.collection("surveys").get()).docs.map((x) => x.data());
+  const avg = (f) => Math.round((all.reduce((sum, x) => sum + f(x), 0) / all.length) * 100) / 100;
+  await ref.update({
+    surveyStats: {
+      count: all.length,
+      average: avg((x) => x.average),
+      recommend: all.filter((x) => x.recommend).length,
+      ...Object.fromEntries(TRIP_RATINGS.map((k) => [k, avg((x) => x.ratings[k])])),
+    },
+  });
+  return { ok: true };
+});
+
+// --- Reports ---------------------------------------------------------------
+// Trips in the caller's branches between two days, with per-trip, per-branch
+// and per-grade figures. Branch figures for a multi-branch trip use each
+// student's own branch.
+exports.getTripsReport = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+  const caller = await tripCaller(request);
+  const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v || "") ? v : "");
+  const from = day(request.data?.from) || "0000-01-01";
+  const to = day(request.data?.to) || "9999-12-31";
+  const branchFilter = typeof request.data?.branch === "string" ? request.data.branch : "";
+  const snap = await db.collection("trips").where("date", ">=", from).where("date", "<=", to).get();
+  const trips = snap.docs.map((d) => ({ ref: d.ref, id: d.id, ...d.data() }))
+    .filter((tr) => tr.status !== "DRAFT" && tr.status !== "PENDING_APPROVAL")
+    .filter((tr) => (branchFilter ? (tr.branches || []).includes(branchFilter) : true))
+    .filter((tr) => tripPerm.view(caller, tr.branches || [], tr) || tripPerm.approve(caller, tr.branches || []));
+
+  const branchOf = await branchResolver();
+  const students = (await db.collection("students").get()).docs.map((d) => d.data()).filter((s) => s.nationalId);
+  const blank = () => ({ trips: 0, targeted: 0, responses: 0, approved: 0, declined: 0, confirmed: 0, boarded: 0, expected: 0, collected: 0, surveys: 0, ratingSum: 0, recommend: 0 });
+  const byBranch = {};
+  const byGrade = {};
+  const declineReasons = {};
+  const rows = [];
+  for (const tr of trips) {
+    const inBranch = (b) => !branchFilter || b === branchFilter;
+    const roster = students.filter((s) => tripTargets(tr, s, branchOf) && inBranch(branchOf(s)));
+    const [enrollSnap, surveySnap] = await Promise.all([tr.ref.collection("enrollments").get(), tr.ref.collection("surveys").get()]);
+    const enrollments = enrollSnap.docs.map((d) => d.data()).filter((e) => inBranch(e.branch));
+    const surveys = surveySnap.docs.map((d) => d.data()).filter((x) => inBranch(x.branch));
+    const row = { id: tr.id, tripCode: tr.tripCode, title: tr.title, destination: tr.destination, date: tr.date, status: tr.status, branches: tr.branches || [], stages: tr.stages || [], fee: tr.fee || 0, ...blank(), trips: 1 };
+    const touched = new Set();
+    const add = (map, key, field, n = 1) => {
+      if (!key) return;
+      map[key] = map[key] || blank();
+      map[key][field] += n;
+    };
+    roster.forEach((s) => {
+      row.targeted++;
+      add(byBranch, branchOf(s), "targeted");
+      add(byGrade, studentGrade(s), "targeted");
+      touched.add(branchOf(s));
+    });
+    if (tr.status === "CANCELLED") {
+      // Cancelled trips count as trips only.
+      rows.push(row);
+      continue;
+    }
+    enrollments.forEach((e) => {
+      const st = enrollmentStatus(e, tr.fee);
+      const inc = (field, n = 1) => { row[field] += n; add(byBranch, e.branch, field, n); add(byGrade, e.grade, field, n); };
+      inc("responses");
+      if (e.decision === "APPROVED") { inc("approved"); inc("expected", tr.fee || 0); }
+      if (st === "DECLINED") {
+        inc("declined");
+        const reason = e.declineReason || "UNSPECIFIED";
+        declineReasons[reason] = (declineReasons[reason] || 0) + 1;
+      }
+      if (st === "CONFIRMED") inc("confirmed");
+      if (e.boarded === true) inc("boarded");
+      if (e.payStatus === "PAID") inc("collected", Number(e.paidAmount ?? tr.fee) || 0);
+      touched.add(e.branch);
+    });
+    surveys.forEach((x) => {
+      row.surveys++; row.ratingSum += x.average; row.recommend += x.recommend ? 1 : 0;
+      add(byBranch, x.branch, "surveys"); add(byBranch, x.branch, "ratingSum", x.average); add(byBranch, x.branch, "recommend", x.recommend ? 1 : 0);
+    });
+    row.ratings = Object.fromEntries(TRIP_RATINGS.map((k) => [k, surveys.length ? Math.round((surveys.reduce((a, x) => a + x.ratings[k], 0) / surveys.length) * 100) / 100 : null]));
+    row.pendingReceipts = enrollments.filter((e) => enrollmentStatus(e, tr.fee) === "RECEIPT_REVIEW").length;
+    row.rejectedReceipts = enrollments.filter((e) => enrollmentStatus(e, tr.fee) === "RECEIPT_REJECTED").length;
+    row.awaitingPayment = enrollments.filter((e) => enrollmentStatus(e, tr.fee) === "AWAITING_PAYMENT").length;
+    touched.forEach((b) => add(byBranch, b, "trips"));
+    rows.push(row);
+  }
+  const strip = ({ ref, ...rest }) => rest;
+  return { trips: rows.map(strip), byBranch, byGrade, declineReasons };
+});
+
+// --- Student record ----------------------------------------------------------
+exports.getStudentTrips = onCall(async (request) => {
+  const caller = await tripCaller(request);
+  const studentId = normalizeDigits(request.data?.studentId);
+  if (!studentId) return { trips: [] };
+  const snap = await db.collectionGroup("enrollments").where("studentId", "==", studentId).get();
+  const out = [];
+  for (const d of snap.docs) {
+    const tripRef = d.ref.parent.parent;
+    const tripSnap = await tripRef.get();
+    if (!tripSnap.exists) continue;
+    const trip = tripSnap.data();
+    if (!(callerAll(caller) || (trip.branches || []).some((b) => callerHasBranch(caller, b)))) continue;
+    const e = d.data();
+    const survey = await tripRef.collection("surveys").doc(studentId).get();
+    out.push({
+      tripId: tripRef.id, tripCode: trip.tripCode, title: trip.title, destination: trip.destination, date: trip.date, tripStatus: trip.status,
+      status: enrollmentStatus(e, trip.fee), declineReason: e.declineReason || null, boarded: e.boarded ?? null, returned: e.returned ?? null,
+      healthNotes: e.healthNotes || "",
+      incidents: (e.incidents || []).map((x) => ({ note: x.note, byName: x.byName, at: x.at?.toMillis?.() || null })),
+      surveyAverage: survey.exists ? survey.data().average : null,
+    });
+  }
+  out.sort((a, b) => (a.date < b.date ? 1 : -1));
+  return { trips: out };
 });

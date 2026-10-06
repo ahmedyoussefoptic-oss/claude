@@ -24,8 +24,18 @@ export function branchScopeConstraintValues(userData) {
 // the IT department, and school principals (who are auto-assigned every
 // public-link submission in their branch) may open that module.
 export function canAccessTechSupport(userData) {
+  if (tripsAccessOf(userData) === 'tripsOnly') return false;
   return userData?.role === 'ADMIN' || userData?.role === 'CUSTOMER_SERVICE' || userData?.department === 'IT' || userData?.isPrincipal === true || userData?.isQuality === true;
 }
+
+// Per-user access to the school trips section (set on the Users page,
+// mirrored in firestore.rules tripsAccess()): 'all' (default) — everything,
+// 'tripsOnly' — only the trips section, 'none' — everything but trips.
+export function tripsAccessOf(userData) {
+  if (userData?.role === 'ADMIN') return 'all';
+  return ['tripsOnly', 'none'].includes(userData?.tripsAccess) ? userData.tripsAccess : 'all';
+}
+export const canSeeTrips = (userData) => userData?.role !== 'RECEPTIONIST' && tripsAccessOf(userData) !== 'none';
 
 // A staff user may be limited to certain grades (`stages`, e.g. G1..G5) for
 // auto-assignment. An empty/missing list means every grade — the default,

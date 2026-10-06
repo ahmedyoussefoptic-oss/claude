@@ -41,6 +41,7 @@ const emptyForm = {
   perms: { edit: false, delete: false, users: false, trips: false, tripFinance: false },
   isPrincipal: false,
   isQuality: false,
+  tripsAccess: 'all',
   notificationPrefs: {},
   notificationChannels: {},
   stages: [],
@@ -104,6 +105,7 @@ export default function Users() {
       perms: { edit: !!u.perms?.edit, delete: !!u.perms?.delete, users: !!u.perms?.users, trips: !!u.perms?.trips, tripFinance: !!u.perms?.tripFinance },
       isPrincipal: u.isPrincipal === true,
       isQuality: u.isQuality === true,
+      tripsAccess: ['tripsOnly', 'none'].includes(u.tripsAccess) ? u.tripsAccess : 'all',
       notificationPrefs: u.notificationPrefs || {},
       notificationChannels: u.notificationChannels || {},
       stages: Array.isArray(u.stages) ? u.stages : [],
@@ -143,6 +145,7 @@ export default function Users() {
           perms: form.perms,
           isPrincipal: form.isPrincipal,
           isQuality: form.isQuality,
+          tripsAccess: form.role === ROLES.ADMIN ? 'all' : form.tripsAccess,
           notificationPrefs: form.notificationPrefs,
           notificationChannels: form.notificationChannels,
           stages: form.stages,
@@ -166,6 +169,7 @@ export default function Users() {
           perms: form.perms,
           isPrincipal: form.isPrincipal,
           isQuality: form.isQuality,
+          tripsAccess: form.role === ROLES.ADMIN ? 'all' : form.tripsAccess,
           notificationPrefs: form.notificationPrefs,
           notificationChannels: form.notificationChannels,
           stages: form.stages,
@@ -508,6 +512,25 @@ export default function Users() {
               </p>
             </div>
 
+            {form.role !== ROLES.ADMIN && form.role !== ROLES.RECEPTIONIST && (
+              <div className="md:col-span-2 bg-sky-50 border border-sky-100 rounded-xl p-4">
+                <p className="text-sm font-bold text-slate-800 mb-2">🚌 {t('users.tripsAccessLabel')}</p>
+                <div className="flex flex-wrap gap-2">
+                  {['all', 'tripsOnly', 'none'].map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, tripsAccess: v }))}
+                      className={`px-3 py-1.5 rounded-lg text-sm border ${form.tripsAccess === v ? 'bg-primary text-white border-primary font-medium' : 'bg-white text-slate-600 border-slate-200'}`}
+                    >
+                      {t(`users.tripsAccess.${v}`)}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-600 mt-2">{t(`users.tripsAccessHint.${form.tripsAccess}`)}</p>
+              </div>
+            )}
+
             <div className="md:col-span-2 bg-amber-50 border border-amber-100 rounded-xl p-4">
               <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
                 <input
@@ -636,6 +659,11 @@ export default function Users() {
                       {u.isPrincipal && (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 mr-1 mt-1">
                           🏫 {t('users.principalTag')}
+                        </span>
+                      )}
+                      {u.role !== 'ADMIN' && ['tripsOnly', 'none'].includes(u.tripsAccess) && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-sky-100 text-sky-700 mr-1 mt-1">
+                          🚌 {t(`users.tripsAccessTag.${u.tripsAccess}`)}
                         </span>
                       )}
                       {u.isQuality && (

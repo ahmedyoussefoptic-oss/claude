@@ -4,6 +4,8 @@ import { userBranches } from '../utils/scope';
 // School trips — mirrors the trips section at the end of functions/index.js.
 export const TRIP_STAGES = [...STAGES, 'SEN'];
 export const TRIP_PAY_METHODS = ['BANK', 'RECEPTION'];
+export const TRIP_DECLINE_REASONS = ['COST', 'TIMING', 'FAMILY', 'HEALTH', 'OTHER'];
+export const TRIP_RATINGS = ['organization', 'safety', 'benefit', 'cost'];
 
 export const TRIP_STATUS_STYLES = {
   DRAFT: 'bg-slate-100 text-slate-700 border-slate-200',

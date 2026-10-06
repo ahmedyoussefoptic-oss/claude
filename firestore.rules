@@ -44,6 +44,18 @@ service cloud.firestore {
     function isReceptionist() {
       return myDoc() != null && myDoc().get('role', null) == 'RECEPTIONIST';
     }
+    // Per-user access to the school trips section (Users page):
+    // 'all' (default) — everything, 'tripsOnly' — only the trips section,
+    // 'none' — everything except trips. Admins always see everything.
+    function tripsAccess() {
+      return myDoc() == null ? 'none' : (myDoc().get('role', null) == 'ADMIN' ? 'all' : myDoc().get('tripsAccess', 'all'));
+    }
+    function isTripsOnly() {
+      return tripsAccess() == 'tripsOnly';
+    }
+    function canSeeTrips() {
+      return isAuthenticated() && !isReceptionist() && tripsAccess() != 'none';
+    }
     function canEditRecord(branch) {
       return isAdmin() || (myPerm('edit') && inMyScope(branch));
     }
@@ -57,7 +69,7 @@ service cloud.firestore {
     // parent's call and log the ticket before it ever reaches IT.
     function canAccessTechSupport() {
       return isAdmin() ||
-        (myDoc() != null && (
+        (myDoc() != null && !isTripsOnly() && (
           myDoc().get('department', null) == 'IT' ||
           myDoc().get('role', null) == 'CUSTOMER_SERVICE' ||
           // School principals are auto-assigned every public-link ticket in
@@ -186,7 +198,7 @@ service cloud.firestore {
       allow get: if true;
       // Listing requires authentication AND being in scope of the branch —
       // callers must filter their query by `branch` for this to resolve.
-      allow list: if isAuthenticated() && (isAdmin() || (
+      allow list: if isAuthenticated() && !isTripsOnly() && (isAdmin() || (
         inMyScope(resource.data.branch) &&
         (!isReceptionist() || resource.data.get('viaVisitQr', false) == true)
       ));
@@ -210,7 +222,7 @@ service cloud.firestore {
 
       // Who opened the record (written by markRecordViewed only).
       match /views/{uid} {
-        allow read: if isAuthenticated() && !isReceptionist();
+        allow read: if isAuthenticated() && !isReceptionist() && !isTripsOnly();
         allow write: if false;
       }
     }
@@ -236,16 +248,22 @@ service cloud.firestore {
       );
     }
     match /trips/{tripId} {
-      allow get: if isAuthenticated() && !isReceptionist() && (isAdmin() || tripInScope(resource.data));
+      allow get: if canSeeTrips() && (isAdmin() || tripInScope(resource.data));
       allow list: if isAdmin();
       allow write: if false;
       match /enrollments/{studentId} {
-        allow read: if isAuthenticated() && !isReceptionist() &&
+        allow read: if canSeeTrips() &&
+          canSeeTripEnrollments(get(/databases/$(database)/documents/trips/$(tripId)).data);
+        allow write: if false;
+      }
+      // Parent surveys after the trip (submitTripSurvey).
+      match /surveys/{studentId} {
+        allow read: if canSeeTrips() &&
           canSeeTripEnrollments(get(/databases/$(database)/documents/trips/$(tripId)).data);
         allow write: if false;
       }
       match /activityLog/{logId} {
-        allow read: if isAuthenticated() && !isReceptionist() &&
+        allow read: if canSeeTrips() &&
           (isAdmin() || tripInScope(get(/databases/$(database)/documents/trips/$(tripId)).data));
         allow write: if false;
       }
@@ -257,7 +275,7 @@ service cloud.firestore {
 
     // School visit appointment bookings — written only by Cloud Functions.
     match /appointments/{id} {
-      allow read: if isAuthenticated();
+      allow read: if isAuthenticated() && !isTripsOnly();
       allow write: if false;
     }
 
@@ -292,7 +310,7 @@ service cloud.firestore {
     // Lost & Found items collection
     match /lostFoundItems/{itemId} {
       allow get: if true;
-      allow list: if isAuthenticated() && !isReceptionist() && (isAdmin() || inMyScope(resource.data.branch));
+      allow list: if isAuthenticated() && !isReceptionist() && !isTripsOnly() && (isAdmin() || inMyScope(resource.data.branch));
       allow create: if true;
       allow update: if (isAuthenticated() && canEditRecord(resource.data.branch)) ||
         isParentSurveyUpdate('RETURNED', ['CLOSED'], ['satisfactionRate', 'satisfactionDetails', 'parentFeedback', 'status', 'closedAt', 'updatedAt']);
@@ -340,7 +358,7 @@ service cloud.firestore {
     // national ID or name and auto-fill the rest; only an admin may bulk
     // import/edit it (see Settings > import).
     match /students/{studentId} {
-      allow read: if isAuthenticated() && !isReceptionist();
+      allow read: if isAuthenticated() && !isReceptionist() && !isTripsOnly();
       allow write: if isAdmin();
     }
 

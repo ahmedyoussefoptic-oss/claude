@@ -8,7 +8,7 @@ import Watermark from '../common/Watermark';
 import SystemCredit from '../common/SystemCredit';
 import LanguageSwitcher from '../common/LanguageSwitcher';
 import logo from '../../assets/logo.png';
-import { canAccessTechSupport } from '../../utils/scope';
+import { canAccessTechSupport, canSeeTrips, tripsAccessOf } from '../../utils/scope';
 
 export default function AppLayout() {
   const { t } = useTranslation();
@@ -24,7 +24,10 @@ export default function AppLayout() {
 
   // Reception staff see nothing but the branch QR visits page.
   const isReceptionist = role === 'RECEPTIONIST';
-  const navItems = isReceptionist ? [{ name: t('nav.branchVisits'), path: '/visits', icon: Armchair }] : [
+  // Staff limited to the trips section see only that tab.
+  const tripsOnly = !isReceptionist && tripsAccessOf(userData) === 'tripsOnly';
+  const homePath = isReceptionist ? '/visits' : tripsOnly ? '/trips' : null;
+  const navItems = isReceptionist ? [{ name: t('nav.branchVisits'), path: '/visits', icon: Armchair }] : tripsOnly ? [{ name: t('nav.trips'), path: '/trips', icon: Bus }] : [
     { name: t('nav.dashboard'), path: '/dashboard', icon: LayoutDashboard },
     { name: t('nav.complaints'), path: '/complaints', icon: FileText },
     { name: t('nav.lostFound'), path: '/lost-found', icon: PackageSearch },
@@ -33,21 +36,21 @@ export default function AppLayout() {
     { name: t('nav.studentRecords'), path: '/students', icon: GraduationCap },
     { name: t('nav.reports'), path: '/reports', icon: FileBarChart },
     { name: t('nav.branchVisits'), path: '/visits', icon: Armchair },
-    { name: t('nav.trips'), path: '/trips', icon: Bus },
+    ...(canSeeTrips(userData) ? [{ name: t('nav.trips'), path: '/trips', icon: Bus }] : []),
   ];
 
   // Tech Support tickets can hold national IDs and account credentials, so
   // access is restricted to the IT department's own specialists, admins,
   // and Customer Service (they're the ones who take the parent's call and
   // log the ticket in the first place, before it reaches IT).
-  if (!isReceptionist && canAccessTechSupport(userData)) {
+  if (!isReceptionist && !tripsOnly && canAccessTechSupport(userData)) {
     navItems.splice(3, 0, { name: t('nav.techSupport'), path: '/tech-support', icon: Wrench });
   }
 
-  if (role === 'ADMIN' || userData?.perms?.users) {
+  if (!tripsOnly && (role === 'ADMIN' || userData?.perms?.users)) {
     navItems.push({ name: t('nav.users'), path: '/users', icon: User });
   }
-  if (role === 'ADMIN' || userData?.isPrincipal) {
+  if (!tripsOnly && (role === 'ADMIN' || userData?.isPrincipal)) {
     navItems.push({ name: t('nav.branchQr'), path: '/branch-qr', icon: QrCode });
   }
   if (role === 'ADMIN') {
@@ -58,8 +61,8 @@ export default function AppLayout() {
   if (!user) {
     return <Outlet />;
   }
-  if (isReceptionist && location.pathname !== '/visits') {
-    return <Navigate to="/visits" replace />;
+  if (homePath && !location.pathname.startsWith(homePath)) {
+    return <Navigate to={homePath} replace />;
   }
 
   return (

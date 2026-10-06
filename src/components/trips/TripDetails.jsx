@@ -6,6 +6,7 @@ import QRCode from 'qrcode';
 import {
   X, Loader2, Pencil, Send, CheckCircle2, XCircle, Lock, Unlock, Flag, Ban, Link2, Copy, Check, QrCode, MessageCircle,
   AlertTriangle, MapPin, Clock, Users as UsersIcon, Wallet, Bus, FileDown, Printer, Paperclip, Search, UserPlus, Trash2, HeartPulse,
+  Home, NotebookPen, Star, ThumbsUp, ClipboardList,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
@@ -16,7 +17,7 @@ import { useUsers } from '../../hooks/useUsers';
 import { useWhatsAppApi } from '../../hooks/useWhatsAppApi';
 import logo from '../../assets/logo.png';
 import {
-  TRIP_STATUS_STYLES, ENROLLMENT_STATUSES, ENROLLMENT_STATUS_STYLES, TRIP_PAY_METHODS,
+  TRIP_STATUS_STYLES, ENROLLMENT_STATUSES, ENROLLMENT_STATUS_STYLES, TRIP_PAY_METHODS, TRIP_DECLINE_REASONS, TRIP_RATINGS,
   enrollmentStatus, tripPermissions, tripConflicts, tripLink, dayToDate,
 } from '../../config/trips';
 
@@ -60,6 +61,7 @@ function NoteDialog({ title, label, required, onCancel, onConfirm, busy }) {
 function ManualConsentDialog({ trip, student, current, onCancel, onSaved }) {
   const { t } = useTranslation();
   const [decision, setDecision] = useState(current?.decision || 'APPROVED');
+  const [declineReason, setDeclineReason] = useState(current?.declineReason || '');
   const [payMethod, setPayMethod] = useState(current?.payMethod || (trip.payMethods || [])[0] || 'RECEPTION');
   const [healthNotes, setHealthNotes] = useState(current?.healthNotes || '');
   const [emergencyPhone, setEmergencyPhone] = useState(current?.emergencyPhone || '');
@@ -69,7 +71,7 @@ function ManualConsentDialog({ trip, student, current, onCancel, onSaved }) {
     setBusy(true);
     setError(null);
     try {
-      await call('staffSetTripEnrollment', { id: trip.id, studentId: student.id, decision, payMethod, healthNotes, emergencyPhone, remove });
+      await call('staffSetTripEnrollment', { id: trip.id, studentId: student.id, decision, declineReason, payMethod, healthNotes, emergencyPhone, remove });
       onSaved();
     } catch (err) {
       setError(err.message);
@@ -88,6 +90,15 @@ function ManualConsentDialog({ trip, student, current, onCancel, onSaved }) {
             </button>
           ))}
         </div>
+        {decision === 'DECLINED' && (
+          <div>
+            <label className="block text-xs text-slate-600 mb-1">{t('tripConsent.declineReason')}</label>
+            <select value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} className={inputCls}>
+              <option value="">{t('common.optional')}</option>
+              {TRIP_DECLINE_REASONS.map((r) => <option key={r} value={r}>{t(`trips.declineReason.${r}`)}</option>)}
+            </select>
+          </div>
+        )}
         {decision === 'APPROVED' && trip.fee > 0 && (
           <div>
             <label className="block text-xs text-slate-600 mb-1">{t('trips.form.payMethods')}</label>
@@ -136,6 +147,8 @@ export default function TripDetails({ tripId, listed, allTrips, onClose, onEdit,
   const [roster, setRoster] = useState(null);
   const [rosterError, setRosterError] = useState(null);
   const [log, setLog] = useState([]);
+  const [surveys, setSurveys] = useState([]);
+  const [arrivalResult, setArrivalResult] = useState(null);
   const [busy, setBusy] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [dialog, setDialog] = useState(null);
@@ -158,11 +171,19 @@ export default function TripDetails({ tripId, listed, allTrips, onClose, onEdit,
     }, (err) => console.error(err));
   }, [tripId, perms.seeStudents]);
 
+  const surveyVisible = perms.seeStudents && trip?.status === 'COMPLETED';
+  useEffect(() => {
+    if (!surveyVisible) return undefined;
+    return onSnapshot(collection(db, 'trips', tripId, 'surveys'), (snap) => {
+      setSurveys(snap.docs.map((d) => d.data()).sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0)));
+    }, (err) => console.error(err));
+  }, [tripId, surveyVisible]);
+
   useEffect(() => onSnapshot(query(collection(db, 'trips', tripId, 'activityLog'), orderBy('createdAt', 'desc'), limit(40)), (snap) => {
     setLog(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }, (err) => console.error(err)), [tripId]);
 
-  const needRoster = perms.seeStudents && tab !== 'overview' && !roster;
+  const needRoster = perms.seeStudents && ['students', 'boarding'].includes(tab) && !roster;
   useEffect(() => {
     if (!needRoster) return;
     call('getTripRoster', { id: tripId }).then((d) => setRoster(d.students)).catch((err) => setRosterError(err.message));
@@ -211,6 +232,17 @@ export default function TripDetails({ tripId, listed, allTrips, onClose, onEdit,
     return result;
   });
   const review = (studentId, act, note) => run(`pay-${studentId}`, () => call('reviewTripPayment', { id: trip.id, studentId, action: act, note }));
+  const announceArrival = () => run('arrival', async () => {
+    const result = await call('announceTripArrival', { id: trip.id });
+    setArrivalResult(result);
+    return result;
+  });
+  const sendSurvey = () => run('survey', async () => {
+    const result = await call('sendTripSurvey', { id: trip.id });
+    setAnnounceResult(result);
+    return result;
+  });
+  const addIncident = (r) => setDialog({ title: t('trips.incidentTitle', { name: r.name }), label: t('trips.incidentLabel'), required: true, onConfirm: async (note) => { await run(`inc-${r.id}`, () => call('addTripIncident', { id: trip.id, studentId: r.id, note })); setDialog(null); } });
   const boarding = (studentId, field, value) => run(`board-${studentId}-${field}`, () => call('setTripBoarding', { id: trip.id, studentId, field, value }));
 
   const link = tripLink(trip.tripCode);
@@ -275,6 +307,7 @@ export default function TripDetails({ tripId, listed, allTrips, onClose, onEdit,
     ['overview', t('trips.tabOverview')],
     ...(perms.seeStudents ? [['students', t('trips.tabStudents')]] : []),
     ...(perms.supervise && isPublic ? [['boarding', t('trips.tabBoarding')]] : []),
+    ...(surveyVisible ? [['survey', t('trips.tabSurvey')]] : []),
   ];
   const btn = 'px-3 py-2 rounded-xl text-sm font-medium flex items-center gap-1.5 disabled:opacity-50';
   const spin = (key, Icon) => (busy === key ? <Loader2 className="w-4 h-4 animate-spin" /> : <Icon className="w-4 h-4" />);
@@ -437,8 +470,8 @@ export default function TripDetails({ tripId, listed, allTrips, onClose, onEdit,
             </>
           )}
 
-          {tab !== 'overview' && !roster && !rosterError && <div className="py-16 flex justify-center"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>}
-          {tab !== 'overview' && rosterError && <p className="text-sm text-red-600">{rosterError}</p>}
+          {['students', 'boarding'].includes(tab) && !roster && !rosterError && <div className="py-16 flex justify-center"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>}
+          {['students', 'boarding'].includes(tab) && rosterError && <p className="text-sm text-red-600">{rosterError}</p>}
 
           {tab === 'students' && roster && (
             <>
@@ -482,6 +515,8 @@ export default function TripDetails({ tripId, listed, allTrips, onClose, onEdit,
                           <span className={`inline-block px-2 py-0.5 rounded-md text-xs font-medium border ${ENROLLMENT_STATUS_STYLES[r.status]}`}>{t(`trips.enrollment.${r.status}`)}</span>
                           {r.e?.source === 'staff' && <p className="text-[11px] text-slate-400 mt-0.5">{t('trips.byStaff', { name: r.e.recordedByName || '' })}</p>}
                           {r.e?.payRejectReason && r.status === 'RECEIPT_REJECTED' && <p className="text-[11px] text-orange-700 mt-0.5">{r.e.payRejectReason}</p>}
+                          {r.status === 'DECLINED' && r.e?.declineReason && <p className="text-[11px] text-rose-700 mt-0.5">{t(`trips.declineReason.${r.e.declineReason}`)}</p>}
+                          {r.e?.incidents?.length > 0 && <p className="text-[11px] text-amber-700 mt-0.5 flex items-center gap-1"><NotebookPen className="w-3 h-3" />{t('trips.incidentsCount', { count: r.e.incidents.length })}</p>}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-slate-600">
                           {r.e?.payMethod && <p>{t(`trips.payMethod.${r.e.payMethod}`)}</p>}
@@ -514,12 +549,67 @@ export default function TripDetails({ tripId, listed, allTrips, onClose, onEdit,
             </>
           )}
 
+          {tab === 'survey' && (
+            <>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm text-slate-600">{t('trips.surveyCount', { count: surveys.length, total: stats.confirmed || 0 })}</p>
+                {perms.manage && (
+                  <button disabled={!!busy || !waApi.enabled} onClick={sendSurvey} className={`${btn} bg-[#25D366] text-white`}>{spin('survey', MessageCircle)}{t('trips.sendSurvey')}</button>
+                )}
+              </div>
+              {announceResult && <p className="text-sm text-emerald-700">{t('trips.announceResult', announceResult)}</p>}
+              {trip.surveySentAt && <p className="text-xs text-slate-500">{t('trips.surveySentAt', { date: format(trip.surveySentAt.toDate(), 'PPp', { locale: dateLocale }) })}</p>}
+              {surveys.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+                  <div className="border border-amber-100 bg-amber-50/50 rounded-2xl p-4 col-span-2 md:col-span-1">
+                    <p className="text-xs text-slate-500 flex items-center gap-1"><Star className="w-4 h-4" />{t('trips.overallRating')}</p>
+                    <p className="text-2xl font-bold text-amber-600 mt-1">{(surveys.reduce((a, x) => a + x.average, 0) / surveys.length).toFixed(1)}<span className="text-sm text-slate-400"> / 5</span></p>
+                  </div>
+                  {TRIP_RATINGS.map((k) => (
+                    <div key={k} className="border border-slate-100 rounded-2xl p-4">
+                      <p className="text-xs text-slate-500">{t(`trips.rating.${k}`)}</p>
+                      <p className="text-xl font-bold text-slate-800 mt-1">{(surveys.reduce((a, x) => a + x.ratings[k], 0) / surveys.length).toFixed(1)}</p>
+                    </div>
+                  ))}
+                  <div className="border border-emerald-100 rounded-2xl p-4">
+                    <p className="text-xs text-slate-500 flex items-center gap-1"><ThumbsUp className="w-4 h-4" />{t('trips.recommendRate')}</p>
+                    <p className="text-xl font-bold text-emerald-700 mt-1">{Math.round((100 * surveys.filter((x) => x.recommend).length) / surveys.length)}%</p>
+                  </div>
+                </div>
+              )}
+              {surveys.length === 0 ? <p className="py-10 text-center text-slate-400 text-sm">{t('trips.noSurveys')}</p> : (
+                <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
+                  {surveys.map((x) => (
+                    <li key={x.studentId} className="p-3 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium text-slate-900">{x.studentName}</span>
+                        <span className="text-xs text-slate-400" dir="ltr">{x.grade}</span>
+                        <span className={`px-2 py-0.5 rounded-md text-xs font-bold ${x.average <= 2.5 ? 'bg-rose-100 text-rose-700' : x.average < 4 ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{x.average.toFixed(1)} / 5</span>
+                        <span className="text-xs text-slate-500">{x.recommend ? t('trips.recommends') : t('trips.notRecommends')}</span>
+                        {x.complaintId && <span className="text-xs text-rose-600 flex items-center gap-1"><ClipboardList className="w-3.5 h-3.5" />{t('trips.complaintOpened')} <span dir="ltr" className="font-mono">{x.complaintId}</span></span>}
+                      </div>
+                      {x.comment && <p className="text-slate-600 mt-1">{x.comment}</p>}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+
           {tab === 'boarding' && roster && (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm text-slate-600">{t('trips.boardingCounts', { boarded: confirmedRows.filter((r) => r.e?.boarded === true).length, returned: confirmedRows.filter((r) => r.e?.returned === true).length, total: confirmedRows.length })}</p>
-                <button onClick={printBoarding} className={`${btn} border border-slate-300 bg-white text-slate-700`}><Printer className="w-4 h-4" />{t('trips.printBoarding')}</button>
+                <div className="flex flex-wrap gap-2">
+                  <button onClick={printBoarding} className={`${btn} border border-slate-300 bg-white text-slate-700`}><Printer className="w-4 h-4" />{t('trips.printBoarding')}</button>
+                  {trip.date === format(new Date(), 'yyyy-MM-dd') && (
+                    <button disabled={!!busy} onClick={announceArrival} className={`${btn} bg-emerald-600 text-white`}>{spin('arrival', Home)}{t('trips.arrived')}</button>
+                  )}
+                </div>
               </div>
+              <p className="text-xs text-slate-500">{t('trips.arrivedHint')}</p>
+              {arrivalResult && <p className="text-sm text-emerald-700">{arrivalResult.whatsapp ? t('trips.arrivalSent', arrivalResult) : t('trips.arrivalNoWa')}</p>}
+              {trip.arrivedAt && <p className="text-xs text-slate-500">{t('trips.arrivedAt', { time: format(trip.arrivedAt.toDate(), 'p', { locale: dateLocale }), name: trip.arrivedByName || '' })}</p>}
               {confirmedRows.length === 0 ? <p className="py-10 text-center text-slate-400 text-sm">{t('trips.noConfirmed')}</p> : (
                 <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
                   {confirmedRows.map((r) => (
@@ -528,7 +618,11 @@ export default function TripDetails({ tripId, listed, allTrips, onClose, onEdit,
                         <p className="font-medium text-slate-900">{r.name} <span className="text-xs text-slate-400" dir="ltr">{r.grade} {r.className}</span></p>
                         {r.e?.healthNotes && <p className="text-xs text-rose-600 flex items-center gap-1"><HeartPulse className="w-3.5 h-3.5" />{r.e.healthNotes}</p>}
                         {r.e?.emergencyPhone && <a href={`tel:${r.e.emergencyPhone}`} className="text-xs text-slate-500" dir="ltr">{r.e.emergencyPhone}</a>}
+                        {(r.e?.incidents || []).map((x, i) => (
+                          <p key={i} className="text-xs text-amber-800 bg-amber-50 rounded-md px-2 py-1 mt-1">{x.note} <span className="text-amber-600">— {x.byName}{x.at?.toDate ? ` · ${format(x.at.toDate(), 'p', { locale: dateLocale })}` : ''}</span></p>
+                        ))}
                       </div>
+                      <button disabled={!!busy} onClick={() => addIncident(r)} className="px-2 py-1 rounded-lg text-xs text-amber-700 hover:bg-amber-50 flex items-center gap-1 self-start sm:self-center"><NotebookPen className="w-3.5 h-3.5" />{t('trips.addIncident')}</button>
                       {['boarded', 'returned'].map((field) => (
                         <div key={field} className="flex items-center gap-1">
                           <span className="text-xs text-slate-500 w-14">{t(`trips.col.${field}`)}</span>

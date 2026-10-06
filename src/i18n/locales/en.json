@@ -834,7 +834,22 @@
     "qualityTag": "Quality",
     "receptionistHint": "A receptionist only sees parents' QR check-ins at their branches (who is waiting, for how long, and who met them) — not feedback, tech tickets or lost & found.",
     "permTrips": "Manage trips (activities coordinator)",
-    "permTripFinance": "Trip finance (review receipts)"
+    "permTripFinance": "Trip finance (review receipts)",
+    "tripsAccessLabel": "School trips section access",
+    "tripsAccess": {
+      "all": "Whole system incl. trips",
+      "tripsOnly": "Trips only",
+      "none": "No trips"
+    },
+    "tripsAccessHint": {
+      "all": "Sees every section their permissions allow, including trips.",
+      "tripsOnly": "Sees only the trips section (e.g. trip supervisors and accompanying teachers) — no complaints, tech tickets, lost & found or student records, and is never assigned them.",
+      "none": "Sees the rest of the system but not the trips section."
+    },
+    "tripsAccessTag": {
+      "tripsOnly": "Trips only",
+      "none": "No trips"
+    }
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",
@@ -1568,7 +1583,10 @@
       "TRIP_ENROLLMENT_REMOVED": "removed a parent response",
       "TRIP_PAYMENT_ACCEPT": "accepted a receipt",
       "TRIP_PAYMENT_REJECT": "rejected a receipt",
-      "TRIP_PAYMENT_CASH": "recorded a cash payment"
+      "TRIP_PAYMENT_CASH": "recorded a cash payment",
+      "TRIP_ARRIVED": "recorded arrival",
+      "TRIP_INCIDENT": "added a trip note",
+      "TRIP_SURVEY_SENT": "sent the survey"
     },
     "allStudents": "All",
     "searchStudents": "Search by name, ID or class",
@@ -1613,7 +1631,70 @@
     "boardingCounts": "{{boarded}} boarded and {{returned}} returned of {{total}} confirmed students.",
     "noConfirmed": "No confirmed students yet.",
     "present": "Present",
-    "absent": "Absent"
+    "absent": "Absent",
+    "declineReason": {
+      "COST": "Cost",
+      "TIMING": "Timing",
+      "FAMILY": "Family reasons",
+      "HEALTH": "Health reasons",
+      "OTHER": "Other",
+      "UNSPECIFIED": "Not specified"
+    },
+    "rating": {
+      "organization": "Organization",
+      "safety": "Safety & supervision",
+      "benefit": "Learning value",
+      "cost": "Value for money"
+    },
+    "absentFromTrip": "Absent from the trip",
+    "attended": "Took part",
+    "addIncident": "Note",
+    "arrived": "We're back — notify parents",
+    "arrivedHint": "On return to the branch: parents of the students on the trip (those marked as boarded, or all confirmed if boarding wasn't taken) get a message with the arrival time.",
+    "arrivalSent": "Arrival notice sent to {{sent}} of {{total}}, {{failed}} failed.",
+    "arrivalNoWa": "Arrival time recorded. WhatsApp API is off, so no messages were sent.",
+    "arrivedAt": "Arrived {{time}} ({{name}})",
+    "incidentTitle": "Note about {{name}}",
+    "incidentLabel": "What happened during the trip (health, behaviour, incident…) — shown in the student record",
+    "incidentsCount": "{{count}} trip note(s)",
+    "complaintOpened": "Complaint opened",
+    "noAccess": "You don't have access to the trips section.",
+    "noSurveys": "No ratings yet.",
+    "recommends": "Would recommend",
+    "notRecommends": "Would not recommend",
+    "overallRating": "Average satisfaction",
+    "recommendRate": "Would recommend",
+    "sendSurvey": "Send survey via WhatsApp",
+    "studentTripsTitle": "School trips",
+    "surveyCount": "{{count}} ratings from {{total}} confirmed students. Low ratings (2.5 or less) or “wouldn't recommend” open a complaint assigned to the trip's creator.",
+    "surveySentAt": "Survey last sent: {{date}}",
+    "tabSurvey": "Parent survey",
+    "viewReport": "Reports",
+    "report": {
+      "byBranch": "Branch comparison",
+      "byGrade": "Participation by grade",
+      "byTrip": "Trips",
+      "cancelledCount": "Cancelled: {{count}}",
+      "collected": "Collected (SAR)",
+      "completed": "Completed trips",
+      "declineRate": "Decline rate",
+      "declineReasons": "Decline reasons",
+      "declinedCount": "{{count}} declined",
+      "expected": "Expected (SAR)",
+      "ofExpected": "of {{expected}} expected",
+      "ofTargeted": "{{confirmed}} of {{targeted}} targeted students",
+      "participation": "Participation",
+      "ratingByCriterion": "Satisfaction by criterion",
+      "receipts": "Receipts",
+      "receiptsCell": "review {{review}} · rejected {{rejected}} · awaiting {{awaiting}}",
+      "recommendSub": "would recommend {{rate}} · {{count}} ratings",
+      "sheetBranches": "Branches",
+      "sheetTrips": "Trips",
+      "surveys": "Ratings",
+      "targeted": "Targeted",
+      "trip": "Trip",
+      "trips": "Trips"
+    }
   },
   "tripConsent": {
     "times": "{{from}} to {{to}}",
@@ -1652,6 +1733,17 @@
       "RECEIPT_REJECTED": "The previous receipt was rejected, please attach a new one.",
       "CONFIRMED": "Participation is confirmed.",
       "NO_RESPONSE": ""
+    },
+    "declineReason": "Reason for declining",
+    "survey": {
+      "title": "Rate the trip",
+      "comment": "Your comments (optional)",
+      "incomplete": "Rate every item and answer the recommend question.",
+      "notParticipant": "The survey is for parents of students who took part in the trip.",
+      "recommend": "Would you recommend repeating this trip?",
+      "submit": "Submit rating",
+      "thanks": "Thank you, your rating was received.",
+      "verifyTitle": "Rate the trip — student details"
     }
   }
 }

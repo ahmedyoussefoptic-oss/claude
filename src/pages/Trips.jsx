@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { httpsCallable } from 'firebase/functions';
-import { Bus, Plus, CalendarDays, List, ChevronRight, ChevronLeft, Loader2, Hourglass, CheckCircle2, Wallet, AlertTriangle, MapPin, Users as UsersIcon } from 'lucide-react';
+import { Bus, Plus, CalendarDays, List, ChevronRight, ChevronLeft, Loader2, Hourglass, CheckCircle2, Wallet, AlertTriangle, MapPin, Users as UsersIcon, FileBarChart, Star } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, addDays, addMonths, isSameMonth } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { functions } from '../config/firebase';
@@ -11,6 +11,8 @@ import { useBranches, useDepartments } from '../hooks/useOrgData';
 import StatCard from '../components/dashboard/StatCard';
 import TripForm from '../components/trips/TripForm';
 import TripDetails from '../components/trips/TripDetails';
+import TripsReport from '../components/trips/TripsReport';
+import { canSeeTrips } from '../utils/scope';
 import { TRIP_STATUSES, TRIP_STATUS_STYLES, TRIP_DOT, canCreateTrips, tripConflicts, dayToDate } from '../config/trips';
 
 const ymd = (d) => format(d, 'yyyy-MM-dd');
@@ -84,6 +86,10 @@ export default function Trips() {
   const stageText = (tr) => ((tr.stages || []).length ? tr.stages.join('، ') : t('trips.allGrades'));
   const selected = trips.find((tr) => tr.id === openId);
 
+  if (!canSeeTrips(userData)) {
+    return <p className="max-w-xl mx-auto mt-20 text-center text-slate-500">{t('trips.noAccess')}</p>;
+  }
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
@@ -110,13 +116,16 @@ export default function Trips() {
           <div className="flex bg-slate-100 rounded-xl p-1">
             <button onClick={() => setView('calendar')} className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 ${view === 'calendar' ? 'bg-white shadow-sm text-primary font-medium' : 'text-slate-600'}`}><CalendarDays className="w-4 h-4" />{t('trips.viewCalendar')}</button>
             <button onClick={() => setView('list')} className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 ${view === 'list' ? 'bg-white shadow-sm text-primary font-medium' : 'text-slate-600'}`}><List className="w-4 h-4" />{t('trips.viewList')}</button>
+            <button onClick={() => setView('report')} className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 ${view === 'report' ? 'bg-white shadow-sm text-primary font-medium' : 'text-slate-600'}`}><FileBarChart className="w-4 h-4" />{t('trips.viewReport')}</button>
           </div>
-          {select(branchFilter, setBranchFilter, [['ALL', t('common.allBranches')], ...branches.map((b) => [b.id, b.name])])}
+          {view !== 'report' && <>{select(branchFilter, setBranchFilter, [['ALL', t('common.allBranches')], ...branches.map((b) => [b.id, b.name])])}
           {select(deptFilter, setDeptFilter, [['ALL', t('trips.allSections')], ...departments.map((d) => [d.id, d.name])])}
-          {select(statusFilter, setStatusFilter, [['ALL', t('trips.allStatuses')], ...TRIP_STATUSES.map((s) => [s, t(`trips.status.${s}`)])])}
+          {select(statusFilter, setStatusFilter, [['ALL', t('trips.allStatuses')], ...TRIP_STATUSES.map((s) => [s, t(`trips.status.${s}`)])])}</>}
         </div>
 
-        {loading ? (
+        {view === 'report' ? (
+          <TripsReport onOpenTrip={openTrip} />
+        ) : loading ? (
           <div className="py-16 flex justify-center"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>
         ) : error ? (
           <p className="py-16 text-center text-red-600 text-sm">{error}</p>
@@ -187,6 +196,7 @@ export default function Trips() {
                           <UsersIcon className="w-4 h-4 text-emerald-600" />{tr.stats?.confirmed || 0}{tr.capacity > 0 && <span className="text-slate-400">/{tr.capacity}</span>}
                         </span>
                       )}
+                      {tr.surveyStats?.count > 0 && <span className="text-amber-600 flex items-center gap-1" title={t('trips.overallRating')}><Star className="w-4 h-4 fill-amber-400 text-amber-400" />{tr.surveyStats.average.toFixed(1)}</span>}
                       {tr.fee > 0 && <span className="text-slate-500">{t('trips.feeValue', { fee: tr.fee })}</span>}
                       <span className={`px-2.5 py-1 rounded-md text-xs font-medium border ${TRIP_STATUS_STYLES[tr.status]}`}>{t(`trips.status.${tr.status}`)}</span>
                     </div>

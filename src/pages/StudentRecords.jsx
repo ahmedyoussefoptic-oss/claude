@@ -9,7 +9,8 @@ import { useBranchScopedCollection } from '../hooks/useBranchScopedCollection';
 import { TICKET_STATUS_BADGE } from '../config/techSupport';
 import { ITEM_STATUS_BADGE } from '../config/lostFound';
 import { studentKey } from '../utils/studentKey';
-import { canAccessTechSupport } from '../utils/scope';
+import StudentTrips from '../components/trips/StudentTrips';
+import { canAccessTechSupport, canSeeTrips } from '../utils/scope';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import TechSupportDetails from '../components/techSupport/TechSupportDetails';
 import LostFoundDetails from '../components/lostFound/LostFoundDetails';
@@ -299,6 +300,8 @@ export default function StudentRecords() {
                   return <span key={kind} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium ${KIND_META[kind].chip}`}><Icon className="w-4 h-4" />{t(`studentRecords.kinds.${kind}`)}: {n}</span>;
                 })}
               </div>
+
+              {selected.studentId && canSeeTrips(userData) && <StudentTrips studentId={selected.studentId} />}
 
               <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
                 <table className="w-full text-right text-sm">

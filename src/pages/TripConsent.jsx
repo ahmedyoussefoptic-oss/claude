@@ -2,13 +2,70 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
-import { Bus, MapPin, Clock, CalendarDays, Wallet, Loader2, CheckCircle2, ShieldCheck, Paperclip, AlertTriangle, Info } from 'lucide-react';
+import { Bus, MapPin, Clock, CalendarDays, Wallet, Loader2, CheckCircle2, ShieldCheck, Paperclip, AlertTriangle, Info, Star } from 'lucide-react';
 import { functions } from '../config/firebase';
 import Watermark from '../components/common/Watermark';
 import LanguageSwitcher from '../components/common/LanguageSwitcher';
 import logo from '../assets/logo.png';
 import { fileToBase64, MAX_PUBLIC_FILE_BYTES } from '../utils/publicSubmission';
-import { ENROLLMENT_STATUS_STYLES } from '../config/trips';
+import { ENROLLMENT_STATUS_STYLES, TRIP_DECLINE_REASONS, TRIP_RATINGS } from '../config/trips';
+
+// Post-trip parent survey (submitTripSurvey): four 1–5 ratings, "would you
+// recommend it", and a free comment.
+function SurveyForm({ code, studentId, last4, onDone }) {
+  const { t } = useTranslation();
+  const [ratings, setRatings] = useState({});
+  const [recommend, setRecommend] = useState(null);
+  const [comment, setComment] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    if (TRIP_RATINGS.some((k) => !ratings[k]) || recommend === null) { setError(t('tripConsent.survey.incomplete')); return; }
+    setBusy(true);
+    try {
+      await call('submitTripSurvey', { tripCode: code, studentId, last4, ratings, recommend, comment });
+      onDone();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <form onSubmit={submit} className="space-y-4">
+      <p className="font-bold text-slate-900">{t('tripConsent.survey.title')}</p>
+      {TRIP_RATINGS.map((k) => (
+        <div key={k}>
+          <p className="text-sm text-slate-700 mb-1">{t(`trips.rating.${k}`)}</p>
+          <div className="flex gap-1" dir="ltr">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button type="button" key={n} onClick={() => setRatings((r) => ({ ...r, [k]: n }))} className="p-1" aria-label={String(n)}>
+                <Star className={`w-8 h-8 ${ratings[k] >= n ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} />
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+      <div>
+        <p className="text-sm text-slate-700 mb-1">{t('tripConsent.survey.recommend')}</p>
+        <div className="grid grid-cols-2 gap-2">
+          {[true, false].map((v) => (
+            <button type="button" key={String(v)} onClick={() => setRecommend(v)} className={`py-2.5 rounded-xl text-sm border ${recommend === v ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200'}`}>{v ? t('common.yes') : t('common.no')}</button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <p className="text-sm text-slate-700 mb-1">{t('tripConsent.survey.comment')}</p>
+        <textarea rows={3} value={comment} onChange={(e) => setComment(e.target.value)} className={inputCls} />
+      </div>
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      <button disabled={busy} className="w-full py-3 bg-primary text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-60">
+        {busy && <Loader2 className="w-4 h-4 animate-spin" />}{t('tripConsent.survey.submit')}
+      </button>
+    </form>
+  );
+}
 
 const call = (name, data) => httpsCallable(functions, name)(data).then((r) => r.data);
 const inputCls = 'w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
@@ -27,6 +84,8 @@ export default function TripConsent() {
   const [last4, setLast4] = useState('');
   const [student, setStudent] = useState(null);
   const [decision, setDecision] = useState('');
+  const [declineReason, setDeclineReason] = useState('');
+  const [surveyDone, setSurveyDone] = useState(false);
   const [payMethod, setPayMethod] = useState('');
   const [healthNotes, setHealthNotes] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
@@ -52,6 +111,7 @@ export default function TripConsent() {
       const en = data.enrollment;
       if (en) {
         setDecision(en.decision || '');
+        setDeclineReason(en.declineReason || '');
         setPayMethod(en.payMethod || '');
         setHealthNotes(en.healthNotes || '');
         setEmergencyPhone(en.emergencyPhone || '');
@@ -84,7 +144,7 @@ export default function TripConsent() {
       const file = paid && payMethod === 'BANK' && receipt
         ? { fileName: receipt.name, mimeType: receipt.type || 'application/octet-stream', base64Data: await fileToBase64(receipt) }
         : null;
-      const data = await call('submitTripConsent', { tripCode: code, studentId, last4, decision, payMethod, healthNotes, emergencyPhone, agree, receipt: file });
+      const data = await call('submitTripConsent', { tripCode: code, studentId, last4, decision, declineReason, payMethod, healthNotes, emergencyPhone, agree, receipt: file });
       setDone(data.enrollment);
     } catch (err) {
       setError(err.message);
@@ -134,21 +194,34 @@ export default function TripConsent() {
               {trip.objective && <p className="text-sm text-slate-600 mt-4">{trip.objective}</p>}
               {trip.meetingPoint && <p className="text-sm text-slate-600 mt-2"><b>{t('trips.form.meetingPoint')}:</b> {trip.meetingPoint}</p>}
               {trip.requirements && <p className="text-sm text-slate-600 mt-2 whitespace-pre-wrap"><b>{t('trips.form.requirements')}:</b> {trip.requirements}</p>}
-              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-3 mt-4 flex gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5" />{t('tripConsent.deadline', { date: trip.payDeadlineLabel })}</p>
+              {!trip.surveyOpen && <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-3 mt-4 flex gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5" />{t('tripConsent.deadline', { date: trip.payDeadlineLabel })}</p>}
             </div>
 
-            {done ? (
+            {surveyDone || (student && trip.surveyOpen && student.surveyDone) ? (
+              <div className={`${card} text-center`}>
+                <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle2 className="w-7 h-7" /></div>
+                <h2 className="text-xl font-bold text-slate-900">{t('tripConsent.survey.thanks')}</h2>
+              </div>
+            ) : student && trip.surveyOpen ? (
+              <div className={card}>
+                <p className="text-xs text-slate-500">{t('tripConsent.student')}</p>
+                <p className="font-bold text-slate-900 mb-4">{student.studentName}</p>
+                {student.participated
+                  ? <SurveyForm code={code} studentId={studentId} last4={last4} onDone={() => setSurveyDone(true)} />
+                  : <p className="text-sm text-slate-600">{t('tripConsent.survey.notParticipant')}</p>}
+              </div>
+            ) : done ? (
               <div className={`${card} text-center`}>
                 <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle2 className="w-7 h-7" /></div>
                 <h2 className="text-xl font-bold text-slate-900 mb-2">{t('tripConsent.doneTitle')}</h2>
                 <span className={`inline-block px-3 py-1 rounded-lg text-sm font-medium border ${ENROLLMENT_STATUS_STYLES[done.status]}`}>{t(`trips.enrollment.${done.status}`)}</span>
                 <p className="text-sm text-slate-600 mt-3">{t(`tripConsent.doneBody.${done.status}`)}</p>
               </div>
-            ) : !trip.registrationOpen && !student ? (
+            ) : !trip.registrationOpen && !trip.surveyOpen && !student ? (
               <div className={`${card} text-center text-slate-600`}>{t('tripConsent.closed')}</div>
             ) : !student ? (
               <form onSubmit={verify} className={`${card} space-y-4`}>
-                <h2 className="font-bold text-slate-900 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" />{t('tripConsent.verifyTitle')}</h2>
+                <h2 className="font-bold text-slate-900 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" />{trip.surveyOpen ? t('tripConsent.survey.verifyTitle') : t('tripConsent.verifyTitle')}</h2>
                 <p className="text-sm text-slate-500">{t('tripConsent.verifyHint')}</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -194,6 +267,16 @@ export default function TripConsent() {
                         ))}
                       </div>
                     </div>
+
+                    {decision === 'DECLINED' && (
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">{t('tripConsent.declineReason')}</label>
+                        <select value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} className={inputCls}>
+                          <option value="">{t('common.optional')}</option>
+                          {TRIP_DECLINE_REASONS.map((r) => <option key={r} value={r}>{t(`trips.declineReason.${r}`)}</option>)}
+                        </select>
+                      </div>
+                    )}
 
                     {decision === 'APPROVED' && (
                       <>
