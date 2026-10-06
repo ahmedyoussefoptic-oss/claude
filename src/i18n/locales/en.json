@@ -169,8 +169,11 @@
     "quickFilters": {
       "ALL": "All",
       "OPEN": "Open",
-      "OVERDUE": "Overdue",
+      "ASSIGNED": "Assigned",
+      "IN_PROGRESS": "In progress",
       "ESCALATED": "Escalated",
+      "OVERDUE": "Overdue",
+      "SOLVED": "Solved",
       "CLOSED": "Closed",
       "VISITS": "Branch visits"
     },
@@ -622,7 +625,9 @@
       "ASSIGNED": "Assigned",
       "IN_PROGRESS": "In Progress",
       "SOLVED": "Solved",
-      "CLOSED": "Closed"
+      "CLOSED": "Closed",
+      "OPEN": "Open",
+      "OVERDUE": "Overdue / escalated"
     },
     "ticketNumber": "Ticket #",
     "problemType": "Problem Type",

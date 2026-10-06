@@ -169,8 +169,11 @@
     "quickFilters": {
       "ALL": "الكل",
       "OPEN": "مفتوحة",
-      "OVERDUE": "متأخرة",
+      "ASSIGNED": "مسندة",
+      "IN_PROGRESS": "قيد المعالجة",
       "ESCALATED": "مصعدة",
+      "OVERDUE": "متأخرة",
+      "SOLVED": "تم الحل",
       "CLOSED": "مغلقة",
       "VISITS": "زيارات الفروع"
     },
@@ -622,7 +625,9 @@
       "ASSIGNED": "مُسندة",
       "IN_PROGRESS": "قيد المعالجة",
       "SOLVED": "تم الحل",
-      "CLOSED": "مغلقة"
+      "CLOSED": "مغلقة",
+      "OPEN": "مفتوحة",
+      "OVERDUE": "متأخرة / مصعدة"
     },
     "ticketNumber": "رقم البلاغ",
     "problemType": "نوع المشكلة",

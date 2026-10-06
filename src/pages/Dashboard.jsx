@@ -257,7 +257,7 @@ export default function Dashboard() {
           value={stats.inProgress.toString()}
           icon={Clock}
           gradient="from-amber-400 to-orange-500"
-          to="/complaints?filter=IN_PROGRESS"
+          to="/complaints?filter=ACTIVE"
         />
         <StatCard
           title={t('dashboard.overdue')}
@@ -271,7 +271,7 @@ export default function Dashboard() {
           value={stats.solved.toString()}
           icon={CheckCircle2}
           gradient="from-emerald-500 to-teal-600"
-          to="/complaints?filter=CLOSED"
+          to="/complaints?filter=RESOLVED"
         />
       </div>
 

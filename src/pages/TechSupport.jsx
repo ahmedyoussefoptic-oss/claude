@@ -14,7 +14,8 @@ import { branchScopeConstraintValues } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
-const FILTER_IDS = ['ALL', 'ASSIGNED', 'IN_PROGRESS', 'SOLVED', 'CLOSED'];
+const FILTER_IDS = ['ALL', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'OVERDUE', 'SOLVED', 'CLOSED'];
+const matchesStatus = (tk, id) => (id === 'ALL' ? true : id === 'OPEN' ? OPEN_TICKET_STATUSES.includes(tk.status) : id === 'OVERDUE' ? isTicketOverdue(tk) : tk.status === id);
 
 export default function TechSupport() {
   const { t, i18n } = useTranslation();
@@ -95,11 +96,9 @@ export default function TechSupport() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
 
-  const filteredTickets = useMemo(() => {
+  // Everything except the status chip — chips count within this set.
+  const baseTickets = useMemo(() => {
     return tickets.filter((tk) => {
-      if (statusFilter === 'OPEN' && !OPEN_TICKET_STATUSES.includes(tk.status)) return false;
-      if (statusFilter === 'OVERDUE' && !isTicketOverdue(tk)) return false;
-      if (!['ALL', 'OPEN', 'OVERDUE'].includes(statusFilter) && tk.status !== statusFilter) return false;
       if (branchFilter && tk.branch !== branchFilter) return false;
       if (departmentFilter && (tk.department || '__NONE__') !== departmentFilter) return false;
       if (publicLinkOnly && tk.source !== 'PARENT_PORTAL') return false;
@@ -110,7 +109,11 @@ export default function TechSupport() {
       }
       return true;
     });
-  }, [tickets, search, statusFilter, branchFilter, departmentFilter, publicLinkOnly, userData]);
+  }, [tickets, search, branchFilter, departmentFilter, publicLinkOnly]);
+  const statusCounts = useMemo(() => Object.fromEntries(FILTER_IDS.map((id) => [id, baseTickets.filter((tk) => matchesStatus(tk, id)).length])), [baseTickets]);
+  const filteredTickets = useMemo(() => {
+    return baseTickets.filter((tk) => matchesStatus(tk, statusFilter));
+  }, [baseTickets, statusFilter]);
 
   const problemTypeName = (id) => problemTypes.find((pt) => pt.id === id)?.name || id;
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
@@ -151,6 +154,7 @@ export default function TechSupport() {
                 className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${statusFilter === id ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
               >
                 {t(`techSupportList.filters.${id}`)}
+                <span className={`mr-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold tabular-nums ${statusFilter === id ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600'}`}>{statusCounts[id]}</span>
               </button>
             ))}
             <select

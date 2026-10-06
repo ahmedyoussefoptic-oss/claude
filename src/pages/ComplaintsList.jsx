@@ -18,11 +18,29 @@ import { isComplaintOverdue, complaintStatusLabel, complaintHasType, complaintTy
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
-const QUICK_FILTER_IDS = ['ALL', 'OPEN', 'OVERDUE', 'ESCALATED', 'CLOSED', 'VISITS'];
+const QUICK_FILTER_IDS = ['ALL', 'OPEN', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'OVERDUE', 'SOLVED', 'CLOSED', 'VISITS'];
 
 // Recognized but not shown as a tab — only reachable via a dashboard KPI
-// link (?filter=IN_PROGRESS / ?filter=REOPENED), same list underneath.
-const LINK_ONLY_FILTERS = ['IN_PROGRESS', 'REOPENED'];
+// link (?filter=ACTIVE / RESOLVED / REOPENED), same list underneath.
+const LINK_ONLY_FILTERS = ['ACTIVE', 'RESOLVED', 'REOPENED'];
+
+// Each quick filter as a predicate — used both to filter the list and to
+// count every chip.
+const QUICK_MATCH = {
+  ALL: () => true,
+  OPEN: (c) => !['SOLVED', 'CLOSED', 'REJECTED'].includes(c.status),
+  // Assigned to someone but nobody has acknowledged it yet.
+  ASSIGNED: (c) => c.status === 'RECEIVED' && (c.assignedTo || []).length > 0,
+  IN_PROGRESS: (c) => ['IN_PROGRESS', 'WAITING_PARENT_RESPONSE'].includes(c.status),
+  ESCALATED: (c) => c.status === 'ESCALATED',
+  OVERDUE: (c) => isComplaintOverdue(c),
+  SOLVED: (c) => c.status === 'SOLVED',
+  CLOSED: (c) => ['CLOSED', 'REJECTED'].includes(c.status),
+  VISITS: (c) => Boolean(c.viaVisitQr),
+  ACTIVE: (c) => ['IN_PROGRESS', 'RECEIVED'].includes(c.status),
+  RESOLVED: (c) => ['SOLVED', 'CLOSED'].includes(c.status),
+  REOPENED: (c) => Boolean(c.reopened),
+};
 
 export default function ComplaintsList() {
   const { t, i18n } = useTranslation();
@@ -132,15 +150,10 @@ export default function ComplaintsList() {
 
   const waitingVisits = complaints.filter((c) => c.visitStatus === 'WAITING').length;
 
-  const filteredComplaints = useMemo(() => {
+  // Everything except the quick filter — the chips count within this set,
+  // so their numbers follow the search / branch / type / date filters.
+  const baseComplaints = useMemo(() => {
     return complaints.filter((c) => {
-      if (quickFilter === 'OPEN' && ['SOLVED', 'CLOSED', 'REJECTED'].includes(c.status)) return false;
-      if (quickFilter === 'OVERDUE' && !isComplaintOverdue(c)) return false;
-      if (quickFilter === 'CLOSED' && !['SOLVED', 'CLOSED'].includes(c.status)) return false;
-      if (quickFilter === 'ESCALATED' && c.status !== 'ESCALATED') return false;
-      if (quickFilter === 'IN_PROGRESS' && !['IN_PROGRESS', 'RECEIVED'].includes(c.status)) return false;
-      if (quickFilter === 'REOPENED' && !c.reopened) return false;
-      if (quickFilter === 'VISITS' && !c.viaVisitQr) return false;
       if (typeFilter && !complaintHasType(c, typeFilter)) return false;
       if (branchFilter && c.branch !== branchFilter) return false;
       if (departmentFilter && (c.department || '__NONE__') !== departmentFilter) return false;
@@ -162,7 +175,16 @@ export default function ComplaintsList() {
       }
       return true;
     });
-  }, [complaints, search, quickFilter, typeFilter, branchFilter, departmentFilter, dateFrom, dateTo, publicLinkOnly, userData]);
+  }, [complaints, search, typeFilter, branchFilter, departmentFilter, dateFrom, dateTo, publicLinkOnly]);
+
+  const quickCounts = useMemo(
+    () => Object.fromEntries(QUICK_FILTER_IDS.map((id) => [id, baseComplaints.filter(QUICK_MATCH[id]).length])),
+    [baseComplaints]
+  );
+  const filteredComplaints = useMemo(
+    () => baseComplaints.filter(QUICK_MATCH[quickFilter] || QUICK_MATCH.ALL),
+    [baseComplaints, quickFilter]
+  );
 
   // How many complaints each student has in the loaded list — drives the
   // "repeated" chip that links to the student's full record.
@@ -248,6 +270,7 @@ export default function ComplaintsList() {
                 className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${quickFilter === id ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}
               >
                 {t(`complaintsList.quickFilters.${id}`)}
+                <span className={`mr-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold tabular-nums ${quickFilter === id ? 'bg-white/25 text-white' : 'bg-slate-100 text-slate-600'}`}>{quickCounts[id]}</span>
                 {id === 'VISITS' && waitingVisits > 0 && (
                   <span className="mr-1.5 inline-flex items-center justify-center min-w-5 h-5 px-1 rounded-full bg-rose-500 text-white text-[11px] font-bold">{waitingVisits}</span>
                 )}
