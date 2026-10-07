@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { Armchair, Handshake, Clock, CalendarDays, Phone, Loader2, CheckCircle2 } from 'lucide-react';
+import { Armchair, Handshake, Clock, CalendarDays, CalendarPlus, Phone, Loader2, CheckCircle2 } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
@@ -14,6 +14,7 @@ import StatCard from '../components/dashboard/StatCard';
 import { formatMinutes } from '../utils/duration';
 import { normalizeAssignees } from '../utils/assignees';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
+import AppointmentPicker from '../components/appointments/AppointmentPicker';
 
 const isToday = (ts) => {
   if (!ts?.toDate) return false;
@@ -22,6 +23,49 @@ const isToday = (ts) => {
   return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
 };
 const minutesBetween = (a, b) => Math.max(0, Math.round((b - a) / 60000));
+
+// The parent couldn't be met during a walk-in visit: book a confirmed
+// meeting slot on the same record (bookMeetingFromVisit). The parent gets
+// the WhatsApp confirmation and checks in with "I have an appointment".
+function BookMeetingDialog({ visit, onClose }) {
+  const { t } = useTranslation();
+  const [slot, setSlot] = useState(null);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const book = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await httpsCallable(functions, 'bookMeetingFromVisit')({ complaintDocId: visit.id, slot, note });
+      onClose();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 z-[100] flex items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg max-h-full overflow-y-auto bg-white rounded-2xl shadow-2xl p-5 space-y-3">
+        <h3 className="font-bold text-slate-900 flex items-center gap-2"><CalendarPlus className="w-5 h-5 text-indigo-600" />{t('branchVisits.bookTitle')}</h3>
+        <p className="text-sm text-slate-600">{t('branchVisits.confirmFor', { parent: visit.parentName, student: visit.studentName })}</p>
+        <AppointmentPicker branch={visit.branch} value={slot} onChange={setSlot} />
+        <div>
+          <label className="block text-xs text-slate-600 mb-1">{t('branchVisits.bookNote')}</label>
+          <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm" />
+        </div>
+        <p className="text-xs text-slate-500">{t('branchVisits.bookHint')}</p>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-xl border border-slate-300 bg-white">{t('common.cancel')}</button>
+          <button disabled={busy || !slot} onClick={book} className="px-5 py-2 text-sm rounded-xl bg-indigo-600 text-white font-medium flex items-center gap-2 disabled:opacity-50">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CalendarPlus className="w-4 h-4" />}{t('branchVisits.bookButton')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Reception confirms that the parent was met and by whom (confirmBranchVisit);
 // that staff member then writes the meeting summary and solution.
@@ -95,6 +139,7 @@ export default function BranchVisits() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [now, setNow] = useState(() => Date.now());
   const [confirming, setConfirming] = useState(null);
+  const [booking, setBooking] = useState(null);
   // Staff open the visit's full record; reception only sees this list.
   const [openId, setOpenId] = useState(null);
   const isReceptionist = userData?.role === 'RECEPTIONIST';
@@ -169,6 +214,7 @@ export default function BranchVisits() {
           {chip(statusFilter === 'ALL', () => setStatusFilter('ALL'), t('branchVisits.statusAll'))}
           {chip(statusFilter === 'WAITING', () => setStatusFilter('WAITING'), t('branchVisits.statusWaiting'))}
           {chip(statusFilter === 'MET', () => setStatusFilter('MET'), t('branchVisits.statusMet'))}
+          {chip(statusFilter === 'NOT_MET', () => setStatusFilter('NOT_MET'), t('branchVisits.statusNotMet'))}
         </div>
 
         {loading ? (
@@ -179,6 +225,7 @@ export default function BranchVisits() {
           <ul className="divide-y divide-slate-100">
             {shown.map((v) => {
               const waiting = v.visitStatus === 'WAITING';
+              const notMet = v.visitStatus === 'NOT_MET';
               const arrived = v.visitArrivedAt?.toMillis?.();
               return (
                 <li
@@ -186,8 +233,8 @@ export default function BranchVisits() {
                   onClick={isReceptionist ? undefined : () => setOpenId(v.id)}
                   className={`p-4 flex flex-col md:flex-row md:items-center gap-3 ${waiting ? 'bg-rose-50/40' : ''} ${isReceptionist ? '' : 'cursor-pointer hover:bg-slate-50 transition-colors'}`}
                 >
-                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${waiting ? 'bg-rose-100 text-rose-600' : 'bg-teal-100 text-teal-600'}`}>
-                    {waiting ? <Armchair className="w-5 h-5" /> : <Handshake className="w-5 h-5" />}
+                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${waiting ? 'bg-rose-100 text-rose-600' : notMet ? 'bg-indigo-100 text-indigo-600' : 'bg-teal-100 text-teal-600'}`}>
+                    {waiting ? <Armchair className="w-5 h-5" /> : notMet ? <CalendarPlus className="w-5 h-5" /> : <Handshake className="w-5 h-5" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-slate-900">
@@ -205,9 +252,15 @@ export default function BranchVisits() {
                     )}
                   </div>
                   <div className="md:text-left shrink-0 space-y-1">
-                    <span className={`inline-block px-2.5 py-1 rounded-md text-xs font-medium border ${waiting ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-teal-100 text-teal-700 border-teal-200'}`}>
-                      {waiting ? t('branchVisits.statusWaiting') : t('branchVisits.statusMet')}
+                    <span className={`inline-block px-2.5 py-1 rounded-md text-xs font-medium border ${waiting ? 'bg-rose-100 text-rose-700 border-rose-200' : notMet ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-teal-100 text-teal-700 border-teal-200'}`}>
+                      {waiting ? t('branchVisits.statusWaiting') : notMet ? t('branchVisits.statusNotMet') : t('branchVisits.statusMet')}
                     </span>
+                    {notMet && v.appointment?.start && (
+                      <p className="text-xs font-medium text-indigo-700">
+                        {t('branchVisits.meetingBooked', { when: format(v.appointment.start.toDate(), 'EEEE d MMMM · p', { locale: dateLocale }) })}
+                        {v.visitNotMetByName && <span className="block text-[11px] text-slate-400 font-normal">{t('branchVisits.bookedBy', { name: v.visitNotMetByName })}</span>}
+                      </p>
+                    )}
                     {arrived && (
                       <p className="text-xs text-slate-500">
                         {t('branchVisits.arrived', { time: format(v.visitArrivedAt.toDate(), 'p', { locale: dateLocale }) })}
@@ -217,10 +270,17 @@ export default function BranchVisits() {
                     {waiting && arrived && (
                       <p className="text-xs font-bold text-rose-600">{t('branchVisits.waitingForText', { time: formatMinutes(minutesBetween(arrived, now), t) })}</p>
                     )}
-                    {waiting && isReceptionist && (
-                      <button onClick={() => setConfirming(v)} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-teal-600 text-white flex items-center gap-1 md:mr-auto">
-                        <CheckCircle2 className="w-3.5 h-3.5" />{t('branchVisits.confirmButton')}
-                      </button>
+                    {waiting && (
+                      <div className="flex flex-wrap gap-1.5 md:justify-end">
+                        {isReceptionist && (
+                          <button onClick={(e) => { e.stopPropagation(); setConfirming(v); }} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-teal-600 text-white flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" />{t('branchVisits.confirmButton')}
+                          </button>
+                        )}
+                        <button onClick={(e) => { e.stopPropagation(); setBooking(v); }} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-50 flex items-center gap-1">
+                          <CalendarPlus className="w-3.5 h-3.5" />{t('branchVisits.bookButton')}
+                        </button>
+                      </div>
                     )}
                     {!waiting && v.visitMetAt && (
                       <p className="text-xs text-teal-700">
@@ -239,6 +299,7 @@ export default function BranchVisits() {
         )}
       </div>
       {confirming && <ConfirmMeetingDialog visit={confirming} onClose={() => setConfirming(null)} />}
+      {booking && <BookMeetingDialog visit={booking} onClose={() => setBooking(null)} />}
       {openId && visits.find((v) => v.id === openId) && (
         <ComplaintDetails complaint={visits.find((v) => v.id === openId)} onClose={() => setOpenId(null)} />
       )}

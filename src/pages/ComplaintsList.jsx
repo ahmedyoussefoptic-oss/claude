@@ -405,7 +405,7 @@ export default function ComplaintsList() {
                           </span>
                         )}
                         {c.viaVisitQr && (
-                          <span title={t(c.visitStatus === 'WAITING' ? 'branchVisit.badgeWaiting' : 'branchVisit.badgeMet')} className={`inline-flex items-center justify-center w-5 h-5 rounded-full shrink-0 ${c.visitStatus === 'WAITING' ? 'bg-rose-100 text-rose-600 animate-pulse' : 'bg-teal-100 text-teal-600'}`}>
+                          <span title={t(c.visitStatus === 'WAITING' ? 'branchVisit.badgeWaiting' : c.visitStatus === 'NOT_MET' ? 'branchVisits.statusNotMet' : 'branchVisit.badgeMet')} className={`inline-flex items-center justify-center w-5 h-5 rounded-full shrink-0 ${c.visitStatus === 'WAITING' ? 'bg-rose-100 text-rose-600 animate-pulse' : c.visitStatus === 'NOT_MET' ? 'bg-indigo-100 text-indigo-600' : 'bg-teal-100 text-teal-600'}`}>
                             <Armchair className="w-3 h-3" />
                           </span>
                         )}

@@ -1367,7 +1367,14 @@
     "minutes_zero": "{{count}} دقيقة",
     "minutes_two": "{{count}} دقيقة",
     "minutes_few": "{{count}} دقيقة",
-    "minutes_many": "{{count}} دقيقة"
+    "minutes_many": "{{count}} دقيقة",
+    "statusNotMet": "لم تتم · حُجز موعد",
+    "bookButton": "حجز موعد مقابلة",
+    "bookTitle": "حجز موعد مقابلة لولي الأمر",
+    "bookNote": "ملاحظة (اختياري)",
+    "bookHint": "تُسجَّل الزيارة «لم تتم المقابلة»، ويُحجز الموعد مؤكداً، وتصل ولي الأمر رسالة واتساب بالموعد. عند حضوره يمسح رمز QR ويختار «لدي موعد مسبق».",
+    "meetingBooked": "موعد المقابلة: {{when}}",
+    "bookedBy": "حجزه {{name}}"
   },
   "slaSettings": {
     "title": "زمن الحل (SLA) وساعات الدوام",
@@ -1878,7 +1885,8 @@
     "metBy": "القائم بالمقابلة",
     "wait": "الانتظار",
     "bookedTag": "موعد مسبق",
-    "notMetShort": "لم تتم المقابلة"
+    "notMetShort": "لم تتم المقابلة",
+    "bookedLaterSub": "حُجز لـ {{count}} منهم موعد لاحق"
   },
   "duration": {
     "minutes": "{{n}} دقيقة",

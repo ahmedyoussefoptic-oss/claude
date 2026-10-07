@@ -133,7 +133,7 @@ export default function VisitsReport({ complaints, filters, branches, complaintT
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <Box title={t('visitsReport.totalVisits')} value={visits.length} sub={t('visitsReport.bookedSub', { count: visits.filter((v) => v.booked).length })} icon={Armchair} gradient="from-teal-500 to-emerald-600" />
           <Box title={t('visitsReport.metCount')} value={met.length} sub={pctOf(met.length, visits.length)} icon={Handshake} gradient="from-emerald-500 to-green-600" />
-          <Box title={t('visitsReport.notMet')} value={waiting.length} sub={t('visitsReport.receptionSub', { count: byReception.length })} icon={Hourglass} gradient="from-rose-500 to-red-600" />
+          <Box title={t('visitsReport.notMet')} value={waiting.length} sub={t('visitsReport.bookedLaterSub', { count: visits.filter((v) => v.c.visitStatus === 'NOT_MET').length })} icon={Hourglass} gradient="from-rose-500 to-red-600" />
           <Box title={t('visitsReport.solvedCount')} value={solved.length} sub={pctOf(solved.length, visits.length)} icon={CheckCircle2} gradient="from-sky-500 to-blue-600" />
           <Box title={t('visitsReport.avgWait')} value={mins(avg(waits))} icon={Clock} gradient="from-amber-400 to-orange-500" />
           <Box title={t('visitsReport.medianWait')} value={mins(median(waits))} icon={Timer} gradient="from-amber-400 to-orange-500" />

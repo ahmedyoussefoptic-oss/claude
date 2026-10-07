@@ -1351,7 +1351,14 @@
     "expectedInterviewer": "Assigned (to meet)",
     "waitingForText": "Waiting {{time}}",
     "waitedText": "waited {{time}}",
-    "noVisitsToday": "No visits today"
+    "noVisitsToday": "No visits today",
+    "statusNotMet": "Not met · booked",
+    "bookButton": "Book a meeting",
+    "bookTitle": "Book a meeting for the parent",
+    "bookNote": "Note (optional)",
+    "bookHint": "The visit is marked “not met”, the slot is booked as confirmed and the parent gets a WhatsApp message. On the day they scan the QR code and choose “I have an appointment”.",
+    "meetingBooked": "Meeting: {{when}}",
+    "bookedBy": "Booked by {{name}}"
   },
   "slaSettings": {
     "title": "Resolution time (SLA) & working hours",
@@ -1854,7 +1861,8 @@
     "metBy": "Met by",
     "wait": "Wait",
     "bookedTag": "booked",
-    "notMetShort": "Not met"
+    "notMetShort": "Not met",
+    "bookedLaterSub": "{{count}} booked a later meeting"
   },
   "duration": {
     "minutes": "{{n}} min",

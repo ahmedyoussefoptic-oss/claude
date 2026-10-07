@@ -3536,3 +3536,52 @@ exports.sendRecordReminder = onCall(async (request) => {
   });
   return { sent: recipients.length };
 });
+
+// --- Walk-in visit not met: book a meeting appointment -----------------------
+// From the branch visits page: the parent who came without an appointment
+// couldn't be met, so reception (or the staff member) books a confirmed
+// slot on the same record. The visit is marked NOT_MET, the slot is
+// reserved like any appointment and the parent gets the usual WhatsApp
+// confirmation; on the day they check in with "I have an appointment".
+exports.bookMeetingFromVisit = onCall({ secrets: WA_SECRETS }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const { complaintDocId, slot } = request.data || {};
+  const note = String(request.data?.note || "").trim().slice(0, 300);
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  if (!callerDoc.exists || caller.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  const ref = db.collection("complaints").doc(String(complaintDocId || ""));
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "لم يتم العثور على الزيارة.");
+  const record = snap.data();
+  const inScope = caller.role === "ADMIN" || caller.access === "all" || (caller.branches || []).includes(record.branch) || caller.branch === record.branch;
+  const allowed = caller.role === "RECEPTIONIST" ? inScope : canManageAppointment(caller, record, request.auth.uid) || (inScope && caller.isQuality === true);
+  if (!allowed) throw new HttpsError("permission-denied", "لا تملك صلاحية حجز موعد لهذه الزيارة.");
+  if (!record.viaVisitQr || record.visitStatus !== "WAITING") throw new HttpsError("failed-precondition", "هذه الزيارة ليست بانتظار المقابلة.");
+
+  const reserved = await reserveAppointment({
+    branch: record.branch, startMs: Number(slot), complaintDocId: ref.id, complaintId: record.complaintId,
+    cancelId: record.appointment && ACTIVE_APPT.includes(record.appointment.status) ? record.appointment.id : undefined,
+  });
+  await db.collection("appointments").doc(reserved.id).update({ status: "CONFIRMED" });
+  const now = Timestamp.now();
+  const actorName = caller.name || "مستخدم";
+  const when = formatRiyadh(reserved.start.toMillis());
+  const appointment = { ...reserved, status: "CONFIRMED", fromVisit: true, decidedAt: now, decidedBy: request.auth.uid, decidedByName: actorName };
+  await ref.update({
+    appointment,
+    visitStatus: "NOT_MET", visitNotMetAt: now, visitNotMetByName: actorName,
+    hasInternalComment: true, updatedAt: now,
+    ...(record.status === "RECEIVED" ? { status: "IN_PROGRESS" } : {}),
+  });
+  const logs = ref.collection("activityLog");
+  await logs.add({ action: "APPOINTMENT_CONFIRMED", actorId: request.auth.uid, actorName, metadata: { when, fromVisit: true }, createdAt: now });
+  await logs.add({
+    action: "INTERNAL_COMMENT_ADDED", actorId: request.auth.uid, actorName,
+    metadata: { comment: `⏳ لم تتم مقابلة ولي الأمر أثناء زيارته للفرع، وحُجز له موعد مقابلة: ${when}.${note ? `\n${note}` : ""}`, visit: true },
+    createdAt: now,
+  });
+  // The internal comment above already notifies the assignees.
+  await autoSendWa("complaint", ref, "appointmentConfirmed");
+  return { ok: true, when };
+});
