@@ -1334,7 +1334,12 @@
     "otherStaff": "Other branch staff",
     "receptionNote": "Note (optional)",
     "confirmHint": "Records that the meeting took place; the chosen staff member is notified to write the summary and solution.",
-    "confirmedByReception": "Confirmed by reception: {{name}}"
+    "confirmedByReception": "Confirmed by reception: {{name}}",
+    "interviewer": "Met by",
+    "expectedInterviewer": "Assigned (to meet)",
+    "waitingForText": "Waiting {{time}}",
+    "waitedText": "waited {{time}}",
+    "noVisitsToday": "No visits today"
   },
   "slaSettings": {
     "title": "Resolution time (SLA) & working hours",
@@ -1836,5 +1841,10 @@
     "wait": "Wait",
     "bookedTag": "booked",
     "notMetShort": "Not met"
+  },
+  "duration": {
+    "minutes": "{{n}} min",
+    "hours": "{{h}} h",
+    "hoursMinutes": "{{h}} h {{m}} min"
   }
 }

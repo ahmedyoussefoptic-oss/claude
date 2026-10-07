@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { Armchair, Handshake, Clock, Hourglass, CheckCircle2, CalendarCheck, CalendarX, Timer } from 'lucide-react';
 import { complaintTypesLabel, complaintStatusLabel } from '../../config/complaintTypes';
+import { formatMinutes } from '../../utils/duration';
 
 const DAY_MS = 86400000;
 const minutes = (a, b) => Math.max(0, Math.round((b - a) / 60000));
@@ -121,7 +122,7 @@ export default function VisitsReport({ complaints, filters, branches, complaintT
 
   const th = 'text-right py-2 px-2 font-medium text-slate-500 text-xs whitespace-nowrap';
   const td = 'py-2 px-2 tabular-nums text-slate-800';
-  const mins = (v) => (v == null ? '—' : t('visitsReport.minutes', { count: v }));
+  const mins = (v) => formatMinutes(v, t);
 
   return (
     <div className={`space-y-8 ${merged ? 'pt-8 border-t-4 border-teal-100' : ''}`}>
@@ -243,7 +244,7 @@ export default function VisitsReport({ complaints, filters, branches, complaintT
         </section>
       )}
 
-      {showDetails && visits.length > 0 && (
+      {(showDetails || !merged) && visits.length > 0 && (
         <section>
           <SectionTitle>{t('visitsReport.detailsTitle')} ({visits.length})</SectionTitle>
           <table className="w-full text-xs border-collapse">

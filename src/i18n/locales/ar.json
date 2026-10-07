@@ -327,7 +327,11 @@
     "removedLogLabel": "أُزيل:",
     "noChangeAlert": "لم يطرأ أي تغيير على الإسناد.",
     "gradeTag": "مسؤول عن الصف",
-    "curriculumTag": "مسؤول عن القسم"
+    "curriculumTag": "مسؤول عن القسم",
+    "peopleSelected_zero": "{{count}} أشخاص مختارون",
+    "peopleSelected_two": "{{count}} أشخاص مختارون",
+    "peopleSelected_few": "{{count}} أشخاص مختارون",
+    "peopleSelected_many": "{{count}} أشخاص مختارون"
   },
   "messageStatus": {
     "receiptSent": "أُرسلت رسالة الاستلام لولي الأمر",
@@ -1334,7 +1338,24 @@
     "otherStaff": "موظفون آخرون في الفرع",
     "receptionNote": "ملاحظة (اختياري)",
     "confirmHint": "يُسجَّل أن المقابلة تمت، ويصل للموظف المختار إشعار ليكتب ملخص المقابلة والحل.",
-    "confirmedByReception": "أكّدها الاستقبال: {{name}}"
+    "confirmedByReception": "أكّدها الاستقبال: {{name}}",
+    "interviewer": "القائم بالمقابلة",
+    "expectedInterviewer": "المسند إليهم (للمقابلة)",
+    "waitingForText": "ينتظر منذ {{time}}",
+    "waitedText": "انتظر {{time}}",
+    "noVisitsToday": "لا توجد زيارات اليوم",
+    "waited_zero": "انتظر {{count}} دقيقة",
+    "waited_two": "انتظر {{count}} دقيقة",
+    "waited_few": "انتظر {{count}} دقيقة",
+    "waited_many": "انتظر {{count}} دقيقة",
+    "waitingFor_zero": "ينتظر منذ {{count}} دقيقة",
+    "waitingFor_two": "ينتظر منذ {{count}} دقيقة",
+    "waitingFor_few": "ينتظر منذ {{count}} دقيقة",
+    "waitingFor_many": "ينتظر منذ {{count}} دقيقة",
+    "minutes_zero": "{{count}} دقيقة",
+    "minutes_two": "{{count}} دقيقة",
+    "minutes_few": "{{count}} دقيقة",
+    "minutes_many": "{{count}} دقيقة"
   },
   "slaSettings": {
     "title": "زمن الحل (SLA) وساعات الدوام",
@@ -1366,7 +1387,11 @@
   "recordViewers": {
     "seenBy_one": "اطّلع عليها {{count}}:",
     "seenBy_other": "اطّلع عليها {{count}}:",
-    "detail": "أول اطّلاع: {{first}} — آخر اطّلاع: {{last}} — عدد المرات: {{count}}"
+    "detail": "أول اطّلاع: {{first}} — آخر اطّلاع: {{last}} — عدد المرات: {{count}}",
+    "seenBy_zero": "اطّلع عليها {{count}}:",
+    "seenBy_two": "اطّلع عليها {{count}}:",
+    "seenBy_few": "اطّلع عليها {{count}}:",
+    "seenBy_many": "اطّلع عليها {{count}}:"
   },
   "notificationPrefs": {
     "title": "الإشعارات",
@@ -1441,7 +1466,11 @@
       "REQUESTED": "بانتظار تأكيد إدارة المدرسة",
       "CONFIRMED": "مؤكد — امسحوا رمز QR عند الوصول",
       "CHECKED_IN": "تم تسجيل وصولكم"
-    }
+    },
+    "freeCount_zero": "{{count}} متاح",
+    "freeCount_two": "{{count}} متاح",
+    "freeCount_few": "{{count}} متاح",
+    "freeCount_many": "{{count}} متاح"
   },
   "appointmentSettings": {
     "title": "مواعيد الزيارات المدرسية",
@@ -1824,17 +1853,22 @@
     "apptNoShow": "لم يحضر (موعد مضى)",
     "byBranch": "الزيارات حسب الفرع",
     "fromAppt": "بموعد مسبق",
-    "byStaff": "المقابلات حسب الموظف",
-    "staff": "الموظف",
+    "byStaff": "القائمون بالمقابلات",
+    "staff": "القائم بالمقابلة",
     "byReason": "أسباب الزيارة",
     "peakTitle": "أوقات الذروة",
     "peakSub": "عدد الزيارات حسب يوم الأسبوع وساعة الوصول",
     "detailsTitle": "تفاصيل الزيارات",
     "arrival": "الوصول",
     "reason": "سبب الزيارة",
-    "metBy": "قابله",
+    "metBy": "القائم بالمقابلة",
     "wait": "الانتظار",
     "bookedTag": "موعد مسبق",
     "notMetShort": "لم تتم المقابلة"
+  },
+  "duration": {
+    "minutes": "{{n}} دقيقة",
+    "hours": "{{h}} ساعة",
+    "hoursMinutes": "{{h}} ساعة و{{m}} دقيقة"
   }
 }

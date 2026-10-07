@@ -11,6 +11,7 @@ import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
 import { branchScopeConstraintValues, userBranches } from '../utils/scope';
 import StatCard from '../components/dashboard/StatCard';
+import { formatMinutes } from '../utils/duration';
 
 const isToday = (ts) => {
   if (!ts?.toDate) return false;
@@ -122,14 +123,15 @@ export default function BranchVisits() {
   const stats = useMemo(() => {
     const today = visits.filter((v) => isToday(v.visitArrivedAt));
     const metToday = today.filter((v) => v.visitStatus === 'MET' && v.visitMetAt);
-    const waits = metToday.map((v) => minutesBetween(v.visitArrivedAt.toMillis(), v.visitMetAt.toMillis()));
+    // Today's visits: arrival → meeting, or → now for those still waiting.
+    const waits = today.map((v) => minutesBetween(v.visitArrivedAt.toMillis(), v.visitStatus === 'MET' && v.visitMetAt ? v.visitMetAt.toMillis() : now));
     return {
       waiting: visits.filter((v) => v.visitStatus === 'WAITING').length,
       today: today.length,
       metToday: metToday.length,
       avgWait: waits.length ? Math.round(waits.reduce((s, m) => s + m, 0) / waits.length) : null,
     };
-  }, [visits]);
+  }, [visits, now]);
 
   const shown = visits.filter((v) => (range === 'ALL' || isToday(v.visitArrivedAt) || v.visitStatus === 'WAITING')
     && (statusFilter === 'ALL' || v.visitStatus === statusFilter));
@@ -152,7 +154,7 @@ export default function BranchVisits() {
         <StatCard title={t('branchVisits.waitingNow')} value={String(stats.waiting)} icon={Armchair} gradient="from-rose-500 to-red-600" />
         <StatCard title={t('branchVisits.today')} value={String(stats.today)} icon={CalendarDays} gradient="from-sky-500 to-blue-600" />
         <StatCard title={t('branchVisits.metToday')} value={String(stats.metToday)} icon={Handshake} gradient="from-emerald-500 to-teal-600" />
-        <StatCard title={t('branchVisits.avgWait')} value={stats.avgWait == null ? '—' : t('branchVisits.minutes', { count: stats.avgWait })} icon={Clock} gradient="from-amber-400 to-orange-500" />
+        <StatCard title={t('branchVisits.avgWait')} value={stats.avgWait == null ? formatMinutes(0, t) : formatMinutes(stats.avgWait, t)} sub={stats.avgWait == null ? t('branchVisits.noVisitsToday') : undefined} icon={Clock} gradient="from-amber-400 to-orange-500" />
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
@@ -188,8 +190,10 @@ export default function BranchVisits() {
                       {t('branchVisits.studentLine', { student: v.studentName, grade: [v.stage, v.grade].filter(Boolean).join(' — '), branch: branchName(v.branch) })}
                     </p>
                     <p className="text-sm text-slate-500 mt-0.5">{t('branchVisits.reason')}: {v.subject}</p>
-                    {v.assignedToNames?.length > 0 && (
-                      <p className="text-xs text-slate-400 mt-1">{t('branchVisits.assigned')}: {v.assignedToNames.join(i18n.language === 'ar' ? '، ' : ', ')}</p>
+                    {!waiting && v.visitMetByName ? (
+                      <p className="text-sm font-medium text-teal-700 mt-1">{t('branchVisits.interviewer')}: {v.visitMetByName}</p>
+                    ) : v.assignedToNames?.length > 0 && (
+                      <p className="text-sm text-slate-600 mt-1">{t('branchVisits.expectedInterviewer')}: {v.assignedToNames.join(i18n.language === 'ar' ? '، ' : ', ')}</p>
                     )}
                   </div>
                   <div className="md:text-left shrink-0 space-y-1">
@@ -203,7 +207,7 @@ export default function BranchVisits() {
                       </p>
                     )}
                     {waiting && arrived && (
-                      <p className="text-xs font-bold text-rose-600">{t('branchVisits.waitingFor', { count: minutesBetween(arrived, now) })}</p>
+                      <p className="text-xs font-bold text-rose-600">{t('branchVisits.waitingForText', { time: formatMinutes(minutesBetween(arrived, now), t) })}</p>
                     )}
                     {waiting && isReceptionist && (
                       <button onClick={() => setConfirming(v)} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-teal-600 text-white flex items-center gap-1 md:mr-auto">
@@ -213,7 +217,7 @@ export default function BranchVisits() {
                     {!waiting && v.visitMetAt && (
                       <p className="text-xs text-teal-700">
                         {t('branchVisits.metBy', { name: v.visitMetByName || '—', time: format(v.visitMetAt.toDate(), 'p', { locale: dateLocale }) })}
-                        {arrived && ` · ${t('branchVisits.waited', { count: minutesBetween(arrived, v.visitMetAt.toMillis()) })}`}
+                        {arrived && ` · ${t('branchVisits.waitedText', { time: formatMinutes(minutesBetween(arrived, v.visitMetAt.toMillis()), t) })}`}
                       </p>
                     )}
                     {!waiting && v.visitConfirmedByName && (
