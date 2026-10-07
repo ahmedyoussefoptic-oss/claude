@@ -1241,7 +1241,12 @@
     "apptSubmit": "Check in",
     "apptError": "Couldn't check in.",
     "apptDoneTitle": "You're checked in for your appointment",
-    "apptDoneBody": "Appointment {{when}} — student {{student}}."
+    "apptDoneBody": "Appointment {{when}} — student {{student}}.",
+    "bookAppointment": "Book a visit",
+    "bookAppointmentHint": "Visit the school on a later day and time you pick from the available slots",
+    "bookSubmit": "Send appointment request",
+    "bookDoneTitle": "Appointment request received",
+    "bookDoneBody": "The principal will confirm it or suggest another time and you'll get a message. When you arrive, scan the QR code and choose “I have an appointment”."
   },
   "branchQr": {
     "title": "Branch visit QR codes",

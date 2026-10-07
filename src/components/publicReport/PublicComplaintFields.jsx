@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, Plus, X } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
@@ -41,7 +41,10 @@ const selectCls = `${inputCls} bg-white`;
 // `visit` = the branch QR check-in page (/visit): the parent is at the
 // branch waiting to meet someone, so only a short visit reason is asked for
 // (details optional, no attachments) and the record is flagged as a visit.
-export default function PublicComplaintFields({ initialBranch, onSuccess, visit = false, lockBranch = false }) {
+// `bookAppointment` = booking a visit from the branch QR page: the visit
+// slot picker always shows and the category starts on the "visit
+// appointment" one (the parent can still change it).
+export default function PublicComplaintFields({ initialBranch, onSuccess, visit = false, lockBranch = false, bookAppointment = false }) {
   const { t } = useTranslation();
   const branches = useBranches();
   const departments = useDepartments();
@@ -56,6 +59,14 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
   const [error, setError] = useState(null);
 
   const maxMb = (MAX_PUBLIC_FILE_BYTES / 1024 / 1024).toFixed(0);
+
+  // Pre-select the appointment category once the lists have loaded.
+  const apptSub = bookAppointment ? subTypes.find((s) => isAppointmentCategory(s.parentType, s.name, complaintTypes, subTypes)) : null;
+  const apptType = bookAppointment && !apptSub ? complaintTypes.find((ct) => ct.appointment) : null;
+  useEffect(() => {
+    if (!apptSub && !apptType) return;
+    setEntries((list) => list.map((en) => (en.complaintType ? en : { ...en, complaintType: apptSub ? apptSub.parentType : apptType.id, subType: apptSub ? apptSub.name : '' })));
+  }, [apptSub?.id, apptType?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleParentChange = (e) => {
     const { name, value } = e.target;
@@ -98,7 +109,7 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
     setEntries((list) => list.map((en) => (en.key === key ? { ...en, files: en.files.filter((_, i) => i !== index) } : en)));
   };
 
-  const wantsAppointment = (en) => !visit && isAppointmentCategory(en.complaintType, en.subType, complaintTypes, subTypes);
+  const wantsAppointment = (en) => !visit && (bookAppointment || isAppointmentCategory(en.complaintType, en.subType, complaintTypes, subTypes));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -264,8 +275,8 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t(visit ? 'branchVisit.reasonLabel' : 'complaintForm.subjectLabel')} <span className="text-red-500">*</span></label>
-                <input type="text" name="subject" value={entry.subject} onChange={onChange} required placeholder={t(visit ? 'branchVisit.reasonPlaceholder' : 'complaintForm.subjectPlaceholder')} className={inputCls} />
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t(visit || bookAppointment ? 'branchVisit.reasonLabel' : 'complaintForm.subjectLabel')} <span className="text-red-500">*</span></label>
+                <input type="text" name="subject" value={entry.subject} onChange={onChange} required placeholder={t(visit || bookAppointment ? 'branchVisit.reasonPlaceholder' : 'complaintForm.subjectPlaceholder')} className={inputCls} />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.detailsLabel')} {!visit && <span className="text-red-500">*</span>}</label>
@@ -294,7 +305,7 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
         className="w-full px-4 py-3 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-70"
       >
         {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-        {loading ? t('publicReport.sending') : visit ? t('branchVisit.submit') : multiple ? t('publicReport.submitComplaintMulti', { count: entries.length }) : t('publicReport.submitComplaint')}
+        {loading ? t('publicReport.sending') : visit ? t('branchVisit.submit') : bookAppointment ? t('branchVisit.bookSubmit') : multiple ? t('publicReport.submitComplaintMulti', { count: entries.length }) : t('publicReport.submitComplaint')}
       </button>
     </form>
   );

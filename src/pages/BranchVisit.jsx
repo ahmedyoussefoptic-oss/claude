@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2, MapPin, Armchair, CalendarCheck, UserRound, Loader2 } from 'lucide-react';
+import { CheckCircle2, MapPin, Armchair, CalendarCheck, CalendarPlus, UserRound, Loader2 } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../config/firebase';
 import logo from '../assets/logo.png';
@@ -24,7 +24,8 @@ export default function BranchVisit() {
   const branch = branches.find((b) => b.id === branchId);
   const branchLabel = branch ? t(`businessData.branches.${branch.id}`, branch.name) : '';
   const [saved, setSaved] = useState(null);
-  // 'appointment' = arriving for a booked visit, 'walkin' = new visit.
+  // 'appointment' = arriving for a booked visit, 'walkin' = new visit,
+  // 'book' = booking a visit appointment for later.
   const [mode, setMode] = useState(null);
   const [apptNo, setApptNo] = useState('');
   const [apptLast4, setApptLast4] = useState('');
@@ -78,10 +79,10 @@ export default function BranchVisit() {
             <div className="w-14 h-14 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle2 className="w-7 h-7" />
             </div>
-            <h2 className="text-xl font-bold text-slate-900 mb-2">{t('branchVisit.successTitle')}</h2>
+            <h2 className="text-xl font-bold text-slate-900 mb-2">{mode === 'book' ? t('branchVisit.bookDoneTitle') : t('branchVisit.successTitle')}</h2>
             <p className="text-sm text-slate-600 mb-6 flex items-center justify-center gap-1.5">
-              <Armchair className="w-4 h-4 text-primary" />
-              {t('branchVisit.successWait')}
+              {mode === 'book' ? <CalendarPlus className="w-4 h-4 text-primary shrink-0" /> : <Armchair className="w-4 h-4 text-primary" />}
+              {mode === 'book' ? t('branchVisit.bookDoneBody') : t('branchVisit.successWait')}
             </p>
             <div className="space-y-3 mb-6">
               {saved.map((item) => (
@@ -110,7 +111,7 @@ export default function BranchVisit() {
               <p className="text-slate-500 text-sm">{t('branchVisit.pageSubtitle')}</p>
             </div>
             {mode === null && (
-              <div className="w-full max-w-xl grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="w-full max-w-xl grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <button type="button" onClick={() => setMode('appointment')} className="bg-white border-2 border-primary/30 hover:border-primary rounded-2xl p-5 text-center shadow-sm">
                   <CalendarCheck className="w-8 h-8 text-primary mx-auto mb-2" />
                   <p className="font-bold text-slate-900">{t('branchVisit.haveAppointment')}</p>
@@ -120,6 +121,11 @@ export default function BranchVisit() {
                   <UserRound className="w-8 h-8 text-slate-600 mx-auto mb-2" />
                   <p className="font-bold text-slate-900">{t('branchVisit.walkIn')}</p>
                   <p className="text-xs text-slate-500 mt-1">{t('branchVisit.walkInHint')}</p>
+                </button>
+                <button type="button" onClick={() => setMode('book')} className="bg-white border-2 border-slate-200 hover:border-primary rounded-2xl p-5 text-center shadow-sm">
+                  <CalendarPlus className="w-8 h-8 text-indigo-600 mx-auto mb-2" />
+                  <p className="font-bold text-slate-900">{t('branchVisit.bookAppointment')}</p>
+                  <p className="text-xs text-slate-500 mt-1">{t('branchVisit.bookAppointmentHint')}</p>
                 </button>
               </div>
             )}
@@ -145,6 +151,15 @@ export default function BranchVisit() {
             )}
             {mode === 'walkin' && (
               <PublicComplaintFields visit lockBranch={!!branch} initialBranch={branchId} onSuccess={(items) => setSaved(items)} />
+            )}
+            {mode === 'book' && (
+              <>
+                <div className="w-full max-w-xl flex items-center justify-between mb-3">
+                  <p className="font-bold text-slate-900 flex items-center gap-2"><CalendarPlus className="w-5 h-5 text-indigo-600" />{t('branchVisit.bookAppointment')}</p>
+                  <button type="button" onClick={() => setMode(null)} className="px-3 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-sm">{t('common.back')}</button>
+                </div>
+                <PublicComplaintFields bookAppointment lockBranch={!!branch} initialBranch={branchId} onSuccess={(items) => setSaved(items)} />
+              </>
             )}
           </>
         )}
