@@ -8,6 +8,7 @@ import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import ComplaintForm from '../components/complaints/ComplaintForm';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches, useComplaintTypes, useDepartments } from '../hooks/useOrgData';
+import ReminderButton from '../components/common/ReminderButton';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { normalizeAssignees } from '../utils/assignees';
 import { branchScopeConstraintValues } from '../utils/scope';
@@ -460,8 +461,11 @@ export default function ComplaintsList() {
                       />
                     </td>
                     <td className="px-6 py-4 text-left">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors mr-auto">
-                        <ChevronLeft className="w-5 h-5" />
+                      <div className="flex items-center justify-end gap-1">
+                        <ReminderButton kind="complaint" record={c} />
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors">
+                          <ChevronLeft className="w-5 h-5" />
+                        </div>
                       </div>
                     </td>
                   </tr>

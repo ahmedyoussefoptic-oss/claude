@@ -9,6 +9,7 @@ import LostFoundForm from '../components/lostFound/LostFoundForm';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches, useItemCategories } from '../hooks/useOrgData';
 import { ITEM_STATUS_BADGE } from '../config/lostFound';
+import ReminderButton from '../components/common/ReminderButton';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { branchScopeConstraintValues } from '../utils/scope';
 import { format } from 'date-fns';
@@ -206,8 +207,11 @@ export default function LostFound() {
                       />
                     </td>
                     <td className="px-6 py-4 text-left">
-                      <div className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors mr-auto">
-                        <ChevronLeft className="w-5 h-5" />
+                      <div className="flex items-center justify-end gap-1">
+                        <ReminderButton kind="lostFound" record={item} />
+                        <div className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 group-hover:text-primary group-hover:bg-primary/10 transition-colors">
+                          <ChevronLeft className="w-5 h-5" />
+                        </div>
                       </div>
                     </td>
                   </tr>

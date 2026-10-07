@@ -296,6 +296,7 @@ const NOTIFICATION_CATEGORIES = {
   viewed: ["VIEWED", "IT_VIEWED"],
   appointment: ["APPOINTMENT_REQUESTED"],
   trips: ["TRIP_APPROVAL_REQUESTED", "TRIP_DECIDED", "TRIP_RECEIPT"],
+  reminder: ["REMINDER", "IT_REMINDER", "LF_REMINDER"],
 };
 const categoryOfType = (type) => Object.keys(NOTIFICATION_CATEGORIES).find((c) => NOTIFICATION_CATEGORIES[c].includes(type));
 
@@ -3478,4 +3479,60 @@ exports.onUserLostFoundRole = onDocumentWritten("users/{uid}", async (event) => 
   if (isOfficer(before) && scope(before) === scope(after)) return;
   const added = await assignLostFoundBacklog(event.params.uid);
   console.log(`lost & found: ${added} old reports assigned to ${event.params.uid}`);
+});
+
+// --- Reminders -------------------------------------------------------------
+// A staff member nudges the people assigned to an unresolved complaint, tech
+// ticket or lost & found report. They get a notification naming the sender
+// (plus push / email per their preferences); the record's activity log keeps
+// it. One reminder per record every 10 minutes.
+const REMINDER_KINDS = {
+  complaint: { collection: "complaints", idField: "complaintId", open: OPEN_STATUSES, type: "REMINDER", label: "الملاحظة", title: (r) => r.subject || r.studentName || "" },
+  techSupport: { collection: "techSupportTickets", idField: "ticketId", open: OPEN_TICKET_STATUSES, type: "IT_REMINDER", label: "البلاغ التقني", title: (r) => r.studentName || "" },
+  lostFound: { collection: "lostFoundItems", idField: "itemCode", open: OPEN_LOST_FOUND_STATUSES, type: "LF_REMINDER", label: "بلاغ المفقودات", title: (r) => r.itemName || "" },
+};
+exports.sendRecordReminder = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const { kind, docId } = request.data || {};
+  const note = String(request.data?.note || "").trim().slice(0, 300);
+  const cfg = REMINDER_KINDS[kind];
+  if (!cfg || typeof docId !== "string" || !docId) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  const callerSnap = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerSnap.data();
+  if (!callerSnap.exists || caller.active === false || caller.role === "RECEPTIONIST" || (caller.role !== "ADMIN" && caller.tripsAccess === "tripsOnly")) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية إرسال التذكير.");
+  }
+  const ref = db.collection(cfg.collection).doc(docId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "لم يتم العثور على السجل.");
+  const record = snap.data();
+  const inScope = caller.role === "ADMIN" || caller.access === "all" || (caller.branches || []).includes(record.branch) || caller.branch === record.branch || (record.assignedTo || []).includes(request.auth.uid);
+  const canTech = caller.role === "ADMIN" || caller.department === "IT" || caller.role === "CUSTOMER_SERVICE" || caller.isPrincipal === true || caller.isQuality === true;
+  if (!inScope || (kind === "techSupport" && !canTech)) throw new HttpsError("permission-denied", "لا تملك صلاحية إرسال التذكير لهذا السجل.");
+  if (!cfg.open.includes(record.status)) throw new HttpsError("failed-precondition", "هذا السجل مغلق أو تم حله.");
+  const recipients = (record.assignedTo || []).filter((uid) => uid !== request.auth.uid);
+  if (!recipients.length) throw new HttpsError("failed-precondition", "لا يوجد مسند إليهم لإرسال التذكير.");
+  if (record.lastReminderAt && Date.now() - record.lastReminderAt.toMillis() < 10 * 60000) {
+    throw new HttpsError("resource-exhausted", `أُرسل تذكير قبل قليل (${record.lastReminderByName || ""}). حاول بعد 10 دقائق.`);
+  }
+
+  const senderName = caller.name || "مستخدم";
+  const number = record[cfg.idField] || "";
+  const subject = cfg.title(record);
+  await notifyUsers(recipients, {
+    title: `تذكير من ${senderName}`,
+    body: `${senderName} يذكّرك بـ${cfg.label} رقم ${number}${subject ? ` (${subject})` : ""}${note ? `: ${note}` : " — يرجى المتابعة والحل."}`,
+    complaintId: docId,
+    type: cfg.type,
+  });
+  const now = Timestamp.now();
+  await ref.update({ lastReminderAt: now, lastReminderBy: request.auth.uid, lastReminderByName: senderName, reminderCount: FieldValue.increment(1) });
+  await ref.collection("activityLog").add({
+    action: "REMINDER_SENT",
+    actorId: request.auth.uid,
+    actorName: senderName,
+    metadata: { note, toUserIds: recipients, toUserNames: (record.assignedToNames || []).filter((_, i) => recipients.includes((record.assignedTo || [])[i])) },
+    createdAt: now,
+  });
+  return { sent: recipients.length };
 });

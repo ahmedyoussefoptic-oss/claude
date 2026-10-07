@@ -922,6 +922,12 @@ function ComplaintDetailsInner({ complaint, onClose }) {
                           {log.metadata.partialSolution}
                         </div>
                       )}
+                      {log.action === 'REMINDER_SENT' && (
+                        <div className="mt-2 p-3 bg-amber-50 text-amber-800 rounded-lg text-sm border border-amber-100">
+                          {t('reminder.logTo', { names: (log.metadata?.toUserNames || []).join('، ') || '—' })}
+                          {log.metadata?.note && <p className="mt-1 whitespace-pre-wrap">{log.metadata.note}</p>}
+                        </div>
+                      )}
                       {log.metadata?.reason && (
                         <div className="mt-2 p-3 bg-red-50 text-red-800 rounded-lg text-sm border border-red-100">
                           <strong>{t('complaintDetails.reasonLabel')}</strong> {log.metadata.reason}
@@ -938,7 +944,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
                           ))}
                         </div>
                       )}
-                      {log.metadata?.toUserNames?.length > 0 && (
+                      {log.action !== 'REMINDER_SENT' && log.metadata?.toUserNames?.length > 0 && (
                         <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200 space-y-1">
                           <p>{t('complaintDetails.assignedToLabel')} <strong>{log.metadata.toUserNames.join(listSep)}</strong></p>
                           {log.metadata.addedNames?.length > 0 && <p className="text-emerald-700">{t('complaintDetails.addedLabel')} {log.metadata.addedNames.join(listSep)}</p>}

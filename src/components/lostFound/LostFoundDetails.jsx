@@ -393,7 +393,10 @@ function LostFoundDetailsInner({ item, onClose }) {
                         <strong>{t('lostFoundDetails.returnedToLabel')}</strong> {log.metadata.returnedTo}
                       </div>
                     )}
-                    {log.metadata?.toUserNames?.length > 0 && (
+                    {log.action === 'REMINDER_SENT' && (
+                      <p className="text-sm text-amber-700 mt-1">{t('reminder.logTo', { names: (log.metadata?.toUserNames || []).join(listSep) || '—' })}</p>
+                    )}
+                    {log.action !== 'REMINDER_SENT' && log.metadata?.toUserNames?.length > 0 && (
                       <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200 space-y-1">
                         <p>{t('assigneeSelect.assignedToLogLabel')} <strong>{log.metadata.toUserNames.join(listSep)}</strong></p>
                         {log.metadata.addedNames?.length > 0 && <p className="text-emerald-700">{t('assigneeSelect.addedLogLabel')} {log.metadata.addedNames.join(listSep)}</p>}

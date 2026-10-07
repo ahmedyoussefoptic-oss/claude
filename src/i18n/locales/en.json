@@ -1090,7 +1090,8 @@
       "PARTIAL_SOLUTION_ADDED": "Partial solution added",
       "APPOINTMENT_REQUESTED": "Visit appointment requested",
       "APPOINTMENT_CONFIRMED": "Visit appointment confirmed",
-      "APPOINTMENT_RESCHEDULED": "Alternative visit time set"
+      "APPOINTMENT_RESCHEDULED": "Alternative visit time set",
+      "REMINDER_SENT": "Reminder sent"
     },
     "lostFound": {
       "ITEM_REGISTERED": "Item registered",
@@ -1102,7 +1103,8 @@
       "NOTE_ADDED": "Note",
       "ITEM_DELETED": "Report deleted",
       "WHATSAPP_API_FAILED": "Automatic WhatsApp API send failed",
-      "WHATSAPP_API_SENT": "Sent to parent via WhatsApp API"
+      "WHATSAPP_API_SENT": "Sent to parent via WhatsApp API",
+      "REMINDER_SENT": "Reminder sent"
     },
     "techSupport": {
       "TICKET_CREATED": "Ticket registered",
@@ -1120,7 +1122,8 @@
       "CONVERTED_FROM_COMPLAINT": "Converted from feedback",
       "TICKET_EDITED": "Ticket details edited",
       "WHATSAPP_API_SENT": "Sent to parent via WhatsApp API",
-      "WHATSAPP_API_FAILED": "Automatic WhatsApp API send failed"
+      "WHATSAPP_API_FAILED": "Automatic WhatsApp API send failed",
+      "REMINDER_SENT": "Reminder sent"
     }
   },
   "complaintEdit": {
@@ -1394,7 +1397,8 @@
       "visit": "Parent arrived at branch",
       "viewed": "Record views",
       "appointment": "Visit appointment requests",
-      "trips": "School trips"
+      "trips": "School trips",
+      "reminder": "Reminders"
     },
     "hints": {
       "assigned": "When feedback, a tech ticket or lost item is assigned to you",
@@ -1407,7 +1411,8 @@
       "visit": "A parent checked in with the QR code",
       "viewed": "When a staff member opens a record for the first time",
       "appointment": "A parent requested a visit slot that needs confirming",
-      "trips": "A trip awaiting your approval, your trip approved, or a payment receipt to review"
+      "trips": "A trip awaiting your approval, your trip approved, or a payment receipt to review",
+      "reminder": "When a colleague sends you a reminder about a record assigned to you"
     },
     "channelsTitle": "Delivery (in addition to the in-app bell)",
     "channels": {
@@ -1850,5 +1855,15 @@
     "minutes": "{{n}} min",
     "hours": "{{h}} h",
     "hoursMinutes": "{{h}} h {{m}} min"
+  },
+  "reminder": {
+    "button": "Send a reminder to the assignees",
+    "title": "Remind the assignees",
+    "to": "To: {{names}}",
+    "notePlaceholder": "Note with the reminder (optional)",
+    "send": "Send reminder",
+    "sent": "Sent",
+    "last": "Last reminder from {{name}} {{ago}}",
+    "logTo": "Reminder sent to: {{names}}"
   }
 }
