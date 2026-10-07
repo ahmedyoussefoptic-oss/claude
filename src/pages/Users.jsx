@@ -80,6 +80,8 @@ export default function Users() {
 
   const [branchFilter, setBranchFilter] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
+  const [deptFilter, setDeptFilter] = useState('');
+  const [curriculumFilter, setCurriculumFilter] = useState('');
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
@@ -240,10 +242,13 @@ export default function Users() {
   const filteredUsers = users.filter((u) => {
     if (branchFilter && u.access !== 'all' && !userBranches(u).includes(branchFilter)) return false;
     if (roleFilter && u.role !== roleFilter) return false;
+    if (deptFilter && (deptFilter === '__NONE__' ? !!u.department : u.department !== deptFilter)) return false;
+    // A user with no curricula limit covers every section.
+    if (curriculumFilter && Array.isArray(u.curricula) && u.curricula.length && !u.curricula.includes(curriculumFilter)) return false;
     return true;
   });
-  const filtersActive = branchFilter || roleFilter;
-  const resetFilters = () => { setBranchFilter(''); setRoleFilter(''); };
+  const filtersActive = branchFilter || roleFilter || deptFilter || curriculumFilter;
+  const resetFilters = () => { setBranchFilter(''); setRoleFilter(''); setDeptFilter(''); setCurriculumFilter(''); };
 
   return (
     <div className="p-8">
@@ -636,6 +641,29 @@ export default function Users() {
               >
                 <option value="">{t('users.allRoles')}</option>
                 {Object.values(ROLES).map((r) => <option key={r} value={r}>{roleName(r)}</option>)}
+              </select>
+            </div>
+            <div className="w-52">
+              <label className="block text-xs text-slate-500 mb-1">{t('users.departmentSpecialtyLabel')}</label>
+              <select
+                value={deptFilter}
+                onChange={(e) => setDeptFilter(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+              >
+                <option value="">{t('common.allDepartments')}</option>
+                {DEPARTMENT_IDS.map((id) => <option key={id} value={id}>{departmentName(id)}</option>)}
+                <option value="__NONE__">{t('common.noDepartment')}</option>
+              </select>
+            </div>
+            <div className="w-48">
+              <label className="block text-xs text-slate-500 mb-1">{t('users.curriculumFilterLabel')}</label>
+              <select
+                value={curriculumFilter}
+                onChange={(e) => setCurriculumFilter(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+              >
+                <option value="">{t('common.allDepartments')}</option>
+                {curriculumOptions.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
               </select>
             </div>
             {filtersActive && (

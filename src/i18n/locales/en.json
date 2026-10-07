@@ -854,7 +854,8 @@
     "protectedAccount": "Protected account",
     "isCounselorLabel": "Student counselor",
     "isCounselorHint": "Automatically assigned every lost & found report in their branches (new and existing), alongside the quality officers, and notified of each new one.",
-    "counselorTag": "Counselor"
+    "counselorTag": "Counselor",
+    "curriculumFilterLabel": "Section (curriculum)"
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",
