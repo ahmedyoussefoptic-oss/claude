@@ -831,7 +831,7 @@
     "curriculaSelected": "Responsible for: {{list}}.",
     "curriculaShort": "Section",
     "isQualityLabel": "Quality officer",
-    "isQualityHint": "Automatically assigned every feedback record and tech ticket in their branches — from the public link, staff entry, or conversion — with a notification for each. Also grants access to the Tech Support section for those branches.",
+    "isQualityHint": "Automatically assigned every feedback record and tech ticket in their branches — from the public link, staff entry, or conversion — with a notification for each. Also grants access to the Tech Support section for those branches. Also assigned every lost & found report in their branches (new and existing).",
     "qualityTag": "Quality",
     "receptionistHint": "A receptionist only sees parents' QR check-ins at their branches (who is waiting, for how long, and who met them) — not feedback, tech tickets or lost & found.",
     "permTrips": "Manage trips (activities coordinator)",
@@ -851,7 +851,10 @@
       "tripsOnly": "Trips only",
       "none": "No trips"
     },
-    "protectedAccount": "Protected account"
+    "protectedAccount": "Protected account",
+    "isCounselorLabel": "Student counselor",
+    "isCounselorHint": "Automatically assigned every lost & found report in their branches (new and existing), alongside the quality officers, and notified of each new one.",
+    "counselorTag": "Counselor"
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",

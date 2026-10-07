@@ -174,7 +174,7 @@ exports.createStaffUser = onCall(async (request) => {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
-  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, stages, curricula, notificationPrefs, notificationChannels, tripsAccess } = request.data || {};
+  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, isCounselor, stages, curricula, notificationPrefs, notificationChannels, tripsAccess } = request.data || {};
   if (!name || !email || !password || !role) {
     throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
   }
@@ -219,6 +219,7 @@ exports.createStaffUser = onCall(async (request) => {
     department: department || null,
     isPrincipal: isPrincipal === true,
     isQuality: isQuality === true,
+    isCounselor: isCounselor === true,
     notificationPrefs: notificationPrefs && typeof notificationPrefs === "object" ? notificationPrefs : {},
     notificationChannels: notificationChannels && typeof notificationChannels === "object" ? notificationChannels : {},
     stages: Array.isArray(stages) ? stages.filter((st) => typeof st === "string") : [],
@@ -563,10 +564,33 @@ exports.handleItTicketAssignment = onDocumentUpdated({ document: "techSupportTic
 // Lost & found has no SLA/escalation concept (see lostFoundBreakdown in
 // BranchIndicators.jsx) — these two triggers only ever notify on assignment,
 // mirroring calculateItTicketSla/handleItTicketAssignment above but simpler.
+// Every lost & found report (new ones here, old ones via
+// assignLostFoundBacklog) goes to its branch's quality officers and student
+// counselors (users flagged isQuality / isCounselor).
+function lostFoundOfficers(users, branch) {
+  return users.filter((u) => (u.isQuality === true || u.isCounselor === true) && u.active !== false && u.tripsAccess !== "tripsOnly"
+    && (u.access === "all" || (u.branches || []).includes(branch) || u.branch === branch));
+}
+// Adds the given officers to an item; `silent` marks the write so the
+// update trigger doesn't send "assigned to you" for old records.
+async function addLostFoundAssignees(ref, item, officers, silent) {
+  const current = item.assignedTo || [];
+  const missing = officers.filter((u) => !current.includes(u.id));
+  if (!missing.length) return 0;
+  await ref.update({
+    assignedTo: [...current, ...missing.map((u) => u.id)],
+    assignedToNames: [...(item.assignedToNames || []), ...missing.map((u) => u.name || "")],
+    ...(current.length ? {} : { assignedAt: Timestamp.now() }),
+    ...(silent ? { silentAssignAt: Timestamp.now() } : {}),
+  });
+  return missing.length;
+}
+
 exports.notifyLostFoundAssignment = onDocumentCreated({ document: "lostFoundItems/{itemId}", secrets: WA_SECRETS }, async (event) => {
   const snap = event.data;
   if (!snap) return;
   const data = snap.data();
+  await addLostFoundAssignees(snap.ref, data, lostFoundOfficers(await loadActiveUsers(), data.branch), false);
 
   if (data.assignedTo?.length) {
     await notifyUsers(data.assignedTo, {
@@ -584,9 +608,15 @@ exports.handleLostFoundAssignment = onDocumentUpdated({ document: "lostFoundItem
   const before = event.data.before.data();
   const after = event.data.after.data();
 
+  // Moved to another branch: that branch's officers join too.
+  if (after.branch && after.branch !== before.branch) {
+    await addLostFoundAssignees(event.data.after.ref, after, lostFoundOfficers(await loadActiveUsers(), after.branch), false);
+  }
+
   const beforeAssigned = new Set(before.assignedTo || []);
   const newlyAssigned = (after.assignedTo || []).filter((uid) => !beforeAssigned.has(uid));
-  if (newlyAssigned.length > 0) {
+  const silent = after.silentAssignAt && !(before.silentAssignAt && before.silentAssignAt.isEqual(after.silentAssignAt));
+  if (newlyAssigned.length > 0 && !silent) {
     await notifyUsers(newlyAssigned, {
       title: "تم إسناد بلاغ مفقودات لك",
       body: `البلاغ رقم ${after.itemCode} (${after.itemName}) تم إسناده إليك.`,
@@ -3409,4 +3439,43 @@ exports.lockSettings = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   await db.collection("settingsUnlocks").doc(request.auth.uid).delete();
   return { ok: true };
+});
+
+// --- Lost & found backlog -------------------------------------------------
+// Assigns every existing lost & found report to its branch's quality
+// officers and counselors, without notifications. Runs once on deploy
+// (marker in meta/migrations) and again for a user whenever they become a
+// quality officer / counselor or their branches change.
+async function assignLostFoundBacklog(onlyUser) {
+  const users = await loadActiveUsers();
+  const snap = await db.collection("lostFoundItems").get();
+  let added = 0;
+  for (const doc of snap.docs) {
+    const item = doc.data();
+    let officers = lostFoundOfficers(users, item.branch);
+    if (onlyUser) officers = officers.filter((u) => u.id === onlyUser);
+    if (officers.length) added += await addLostFoundAssignees(doc.ref, item, officers, true);
+  }
+  return added;
+}
+
+exports.lostFoundBacklogOnce = onSchedule("every 30 minutes", async () => {
+  const markerRef = db.collection("meta").doc("migrations");
+  const marker = await markerRef.get();
+  if (marker.exists && marker.data().lostFoundOfficersBackfill) return;
+  const added = await assignLostFoundBacklog(null);
+  await markerRef.set({ lostFoundOfficersBackfill: Timestamp.now(), lostFoundOfficersBackfillCount: added }, { merge: true });
+  console.log(`lost & found officers backfill: ${added} assignments added.`);
+});
+
+exports.onUserLostFoundRole = onDocumentWritten("users/{uid}", async (event) => {
+  const before = event.data.before.exists ? event.data.before.data() : {};
+  const after = event.data.after.exists ? event.data.after.data() : null;
+  if (!after || after.active === false) return;
+  const isOfficer = (u) => u.isQuality === true || u.isCounselor === true;
+  if (!isOfficer(after)) return;
+  const scope = (u) => `${u.access || ""}|${(u.branches || []).join(",")}|${u.branch || ""}`;
+  if (isOfficer(before) && scope(before) === scope(after)) return;
+  const added = await assignLostFoundBacklog(event.params.uid);
+  console.log(`lost & found: ${added} old reports assigned to ${event.params.uid}`);
 });

@@ -42,6 +42,7 @@ const emptyForm = {
   perms: { edit: false, delete: false, users: false, trips: false, tripFinance: false },
   isPrincipal: false,
   isQuality: false,
+  isCounselor: false,
   tripsAccess: 'all',
   notificationPrefs: {},
   notificationChannels: {},
@@ -111,6 +112,7 @@ export default function Users() {
       perms: { edit: !!u.perms?.edit, delete: !!u.perms?.delete, users: !!u.perms?.users, trips: !!u.perms?.trips, tripFinance: !!u.perms?.tripFinance },
       isPrincipal: u.isPrincipal === true,
       isQuality: u.isQuality === true,
+      isCounselor: u.isCounselor === true,
       tripsAccess: ['tripsOnly', 'none'].includes(u.tripsAccess) ? u.tripsAccess : 'all',
       notificationPrefs: u.notificationPrefs || {},
       notificationChannels: u.notificationChannels || {},
@@ -151,6 +153,7 @@ export default function Users() {
           perms: form.perms,
           isPrincipal: form.isPrincipal,
           isQuality: form.isQuality,
+          isCounselor: form.isCounselor,
           tripsAccess: form.role === ROLES.ADMIN ? 'all' : form.tripsAccess,
           notificationPrefs: form.notificationPrefs,
           notificationChannels: form.notificationChannels,
@@ -175,6 +178,7 @@ export default function Users() {
           perms: form.perms,
           isPrincipal: form.isPrincipal,
           isQuality: form.isQuality,
+          isCounselor: form.isCounselor,
           tripsAccess: form.role === ROLES.ADMIN ? 'all' : form.tripsAccess,
           notificationPrefs: form.notificationPrefs,
           notificationChannels: form.notificationChannels,
@@ -561,6 +565,18 @@ export default function Users() {
               <p className="text-xs text-slate-600 mt-2">{t('users.isQualityHint')}</p>
             </div>
 
+            <div className="md:col-span-2 bg-violet-50 border border-violet-100 rounded-xl p-4">
+              <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                <input
+                  type="checkbox"
+                  checked={form.isCounselor}
+                  onChange={(e) => setForm((p) => ({ ...p, isCounselor: e.target.checked }))}
+                />
+                🧭 {t('users.isCounselorLabel')}
+              </label>
+              <p className="text-xs text-slate-600 mt-2">{t('users.isCounselorHint')}</p>
+            </div>
+
             <div className="md:col-span-2 bg-slate-50 border border-slate-100 rounded-xl p-4">
               <NotificationPrefsEditor
                 prefs={form.notificationPrefs}
@@ -679,6 +695,11 @@ export default function Users() {
                       {u.isQuality && (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-700 mr-1 mt-1">
                           ✅ {t('users.qualityTag')}
+                        </span>
+                      )}
+                      {u.isCounselor && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-700 mr-1 mt-1">
+                          🧭 {t('users.counselorTag')}
                         </span>
                       )}
                     </td>

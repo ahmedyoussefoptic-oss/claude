@@ -28,7 +28,7 @@ export function eligibleAssignees(staff, { branch, complaintType, stage, curricu
   };
   return staff
     .filter((u) =>
-      (['SPECIALIST', 'UPPER_MANAGEMENT', 'ADMIN'].includes(u.role) || u.isPrincipal === true || u.isQuality === true) &&
+      (['SPECIALIST', 'UPPER_MANAGEMENT', 'ADMIN'].includes(u.role) || u.isPrincipal === true || u.isQuality === true || u.isCounselor === true) &&
       u.active !== false && u.tripsAccess !== 'tripsOnly' &&
       (u.access === 'all' || !branch || userBranches(u).includes(branch))
     )
