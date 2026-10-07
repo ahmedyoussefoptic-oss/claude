@@ -1324,7 +1324,16 @@
     "waitingFor_other": "Waiting {{count}} min",
     "metBy": "Met by {{name}} at {{time}}",
     "waited_one": "waited {{count}} min",
-    "waited_other": "waited {{count}} min"
+    "waited_other": "waited {{count}} min",
+    "confirmButton": "Confirm meeting",
+    "confirmTitle": "Confirm the parent meeting",
+    "confirmFor": "Parent {{parent}} — student {{student}}",
+    "metWith": "Met with",
+    "assignedGroup": "Assigned staff",
+    "otherStaff": "Other branch staff",
+    "receptionNote": "Note (optional)",
+    "confirmHint": "Records that the meeting took place; the chosen staff member is notified to write the summary and solution.",
+    "confirmedByReception": "Confirmed by reception: {{name}}"
   },
   "slaSettings": {
     "title": "Resolution time (SLA) & working hours",

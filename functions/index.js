@@ -1652,18 +1652,21 @@ exports.confirmBranchVisit = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   }
-  const { complaintDocId, notes, solved } = request.data || {};
+  const { complaintDocId, notes, solved, metById } = request.data || {};
   if (!complaintDocId || typeof complaintDocId !== "string") {
     throw new HttpsError("invalid-argument", "رقم الملاحظة مطلوب.");
-  }
-  if (typeof notes !== "string" || !notes.trim()) {
-    throw new HttpsError("invalid-argument", "يرجى كتابة ملخص المقابلة والحل.");
   }
 
   const callerDoc = await db.collection("users").doc(request.auth.uid).get();
   const caller = callerDoc.data();
   if (!callerDoc.exists || caller.active === false) {
     throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  }
+  // The reception desk confirms that the meeting took place and with whom;
+  // the summary and solution stay with the staff member who met the parent.
+  const byReception = caller.role === "RECEPTIONIST";
+  if (!byReception && (typeof notes !== "string" || !notes.trim())) {
+    throw new HttpsError("invalid-argument", "يرجى كتابة ملخص المقابلة والحل.");
   }
   const complaintRef = db.collection("complaints").doc(complaintDocId);
   const snap = await complaintRef.get();
@@ -1678,22 +1681,36 @@ exports.confirmBranchVisit = onCall(async (request) => {
   const isAdminCaller = caller.role === "ADMIN";
   const inScope = caller.access === "all" || (caller.branches || []).includes(complaint.branch) || caller.branch === complaint.branch;
   const isAssignee = (complaint.assignedTo || []).includes(request.auth.uid);
-  const allowed = isAdminCaller || isAssignee || (inScope && (caller.perms?.edit === true || caller.isPrincipal === true || caller.isQuality === true));
+  const allowed = byReception ? inScope : isAdminCaller || isAssignee || (inScope && (caller.perms?.edit === true || caller.isPrincipal === true || caller.isQuality === true));
   if (!allowed) {
     throw new HttpsError("permission-denied", "لا تملك صلاحية تأكيد هذه المقابلة.");
   }
 
+  // Who met the parent: the caller, or — from reception — the staff member
+  // picked (an active, non-reception account covering the branch).
+  let metBy = { id: request.auth.uid, name: caller.name || "مستخدم" };
+  if (byReception) {
+    if (typeof metById !== "string" || !metById) throw new HttpsError("invalid-argument", "اختر الموظف الذي قابل ولي الأمر.");
+    const metSnap = await db.collection("users").doc(metById).get();
+    const m = metSnap.data();
+    const coversBranch = m && (m.access === "all" || m.role === "ADMIN" || (m.branches || []).includes(complaint.branch) || m.branch === complaint.branch);
+    if (!metSnap.exists || m.active === false || m.role === "RECEPTIONIST" || !(coversBranch || (complaint.assignedTo || []).includes(metById))) {
+      throw new HttpsError("invalid-argument", "الموظف المختار غير متاح لهذا الفرع.");
+    }
+    metBy = { id: metById, name: m.name || "مستخدم" };
+  }
+
   const now = Timestamp.now();
   const actorName = caller.name || "مستخدم";
-  const text = notes.trim();
-  const isSolved = solved === true && !["SOLVED", "CLOSED", "REJECTED"].includes(complaint.status);
+  const text = typeof notes === "string" ? notes.trim() : "";
+  const isSolved = !byReception && solved === true && !["SOLVED", "CLOSED", "REJECTED"].includes(complaint.status);
 
   // The person who met the parent becomes an assignee if they weren't.
   const assignedTo = complaint.assignedTo || [];
   const assignedToNames = complaint.assignedToNames || [];
-  const assigneeUpdate = isAssignee ? {} : {
-    assignedTo: [...assignedTo, request.auth.uid],
-    assignedToNames: [...assignedToNames, actorName],
+  const assigneeUpdate = assignedTo.includes(metBy.id) ? {} : {
+    assignedTo: [...assignedTo, metBy.id],
+    assignedToNames: [...assignedToNames, metBy.name],
     ...(assignedTo.length ? {} : { assignedAt: now }),
   };
 
@@ -1703,21 +1720,27 @@ exports.confirmBranchVisit = onCall(async (request) => {
     action: "INTERNAL_COMMENT_ADDED",
     actorId: request.auth.uid,
     actorName,
-    metadata: { comment: `✅ تمت مقابلة ولي الأمر في الفرع.\n${text}`, visit: true },
+    metadata: {
+      comment: byReception
+        ? `✅ أكّد موظف الاستقبال (${actorName}) مقابلة ولي الأمر في الفرع مع ${metBy.name}.${text ? `\n${text}` : ""}\nيُرجى من ${metBy.name} كتابة ملخص المقابلة والحل.`
+        : `✅ تمت مقابلة ولي الأمر في الفرع.\n${text}`,
+      visit: true,
+    },
     createdAt: now,
   });
   batch.set(logs.doc(), {
     action: "VISIT_MET",
     actorId: request.auth.uid,
     actorName,
-    metadata: { solved: isSolved },
+    metadata: { solved: isSolved, metById: metBy.id, metByName: metBy.name, byReception },
     createdAt: now,
   });
   batch.update(complaintRef, {
     visitStatus: "MET",
     visitMetAt: now,
-    visitMetBy: request.auth.uid,
-    visitMetByName: actorName,
+    visitMetBy: metBy.id,
+    visitMetByName: metBy.name,
+    ...(byReception ? { visitConfirmedByName: actorName } : {}),
     hasInternalComment: true,
     ...assigneeUpdate,
     ...(isSolved ? { status: "SOLVED", solvedAt: now } : (complaint.status === "RECEIVED" ? { status: "IN_PROGRESS" } : {})),

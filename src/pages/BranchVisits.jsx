@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { Armchair, Handshake, Clock, CalendarDays, Phone, Loader2 } from 'lucide-react';
+import { Armchair, Handshake, Clock, CalendarDays, Phone, Loader2, CheckCircle2 } from 'lucide-react';
+import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
-import { db } from '../config/firebase';
+import { db, functions } from '../config/firebase';
+import { useUsers } from '../hooks/useUsers';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
-import { branchScopeConstraintValues } from '../utils/scope';
+import { branchScopeConstraintValues, userBranches } from '../utils/scope';
 import StatCard from '../components/dashboard/StatCard';
 
 const isToday = (ts) => {
@@ -17,6 +19,61 @@ const isToday = (ts) => {
   return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
 };
 const minutesBetween = (a, b) => Math.max(0, Math.round((b - a) / 60000));
+
+// Reception confirms that the parent was met and by whom (confirmBranchVisit);
+// that staff member then writes the meeting summary and solution.
+function ConfirmMeetingDialog({ visit, onClose }) {
+  const { t } = useTranslation();
+  const users = useUsers();
+  const assigned = (visit.assignedTo || []).map((id, i) => ({ id, name: users.find((u) => u.id === id)?.name || visit.assignedToNames?.[i] || id }));
+  const others = users
+    .filter((u) => u.active !== false && u.role !== 'RECEPTIONIST' && u.tripsAccess !== 'tripsOnly' && !(visit.assignedTo || []).includes(u.id)
+      && (u.access === 'all' || userBranches(u).includes(visit.branch)))
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
+  const [metById, setMetById] = useState(assigned.length === 1 ? assigned[0].id : '');
+  const [notes, setNotes] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const confirm = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await httpsCallable(functions, 'confirmBranchVisit')({ complaintDocId: visit.id, metById, notes });
+      onClose();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 z-[100] flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5 space-y-3">
+        <h3 className="font-bold text-slate-900">{t('branchVisits.confirmTitle')}</h3>
+        <p className="text-sm text-slate-600">{t('branchVisits.confirmFor', { parent: visit.parentName, student: visit.studentName })}</p>
+        <div>
+          <label className="block text-xs text-slate-600 mb-1">{t('branchVisits.metWith')}</label>
+          <select value={metById} onChange={(e) => setMetById(e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm">
+            <option value="">{t('common.select')}</option>
+            {assigned.length > 0 && <optgroup label={t('branchVisits.assignedGroup')}>{assigned.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</optgroup>}
+            {others.length > 0 && <optgroup label={t('branchVisits.otherStaff')}>{others.map((u) => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}</optgroup>}
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs text-slate-600 mb-1">{t('branchVisits.receptionNote')}</label>
+          <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm" />
+        </div>
+        <p className="text-xs text-slate-500">{t('branchVisits.confirmHint')}</p>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-xl border border-slate-300 bg-white">{t('common.cancel')}</button>
+          <button disabled={busy || !metById} onClick={confirm} className="px-5 py-2 text-sm rounded-xl bg-teal-600 text-white font-medium flex items-center gap-2 disabled:opacity-50">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}{t('branchVisits.confirmButton')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // Branch QR check-ins (see BranchVisit.jsx / confirmBranchVisit) — the only
 // page a reception employee (role RECEPTIONIST) can open, and firestore.rules
@@ -34,6 +91,8 @@ export default function BranchVisits() {
   const [range, setRange] = useState('TODAY');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [now, setNow] = useState(() => Date.now());
+  const [confirming, setConfirming] = useState(null);
+  const isReceptionist = userData?.role === 'RECEPTIONIST';
 
   // Keeps the "waiting for X minutes" figures moving.
   useEffect(() => {
@@ -146,11 +205,19 @@ export default function BranchVisits() {
                     {waiting && arrived && (
                       <p className="text-xs font-bold text-rose-600">{t('branchVisits.waitingFor', { count: minutesBetween(arrived, now) })}</p>
                     )}
+                    {waiting && isReceptionist && (
+                      <button onClick={() => setConfirming(v)} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-teal-600 text-white flex items-center gap-1 md:mr-auto">
+                        <CheckCircle2 className="w-3.5 h-3.5" />{t('branchVisits.confirmButton')}
+                      </button>
+                    )}
                     {!waiting && v.visitMetAt && (
                       <p className="text-xs text-teal-700">
                         {t('branchVisits.metBy', { name: v.visitMetByName || '—', time: format(v.visitMetAt.toDate(), 'p', { locale: dateLocale }) })}
                         {arrived && ` · ${t('branchVisits.waited', { count: minutesBetween(arrived, v.visitMetAt.toMillis()) })}`}
                       </p>
+                    )}
+                    {!waiting && v.visitConfirmedByName && (
+                      <p className="text-[11px] text-slate-400">{t('branchVisits.confirmedByReception', { name: v.visitConfirmedByName })}</p>
                     )}
                   </div>
                 </li>
@@ -159,6 +226,7 @@ export default function BranchVisits() {
           </ul>
         )}
       </div>
+      {confirming && <ConfirmMeetingDialog visit={confirming} onClose={() => setConfirming(null)} />}
     </div>
   );
 }

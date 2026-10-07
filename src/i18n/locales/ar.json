@@ -1324,7 +1324,16 @@
     "waitingFor_other": "ينتظر منذ {{count}} دقيقة",
     "metBy": "قابله {{name}} الساعة {{time}}",
     "waited_one": "انتظر {{count}} دقيقة",
-    "waited_other": "انتظر {{count}} دقيقة"
+    "waited_other": "انتظر {{count}} دقيقة",
+    "confirmButton": "تأكيد المقابلة",
+    "confirmTitle": "تأكيد مقابلة ولي الأمر",
+    "confirmFor": "ولي الأمر {{parent}} — الطالب/ة {{student}}",
+    "metWith": "قابله الموظف",
+    "assignedGroup": "المسند إليهم",
+    "otherStaff": "موظفون آخرون في الفرع",
+    "receptionNote": "ملاحظة (اختياري)",
+    "confirmHint": "يُسجَّل أن المقابلة تمت، ويصل للموظف المختار إشعار ليكتب ملخص المقابلة والحل.",
+    "confirmedByReception": "أكّدها الاستقبال: {{name}}"
   },
   "slaSettings": {
     "title": "زمن الحل (SLA) وساعات الدوام",
