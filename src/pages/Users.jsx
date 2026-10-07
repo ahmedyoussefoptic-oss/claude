@@ -269,9 +269,17 @@ export default function Users() {
         </button>
       </div>
 
+      {/* Add / edit form as a modal, so editing a user far down the list
+          doesn't jump the page back to the top. */}
       {showForm && (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8">
-          <h2 className="text-lg font-bold mb-4">{editingId ? t('users.editUserTitle') : t('users.addNewUserTitle')}</h2>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 md:p-6">
+        <div className="w-full max-w-4xl max-h-full overflow-y-auto bg-white p-6 rounded-2xl shadow-2xl border border-slate-100">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-bold">{editingId ? t('users.editUserTitle') : t('users.addNewUserTitle')}</h2>
+            <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl" aria-label={t('common.close')}>
+              <X className="w-5 h-5" />
+            </button>
+          </div>
           {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{error}</div>}
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -590,7 +598,8 @@ export default function Users() {
               />
             </div>
 
-            <div className="md:col-span-2 mt-2 flex gap-3">
+            {error && <div className="md:col-span-2 bg-red-50 text-red-600 p-3 rounded-lg text-sm">{error}</div>}
+            <div className="md:col-span-2 mt-2 flex gap-3 sticky bottom-0 bg-white pt-3 -mb-1">
               <button
                 type="submit"
                 disabled={submitting}
@@ -607,6 +616,7 @@ export default function Users() {
               </button>
             </div>
           </form>
+        </div>
         </div>
       )}
 
