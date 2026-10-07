@@ -14,6 +14,7 @@ import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import logo from '../assets/logo.png';
 import { Printer, FileSpreadsheet, RotateCcw, Star } from 'lucide-react';
+import VisitsReport from '../components/reports/VisitsReport';
 import ComplaintsReport from '../components/reports/ComplaintsReport';
 import { complaintMetrics, ticketMetrics } from '../utils/reportMetrics';
 import { useSlaSettings, elapsedMs, businessMs } from '../utils/businessTime';
@@ -26,7 +27,7 @@ function sheetName(label) {
   return label.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31);
 }
 
-const REPORT_TYPE_IDS = ['COMPLAINTS', 'TECH_SUPPORT', 'SURVEY'];
+const REPORT_TYPE_IDS = ['COMPLAINTS', 'TECH_SUPPORT', 'VISITS', 'SURVEY'];
 const RATING_KEYS = ['resolutionSpeed', 'solutionQuality', 'staffProfessionalism'];
 
 function average(list, getValue) {
@@ -68,6 +69,7 @@ export default function Reports() {
   const canSeeTech = canAccessTechSupport(userData);
   const [includeTech, setIncludeTech] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  const [includeVisits, setIncludeVisits] = useState(false);
   const mergeTech = includeTech && canSeeTech;
   const sla = useSlaSettings();
 
@@ -551,7 +553,7 @@ export default function Reports() {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.toDate')}</label>
             <input type="date" name="to" value={filters.to} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
           </div>
-          {reportType !== 'TECH_SUPPORT' && (
+          {!['TECH_SUPPORT', 'VISITS'].includes(reportType) && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('reports.complaintTypeLabel')}</label>
               <select name="complaintType" value={filters.complaintType} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
@@ -560,7 +562,7 @@ export default function Reports() {
               </select>
             </div>
           )}
-          {reportType !== 'TECH_SUPPORT' && (
+          {!['TECH_SUPPORT', 'VISITS'].includes(reportType) && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.subTypeLabel')}</label>
               <select name="subType" value={filters.subType} onChange={handleChange} disabled={!filters.complaintType} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white disabled:text-slate-400 disabled:bg-slate-50">
@@ -576,13 +578,13 @@ export default function Reports() {
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
-          <div>
+          {reportType !== 'VISITS' && <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('reports.specialistLabel')}</label>
             <select name="assignedTo" value={filters.assignedTo} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
               <option value="">{t('reports.allSpecialists')}</option>
               {specialists.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-          </div>
+          </div>}
         </div>
         {reportType === 'COMPLAINTS' && (
           <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-4 border-t border-slate-100">
@@ -593,8 +595,20 @@ export default function Reports() {
               </label>
             )}
             <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={includeVisits} onChange={(e) => setIncludeVisits(e.target.checked)} />
+              {t('visitsReport.optInclude')}
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
               <input type="checkbox" checked={showDetails} onChange={(e) => setShowDetails(e.target.checked)} />
               {t('reports.full.optShowDetails')}
+            </label>
+          </div>
+        )}
+        {reportType === 'VISITS' && (
+          <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-4 border-t border-slate-100">
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={showDetails} onChange={(e) => setShowDetails(e.target.checked)} />
+              {t('visitsReport.optDetails')}
             </label>
           </div>
         )}
@@ -607,7 +621,10 @@ export default function Reports() {
             <img src={logo} alt={t('reports.schoolFullName')} className="h-14 w-auto" />
             <div>
               <h2 className="text-xl font-bold text-slate-900">{t('reports.schoolFullName')}</h2>
-              <p className="text-sm text-slate-500">{reportType === 'COMPLAINTS' && mergeTech ? t('reports.full.mergedTitle') : t(`reports.types.${reportType}`)}</p>
+              <p className="text-sm text-slate-500">
+                {reportType === 'COMPLAINTS' && mergeTech ? t('reports.full.mergedTitle') : t(`reports.types.${reportType}`)}
+                {reportType === 'COMPLAINTS' && includeVisits && ` + ${t('reports.types.VISITS')}`}
+              </p>
             </div>
           </div>
           <div className="text-left">
@@ -636,6 +653,18 @@ export default function Reports() {
             onOpenComplaint={setSelectedComplaint}
             onOpenTicket={setSelectedTicket}
             problemTypeName={problemTypeName}
+          />
+        )}
+
+        {(reportType === 'VISITS' || (reportType === 'COMPLAINTS' && includeVisits)) && (
+          <VisitsReport
+            complaints={complaints}
+            filters={filters}
+            branches={branches}
+            complaintTypes={complaintTypes}
+            showDetails={showDetails}
+            onOpenComplaint={setSelectedComplaint}
+            merged={reportType === 'COMPLAINTS'}
           />
         )}
 
