@@ -12,6 +12,8 @@ import { useBranches } from '../hooks/useOrgData';
 import { branchScopeConstraintValues, userBranches } from '../utils/scope';
 import StatCard from '../components/dashboard/StatCard';
 import { formatMinutes } from '../utils/duration';
+import { normalizeAssignees } from '../utils/assignees';
+import ComplaintDetails from '../components/complaints/ComplaintDetails';
 
 const isToday = (ts) => {
   if (!ts?.toDate) return false;
@@ -93,6 +95,8 @@ export default function BranchVisits() {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [now, setNow] = useState(() => Date.now());
   const [confirming, setConfirming] = useState(null);
+  // Staff open the visit's full record; reception only sees this list.
+  const [openId, setOpenId] = useState(null);
   const isReceptionist = userData?.role === 'RECEPTIONIST';
 
   // Keeps the "waiting for X minutes" figures moving.
@@ -108,7 +112,7 @@ export default function BranchVisits() {
       constraints.push(where('branch', 'in', branchScopeConstraintValues(userData)));
     }
     const unsubscribe = onSnapshot(query(collection(db, 'complaints'), ...constraints), (snapshot) => {
-      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data(), ...normalizeAssignees(d.data()) }));
       list.sort((a, b) => (b.visitArrivedAt?.toMillis?.() || 0) - (a.visitArrivedAt?.toMillis?.() || 0));
       setVisits(list);
       setLoading(false);
@@ -177,14 +181,18 @@ export default function BranchVisits() {
               const waiting = v.visitStatus === 'WAITING';
               const arrived = v.visitArrivedAt?.toMillis?.();
               return (
-                <li key={v.id} className={`p-4 flex flex-col md:flex-row md:items-center gap-3 ${waiting ? 'bg-rose-50/40' : ''}`}>
+                <li
+                  key={v.id}
+                  onClick={isReceptionist ? undefined : () => setOpenId(v.id)}
+                  className={`p-4 flex flex-col md:flex-row md:items-center gap-3 ${waiting ? 'bg-rose-50/40' : ''} ${isReceptionist ? '' : 'cursor-pointer hover:bg-slate-50 transition-colors'}`}
+                >
                   <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${waiting ? 'bg-rose-100 text-rose-600' : 'bg-teal-100 text-teal-600'}`}>
                     {waiting ? <Armchair className="w-5 h-5" /> : <Handshake className="w-5 h-5" />}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-slate-900">
                       {v.parentName}
-                      {v.parentPhone && <a href={`tel:${v.parentPhone}`} className="text-sm font-normal text-slate-500 mr-2 inline-flex items-center gap-1" dir="ltr"><Phone className="w-3.5 h-3.5" />{v.parentPhone}</a>}
+                      {v.parentPhone && <a href={`tel:${v.parentPhone}`} onClick={(e) => e.stopPropagation()} className="text-sm font-normal text-slate-500 mr-2 inline-flex items-center gap-1" dir="ltr"><Phone className="w-3.5 h-3.5" />{v.parentPhone}</a>}
                     </p>
                     <p className="text-sm text-slate-600 mt-0.5">
                       {t('branchVisits.studentLine', { student: v.studentName, grade: [v.stage, v.grade].filter(Boolean).join(' — '), branch: branchName(v.branch) })}
@@ -231,6 +239,9 @@ export default function BranchVisits() {
         )}
       </div>
       {confirming && <ConfirmMeetingDialog visit={confirming} onClose={() => setConfirming(null)} />}
+      {openId && visits.find((v) => v.id === openId) && (
+        <ComplaintDetails complaint={visits.find((v) => v.id === openId)} onClose={() => setOpenId(null)} />
+      )}
     </div>
   );
 }
