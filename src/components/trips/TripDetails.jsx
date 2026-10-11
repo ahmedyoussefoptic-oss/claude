@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
 import { doc, collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
@@ -129,7 +130,7 @@ function ManualConsentDialog({ trip, student, current, onCancel, onSaved }) {
   );
 }
 
-export default function TripDetails({ tripId, listed, allTrips, onClose, onEdit, onChanged }) {
+function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged }) {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
   const { user, userData } = useAuthStore();
@@ -338,7 +339,7 @@ export default function TripDetails({ tripId, listed, allTrips, onClose, onEdit,
           ))}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-5 md:p-6 space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto p-5 md:p-6 space-y-5">
           {actionError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3">{actionError}</div>}
 
           {tab === 'overview' && (
@@ -653,4 +654,10 @@ export default function TripDetails({ tripId, listed, allTrips, onClose, onEdit,
       )}
     </div>
   );
+}
+
+// Rendered on <body> so the modal sits above the whole app shell — inside
+// <main> (its own stacking context) the sidebar covered its right edge.
+export default function TripDetails(props) {
+  return createPortal(<TripDetailsInner {...props} />, document.body);
 }

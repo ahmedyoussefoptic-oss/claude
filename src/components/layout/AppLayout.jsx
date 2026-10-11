@@ -90,7 +90,7 @@ export default function AppLayout() {
       {/* Sidebar — always right-aligned regardless of language, only the
           text swaps for English; mirroring the whole shell isn't worth the
           risk of positioning bugs this combination of sticky+rtl:/ltr: caused. */}
-      <aside className={`fixed md:sticky top-0 right-0 h-screen w-64 bg-white border-l border-slate-200 z-50 transition-transform transform ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full'} md:translate-x-0 flex flex-col`}>
+      <aside className={`fixed md:sticky top-0 right-0 h-screen w-64 bg-white border-l border-slate-200 z-50 md:z-0 transition-transform transform ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full'} md:translate-x-0 flex flex-col`}>
         <div className="p-6 border-b border-slate-100 flex items-center gap-3">
           <img src={logo} alt="Al Moktashef International Schools" className="h-10 w-auto shrink-0" />
           <div>

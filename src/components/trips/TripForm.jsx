@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
 import { X, Save, Loader2, AlertTriangle } from 'lucide-react';
@@ -57,7 +58,7 @@ function Chips({ options, value, onChange, ltr }) {
 
 // Create / edit a trip (saveTrip). A new trip starts as a draft; it's sent
 // for the principal's approval from the trip details.
-export default function TripForm({ trip, allTrips, onClose, onSaved }) {
+function TripFormInner({ trip, allTrips, onClose, onSaved }) {
   const { t } = useTranslation();
   const { userData } = useAuthStore();
   const allBranches = useBranches();
@@ -104,7 +105,7 @@ export default function TripForm({ trip, allTrips, onClose, onSaved }) {
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-xl"><X className="w-6 h-6" /></button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
           <Section title={t('trips.form.basics')}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <Field label={t('trips.form.titleLabel')}><input value={form.title} onChange={set('title')} className={inputCls} placeholder={t('trips.form.titlePlaceholder')} /></Field>
@@ -177,4 +178,10 @@ export default function TripForm({ trip, allTrips, onClose, onSaved }) {
       </div>
     </div>
   );
+}
+
+// Rendered on <body> so the modal sits above the whole app shell — inside
+// <main> (its own stacking context) the sidebar covered its right edge.
+export default function TripForm(props) {
+  return createPortal(<TripFormInner {...props} />, document.body);
 }
