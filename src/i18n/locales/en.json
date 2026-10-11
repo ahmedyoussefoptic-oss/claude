@@ -1104,7 +1104,8 @@
       "ITEM_DELETED": "Report deleted",
       "WHATSAPP_API_FAILED": "Automatic WhatsApp API send failed",
       "WHATSAPP_API_SENT": "Sent to parent via WhatsApp API",
-      "REMINDER_SENT": "Reminder sent"
+      "REMINDER_SENT": "Reminder sent",
+      "ITEM_EDITED": "Report details edited"
     },
     "techSupport": {
       "TICKET_CREATED": "Ticket registered",
@@ -1881,5 +1882,33 @@
     "sent": "Sent",
     "last": "Last reminder from {{name}} {{ago}}",
     "logTo": "Reminder sent to: {{names}}"
+  },
+  "lostFoundEdit": {
+    "title": "Edit report details",
+    "editBtn": "Edit details",
+    "saveBtn": "Save changes",
+    "noChanges": "Nothing was changed.",
+    "saveError": "Couldn't save the changes.",
+    "itemSection": "Item",
+    "reporterSection": "Reporter / finder",
+    "addPhoto": "Add a photo",
+    "replacePhoto": "Replace the current photo",
+    "fields": {
+      "reportType": "Report type",
+      "itemName": "Item",
+      "category": "Category",
+      "color": "Color",
+      "branch": "Branch",
+      "location": "Location",
+      "description": "Description",
+      "reporterName": "Reporter name",
+      "reporterPhone": "Reporter phone",
+      "studentName": "Student name",
+      "studentId": "Student ID",
+      "department": "Section",
+      "stage": "Stage",
+      "grade": "Grade",
+      "photo": "Photo"
+    }
   }
 }

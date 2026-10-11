@@ -1108,7 +1108,8 @@
       "ITEM_DELETED": "تم حذف البلاغ",
       "WHATSAPP_API_FAILED": "تعذّر الإرسال التلقائي عبر واتساب API",
       "WHATSAPP_API_SENT": "تم الإرسال لولي الأمر عبر واتساب API",
-      "REMINDER_SENT": "إرسال تذكير"
+      "REMINDER_SENT": "إرسال تذكير",
+      "ITEM_EDITED": "تعديل بيانات البلاغ"
     },
     "techSupport": {
       "TICKET_CREATED": "تم تسجيل البلاغ",
@@ -1905,5 +1906,33 @@
     "sent": "تم الإرسال",
     "last": "آخر تذكير من {{name}} {{ago}}",
     "logTo": "أُرسل التذكير إلى: {{names}}"
+  },
+  "lostFoundEdit": {
+    "title": "تعديل بيانات البلاغ",
+    "editBtn": "تعديل البيانات",
+    "saveBtn": "حفظ التعديلات",
+    "noChanges": "لم يتم تغيير أي بيانات.",
+    "saveError": "تعذّر حفظ التعديلات.",
+    "itemSection": "بيانات الغرض",
+    "reporterSection": "بيانات المُبلّغ / من وجده",
+    "addPhoto": "إضافة صورة",
+    "replacePhoto": "استبدال الصورة الحالية",
+    "fields": {
+      "reportType": "نوع البلاغ",
+      "itemName": "اسم الغرض",
+      "category": "التصنيف",
+      "color": "اللون",
+      "branch": "الفرع",
+      "location": "المكان",
+      "description": "الوصف",
+      "reporterName": "اسم المُبلّغ",
+      "reporterPhone": "جوال المُبلّغ",
+      "studentName": "اسم الطالب",
+      "studentId": "رقم هوية الطالب",
+      "department": "القسم",
+      "stage": "المرحلة",
+      "grade": "الصف",
+      "photo": "الصورة"
+    }
   }
 }

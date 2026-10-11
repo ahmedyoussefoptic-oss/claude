@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAdminPermissions, adminCan } from '../../config/adminPermissions';
-import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle, Link2, UserPlus, Trash2, GraduationCap } from 'lucide-react';
+import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle, Link2, UserPlus, Trash2, GraduationCap, Pencil } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db, functions } from '../../config/firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -17,6 +17,7 @@ import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { useWhatsAppApi } from '../../hooks/useWhatsAppApi';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import ErrorBoundary from '../common/ErrorBoundary';
+import LostFoundEditForm from './LostFoundEditForm';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -58,6 +59,7 @@ function LostFoundDetailsInner({ item, onClose }) {
   const [note, setNote] = useState('');
   const [returnedTo, setReturnedTo] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
   const [selectedAssignees, setSelectedAssignees] = useState(item.assignedTo || []);
 
   useEffect(() => {
@@ -227,6 +229,12 @@ function LostFoundDetailsInner({ item, onClose }) {
               <button disabled={!!waSending} onClick={() => sendViaApi('receipt')} className="px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm font-medium hover:bg-emerald-800 transition-all flex items-center gap-2 disabled:opacity-60">
                 {waSending === 'receipt' ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
                 {t('waApi.sendReceiptApi')}
+              </button>
+            )}
+            {canEdit && (
+              <button onClick={() => setShowEdit(true)} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors flex items-center gap-2">
+                <Pencil className="w-4 h-4" />
+                {t('lostFoundEdit.editBtn')}
               </button>
             )}
             {canEdit && item.status === 'UNCLAIMED' && (
@@ -403,6 +411,17 @@ function LostFoundDetailsInner({ item, onClose }) {
                         {log.metadata.removedNames?.length > 0 && <p className="text-red-700">{t('assigneeSelect.removedLogLabel')} {log.metadata.removedNames.join(listSep)}</p>}
                       </div>
                     )}
+                    {log.metadata?.changes?.length > 0 && (
+                      <div className="mt-2 p-3 bg-slate-50 text-slate-700 rounded-lg text-sm border border-slate-200 space-y-1">
+                        {log.metadata.changes.map((c) => (
+                          <p key={c.field}>
+                            <strong>{t(`lostFoundEdit.fields.${c.field}`, c.field)}:</strong>{' '}
+                            <span className="text-red-700 line-through">{c.from || '—'}</span>{' ← '}
+                            <span className="text-emerald-700">{c.to || '—'}</span>
+                          </p>
+                        ))}
+                      </div>
+                    )}
                     {log.metadata?.note && (
                       <p className="text-sm text-slate-600 mt-1">{log.metadata.note}</p>
                     )}
@@ -430,6 +449,7 @@ function LostFoundDetailsInner({ item, onClose }) {
           </div>
         </div>
 
+        {showEdit && <LostFoundEditForm item={item} onClose={() => setShowEdit(false)} />}
       </div>
     </div>
   );
