@@ -6,6 +6,8 @@ export const TRIP_STAGES = [...STAGES, 'SEN'];
 export const TRIP_PAY_METHODS = ['BANK', 'RECEPTION'];
 export const TRIP_DECLINE_REASONS = ['COST', 'TIMING', 'FAMILY', 'HEALTH', 'OTHER'];
 export const TRIP_RATINGS = ['organization', 'safety', 'benefit', 'cost'];
+export const TRIP_GENDERS = ['ALL', 'BOYS', 'GIRLS'];
+export const TRIP_GENDER_STYLES = { ALL: 'bg-slate-100 text-slate-600', BOYS: 'bg-sky-100 text-sky-700', GIRLS: 'bg-pink-100 text-pink-700' };
 
 export const TRIP_STATUS_STYLES = {
   DRAFT: 'bg-slate-100 text-slate-700 border-slate-200',
@@ -64,7 +66,9 @@ export function tripConflicts(trip, trips) {
   const overlap = (a, b) => !a.length || !b.length || a.some((x) => b.includes(x));
   return trips.filter((o) => o.id !== trip.id && o.status !== 'CANCELLED' && o.date === trip.date
     && (o.branches || []).some((b) => (trip.branches || []).includes(b))
-    && overlap(o.stages || [], trip.stages || []));
+    && overlap(o.stages || [], trip.stages || [])
+    // A boys' trip and a girls' trip on the same day don't clash.
+    && !([o.gender, trip.gender].includes('BOYS') && [o.gender, trip.gender].includes('GIRLS')));
 }
 
 export const tripLink = (code) => `${window.location.origin}/trip/${code}`;

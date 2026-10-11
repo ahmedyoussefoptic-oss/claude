@@ -2444,8 +2444,15 @@ async function branchResolver() {
   return (s) => s.branch || byName.get(String(s.branchName || "").trim().replace(/^فرع\s+/, "")) || "";
 }
 
+// Student gender from the roster ("gender" column, imported as M / F) —
+// the current roster file has none, so it is often unknown ("").
+const studentGenderOf = (s) => (s.gender === "M" || s.gender === "F" ? s.gender : "");
 function tripTargets(trip, s, branchOf) {
   if (!(trip.branches || []).includes(branchOf(s))) return false;
+  // Boys-only / girls-only trip: exclude students known to be the other
+  // gender (unknown gender stays included).
+  const g = studentGenderOf(s);
+  if (g && ((trip.gender === "BOYS" && g === "F") || (trip.gender === "GIRLS" && g === "M"))) return false;
   if ((trip.stages || []).length && !trip.stages.includes(studentGrade(s))) return false;
   const section = studentSection(s);
   if ((trip.departments || []).length && section && !trip.departments.includes(section)) return false;
@@ -2549,6 +2556,8 @@ function cleanTrip(input) {
     supervisors: list(d.supervisors).slice(0, 30),
     buses: Math.max(0, Math.floor(Number(d.buses) || 0)),
     notes: str(d.notes, 1000),
+    gender: ["BOYS", "GIRLS"].includes(d.gender) ? d.gender : "ALL",
+    pledgeRequired: d.pledgeRequired === true,
   };
   if (!trip.title || !trip.destination || !trip.date || !trip.branches.length) {
     throw new HttpsError("invalid-argument", "أكمل اسم الرحلة والوجهة والتاريخ والفروع.");
@@ -2695,14 +2704,18 @@ async function waTripSettings() {
   return settings;
 }
 
-async function sendTripNotice({ settings, trip, phone, studentName, branch, section, line }) {
+async function sendTripNotice({ settings, trip, phone, studentName, branch, section, line, image }) {
   const to = toIntlNumber(phone);
   if (!to) throw new Error("لا يوجد رقم جوال لولي الأمر.");
+  // With an image: the "tripAnnouncementImage" template (image header, same
+  // body variables and button).
+  const withImage = image && (settings.templates || {}).tripAnnouncementImage;
   const payload = {
     to,
     type: "template",
-    template: { name: settings.templates.tripNotice, language: { code: settings.language || "ar" } },
+    template: { name: withImage ? settings.templates.tripAnnouncementImage : settings.templates.tripNotice, language: { code: settings.language || "ar" } },
     components: [
+      ...(withImage ? [{ type: "header", parameters: [{ type: "image", image: { link: image } }] }] : []),
       {
         type: "body",
         parameters: [studentName, trip.title, tripWhen(trip), line, `${PUBLIC_APP_URL}/trip/${trip.tripCode}`].map((v) => ({ type: "text", text: waParam(v) })),
@@ -2723,14 +2736,14 @@ async function sendTripNotice({ settings, trip, phone, studentName, branch, sect
 }
 
 // Sends to many parents a few at a time; never throws.
-async function sendTripNotices(settings, trip, recipients, lineFor) {
+async function sendTripNotices(settings, trip, recipients, lineFor, image) {
   let sent = 0;
   let failed = 0;
   const queue = [...recipients];
   const worker = async () => {
     for (let r = queue.shift(); r; r = queue.shift()) {
       try {
-        await sendTripNotice({ settings, trip, phone: r.mobile, studentName: r.name, branch: r.branch, section: r.section, line: lineFor(r) });
+        await sendTripNotice({ settings, trip, phone: r.mobile, studentName: r.name, branch: r.branch, section: r.section, line: lineFor(r), image });
         sent++;
       } catch (err) {
         failed++;
@@ -2774,7 +2787,7 @@ exports.sendTripAnnouncement = onCall({ secrets: WA_SECRETS, timeoutSeconds: 540
   const result = await sendTripNotices(settings, trip, recipients, (s) => {
     if (audience === "all") return TRIP_LINES.announce(trip);
     return byId.get(s.id) ? TRIP_LINES.remindPayment(trip) : TRIP_LINES.remindPending(trip);
-  });
+  }, audience === "all" && request.data?.withImage !== false ? trip.imageUrl || null : null);
   const now = Timestamp.now();
   await ref.update(audience === "all"
     ? { announcedAt: now, announcedCount: FieldValue.increment(result.sent) }
@@ -2803,6 +2816,10 @@ async function publicTripView(trip) {
     branchNames: branchSnaps.map((s, i) => (s.exists ? s.data().name : trip.branches[i])),
     registrationOpen: trip.status === "OPEN" && riyadhDay() <= trip.payDeadline,
     surveyOpen: trip.status === "COMPLETED",
+    gender: trip.gender || "ALL",
+    imageUrl: trip.imageUrl || "",
+    pledgeRequired: trip.pledgeRequired === true,
+    pledgeTemplate: trip.pledgeTemplate ? { fileName: trip.pledgeTemplate.fileName, fileUrl: trip.pledgeTemplate.fileUrl } : null,
   };
 }
 
@@ -2849,6 +2866,7 @@ const publicEnrollment = (e, trip) => (e ? {
   payRejectReason: e.payRejectReason || "", status: enrollmentStatus(e, trip.fee),
   healthNotes: e.healthNotes || "", emergencyPhone: e.emergencyPhone || "",
   receiptName: e.receipt?.fileName || "",
+  pledgeName: e.pledge?.fileName || "",
 } : null);
 
 exports.verifyTripStudent = onCall(async (request) => {
@@ -2890,6 +2908,14 @@ exports.submitTripConsent = onCall(async (request) => {
   if (existing && existing.payStatus === "PAID") {
     throw new HttpsError("failed-precondition", "تم تأكيد المشاركة ودفع الرسوم. لأي تعديل تواصل مع الفرع.");
   }
+  // Signed pledge sheet (ورقة التعهد) — required when the trip asks for it.
+  let pledge = existing?.pledge || null;
+  if (decision === "APPROVED" && d.pledge) {
+    pledge = await uploadPublicAttachment(getStorage().bucket(), `trips/${ref.id}/pledges/${v.studentId}`, d.pledge);
+  }
+  if (decision === "APPROVED" && trip.pledgeRequired && !pledge) {
+    throw new HttpsError("invalid-argument", "يرجى إرفاق ورقة التعهد موقّعة.");
+  }
   let receipt = existing?.receipt || null;
   if (paid && payMethod === "BANK" && d.receipt) {
     receipt = await uploadPublicAttachment(getStorage().bucket(), `trips/${ref.id}/receipts/${v.studentId}`, d.receipt);
@@ -2908,6 +2934,7 @@ exports.submitTripConsent = onCall(async (request) => {
     studentId: v.studentId, studentName: v.student.name || "", branch: v.branch, grade: v.grade, section: v.section,
     className: v.student.className || "", parentPhone: v.student.mobile || "",
     decision, declineReason, payMethod, payStatus, receipt: payMethod === "BANK" ? receipt : null,
+    pledge: decision === "APPROVED" ? pledge : null,
     healthNotes: str(d.healthNotes, 500), emergencyPhone: str(d.emergencyPhone, 30),
     payRejectReason: payStatus === "REVIEW" ? "" : existing?.payRejectReason || "",
     source: "parent", updatedAt: now, ...(existing ? {} : { submittedAt: now }),
@@ -3592,4 +3619,23 @@ exports.bookMeetingFromVisit = onCall({ secrets: WA_SECRETS }, async (request) =
   // The internal comment above already notifies the assignees.
   await autoSendWa("complaint", ref, "appointmentConfirmed");
   return { ok: true, when };
+});
+
+// Trip cover image (shown on the trip page, the poster and — with the
+// image template — the WhatsApp announcement) and the pledge sheet template
+// parents download, sign and attach. `file: null` removes it.
+exports.setTripMedia = onCall(async (request) => {
+  const caller = await tripCaller(request);
+  const { id, kind, file } = request.data || {};
+  if (!["image", "pledgeTemplate"].includes(kind)) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  const { ref } = await loadTrip(id, caller, "manage");
+  if (!file) {
+    await ref.update({ [kind === "image" ? "imageUrl" : "pledgeTemplate"]: FieldValue.delete(), updatedAt: Timestamp.now() });
+    return { ok: true };
+  }
+  if (kind === "image" && !/^image\//.test(file.mimeType || "")) throw new HttpsError("invalid-argument", "الصورة يجب أن تكون بصيغة صورة.");
+  const uploaded = await uploadPublicAttachment(getStorage().bucket(), `trips/${ref.id}/${kind}`, file);
+  await ref.update(kind === "image" ? { imageUrl: uploaded.fileUrl, updatedAt: Timestamp.now() } : { pledgeTemplate: uploaded, updatedAt: Timestamp.now() });
+  await tripLog(ref, kind === "image" ? "TRIP_IMAGE_SET" : "TRIP_PLEDGE_SET", caller, { fileName: uploaded.fileName });
+  return { ok: true, fileUrl: uploaded.fileUrl };
 });

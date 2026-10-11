@@ -878,7 +878,7 @@
     "subTypeNamePlaceholder": "Sub-type name",
     "noSubTypesYet": "No sub-types for this type yet",
     "studentImportTitle": "Student data import",
-    "studentImportDescription": "Upload an Excel file with the columns: id_num, name, branch_name, stage_name, grade_name, class_name, mobile. Data is merged with existing records by national ID — no student missing from the new file is deleted.",
+    "studentImportDescription": "Upload an Excel file with the columns: id_num, name, branch_name, stage_name, grade_name, class_name, mobile, and optionally gender (male/female) for boys-/girls-only trips. Data is merged with existing records by national ID — no student missing from the new file is deleted.",
     "chooseExcelFile": "Choose an Excel file",
     "foundRecords": "Found {{count}} valid student record(s) to import.",
     "skippedRows": "Skipped {{count}} row(s) due to a missing ID or name (rows: {{rows}}).",
@@ -1279,7 +1279,8 @@
       "lostFoundReturned": "Lost item returned",
       "appointmentConfirmed": "Visit appointment confirmed",
       "appointmentRescheduled": "Visit appointment changed",
-      "tripNotice": "School trip notice"
+      "tripNotice": "School trip notice",
+      "tripAnnouncementImage": "Trip announcement with image"
     },
     "guideTitle": "Suggested template texts to submit for approval",
     "guideIntro": "Create these four templates in the Taqnyat portal (Message Templates) with the names above, and wait for WhatsApp approval before enabling.",
@@ -1307,7 +1308,8 @@
     "autoSendHint": "Receipt as soon as a feedback / tech ticket / lost-item report is logged, resolution as soon as it's written (closing the tech ticket), thank-you once a branch meeting is confirmed, and handover once an item is returned. If sending fails, the reason is logged on the record and the manual send buttons remain available.",
     "visitAutoNote": "The parent will automatically get a WhatsApp thank-you after confirming.",
     "appointmentVars": "{{3}} student name — {{4}} time and branch. Sent when the principal confirms or sets another time.",
-    "tripVars": "{{1}} student — {{2}} trip name — {{3}} date and time — {{4}} message (announcement, reminder, receipt accepted/rejected) — {{5}} trip page link. Same “contact the branch” button /contact/{{1}}."
+    "tripVars": "{{1}} student — {{2}} trip name — {{3}} date and time — {{4}} message (announcement, reminder, receipt accepted/rejected) — {{5}} trip page link. Same “contact the branch” button /contact/{{1}}.",
+    "tripImageVars": "Template with an image header (Header: Image) — same variables as the trip notice: {{1}} student, {{2}} trip, {{3}} date, {{4}} fee and deadline, {{5}} trip link, plus the contact button. Used to announce trips that have an image; leave empty to send text."
   },
   "contactBranch": {
     "loading": "Opening the branch chat...",
@@ -1571,7 +1573,19 @@
       "pickBranchFirst": "Pick the branches first.",
       "notes": "Internal notes",
       "requiredError": "Fill in the trip name, destination, date and branches.",
-      "createDraft": "Save as draft"
+      "createDraft": "Save as draft",
+      "gender": "Trip for",
+      "genderHint": "Separate boys' and girls' trips on the same day don't count as a clash. To exclude students by gender automatically, import the roster with a “gender” column (male/female); without it the trip targets every student in the chosen grades.",
+      "mediaTitle": "Trip image and pledge sheet",
+      "image": "Trip image",
+      "imageHint": "Shown on the trip page and QR poster, and sent with the WhatsApp announcement (when the image template is set).",
+      "pickImage": "Choose image",
+      "pledgeTemplate": "Pledge sheet template (optional)",
+      "pledgeTemplateHint": "Parents can download it from the trip link to sign, if the sheet wasn't sent home.",
+      "pickPledge": "Choose file (PDF or image)",
+      "pledgeRequired": "A signed pledge sheet is required to consent",
+      "pledgeRequiredHint": "Parents attach a photo or PDF of the signed sheet from the trip link.",
+      "fileTooBig": "Max file size is 4 MB."
     },
     "actions": {
       "submit": "Send for approval",
@@ -1628,7 +1642,9 @@
       "TRIP_PAYMENT_CASH": "recorded a cash payment",
       "TRIP_ARRIVED": "recorded arrival",
       "TRIP_INCIDENT": "added a trip note",
-      "TRIP_SURVEY_SENT": "sent the survey"
+      "TRIP_SURVEY_SENT": "sent the survey",
+      "TRIP_IMAGE_SET": "set the trip image",
+      "TRIP_PLEDGE_SET": "set the pledge template"
     },
     "allStudents": "All",
     "searchStudents": "Search by name, ID or class",
@@ -1736,7 +1752,20 @@
       "targeted": "Targeted",
       "trip": "Trip",
       "trips": "Trips"
-    }
+    },
+    "gender": {
+      "ALL": "Boys & girls",
+      "BOYS": "Boys",
+      "GIRLS": "Girls"
+    },
+    "announceWithImage": "The announcement will include the trip image.",
+    "announceNoImageTemplate": "To send the image with the announcement, set the “trip announcement with image” template in WhatsApp settings; for now it's sent as text and the image shows on the trip page.",
+    "pledgeLabel": "Pledge sheet",
+    "pledgeRequiredShort": "Required",
+    "pledgeOptionalShort": "Optional",
+    "pledgeTemplateLink": "Template",
+    "viewPledge": "Pledge sheet",
+    "pledgeMissing": "Pledge sheet missing"
   },
   "tripConsent": {
     "times": "{{from}} to {{to}}",
@@ -1786,7 +1815,14 @@
       "submit": "Submit rating",
       "thanks": "Thank you, your rating was received.",
       "verifyTitle": "Rate the trip — student details"
-    }
+    },
+    "brandTitle": "Al Moktashef International Schools Trips",
+    "pledgeTitle": "Signed pledge sheet",
+    "pledgeDownload": "Download the pledge sheet",
+    "pledgeAttach": "Attach the pledge sheet (photo or PDF)",
+    "pledgeReplace": "Attached: {{name}} — tap to replace",
+    "pledgeHint": "Photograph the pledge sheet sent home with the student after signing it and attach it here. Max 4 MB.",
+    "pledgeRequired": "Please attach the signed pledge sheet."
   },
   "ownerSettings": {
     "title": "System owner settings",

@@ -18,7 +18,7 @@ import { useUsers } from '../../hooks/useUsers';
 import { useWhatsAppApi } from '../../hooks/useWhatsAppApi';
 import logo from '../../assets/logo.png';
 import {
-  TRIP_STATUS_STYLES, ENROLLMENT_STATUSES, ENROLLMENT_STATUS_STYLES, TRIP_PAY_METHODS, TRIP_DECLINE_REASONS, TRIP_RATINGS,
+  TRIP_STATUS_STYLES, ENROLLMENT_STATUSES, ENROLLMENT_STATUS_STYLES, TRIP_PAY_METHODS, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES,
   enrollmentStatus, tripPermissions, tripConflicts, tripLink, dayToDate,
 } from '../../config/trips';
 
@@ -264,13 +264,17 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
     const logoUrl = new URL(logo, window.location.origin).href;
     printHtml(trip.title, `<div class="page">
   <img class="logo" src="${logoUrl}" alt="">
+  <div class="brand">${escapeHtml(t('tripConsent.brandTitle'))}</div>
+  ${trip.imageUrl ? `<img class="cover" src="${trip.imageUrl}" alt="">` : ''}
   <h1>${escapeHtml(trip.title)}</h1>
   <div class="sub">${escapeHtml(trip.destination)} — ${escapeHtml(format(dayToDate(trip.date), 'EEEE d MMMM yyyy', { locale: dateLocale }))}</div>
   <img class="qr" src="${qr}" alt="">
   <p class="hint">${escapeHtml(t('trips.posterHint'))}</p>
 </div>`, `@page { size: A4; margin: 0 } .page { width: 210mm; height: 297mm; padding: 22mm 18mm; display: flex; flex-direction: column; align-items: center; text-align: center; border: 10mm solid #0369a1 }
   img.logo { height: 26mm } h1 { font-size: 28pt; margin: 10mm 0 3mm } .sub { font-size: 16pt; color: #0369a1; font-weight: bold; margin-bottom: 8mm }
-  img.qr { width: 120mm; height: 120mm; border: 2mm solid #e2e8f0; border-radius: 6mm; padding: 4mm } .hint { font-size: 15pt; margin-top: 9mm; line-height: 1.8 }`);
+  img.qr { width: 120mm; height: 120mm; border: 2mm solid #e2e8f0; border-radius: 6mm; padding: 4mm } .hint { font-size: 15pt; margin-top: 9mm; line-height: 1.8 }
+  .brand { font-size: 14pt; color: #475569; margin-top: 4mm } img.cover { width: 100%; max-height: 62mm; object-fit: cover; border-radius: 5mm; margin-top: 5mm }
+  .page:has(img.cover) img.qr { width: 85mm; height: 85mm } .page:has(img.cover) h1 { margin-top: 6mm }`);
   };
 
   const exportExcel = async () => {
@@ -286,6 +290,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
       [t('trips.col.paid')]: r.e?.payStatus === 'PAID' ? (r.e.paidAmount ?? trip.fee) : '',
       [t('trips.healthNotes')]: r.e?.healthNotes || '',
       [t('trips.emergencyPhone')]: r.e?.emergencyPhone || '',
+      [t('trips.pledgeLabel')]: r.e?.pledge ? '✓' : '',
       [t('trips.col.boarded')]: r.e?.boarded === true ? '✓' : r.e?.boarded === false ? '✗' : '',
     }));
     const ws = XLSX.utils.json_to_sheet(data);
@@ -323,6 +328,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-bold text-slate-900">{trip.title}</h2>
               <span className={`px-2.5 py-1 rounded-md text-xs font-medium border ${TRIP_STATUS_STYLES[trip.status]}`}>{t(`trips.status.${trip.status}`)}</span>
+              {trip.gender && trip.gender !== 'ALL' && <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${TRIP_GENDER_STYLES[trip.gender]}`}>{t(`trips.gender.${trip.gender}`)}</span>}
               <span className="text-xs font-mono text-slate-400" dir="ltr">{trip.tripCode}</span>
             </div>
             <p className="text-sm text-slate-500 mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
@@ -344,6 +350,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
 
           {tab === 'overview' && (
             <>
+              {trip.imageUrl && <img src={trip.imageUrl} alt="" className="w-full max-h-56 object-cover rounded-2xl border border-slate-100" />}
               {trip.status === 'DRAFT' && trip.rejectionReason && (
                 <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl p-3">{t('trips.rejectedNote', { name: trip.rejectedByName || '', reason: trip.rejectionReason })}</div>
               )}
@@ -416,6 +423,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                     )}
                   </div>
                   {!waApi.enabled && <p className="text-xs text-slate-500">{t('trips.waDisabled')}</p>}
+                  {waApi.enabled && trip.imageUrl && <p className="text-xs text-slate-500">{(waApi.templates || {}).tripAnnouncementImage ? t('trips.announceWithImage') : t('trips.announceNoImageTemplate')}</p>}
                   {announceResult && <p className="text-sm text-emerald-700">{t('trips.announceResult', announceResult)}</p>}
                   {trip.announcedAt && <p className="text-xs text-slate-500">{t('trips.announcedAt', { date: format(trip.announcedAt.toDate ? trip.announcedAt.toDate() : new Date(trip.announcedAt), 'PPp', { locale: dateLocale }), count: trip.announcedCount || 0 })}</p>}
                 </div>
@@ -436,6 +444,9 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                   <p><span className="text-slate-500">{t('trips.form.payDeadline')}: </span>{trip.payDeadline && format(dayToDate(trip.payDeadline), 'EEEE d MMMM', { locale: dateLocale })}</p>
                   {trip.fee > 0 && <p><span className="text-slate-500">{t('trips.form.payMethods')}: </span>{(trip.payMethods || []).map((m) => t(`trips.payMethod.${m}`)).join(sep)}</p>}
                   {trip.bankDetails && <p className="whitespace-pre-wrap"><span className="text-slate-500">{t('trips.form.bankDetails')}: </span>{trip.bankDetails}</p>}
+                  <p><span className="text-slate-500">{t('trips.pledgeLabel')}: </span>{trip.pledgeRequired ? t('trips.pledgeRequiredShort') : t('trips.pledgeOptionalShort')}
+                    {trip.pledgeTemplate?.fileUrl && <a href={trip.pledgeTemplate.fileUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline mr-2 inline-flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />{t('trips.pledgeTemplateLink')}</a>}
+                  </p>
                 </div>
                 <div className="border border-slate-100 rounded-2xl p-4 space-y-2 text-sm md:col-span-2">
                   <p className="font-bold text-slate-800">{t('trips.form.operations')}</p>
@@ -521,6 +532,8 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                         </td>
                         <td className="px-3 py-2.5 text-xs text-slate-600">
                           {r.e?.payMethod && <p>{t(`trips.payMethod.${r.e.payMethod}`)}</p>}
+                          {r.e?.pledge?.fileUrl && <a href={r.e.pledge.fileUrl} target="_blank" rel="noreferrer" className="text-indigo-700 hover:underline flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />{t('trips.viewPledge')}</a>}
+                          {r.e?.decision === 'APPROVED' && trip.pledgeRequired && !r.e?.pledge && <p className="text-rose-600">{t('trips.pledgeMissing')}</p>}
                           {r.e?.receipt?.fileUrl && <a href={r.e.receipt.fileUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />{t('trips.viewReceipt')}</a>}
                           {r.e?.payStatus === 'PAID' && <p className="text-emerald-700">{t('trips.paidBy', { name: r.e.reviewedByName || '' })}{r.e.cashReceiptNo && ` · ${r.e.cashReceiptNo}`}</p>}
                         </td>

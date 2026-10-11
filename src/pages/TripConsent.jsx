@@ -8,7 +8,7 @@ import Watermark from '../components/common/Watermark';
 import LanguageSwitcher from '../components/common/LanguageSwitcher';
 import logo from '../assets/logo.png';
 import { fileToBase64, MAX_PUBLIC_FILE_BYTES } from '../utils/publicSubmission';
-import { ENROLLMENT_STATUS_STYLES, TRIP_DECLINE_REASONS, TRIP_RATINGS } from '../config/trips';
+import { ENROLLMENT_STATUS_STYLES, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES } from '../config/trips';
 
 // Post-trip parent survey (submitTripSurvey): four 1–5 ratings, "would you
 // recommend it", and a free comment.
@@ -90,10 +90,18 @@ export default function TripConsent() {
   const [healthNotes, setHealthNotes] = useState('');
   const [emergencyPhone, setEmergencyPhone] = useState('');
   const [receipt, setReceipt] = useState(null);
+  const [pledge, setPledge] = useState(null);
   const [agree, setAgree] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null);
+
+  // Page title for the shared link / browser tab.
+  useEffect(() => {
+    const prev = document.title;
+    document.title = trip ? `${t('tripConsent.brandTitle')} — ${trip.title}` : t('tripConsent.brandTitle');
+    return () => { document.title = prev; };
+  }, [trip, t]);
 
   useEffect(() => {
     call('getPublicTrip', { tripCode: code })
@@ -123,13 +131,13 @@ export default function TripConsent() {
     }
   };
 
-  const pickReceipt = (file) => {
+  const pickReceipt = (file, setter = setReceipt) => {
     setError(null);
     if (file && file.size > MAX_PUBLIC_FILE_BYTES) {
       setError(t('tripConsent.fileTooBig'));
       return;
     }
-    setReceipt(file || null);
+    setter(file || null);
   };
 
   const submit = async (e) => {
@@ -139,12 +147,16 @@ export default function TripConsent() {
     const paid = decision === 'APPROVED' && trip.fee > 0;
     if (paid && !payMethod) { setError(t('tripConsent.pickPayMethod')); return; }
     if (decision === 'APPROVED' && !agree) { setError(t('tripConsent.mustAgree')); return; }
+    if (decision === 'APPROVED' && trip.pledgeRequired && !pledge && !student?.enrollment?.pledgeName) { setError(t('tripConsent.pledgeRequired')); return; }
     setBusy(true);
     try {
       const file = paid && payMethod === 'BANK' && receipt
         ? { fileName: receipt.name, mimeType: receipt.type || 'application/octet-stream', base64Data: await fileToBase64(receipt) }
         : null;
-      const data = await call('submitTripConsent', { tripCode: code, studentId, last4, decision, declineReason, payMethod, healthNotes, emergencyPhone, agree, receipt: file });
+      const pledgeFile = decision === 'APPROVED' && pledge
+        ? { fileName: pledge.name, mimeType: pledge.type || 'application/octet-stream', base64Data: await fileToBase64(pledge) }
+        : null;
+      const data = await call('submitTripConsent', { tripCode: code, studentId, last4, decision, declineReason, payMethod, healthNotes, emergencyPhone, agree, receipt: file, pledge: pledgeFile });
       setDone(data.enrollment);
     } catch (err) {
       setError(err.message);
@@ -177,11 +189,16 @@ export default function TripConsent() {
           <Loader2 className="w-8 h-8 animate-spin text-primary mt-20" />
         ) : (
           <>
+            <h1 className="w-full max-w-2xl text-center text-2xl font-bold text-primary mt-2">{t('tripConsent.brandTitle')}</h1>
             <div className={card}>
+              {trip.imageUrl && <img src={trip.imageUrl} alt="" className="w-full max-h-72 object-cover rounded-2xl mb-5" />}
               <div className="flex items-start gap-3">
                 <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0"><Bus className="w-6 h-6" /></div>
                 <div>
-                  <h1 className="text-xl font-bold text-slate-900">{trip.title}</h1>
+                  <h2 className="text-xl font-bold text-slate-900 flex flex-wrap items-center gap-2">
+                    {trip.title}
+                    {trip.gender && trip.gender !== 'ALL' && <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${TRIP_GENDER_STYLES[trip.gender]}`}>{t(`trips.gender.${trip.gender}`)}</span>}
+                  </h2>
                   <p className="text-sm text-slate-500 mt-0.5">{trip.branchNames.join('، ')}{trip.stages.length > 0 && <> · <span dir="ltr">{trip.stages.join(', ')}</span></>}</p>
                 </div>
               </div>
@@ -314,6 +331,18 @@ export default function TripConsent() {
                           </div>
                         )}
 
+                        <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 space-y-2">
+                          <p className="text-sm font-medium text-slate-700">{t('tripConsent.pledgeTitle')}{trip.pledgeRequired && <span className="text-red-500"> *</span>}</p>
+                          {trip.pledgeTemplate?.fileUrl && (
+                            <a href={trip.pledgeTemplate.fileUrl} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1"><Paperclip className="w-4 h-4" />{t('tripConsent.pledgeDownload')}</a>
+                          )}
+                          <label className="flex items-center gap-2 text-sm text-indigo-700 cursor-pointer">
+                            <Paperclip className="w-4 h-4" />
+                            {pledge ? pledge.name : student?.enrollment?.pledgeName ? t('tripConsent.pledgeReplace', { name: student.enrollment.pledgeName }) : t('tripConsent.pledgeAttach')}
+                            <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => pickReceipt(e.target.files?.[0], setPledge)} />
+                          </label>
+                          <p className="text-xs text-slate-500">{t('tripConsent.pledgeHint')}</p>
+                        </div>
                         {trip.refundPolicy && <p className="text-xs text-slate-500 whitespace-pre-wrap"><b>{t('trips.form.refundPolicy')}:</b> {trip.refundPolicy}</p>}
                         <label className="flex items-start gap-2 text-sm text-slate-700">
                           <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-1" />

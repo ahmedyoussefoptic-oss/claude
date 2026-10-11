@@ -13,7 +13,7 @@ import TripForm from '../components/trips/TripForm';
 import TripDetails from '../components/trips/TripDetails';
 import TripsReport from '../components/trips/TripsReport';
 import { canSeeTrips } from '../utils/scope';
-import { TRIP_STATUSES, TRIP_STATUS_STYLES, TRIP_DOT, canCreateTrips, tripConflicts, dayToDate } from '../config/trips';
+import { TRIP_STATUSES, TRIP_STATUS_STYLES, TRIP_DOT, TRIP_GENDER_STYLES, canCreateTrips, tripConflicts, dayToDate } from '../config/trips';
 
 const ymd = (d) => format(d, 'yyyy-MM-dd');
 
@@ -157,7 +157,7 @@ export default function Trips() {
                                 <span className="truncate">{tr.title}</span>
                                 {conflict && <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />}
                               </span>
-                              <span className="block truncate opacity-80" dir="ltr">{stageText(tr)}</span>
+                              <span className="block truncate opacity-80">{tr.gender && tr.gender !== 'ALL' ? `${t(`trips.gender.${tr.gender}`)} · ` : ''}<span dir="ltr">{stageText(tr)}</span></span>
                             </button>
                           );
                         })}
@@ -184,6 +184,7 @@ export default function Trips() {
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-slate-900 flex items-center gap-2">
                         {tr.title}
+                        {tr.gender && tr.gender !== 'ALL' && <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${TRIP_GENDER_STYLES[tr.gender]}`}>{t(`trips.gender.${tr.gender}`)}</span>}
                         <span className="text-xs font-mono font-normal text-slate-400" dir="ltr">{tr.tripCode}</span>
                         {conflict && <span className="text-xs text-rose-600 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" />{t('trips.conflictShort')}</span>}
                       </p>

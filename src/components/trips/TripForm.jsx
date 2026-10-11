@@ -2,18 +2,20 @@ import { useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
-import { X, Save, Loader2, AlertTriangle } from 'lucide-react';
+import { X, Save, Loader2, AlertTriangle, ImagePlus, FileText, Trash2 } from 'lucide-react';
+import { fileToBase64, MAX_PUBLIC_FILE_BYTES } from '../../utils/publicSubmission';
 import { functions } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches, useDepartments } from '../../hooks/useOrgData';
 import { useUsers } from '../../hooks/useUsers';
 import { userBranches } from '../../utils/scope';
-import { TRIP_STAGES, TRIP_PAY_METHODS, tripConflicts } from '../../config/trips';
+import { TRIP_STAGES, TRIP_PAY_METHODS, TRIP_GENDERS, tripConflicts } from '../../config/trips';
 
 const EMPTY = {
   title: '', destination: '', objective: '', date: '', departTime: '07:30', returnTime: '13:00', meetingPoint: '',
   branches: [], departments: [], stages: [], capacity: '', fee: '', payDeadline: '', payMethods: ['BANK'],
   bankDetails: '', refundPolicy: '', requirements: '', supervisors: [], buses: '', notes: '',
+  gender: 'ALL', pledgeRequired: false,
 };
 
 const inputCls = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
@@ -70,6 +72,9 @@ function TripFormInner({ trip, allTrips, onClose, onSaved }) {
     ? { ...EMPTY, ...trip, capacity: trip.capacity || '', fee: trip.fee || '', buses: trip.buses || '' }
     : { ...EMPTY, branches: branches.length === 1 ? [branches[0].id] : [] }));
   const [saving, setSaving] = useState(false);
+  // Cover image and pledge sheet template: new file to upload, or 'remove'.
+  const [image, setImage] = useState(null);
+  const [pledgeFile, setPledgeFile] = useState(null);
   const [error, setError] = useState(null);
   const set = (key) => (v) => setForm((f) => ({ ...f, [key]: v?.target ? v.target.value : v }));
 
@@ -87,6 +92,13 @@ function TripFormInner({ trip, allTrips, onClose, onSaved }) {
     setSaving(true);
     try {
       const { data } = await httpsCallable(functions, 'saveTrip')({ id: trip?.id || null, trip: form });
+      const setMedia = httpsCallable(functions, 'setTripMedia');
+      for (const [kind, f] of [['image', image], ['pledgeTemplate', pledgeFile]]) {
+        if (!f) continue;
+        if (f === 'remove') { await setMedia({ id: data.id, kind, file: null }); continue; }
+        if (f.size > MAX_PUBLIC_FILE_BYTES) throw new Error(t('trips.form.fileTooBig'));
+        await setMedia({ id: data.id, kind, file: { fileName: f.name, mimeType: f.type || 'application/octet-stream', base64Data: await fileToBase64(f) } });
+      }
       await onSaved(data.id);
     } catch (err) {
       setError(err.message);
@@ -121,6 +133,13 @@ function TripFormInner({ trip, allTrips, onClose, onSaved }) {
           </Section>
 
           <Section title={t('trips.form.targeting')}>
+            <Field label={t('trips.form.gender')} hint={t('trips.form.genderHint')}>
+              <div className="flex gap-1.5">
+                {TRIP_GENDERS.map((g) => (
+                  <button key={g} type="button" onClick={() => setForm((f) => ({ ...f, gender: g }))} className={`px-3 py-1.5 rounded-lg text-sm border ${(form.gender || 'ALL') === g ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'}`}>{t(`trips.gender.${g}`)}</button>
+                ))}
+              </div>
+            </Field>
             <Field label={t('trips.form.branches')}><Chips options={branches.map((b) => [b.id, b.name])} value={form.branches} onChange={set('branches')} /></Field>
             <Field label={t('trips.form.sections')} hint={t('trips.form.sectionsHint')}><Chips options={departments.map((d) => [d.id, d.name])} value={form.departments} onChange={set('departments')} /></Field>
             <Field label={t('trips.form.grades')} hint={t('trips.form.gradesHint')}><Chips ltr options={TRIP_STAGES.map((s) => [s, s])} value={form.stages} onChange={set('stages')} /></Field>
@@ -149,6 +168,42 @@ function TripFormInner({ trip, allTrips, onClose, onSaved }) {
                 <Field label={t('trips.form.refundPolicy')}><textarea rows={2} value={form.refundPolicy} onChange={set('refundPolicy')} className={inputCls} /></Field>
               </>
             )}
+          </Section>
+
+          <Section title={t('trips.form.mediaTitle')}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Field label={t('trips.form.image')} hint={t('trips.form.imageHint')}>
+                {(image && image !== 'remove') || (trip?.imageUrl && image !== 'remove') ? (
+                  <div className="flex items-center gap-3">
+                    <img src={image && image !== 'remove' ? URL.createObjectURL(image) : trip.imageUrl} alt="" className="w-24 h-16 object-cover rounded-lg border border-slate-200" />
+                    <button type="button" onClick={() => setImage(trip?.imageUrl ? 'remove' : null)} className="text-xs text-rose-600 flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" />{t('common.delete')}</button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 px-3 py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-sm text-slate-600 cursor-pointer hover:bg-slate-50">
+                    <ImagePlus className="w-4 h-4 text-slate-400" />{t('trips.form.pickImage')}
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => setImage(e.target.files?.[0] || null)} />
+                  </label>
+                )}
+              </Field>
+              <Field label={t('trips.form.pledgeTemplate')} hint={t('trips.form.pledgeTemplateHint')}>
+                {(pledgeFile && pledgeFile !== 'remove') || (trip?.pledgeTemplate && pledgeFile !== 'remove') ? (
+                  <div className="flex items-center gap-3 text-sm">
+                    <FileText className="w-4 h-4 text-primary" />
+                    <span className="truncate">{pledgeFile && pledgeFile !== 'remove' ? pledgeFile.name : trip.pledgeTemplate.fileName}</span>
+                    <button type="button" onClick={() => setPledgeFile(trip?.pledgeTemplate ? 'remove' : null)} className="text-xs text-rose-600 flex items-center gap-1"><Trash2 className="w-3.5 h-3.5" />{t('common.delete')}</button>
+                  </div>
+                ) : (
+                  <label className="flex items-center gap-2 px-3 py-2.5 border-2 border-dashed border-slate-200 rounded-xl text-sm text-slate-600 cursor-pointer hover:bg-slate-50">
+                    <FileText className="w-4 h-4 text-slate-400" />{t('trips.form.pickPledge')}
+                    <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => setPledgeFile(e.target.files?.[0] || null)} />
+                  </label>
+                )}
+              </Field>
+            </div>
+            <label className="flex items-start gap-2 text-sm text-slate-700">
+              <input type="checkbox" className="mt-1" checked={!!form.pledgeRequired} onChange={(e) => setForm((f) => ({ ...f, pledgeRequired: e.target.checked }))} />
+              <span>{t('trips.form.pledgeRequired')}<span className="block text-[11px] text-slate-400">{t('trips.form.pledgeRequiredHint')}</span></span>
+            </label>
           </Section>
 
           <Section title={t('trips.form.operations')}>

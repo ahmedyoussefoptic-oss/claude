@@ -43,6 +43,14 @@ export function matchBranchCode(branchName, branches) {
 
 // Parses a raw sheet (array of row objects from XLSX.utils.sheet_to_json)
 // into normalized student records, tolerant of header casing/whitespace.
+function normalizeGender(v) {
+  const s = String(v ?? '').trim().toLowerCase();
+  if (!s) return '';
+  if (/^(m|male|boy|ذكر|بنين|ولد)$/.test(s)) return 'M';
+  if (/^(f|female|girl|أنثى|انثى|أنثي|انثي|بنات|بنت)$/.test(s)) return 'F';
+  return '';
+}
+
 export function parseStudentRows(rows, branches) {
   const records = [];
   const skipped = [];
@@ -74,6 +82,8 @@ export function parseStudentRows(rows, branches) {
       gradeName: String(get('grade_name', 'grade') ?? '').trim(),
       className: String(get('class_name', 'class') ?? '').trim(),
       mobile: String(get('mobile', 'phone') ?? '').trim(),
+      // Optional gender column → 'M' / 'F' (used by boys-/girls-only trips).
+      gender: normalizeGender(get('gender', 'sex', 'الجنس', 'student_gender')),
     });
   });
 
