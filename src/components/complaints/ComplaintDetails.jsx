@@ -231,6 +231,8 @@ function ComplaintDetailsInner({ complaint, onClose }) {
   const [visitNotes, setVisitNotes] = useState('');
   const [visitSolved, setVisitSolved] = useState(true);
   const [visitSaving, setVisitSaving] = useState(false);
+  // Colleagues who joined the meeting (besides the person confirming it).
+  const [visitWith, setVisitWith] = useState([]);
   const isVisitWaiting = complaint.visitStatus === 'WAITING';
   const canConfirmVisit = isVisitWaiting && (
     canEdit || (complaint.assignedTo || []).includes(user?.uid) || (userData?.isPrincipal === true && inScope)
@@ -242,8 +244,9 @@ function ComplaintDetailsInner({ complaint, onClose }) {
     }
     setVisitSaving(true);
     try {
-      await httpsCallable(functions, 'confirmBranchVisit')({ complaintDocId: complaint.id, notes: visitNotes, solved: visitSolved });
+      await httpsCallable(functions, 'confirmBranchVisit')({ complaintDocId: complaint.id, notes: visitNotes, solved: visitSolved, metByIds: visitWith });
       setVisitNotes('');
+      setVisitWith([]);
       setActiveTab('internal');
       // The thank-you WhatsApp message goes out automatically (server
       // trigger on visitStatus -> MET) when auto-send is on.
@@ -550,6 +553,18 @@ function ComplaintDetailsInner({ complaint, onClose }) {
                     className="w-full bg-white border border-rose-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-rose-200 outline-none resize-none"
                   />
                   <p className="text-xs text-rose-700/80">{t('branchVisit.notesInternalHint')}</p>
+                  <div>
+                    <p className="text-xs font-medium text-slate-700 mb-1">{t('branchVisit.metWithOthers')}</p>
+                    <AssigneeMultiSelect
+                      options={users
+                        .filter((u) => u.id !== user?.uid && u.active !== false && u.role !== 'RECEPTIONIST' && u.tripsAccess !== 'tripsOnly'
+                          && (u.access === 'all' || u.role === 'ADMIN' || userBranches(u).includes(complaint.branch) || (complaint.assignedTo || []).includes(u.id)))
+                        .sort((a, b) => Number((complaint.assignedTo || []).includes(b.id)) - Number((complaint.assignedTo || []).includes(a.id)) || (a.name || '').localeCompare(b.name || '', 'ar'))}
+                      selected={visitWith}
+                      onChange={setVisitWith}
+                      placeholder={t('branchVisit.metWithPlaceholder')}
+                    />
+                  </div>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div className="flex flex-col gap-1.5">
                       <label className="flex items-center gap-2 text-sm text-slate-700">

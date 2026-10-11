@@ -77,7 +77,8 @@ function ConfirmMeetingDialog({ visit, onClose }) {
     .filter((u) => u.active !== false && u.role !== 'RECEPTIONIST' && u.tripsAccess !== 'tripsOnly' && !(visit.assignedTo || []).includes(u.id)
       && (u.access === 'all' || userBranches(u).includes(visit.branch)))
     .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
-  const [metById, setMetById] = useState(assigned.length === 1 ? assigned[0].id : '');
+  const [metByIds, setMetByIds] = useState(assigned.length === 1 ? [assigned[0].id] : []);
+  const toggle = (id) => setMetByIds((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -85,7 +86,7 @@ function ConfirmMeetingDialog({ visit, onClose }) {
     setBusy(true);
     setError(null);
     try {
-      await httpsCallable(functions, 'confirmBranchVisit')({ complaintDocId: visit.id, metById, notes });
+      await httpsCallable(functions, 'confirmBranchVisit')({ complaintDocId: visit.id, metByIds, notes });
       onClose();
     } catch (err) {
       setError(err.message);
@@ -99,11 +100,20 @@ function ConfirmMeetingDialog({ visit, onClose }) {
         <p className="text-sm text-slate-600">{t('branchVisits.confirmFor', { parent: visit.parentName, student: visit.studentName })}</p>
         <div>
           <label className="block text-xs text-slate-600 mb-1">{t('branchVisits.metWith')}</label>
-          <select value={metById} onChange={(e) => setMetById(e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm">
-            <option value="">{t('common.select')}</option>
-            {assigned.length > 0 && <optgroup label={t('branchVisits.assignedGroup')}>{assigned.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</optgroup>}
-            {others.length > 0 && <optgroup label={t('branchVisits.otherStaff')}>{others.map((u) => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}</optgroup>}
-          </select>
+          <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-2">
+            {[[t('branchVisits.assignedGroup'), assigned], [t('branchVisits.otherStaff'), others.map((u) => ({ id: u.id, name: u.name || u.email }))]].map(([label, list]) => list.length > 0 && (
+              <div key={label}>
+                <p className="text-[11px] font-bold text-slate-400 mb-1">{label}</p>
+                {list.map((u) => (
+                  <label key={u.id} className="flex items-center gap-2 text-sm text-slate-700 py-0.5 cursor-pointer">
+                    <input type="checkbox" checked={metByIds.includes(u.id)} onChange={() => toggle(u.id)} />
+                    {u.name}
+                  </label>
+                ))}
+              </div>
+            ))}
+          </div>
+          {metByIds.length > 1 && <p className="text-xs text-teal-700 mt-1">{t('branchVisits.selectedCount', { n: metByIds.length })}</p>}
         </div>
         <div>
           <label className="block text-xs text-slate-600 mb-1">{t('branchVisits.receptionNote')}</label>
@@ -113,7 +123,7 @@ function ConfirmMeetingDialog({ visit, onClose }) {
         {error && <p className="text-sm text-red-600">{error}</p>}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="px-4 py-2 text-sm rounded-xl border border-slate-300 bg-white">{t('common.cancel')}</button>
-          <button disabled={busy || !metById} onClick={confirm} className="px-5 py-2 text-sm rounded-xl bg-teal-600 text-white font-medium flex items-center gap-2 disabled:opacity-50">
+          <button disabled={busy || !metByIds.length} onClick={confirm} className="px-5 py-2 text-sm rounded-xl bg-teal-600 text-white font-medium flex items-center gap-2 disabled:opacity-50">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}{t('branchVisits.confirmButton')}
           </button>
         </div>

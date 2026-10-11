@@ -1683,7 +1683,7 @@ exports.confirmBranchVisit = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   }
-  const { complaintDocId, notes, solved, metById } = request.data || {};
+  const { complaintDocId, notes, solved, metById, metByIds } = request.data || {};
   if (!complaintDocId || typeof complaintDocId !== "string") {
     throw new HttpsError("invalid-argument", "رقم الملاحظة مطلوب.");
   }
@@ -1717,31 +1717,38 @@ exports.confirmBranchVisit = onCall(async (request) => {
     throw new HttpsError("permission-denied", "لا تملك صلاحية تأكيد هذه المقابلة.");
   }
 
-  // Who met the parent: the caller, or — from reception — the staff member
-  // picked (an active, non-reception account covering the branch).
-  let metBy = { id: request.auth.uid, name: caller.name || "مستخدم" };
-  if (byReception) {
-    if (typeof metById !== "string" || !metById) throw new HttpsError("invalid-argument", "اختر الموظف الذي قابل ولي الأمر.");
-    const metSnap = await db.collection("users").doc(metById).get();
-    const m = metSnap.data();
+  // Who met the parent — one or several staff members. From reception: the
+  // people picked; from staff: the caller plus any colleagues they add.
+  // Each must be an active, non-reception account covering the branch (or
+  // already assigned).
+  const picked = [...new Set([...(Array.isArray(metByIds) ? metByIds : []), ...(typeof metById === "string" && metById ? [metById] : [])].filter((x) => typeof x === "string" && x))];
+  const ids = byReception ? picked : [request.auth.uid, ...picked.filter((x) => x !== request.auth.uid)];
+  if (!ids.length) throw new HttpsError("invalid-argument", "اختر الموظف الذي قابل ولي الأمر.");
+  if (ids.length > 8) throw new HttpsError("invalid-argument", "الحد الأقصى 8 أشخاص.");
+  const metSnaps = await db.getAll(...ids.map((id) => db.collection("users").doc(id)));
+  const metList = metSnaps.map((snapU) => {
+    const m = snapU.data();
+    if (snapU.id === request.auth.uid && !byReception) return { id: snapU.id, name: caller.name || "مستخدم" };
     const coversBranch = m && (m.access === "all" || m.role === "ADMIN" || (m.branches || []).includes(complaint.branch) || m.branch === complaint.branch);
-    if (!metSnap.exists || m.active === false || m.role === "RECEPTIONIST" || !(coversBranch || (complaint.assignedTo || []).includes(metById))) {
-      throw new HttpsError("invalid-argument", "الموظف المختار غير متاح لهذا الفرع.");
+    if (!snapU.exists || m.active === false || m.role === "RECEPTIONIST" || !(coversBranch || (complaint.assignedTo || []).includes(snapU.id))) {
+      throw new HttpsError("invalid-argument", "أحد الموظفين المختارين غير متاح لهذا الفرع.");
     }
-    metBy = { id: metById, name: m.name || "مستخدم" };
-  }
+    return { id: snapU.id, name: m.name || "مستخدم" };
+  });
+  const metBy = { id: metList[0].id, name: metList.map((m) => m.name).join("، ") };
 
   const now = Timestamp.now();
   const actorName = caller.name || "مستخدم";
   const text = typeof notes === "string" ? notes.trim() : "";
   const isSolved = !byReception && solved === true && !["SOLVED", "CLOSED", "REJECTED"].includes(complaint.status);
 
-  // The person who met the parent becomes an assignee if they weren't.
+  // Everyone who met the parent becomes an assignee if they weren't.
   const assignedTo = complaint.assignedTo || [];
   const assignedToNames = complaint.assignedToNames || [];
-  const assigneeUpdate = assignedTo.includes(metBy.id) ? {} : {
-    assignedTo: [...assignedTo, metBy.id],
-    assignedToNames: [...assignedToNames, metBy.name],
+  const newcomers = metList.filter((m) => !assignedTo.includes(m.id));
+  const assigneeUpdate = !newcomers.length ? {} : {
+    assignedTo: [...assignedTo, ...newcomers.map((m) => m.id)],
+    assignedToNames: [...assignedToNames, ...newcomers.map((m) => m.name)],
     ...(assignedTo.length ? {} : { assignedAt: now }),
   };
 
@@ -1754,7 +1761,7 @@ exports.confirmBranchVisit = onCall(async (request) => {
     metadata: {
       comment: byReception
         ? `✅ أكّد موظف الاستقبال (${actorName}) مقابلة ولي الأمر في الفرع مع ${metBy.name}.${text ? `\n${text}` : ""}\nيُرجى من ${metBy.name} كتابة ملخص المقابلة والحل.`
-        : `✅ تمت مقابلة ولي الأمر في الفرع.\n${text}`,
+        : `✅ تمت مقابلة ولي الأمر في الفرع${metList.length > 1 ? ` (${metBy.name})` : ""}.\n${text}`,
       visit: true,
     },
     createdAt: now,
@@ -1763,13 +1770,14 @@ exports.confirmBranchVisit = onCall(async (request) => {
     action: "VISIT_MET",
     actorId: request.auth.uid,
     actorName,
-    metadata: { solved: isSolved, metById: metBy.id, metByName: metBy.name, byReception },
+    metadata: { solved: isSolved, metById: metBy.id, metByIds: metList.map((m) => m.id), metByName: metBy.name, byReception },
     createdAt: now,
   });
   batch.update(complaintRef, {
     visitStatus: "MET",
     visitMetAt: now,
     visitMetBy: metBy.id,
+    visitMetByIds: metList.map((m) => m.id),
     visitMetByName: metBy.name,
     ...(byReception ? { visitConfirmedByName: actorName } : {}),
     hasInternalComment: true,

@@ -94,9 +94,11 @@ export default function VisitsReport({ complaints, filters, branches, complaintT
     .sort((a, b) => b.total - a.total);
 
   const staffMap = {};
+  // A meeting can have several interviewers ("أ، ب"): count it for each.
   met.forEach((v) => {
-    const k = v.c.visitMetByName || '—';
-    (staffMap[k] = staffMap[k] || []).push(v.wait);
+    String(v.c.visitMetByName || '—').split('، ').forEach((k) => {
+      (staffMap[k] = staffMap[k] || []).push(v.wait);
+    });
   });
   const staffRows = Object.entries(staffMap).map(([name, w]) => ({ name, count: w.length, avgWait: avg(w) })).sort((a, b) => b.count - a.count);
 

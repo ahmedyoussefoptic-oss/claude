@@ -1246,7 +1246,9 @@
     "bookAppointmentHint": "Visit the school on a later day and time you pick from the available slots",
     "bookSubmit": "Send appointment request",
     "bookDoneTitle": "Appointment request received",
-    "bookDoneBody": "The principal will confirm it or suggest another time and you'll get a message. When you arrive, scan the QR code and choose “I have an appointment”."
+    "bookDoneBody": "The principal will confirm it or suggest another time and you'll get a message. When you arrive, scan the QR code and choose “I have an appointment”.",
+    "metWithOthers": "Also in the meeting (optional)",
+    "metWithPlaceholder": "Add colleagues who joined..."
   },
   "branchQr": {
     "title": "Branch visit QR codes",
@@ -1358,7 +1360,8 @@
     "bookNote": "Note (optional)",
     "bookHint": "The visit is marked “not met”, the slot is booked as confirmed and the parent gets a WhatsApp message. On the day they scan the QR code and choose “I have an appointment”.",
     "meetingBooked": "Meeting: {{when}}",
-    "bookedBy": "Booked by {{name}}"
+    "bookedBy": "Booked by {{name}}",
+    "selectedCount": "{{n}} people selected"
   },
   "slaSettings": {
     "title": "Resolution time (SLA) & working hours",
