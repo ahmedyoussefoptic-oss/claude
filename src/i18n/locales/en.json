@@ -2087,7 +2087,8 @@
       "view": {
         "board": "Pipeline",
         "list": "List",
-        "report": "Reports"
+        "report": "Reports",
+        "visits": "Visits"
       },
       "stages": {
         "INQUIRY": "New inquiry",
@@ -2320,6 +2321,88 @@
       "reenroll": "Re-enrollment",
       "academicYear": "Coming academic year",
       "academicYearHint": "e.g. 2027-2028 — parent decisions are stored for this year."
+    },
+    "visits": {
+      "title": "Visits & school tours",
+      "book": "Book visit / tour",
+      "bookTitle": "Book a visit or school tour",
+      "editTitle": "Change the visit time",
+      "type": "Appointment type",
+      "types": {
+        "VISIT_TOUR": "Visit & school tour",
+        "VISIT": "School visit",
+        "TOUR": "School tour"
+      },
+      "date": "Date",
+      "time": "Time",
+      "branch": "Branch",
+      "host": "Host (optional)",
+      "hostPlaceholder": "e.g. Ms. Sarah — admissions",
+      "sendConfirm": "Send the parent a WhatsApp confirmation",
+      "save": "Save appointment",
+      "missing": "Set the date, time and branch.",
+      "statuses": {
+        "SCHEDULED": "Scheduled",
+        "CONFIRMED": "Parent confirmed",
+        "ATTENDED": "Attended",
+        "NO_SHOW": "No-show",
+        "CANCELLED": "Cancelled"
+      },
+      "actions": {
+        "confirmed": "Parent confirmed",
+        "attended": "Attended",
+        "noShow": "No-show",
+        "reschedule": "Reschedule",
+        "cancel": "Cancel",
+        "remind": "Send reminder",
+        "remindWa": "WhatsApp reminder",
+        "open": "Open file"
+      },
+      "reminded": "Reminded {{n}}× · last {{when}}",
+      "notReminded": "No reminder sent",
+      "confirmationSent": "Confirmation sent",
+      "interestAsk": "Interest level after the visit",
+      "attendedSave": "Record attendance",
+      "host_label": "Host: {{name}}",
+      "rescheduled": "Rescheduled {{n}}×",
+      "empty": "No appointments for this lead yet.",
+      "dayEmpty": "No visit appointments on this day.",
+      "today": "Today",
+      "tomorrow": "Tomorrow",
+      "tiles": {
+        "total": "Appointments",
+        "confirmed": "Parent confirmed",
+        "attended": "Attended",
+        "noShow": "No-show",
+        "toRemind": "Awaiting reminder"
+      },
+      "remindAll": "Remind everyone ({{n}})",
+      "remindAllConfirm": "Send a WhatsApp reminder to {{n}} parents?",
+      "apiMissing": "To send reminders in bulk, enable the WhatsApp API and add the \"visit reminder\" template name in the platform settings. Meanwhile use the WhatsApp reminder button on each row.",
+      "sentResult": "Sent {{sent}} messages",
+      "failedSuffix": " — failed {{n}}: {{names}}",
+      "saved": "Appointment saved.",
+      "sendConfirmWa": "Send confirmation on WhatsApp",
+      "msgConfirm": "Hello {{parent}},\nYour {{type}} at Al Moktashef International Schools — {{branch}} is confirmed.\nTime: {{when}}\nWe look forward to welcoming you.",
+      "msgReminder": "Hello {{parent}},\nA reminder of your {{type}} at Al Moktashef International Schools — {{branch}}.\nTime: {{when}}\nIf you need to change it, please let us know.",
+      "log": {
+        "booked": "Booked {{type}} — {{when}}",
+        "rescheduled": "Moved {{type}} to {{when}}",
+        "CONFIRMED": "Parent confirmed {{type}} — {{when}}",
+        "ATTENDED": "Parent attended {{type}} — {{when}}",
+        "NO_SHOW": "Parent missed {{type}} — {{when}}",
+        "CANCELLED": "Cancelled {{type}} — {{when}}",
+        "reminder": "Reminder for {{type}} — {{when}} (WhatsApp)",
+        "confirm": "Confirmation for {{type}} — {{when}} (WhatsApp)"
+      },
+      "upcoming": "Upcoming",
+      "statVisitsToday": "Visits today",
+      "homeTitle": "Today's visits & tours",
+      "settingsTitle": "Visit & tour reminders (WhatsApp API)",
+      "templateName": "Approved Taqnyat template name",
+      "templateHint": "Leave empty to send confirmations and reminders manually with the WhatsApp button. Requires the WhatsApp API to be enabled in the main settings.",
+      "autoRemind": "Automatically remind tomorrow's appointments every day at 5:00 PM",
+      "suggested": "Suggested template text (for approval in the Taqnyat portal), with a \"contact the branch\" URL button like the other templates:"
     }
   },
   "leaveRequest": {

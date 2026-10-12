@@ -3864,3 +3864,114 @@ exports.getStudent360 = onCall(async (request) => {
     reenrollments: reenroll.docs.map((d) => ({ id: d.id, ...d.data(), updatedAt: ms(d.data().updatedAt) })),
   };
 });
+
+// --- New customers: visit / school-tour appointments (leadVisits) ---------
+// Owner-only like the rest of the platform. Reminders go through the
+// WhatsApp API with the template named in platformSettings/main
+// (leadVisitTemplate) — same shape as the other templates: five body
+// variables ({{1}} parent, {{2}} visit type, {{3}} date and time,
+// {{4}} the message, {{5}} branch contact link) plus the "contact the
+// branch" URL button /contact/BR-<branch>.
+const LEAD_VISIT_TYPES = { VISIT: "زيارة للمدرسة", TOUR: "جولة مدرسية", VISIT_TOUR: "زيارة وجولة مدرسية" };
+const LEAD_VISIT_ACTIVE = ["SCHEDULED", "CONFIRMED"];
+const LEAD_VISIT_LINES = {
+  confirm: (v, branchName) => `تم تأكيد موعدكم في ${branchName}، ونسعد باستقبالكم${v.host ? `، وسيكون في استقبالكم ${v.host}` : ""}.`,
+  reminder: (v, branchName) => `نذكّركم بموعدكم في ${branchName}، ونسعد باستقبالكم${v.host ? `، وسيكون في استقبالكم ${v.host}` : ""}. في حال رغبتكم بتغيير الموعد يرجى التواصل مع الفرع.`,
+};
+
+async function leadVisitWa() {
+  if (!WA_API_ENABLED) return null;
+  const [waSnap, ps] = await Promise.all([db.collection("settings").doc("whatsappApi").get(), loadPlatformSettings()]);
+  const wa = waSnap.exists ? waSnap.data() : {};
+  if (!wa.enabled || !String(ps.leadVisitTemplate || "").trim()) return null;
+  return { language: wa.language || "ar", template: String(ps.leadVisitTemplate).trim(), ps };
+}
+
+async function sendLeadVisitMessage(cfg, v, kind, branchName) {
+  const to = toIntlNumber(v.phone);
+  if (!to) throw new Error("لا يوجد رقم جوال صحيح لولي الأمر.");
+  const payload = {
+    to,
+    type: "template",
+    template: { name: cfg.template, language: { code: cfg.language } },
+    components: [
+      {
+        type: "body",
+        parameters: [v.parentName, LEAD_VISIT_TYPES[v.type] || LEAD_VISIT_TYPES.VISIT, formatRiyadh(v.at.toMillis()), LEAD_VISIT_LINES[kind](v, branchName), `${PUBLIC_APP_URL}/contact/BR-${v.branch || ""}`]
+          .map((x) => ({ type: "text", text: waParam(x) })),
+      },
+      { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: `BR-${v.branch || ""}` }] },
+    ],
+  };
+  const response = await fetch(TAQNYAT_MESSAGES_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TAQNYAT_WA_TOKEN.value()}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    console.error("Taqnyat lead visit failed", response.status, text.slice(0, 300));
+    throw new Error(`تعذّر الإرسال عبر واتساب API (رمز ${response.status}).`);
+  }
+}
+
+// Sends to each visit a few at a time, logs it on the visit and the lead's
+// timeline; never throws.
+async function remindLeadVisits(docs, kind, actorName, actorId, cfg, extra = {}) {
+  const branchSnap = await db.collection("branches").get();
+  const branchNames = new Map(branchSnap.docs.map((d) => [d.id, d.data().name || d.id]));
+  let sent = 0;
+  const errors = [];
+  const queue = [...docs];
+  const worker = async () => {
+    for (let d = queue.shift(); d; d = queue.shift()) {
+      const v = d.data();
+      try {
+        await sendLeadVisitMessage(cfg, v, kind, branchNames.get(v.branch) || "المدرسة");
+        const now = Timestamp.now();
+        await d.ref.update({
+          ...(kind === "reminder" ? { reminderCount: FieldValue.increment(1), lastReminderAt: now, lastReminderByName: actorName, lastReminderVia: "API" } : { confirmationSentAt: now }),
+          ...extra,
+          updatedAt: now,
+        });
+        if (v.leadId) {
+          await db.collection("leads").doc(v.leadId).collection("activity").add({
+            type: "WHATSAPP",
+            text: `${kind === "reminder" ? "تذكير" : "تأكيد"} موعد ${LEAD_VISIT_TYPES[v.type] || ""} — ${formatRiyadh(v.at.toMillis())} (واتساب API)`,
+            byName: actorName, byId: actorId || null, at: now,
+          });
+        }
+        sent++;
+      } catch (err) {
+        errors.push({ id: d.id, parentName: v.parentName, message: err.message });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, worker));
+  return { sent, failed: errors.length, errors };
+}
+
+exports.sendLeadVisitReminders = onCall({ secrets: WA_SECRETS, timeoutSeconds: 300 }, async (request) => {
+  const caller = await ownerCaller(request);
+  const ids = Array.isArray(request.data?.ids) ? [...new Set(request.data.ids.filter((x) => typeof x === "string" && x))].slice(0, 100) : [];
+  const kind = request.data?.kind === "confirm" ? "confirm" : "reminder";
+  if (!ids.length) throw new HttpsError("invalid-argument", "لا توجد مواعيد محددة.");
+  const cfg = await leadVisitWa();
+  if (!cfg) throw new HttpsError("failed-precondition", "فعّل واتساب API وأضف اسم قالب «تذكير موعد زيارة» في إعدادات المنصة.");
+  const snaps = await db.getAll(...ids.map((id) => db.collection("leadVisits").doc(id)));
+  const due = snaps.filter((s) => s.exists && LEAD_VISIT_ACTIVE.includes(s.data().status));
+  return remindLeadVisits(due, kind, caller.name || "منشئ النظام", caller.uid, cfg);
+});
+
+// Optional: every day at 17:00 Riyadh, remind tomorrow's visits
+// (platformSettings/main.leadVisitAutoRemind).
+exports.leadVisitAutoReminders = onSchedule({ schedule: "0 17 * * *", timeZone: "Asia/Riyadh", secrets: WA_SECRETS, timeoutSeconds: 540 }, async () => {
+  const cfg = await leadVisitWa();
+  if (!cfg || cfg.ps.leadVisitAutoRemind !== true) return;
+  const day = riyadhDay(1);
+  const snap = await db.collection("leadVisits").where("dayKey", "==", day).get();
+  const due = snap.docs.filter((d) => LEAD_VISIT_ACTIVE.includes(d.data().status) && d.data().autoRemindedFor !== day);
+  if (!due.length) return;
+  const result = await remindLeadVisits(due, "reminder", "تذكير تلقائي", null, cfg, { autoRemindedFor: day });
+  console.log("lead visit auto reminders", day, result.sent, result.failed);
+});

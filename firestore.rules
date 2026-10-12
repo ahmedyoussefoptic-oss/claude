@@ -432,6 +432,9 @@ service cloud.firestore {
     match /reenrollments/{id} {
       allow read, write: if isOwner();
     }
+    match /leadVisits/{id} {
+      allow read, write: if isOwner();
+    }
     match /platformSettings/{id} {
       allow read, write: if isOwner();
     }
@@ -445,7 +448,7 @@ service cloud.firestore {
         'itemCategories', 'settings', 'settingsUnlocks', 'secureConfig', 'complaints', 'trips', 'tripVerify',
         'appointments', 'deletedComplaints', 'deletedLostFoundItems', 'deletedTechSupportTickets', 'lostFoundItems',
         'techSupportTickets', 'students', 'notifications',
-        'leaveRequests', 'authorizedPickups', 'leads', 'reenrollments', 'platformSettings'
+        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings'
       ]);
     }
   }

@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, query, where, orderBy, limit, getCountFromServer } from 'firebase/firestore';
-import { LayoutDashboard, DoorOpen, UserPlus, GraduationCap, Settings2, FileText, Bus, Armchair, ChevronLeft, Lock } from 'lucide-react';
+import { LayoutDashboard, DoorOpen, UserPlus, GraduationCap, Settings2, FileText, Bus, Armchair, ChevronLeft, Lock, CalendarCheck } from 'lucide-react';
 import { isToday } from 'date-fns';
 import { db } from '../../config/firebase';
 import { useSlaSettings } from '../../utils/businessTime';
 import { usePlatformSettings } from '../../config/platform';
 import { leadOpen, stageOverdue, followUpOverdue } from '../../components/platform/leadUtils';
+import { dayKeyOf } from '../../components/platform/LeadVisits';
 
 // منصة المكتشف — one screen over every module: today's leaves, the
 // enrollment pipeline, re-enrollment, and the existing complaints / visits /
@@ -21,10 +22,12 @@ export default function PlatformHome() {
   const [leads, setLeads] = useState([]);
   const [reenroll, setReenroll] = useState([]);
   const [counts, setCounts] = useState({});
+  const [visits, setVisits] = useState([]);
 
   useEffect(() => onSnapshot(query(collection(db, 'leaveRequests'), orderBy('createdAt', 'desc'), limit(300)), (s) => setLeaves(s.docs.map((d) => d.data())), () => {}), []);
   useEffect(() => onSnapshot(collection(db, 'leads'), (s) => setLeads(s.docs.map((d) => d.data())), () => {}), []);
   useEffect(() => onSnapshot(query(collection(db, 'reenrollments'), where('year', '==', settings.academicYear)), (s) => setReenroll(s.docs.map((d) => d.data())), () => {}), [settings.academicYear]);
+  useEffect(() => onSnapshot(query(collection(db, 'leadVisits'), where('dayKey', '==', dayKeyOf(new Date()))), (s) => setVisits(s.docs.map((d) => d.data()).filter((v) => v.status !== 'CANCELLED')), () => {}), []);
   useEffect(() => {
     Promise.all([
       getCountFromServer(collection(db, 'students')),
@@ -44,6 +47,7 @@ export default function PlatformHome() {
   const modules = [
     { to: '/platform/leaves', icon: DoorOpen, color: 'from-amber-400 to-orange-500', title: t('platform.leaves.title'), stats: [[t('platform.leaves.statPending'), leaves.filter((l) => l.status === 'PENDING').length], [t('platform.home.leavesToday'), todayLeaves.length], [t('platform.leaves.statExited'), todayLeaves.filter((l) => ['EXITED', 'RETURNED'].includes(l.status)).length]] },
     { to: '/platform/leads', icon: UserPlus, color: 'from-sky-500 to-blue-600', title: t('platform.leads.title'), stats: [[t('platform.leads.statOpen'), openLeads.length], [t('platform.leads.statOverdue'), overdueLeads], [t('platform.leads.report.conversion'), pct(enrolled, leads.length)]] },
+    { to: '/platform/leads?view=visits', icon: CalendarCheck, color: 'from-cyan-500 to-teal-600', title: t('platform.visits.homeTitle'), stats: [[t('platform.visits.tiles.total'), visits.length], [t('platform.visits.tiles.attended'), visits.filter((v) => v.status === 'ATTENDED').length], [t('platform.visits.tiles.toRemind'), visits.filter((v) => ['SCHEDULED', 'CONFIRMED'].includes(v.status) && !v.reminderCount).length]] },
     { to: '/platform/students', icon: GraduationCap, color: 'from-emerald-500 to-teal-600', title: t('platform.students.title'), stats: [[t('platform.home.students'), counts.students ?? '…'], [t('platform.reenroll.intents.RETURNING'), `${returning} (${pct(returning, counts.students)})`], [t('platform.reenroll.intents.NOT_RETURNING'), notReturning]] },
     { to: '/complaints', icon: FileText, color: 'from-violet-500 to-purple-600', title: t('nav.complaints'), stats: [[t('platform.home.openComplaints'), counts.openComplaints ?? '…']] },
     { to: '/visits', icon: Armchair, color: 'from-rose-500 to-red-600', title: t('nav.branchVisits'), stats: [[t('branchVisits.waitingNow'), counts.waitingVisits ?? '…']] },

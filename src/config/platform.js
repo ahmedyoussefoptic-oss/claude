@@ -39,6 +39,17 @@ export const SIDE_STYLES = {
 };
 // Maximum working hours a file may stay in each stage (editable in the
 // platform settings); past it the file is flagged overdue.
+// Visit / school-tour appointments for a lead (leadVisits collection).
+export const VISIT_TYPES = ['VISIT_TOUR', 'VISIT', 'TOUR'];
+export const VISIT_STATUSES = ['SCHEDULED', 'CONFIRMED', 'ATTENDED', 'NO_SHOW', 'CANCELLED'];
+export const VISIT_ACTIVE = ['SCHEDULED', 'CONFIRMED'];
+export const VISIT_STATUS_STYLES = {
+  SCHEDULED: 'bg-sky-100 text-sky-700 border-sky-200',
+  CONFIRMED: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+  ATTENDED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+  NO_SHOW: 'bg-rose-100 text-rose-700 border-rose-200',
+  CANCELLED: 'bg-slate-100 text-slate-500 border-slate-200',
+};
 export const DEFAULT_STAGE_SLA = { INQUIRY: 1, QUALIFIED: 24, VISIT_BOOKED: 72, VISITED: 8, TEST: 120, RESULT: 48, DOCUMENTS: 168, PAYMENT: 168, ENROLLED: 24 };
 
 // --- Current students / re-enrollment ----------------------------------------
@@ -63,6 +74,8 @@ export const DEFAULT_PLATFORM_SETTINGS = {
   stageSla: DEFAULT_STAGE_SLA,
   academicYear: defaultAcademicYear(),
   capacity: {}, // { [branchId]: { [grade]: seats } }
+  leadVisitTemplate: '', // WhatsApp API template for visit confirmations / reminders
+  leadVisitAutoRemind: false, // remind tomorrow's visits every day at 17:00
 };
 
 export function usePlatformSettings() {

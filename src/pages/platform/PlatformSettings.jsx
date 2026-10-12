@@ -9,6 +9,11 @@ import { LEAD_STAGES, LEAD_SOURCES, usePlatformSettings } from '../../config/pla
 import { STAGES } from '../../config/complaintTypes';
 import { Field, inputCls, btn } from '../../components/platform/ui';
 
+// Suggested WhatsApp template for visit confirmations / reminders
+// (sendLeadVisitReminders fills the five variables and the button).
+const VISIT_TEMPLATE = 'مرحباً {{1}}،\nموعد {{2}} في مدارس المكتشف العالمية\nالموعد: {{3}}\n{{4}}\nللتواصل مع الفرع: {{5}}\n\nهذا الرقم مخصص للإشعارات فقط ولا يستقبل الردود، للتواصل مع الفرع اضغط زر "تواصل مع الفرع".';
+const VISIT_TEMPLATE_VARS = '{{1}} ولي الأمر · {{2}} نوع الموعد · {{3}} التاريخ والوقت · {{4}} نص التأكيد أو التذكير · {{5}} رابط التواصل مع الفرع — زر الرابط: https://mis-complaints.web.app/contact/{{1}}';
+
 // إعدادات المنصة — limits and deadlines for the platform modules, seats per
 // grade, and the public links/QR codes for parents.
 export default function PlatformSettings() {
@@ -38,6 +43,8 @@ export default function PlatformSettings() {
       academicYear: String(draft.academicYear || '').trim(),
       stageSla: Object.fromEntries(LEAD_STAGES.map((s) => [s, Math.max(0, Number(draft.stageSla[s]) || 0)])),
       capacity: draft.capacity || {},
+      leadVisitTemplate: String(draft.leadVisitTemplate || '').trim(),
+      leadVisitAutoRemind: draft.leadVisitAutoRemind === true,
     }, { merge: true });
     setSaving(false);
     setSaved(true);
@@ -91,6 +98,20 @@ export default function PlatformSettings() {
           {LEAD_STAGES.map((s) => (
             <Field key={s} label={t(`platform.leads.stages.${s}`)}><input type="number" min="0" step="0.5" value={draft.stageSla?.[s] ?? ''} onChange={(e) => setDraft((d) => ({ ...d, stageSla: { ...d.stageSla, [s]: e.target.value } }))} className={inputCls} /></Field>
           ))}
+        </div>
+      </section>
+
+      <section className={card}>
+        <h3 className="font-bold text-slate-900">{t('platform.visits.settingsTitle')}</h3>
+        <Field label={t('platform.visits.templateName')} hint={t('platform.visits.templateHint')}><input value={draft.leadVisitTemplate || ''} onChange={(e) => setDraft((d) => ({ ...d, leadVisitTemplate: e.target.value }))} className={`${inputCls} max-w-sm font-mono`} dir="ltr" placeholder="lead_visit_reminder" /></Field>
+        <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={draft.leadVisitAutoRemind === true} onChange={(e) => setDraft((d) => ({ ...d, leadVisitAutoRemind: e.target.checked }))} />{t('platform.visits.autoRemind')}</label>
+        <div className="space-y-1.5">
+          <p className="text-xs text-slate-500">{t('platform.visits.suggested')}</p>
+          <div className="relative">
+            <pre className="whitespace-pre-wrap text-xs leading-relaxed bg-slate-50 border border-slate-200 rounded-lg p-3 pl-10 text-slate-700 font-sans">{VISIT_TEMPLATE}</pre>
+            <button onClick={() => copy('tpl', VISIT_TEMPLATE)} className="absolute top-2 left-2 p-1.5 text-slate-400 hover:text-primary">{copied === 'tpl' ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}</button>
+          </div>
+          <p className="text-[11px] text-slate-400" dir="rtl">{VISIT_TEMPLATE_VARS}</p>
         </div>
       </section>
 

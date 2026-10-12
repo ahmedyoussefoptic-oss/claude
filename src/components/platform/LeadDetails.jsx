@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collection, addDoc, doc, updateDoc, onSnapshot, query, orderBy, Timestamp, increment } from 'firebase/firestore';
-import { Phone, MessageCircle, Pencil, Loader2, ChevronLeft, PauseCircle, XCircle, ListOrdered, RotateCcw, CheckCircle2, AlertTriangle, Paperclip, Upload } from 'lucide-react';
+import { Phone, MessageCircle, Pencil, Loader2, ChevronLeft, PauseCircle, XCircle, ListOrdered, RotateCcw, CheckCircle2, AlertTriangle, Paperclip, Upload, CalendarPlus } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { db } from '../../config/firebase';
@@ -15,6 +15,7 @@ import {
 } from '../../config/platform';
 import { Modal, Field, Pill, inputCls, btn } from './ui';
 import LeadForm from './LeadForm';
+import { LeadVisitsSection, VisitForm } from './LeadVisits';
 import { leadOpen, stageOverdue, followUpOverdue, tsMs } from './leadUtils';
 
 const dtLocal = (ms) => format(new Date(ms), "yyyy-MM-dd'T'HH:mm");
@@ -36,6 +37,7 @@ export default function LeadDetails({ lead, onClose }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [panel, setPanel] = useState(null); // 'advance' | 'side' | null
+  const [booking, setBooking] = useState(false);
   const nextStage = LEAD_STAGES[LEAD_STAGES.indexOf(lead.stage) + 1];
   const open = leadOpen(lead);
   const defaultFollow = dtLocal(Math.max(Date.now() + 86400e3, tsMs(lead.nextFollowUp)));
@@ -142,7 +144,8 @@ export default function LeadDetails({ lead, onClose }) {
 
       <div className="flex flex-wrap gap-2">
         <button onClick={() => setEditing(true)} className={btn.ghost}><Pencil className="w-4 h-4" />{t('common.edit')}</button>
-        {open && !lead.sideStatus && nextStage && <button onClick={() => setPanel(panel === 'advance' ? null : 'advance')} className={btn.primary}><CheckCircle2 className="w-4 h-4" />{t('platform.leads.moveTo', { stage: t(`platform.leads.stages.${nextStage}`) })}</button>}
+        {open && !lead.sideStatus && nextStage && <button onClick={() => (nextStage === 'VISIT_BOOKED' ? setBooking(true) : setPanel(panel === 'advance' ? null : 'advance'))} className={btn.primary}><CheckCircle2 className="w-4 h-4" />{t('platform.leads.moveTo', { stage: t(`platform.leads.stages.${nextStage}`) })}</button>}
+        <button onClick={() => setBooking(true)} className={btn.ghost}><CalendarPlus className="w-4 h-4" />{t('platform.visits.book')}</button>
         {open && <button onClick={() => setPanel(panel === 'side' ? null : 'side')} className={btn.ghost}><PauseCircle className="w-4 h-4" />{t('platform.leads.setSide')}</button>}
         {lead.sideStatus && <button disabled={busy} onClick={() => write({ sideStatus: null, sideReason: '', nextFollowUp: Timestamp.fromMillis(Date.now() + 86400e3) }, { type: 'SIDE', side: 'RESUMED', text: t('platform.leads.resumed') })} className={btn.ghost}><RotateCcw className="w-4 h-4" />{t('platform.leads.resume')}</button>}
         {open && lead.noAnswerCount >= 3 && lead.sideStatus !== 'LOST' && <button disabled={busy} onClick={() => write({ sideStatus: 'LOST', sideReason: 'NO_ANSWER', sideAt: Timestamp.now(), nextFollowUp: null }, { type: 'SIDE', side: 'LOST', text: t('platform.leads.loss.NO_ANSWER') })} className={btn.danger}><XCircle className="w-4 h-4" />{t('platform.leads.markNoAnswer')}</button>}
@@ -221,6 +224,8 @@ export default function LeadDetails({ lead, onClose }) {
             </div>
           </div>
 
+          <LeadVisitsSection lead={lead} />
+
           {open && (
             <div className="border border-slate-100 rounded-2xl p-4 space-y-3">
               <p className="text-sm font-bold text-slate-800">{t('platform.leads.logTitle')}</p>
@@ -260,6 +265,7 @@ export default function LeadDetails({ lead, onClose }) {
         </div>
       </div>
 
+      {booking && <VisitForm lead={lead} onClose={() => setBooking(false)} />}
       {editing && <LeadForm lead={lead} onClose={() => setEditing(false)} onSaved={() => setEditing(false)} />}
     </Modal>
   );

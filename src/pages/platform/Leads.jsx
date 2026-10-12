@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
-import { UserPlus, Plus, Loader2, Search, LayoutGrid, List, FileBarChart, AlertTriangle, CalendarClock, Link2, Copy, Check, GraduationCap, TrendingUp } from 'lucide-react';
+import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
+import { UserPlus, Plus, Loader2, Search, LayoutGrid, List, FileBarChart, AlertTriangle, CalendarClock, Link2, Copy, Check, GraduationCap, TrendingUp, CalendarCheck } from 'lucide-react';
 import { format, isThisWeek, isThisMonth } from 'date-fns';
 import { db } from '../../config/firebase';
 import { useBranches } from '../../hooks/useOrgData';
@@ -12,6 +12,7 @@ import { Tile, Pill, btn } from '../../components/platform/ui';
 import LeadForm from '../../components/platform/LeadForm';
 import LeadDetails from '../../components/platform/LeadDetails';
 import LeadsReport from '../../components/platform/LeadsReport';
+import { LeadVisitsDay, dayKeyOf } from '../../components/platform/LeadVisits';
 import { leadOpen, stageOverdue, followUpOverdue, tsMs } from '../../components/platform/leadUtils';
 
 // العملاء الجدد — every enquiry about enrolling becomes a file that moves
@@ -23,9 +24,10 @@ export default function Leads() {
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id || '—';
   const settings = usePlatformSettings();
   const slaCfg = useSlaSettings();
-  const [searchParams, setSearchParams] = useSearchParams();
   const [leads, setLeads] = useState(null);
-  const [view, setView] = useState('board');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [view, setView] = useState(() => (searchParams.get('view') === 'visits' ? 'visits' : 'board'));
+  const [visitsToday, setVisitsToday] = useState([]);
   const [branch, setBranch] = useState('');
   const [source, setSource] = useState('');
   const [assignee, setAssignee] = useState('');
@@ -39,6 +41,9 @@ export default function Leads() {
   useEffect(() => onSnapshot(query(collection(db, 'leads'), orderBy('createdAt', 'desc')), (snap) => {
     setLeads(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }, () => setLeads([])), []);
+  useEffect(() => onSnapshot(query(collection(db, 'leadVisits'), where('dayKey', '==', dayKeyOf(new Date()))), (snap) => {
+    setVisitsToday(snap.docs.map((d) => d.data()).filter((v) => v.status !== 'CANCELLED'));
+  }, () => {}), []);
 
   const now = Date.now();
   const isLate = (l) => stageOverdue(l, settings, slaCfg, now) || followUpOverdue(l, now);
@@ -81,6 +86,7 @@ export default function Leads() {
         <p className="text-xs text-slate-500 mt-0.5" dir="ltr">{(l.students || []).map((s) => s.grade).filter(Boolean).join(' · ') || '—'}</p>
         <p className="text-[11px] text-slate-400 mt-1">{branchName(l.branch)} · {t(`platform.leads.sources.${l.source}`, l.source)}</p>
         {l.sideStatus && <Pill className={`${SIDE_STYLES[l.sideStatus]} border-transparent mt-1`}>{t(`platform.leads.side.${l.sideStatus}`)}</Pill>}
+        {l.visitAt?.toDate && l.visitAt.toMillis() >= new Date().setHours(0, 0, 0, 0) && <p className="text-[11px] mt-1 flex items-center gap-1 text-cyan-700"><CalendarCheck className="w-3 h-3" />{t('platform.visits.upcoming')} <span dir="ltr">{format(l.visitAt.toDate(), 'dd/MM HH:mm')}</span></p>}
         {l.nextFollowUp?.toDate && leadOpen(l) && <p className={`text-[11px] mt-1 flex items-center gap-1 ${followUpOverdue(l, now) ? 'text-rose-600' : 'text-slate-500'}`}><CalendarClock className="w-3 h-3" /><span dir="ltr">{format(l.nextFollowUp.toDate(), 'dd/MM HH:mm')}</span></p>}
       </button>
     );
@@ -99,10 +105,11 @@ export default function Leads() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <Tile label={t('platform.leads.statOpen')} value={stats.open} icon={UserPlus} onClick={() => setQuick('OPEN')} active={quick === 'OPEN'} />
         <Tile label={t('platform.leads.statOverdue')} value={stats.overdue} icon={AlertTriangle} tone="text-rose-600" onClick={() => setQuick('OVERDUE')} active={quick === 'OVERDUE'} />
         <Tile label={t('platform.leads.statToday')} value={stats.today} icon={CalendarClock} tone="text-amber-600" onClick={() => setQuick('FOLLOWUP_TODAY')} active={quick === 'FOLLOWUP_TODAY'} />
+        <Tile label={t('platform.visits.statVisitsToday')} value={visitsToday.length} sub={`${t('platform.visits.statuses.ATTENDED')}: ${visitsToday.filter((v) => v.status === 'ATTENDED').length}`} icon={CalendarCheck} tone="text-cyan-700" onClick={() => setView('visits')} active={view === 'visits'} />
         <Tile label={t('platform.leads.statNewWeek')} value={stats.newWeek} icon={TrendingUp} tone="text-sky-700" />
         <Tile label={t('platform.leads.statEnrolledMonth')} value={stats.enrolledMonth} icon={GraduationCap} tone="text-emerald-700" />
       </div>
@@ -110,7 +117,7 @@ export default function Leads() {
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
         <div className="p-4 border-b border-slate-100 flex flex-wrap items-center gap-2">
           <div className="flex bg-slate-100 rounded-xl p-1">
-            {[['board', LayoutGrid], ['list', List], ['report', FileBarChart]].map(([v, Icon]) => (
+            {[['board', LayoutGrid], ['list', List], ['visits', CalendarCheck], ['report', FileBarChart]].map(([v, Icon]) => (
               <button key={v} onClick={() => setView(v)} className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 ${view === v ? 'bg-white shadow-sm text-primary font-medium' : 'text-slate-600'}`}><Icon className="w-4 h-4" />{t(`platform.leads.view.${v}`)}</button>
             ))}
           </div>
@@ -121,10 +128,11 @@ export default function Leads() {
           {select(branch, setBranch, branches.map((b) => [b.id, b.name]), t('common.allBranches'))}
           {select(source, setSource, LEAD_SOURCES.map((s) => [s, t(`platform.leads.sources.${s}`)]), t('platform.leads.allSources'))}
           {select(assignee, setAssignee, assignees.map((a) => [a, a]), t('platform.leads.allAssignees'))}
-          {view !== 'report' && select(quick === 'OPEN' ? '' : quick, (v) => setQuick(v || 'OPEN'), [['OVERDUE', t('platform.leads.statOverdue')], ['FOLLOWUP_TODAY', t('platform.leads.statToday')], ['CLOSED', t('platform.leads.closed')], ['ALL', t('platform.leads.all')]], t('platform.leads.statOpen'))}
+          {!['report', 'visits'].includes(view) && select(quick === 'OPEN' ? '' : quick, (v) => setQuick(v || 'OPEN'), [['OVERDUE', t('platform.leads.statOverdue')], ['FOLLOWUP_TODAY', t('platform.leads.statToday')], ['CLOSED', t('platform.leads.closed')], ['ALL', t('platform.leads.all')]], t('platform.leads.statOpen'))}
         </div>
 
         {!leads ? <div className="py-16 flex justify-center"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>
+          : view === 'visits' ? <LeadVisitsDay leads={leads} onOpenLead={setOpenId} />
           : view === 'report' ? <div className="p-4"><LeadsReport leads={filtered} settings={settings} slaCfg={slaCfg} branchName={branchName} /></div>
             : view === 'board' ? (
               <div className="p-4 overflow-x-auto">
