@@ -66,10 +66,10 @@
   "app": {
     "brand": "Al Moktashef International",
     "brandShort": "Al Moktashef",
-    "tagline": "Feedback Management System"
+    "tagline": "Customer Relationship Management (CRM)"
   },
   "login": {
-    "title": "Al Moktashef Feedback System",
+    "title": "Customer Relationship Management (CRM) - Al Moktashef International Schools",
     "subtitle": "Sign in to access the dashboard and feedback",
     "email": "Email",
     "password": "Password",
