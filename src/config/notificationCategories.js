@@ -15,5 +15,6 @@ export const NOTIFICATION_CATEGORIES = [
   { id: 'appointment', types: ['APPOINTMENT_REQUESTED'] },
   { id: 'trips', types: ['TRIP_APPROVAL_REQUESTED', 'TRIP_DECIDED', 'TRIP_RECEIPT'] },
   { id: 'reminder', types: ['REMINDER', 'IT_REMINDER', 'LF_REMINDER'] },
+  { id: 'platform', types: ['LEAVE_REQUESTED', 'LEAD_NEW'] },
 ];
 export const NOTIFICATION_CHANNELS = ['push', 'email'];

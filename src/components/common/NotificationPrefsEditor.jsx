@@ -7,7 +7,8 @@ const CHANNEL_ICONS = { push: Smartphone, email: Mail };
 // Toggles for which notifications a user receives, and through which
 // channels besides the in-app bell. `prefs` / `channels` are the user-doc
 // maps where a missing key means "on".
-export default function NotificationPrefsEditor({ prefs = {}, channels = {}, onChange }) {
+// The owner-only platform category is shown only to the owner (showPlatform).
+export default function NotificationPrefsEditor({ prefs = {}, channels = {}, onChange, showPlatform = false }) {
   const { t } = useTranslation();
   const isOn = (map, key) => map[key] !== false;
   const setAll = (on) => onChange({
@@ -31,7 +32,7 @@ export default function NotificationPrefsEditor({ prefs = {}, channels = {}, onC
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {NOTIFICATION_CATEGORIES.map((c) => {
+        {NOTIFICATION_CATEGORIES.filter((c) => showPlatform || c.id !== 'platform').map((c) => {
           const on = isOn(prefs, c.id);
           return (
             <button key={c.id} type="button" role="switch" aria-checked={on} onClick={() => toggle('prefs', c.id)} className="flex items-center gap-3 text-right p-2.5 rounded-lg border border-slate-100 hover:bg-slate-50">

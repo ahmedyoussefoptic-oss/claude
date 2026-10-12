@@ -297,6 +297,7 @@ const NOTIFICATION_CATEGORIES = {
   appointment: ["APPOINTMENT_REQUESTED"],
   trips: ["TRIP_APPROVAL_REQUESTED", "TRIP_DECIDED", "TRIP_RECEIPT"],
   reminder: ["REMINDER", "IT_REMINDER", "LF_REMINDER"],
+  platform: ["LEAVE_REQUESTED", "LEAD_NEW"],
 };
 const categoryOfType = (type) => Object.keys(NOTIFICATION_CATEGORIES).find((c) => NOTIFICATION_CATEGORIES[c].includes(type));
 
@@ -2393,7 +2394,7 @@ exports.checkInAppointment = onCall(async (request) => {
 // new complaint, lost-item photos). Done with the Admin SDK — like the
 // public-link and tech-support uploads — so they don't depend on Firebase
 // Storage security rules, which client-side uploads were tripping over.
-const STAFF_UPLOAD_FOLDERS = ["complaints", "lostFoundItems"];
+const STAFF_UPLOAD_FOLDERS = ["complaints", "lostFoundItems", "leads"];
 exports.uploadStaffFile = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   const { folder, recordId, file } = request.data || {};
@@ -3687,4 +3688,179 @@ exports.setTripMedia = onCall(async (request) => {
   await ref.update(kind === "image" ? { imageUrl: uploaded.fileUrl, updatedAt: Timestamp.now() } : { pledgeTemplate: uploaded, updatedAt: Timestamp.now() });
   await tripLog(ref, kind === "image" ? "TRIP_IMAGE_SET" : "TRIP_PLEDGE_SET", caller, { fileName: uploaded.fileName });
   return { ok: true, fileUrl: uploaded.fileUrl };
+});
+
+// ===========================================================================
+// منصة المكتشف — leave permissions, new-customer (enrollment) follow-up and
+// current students. Visible ONLY to the system owner for now: firestore.rules
+// restrict every platform collection to isOwner(), and the staff callables
+// below check it too. The public endpoints (parent leave request, inquiry
+// form) only create records; they never return platform data.
+// ===========================================================================
+async function ownerCaller(request) {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const snap = await db.collection("users").doc(request.auth.uid).get();
+  if (!snap.exists || snap.data().isOwner !== true) throw new HttpsError("permission-denied", "هذا القسم متاح لمنشئ النظام فقط.");
+  return { uid: request.auth.uid, ...snap.data() };
+}
+async function platformOwners() {
+  const snap = await db.collection("users").where("isOwner", "==", true).get();
+  return snap.docs.map((d) => d.id);
+}
+async function loadPlatformSettings() {
+  const snap = await db.collection("platformSettings").doc("main").get();
+  return snap.exists ? snap.data() : {};
+}
+async function newCode(collection, field, prefix) {
+  const year = riyadhDay().slice(0, 4);
+  for (let i = 0; i < 8; i++) {
+    const code = `${prefix}-${year}-${crypto.randomInt(10000, 100000)}`;
+    const dup = await db.collection(collection).where(field, "==", code).limit(1).get();
+    if (dup.empty) return code;
+  }
+  throw new HttpsError("internal", "تعذّر إنشاء رقم، حاول مرة أخرى.");
+}
+
+// Parent identity for public platform pages: student national ID + last 4
+// digits of the mobile registered for that student; failures are counted
+// per student to stop guessing.
+async function verifyStudentParent(scope, studentIdRaw, last4Raw) {
+  const studentId = normalizeDigits(studentIdRaw);
+  const last4 = normalizeDigits(last4Raw);
+  if (!/^\d{5,15}$/.test(studentId) || !/^\d{4}$/.test(last4)) {
+    throw new HttpsError("invalid-argument", "أدخل رقم هوية الطالب وآخر 4 أرقام من الجوال.");
+  }
+  const guardRef = db.collection("tripVerify").doc(`${scope}_${studentId}`);
+  const guard = (await guardRef.get()).data() || {};
+  const recent = guard.lastAt && Date.now() - guard.lastAt.toMillis() < 3600 * 1000;
+  if (recent && (guard.failures || 0) >= 8) throw new HttpsError("resource-exhausted", "محاولات كثيرة، حاول بعد ساعة أو تواصل مع الفرع.");
+  const fail = async (message) => {
+    await guardRef.set({ failures: (recent ? guard.failures || 0 : 0) + 1, lastAt: Timestamp.now() });
+    throw new HttpsError("not-found", message);
+  };
+  const snap = await db.collection("students").doc(studentId).get();
+  if (!snap.exists) return fail("لم يتم العثور على الطالب. تأكد من رقم الهوية.");
+  const s = snap.data();
+  const mobile = normalizeDigits(s.mobile).replace(/\D/g, "");
+  if (!mobile || mobile.slice(-4) !== last4) return fail("البيانات غير مطابقة لسجل الطالب. تأكد من آخر 4 أرقام من جوال ولي الأمر المسجل في المدرسة.");
+  if (guard.failures) await guardRef.delete();
+  const branchOf = await branchResolver();
+  return { studentId, student: s, branch: branchOf(s), grade: studentGrade(s), section: studentSection(s) };
+}
+
+// --- Leave permissions (الاستئذان) ------------------------------------------
+const LEAVE_REASONS = ["MEDICAL", "ILLNESS", "FAMILY", "OFFICIAL", "OTHER"];
+const LEAVE_ACTIVE = ["PENDING", "APPROVED", "CALLED"];
+
+exports.getLeaveContext = onCall(async (request) => {
+  const v = await verifyStudentParent("leave", request.data?.studentId, request.data?.last4);
+  const pickups = await db.collection("authorizedPickups").where("studentId", "==", v.studentId).where("active", "==", true).get();
+  const open = await db.collection("leaveRequests").where("studentId", "==", v.studentId).where("status", "in", LEAVE_ACTIVE).get();
+  return {
+    studentName: v.student.name || "", grade: v.grade, className: v.student.className || "",
+    pickups: pickups.docs.map((d) => ({ id: d.id, name: d.data().name, relation: d.data().relation })),
+    open: open.docs.map((d) => ({ code: d.data().code, status: d.data().status, requestedAt: d.data().requestedAt?.toMillis?.() || null })),
+  };
+});
+
+exports.submitLeaveRequest = onCall(async (request) => {
+  const d = request.data || {};
+  const v = await verifyStudentParent("leave", d.studentId, d.last4);
+  const reason = LEAVE_REASONS.includes(d.reason) ? d.reason : null;
+  if (!reason) throw new HttpsError("invalid-argument", "اختر سبب الاستئذان.");
+  const requestedMs = Number(d.requestedAt);
+  if (!(requestedMs > Date.now() - 3600e3 && requestedMs < Date.now() + 14 * 86400e3)) throw new HttpsError("invalid-argument", "اختر وقت خروج صحيحاً.");
+  let pickup;
+  if (typeof d.pickupId === "string" && d.pickupId) {
+    const p = await db.collection("authorizedPickups").doc(d.pickupId).get();
+    if (!p.exists || p.data().studentId !== v.studentId || p.data().active !== true) throw new HttpsError("invalid-argument", "المستلم غير موجود في قائمة المفوّضين.");
+    pickup = { authorizedId: p.id, name: p.data().name, relation: p.data().relation, nationalId: p.data().nationalId || "", authorized: true };
+  } else {
+    const name = str(d.pickupName, 80);
+    if (!name) throw new HttpsError("invalid-argument", "اكتب اسم من سيستلم الطالب.");
+    pickup = { name, relation: str(d.pickupRelation, 40), nationalId: normalizeDigits(d.pickupNationalId).slice(0, 15), phone: str(d.pickupPhone, 20), authorized: false };
+  }
+  let attachment = null;
+  if (d.attachment) attachment = await uploadPublicAttachment(getStorage().bucket(), `leaveRequests/${v.studentId}`, d.attachment);
+  const code = await newCode("leaveRequests", "code", "LV");
+  const now = Timestamp.now();
+  const ref = await db.collection("leaveRequests").add({
+    code, studentId: v.studentId, studentName: v.student.name || "", branch: v.branch, grade: v.grade, className: v.student.className || "", section: v.section,
+    parentPhone: v.student.mobile || "", reason, note: str(d.note, 300), type: d.type === "TEMPORARY" ? "TEMPORARY" : "FULL",
+    requestedAt: Timestamp.fromMillis(requestedMs), pickup, attachment, source: "PARENT", status: "PENDING",
+    history: [{ action: "REQUESTED", at: now, byName: "ولي الأمر (رابط الاستئذان)" }], createdAt: now, updatedAt: now,
+  });
+  await notifyUsers(await platformOwners(), {
+    title: "طلب استئذان جديد", body: `${v.student.name || ""} — ${pickup.name}${pickup.authorized ? "" : " (غير مفوّض)"}`, complaintId: ref.id, type: "LEAVE_REQUESTED",
+  });
+  return { code };
+});
+
+// --- New customers / enrollment follow-up (العملاء الجدد) --------------------
+const LEAD_SOURCES = ["CALL_CENTER", "WHATSAPP", "WALK_IN", "WEBSITE", "CAMPAIGN", "REFERRAL", "OTHER"];
+const normalizePhone = (p) => toIntlNumber(p);
+
+// Public inquiry form (/join): website, campaigns, branch QR, referral link.
+// One file per parent phone — a repeat inquiry is added to the existing file.
+exports.submitLeadInquiry = onCall(async (request) => {
+  const d = request.data || {};
+  const parentName = str(d.parentName, 80);
+  const phone = normalizePhone(d.phone);
+  if (!parentName || !/^9665\d{8}$/.test(phone)) throw new HttpsError("invalid-argument", "أدخل الاسم ورقم جوال سعودي صحيحاً.");
+  const students = (Array.isArray(d.students) ? d.students : []).slice(0, 6).map((s) => ({
+    name: str(s.name, 80), gender: s.gender === "F" ? "F" : s.gender === "M" ? "M" : "", birthDate: /^\d{4}-\d{2}-\d{2}$/.test(s.birthDate || "") ? s.birthDate : "",
+    grade: str(s.grade, 10), curriculum: str(s.curriculum, 30), currentSchool: str(s.currentSchool, 80),
+  })).filter((s) => s.name || s.grade);
+  if (!students.length) throw new HttpsError("invalid-argument", "أضف بيانات طالب واحد على الأقل.");
+  const source = LEAD_SOURCES.includes(d.source) ? d.source : "WEBSITE";
+  const now = Timestamp.now();
+  const existing = await db.collection("leads").where("phone", "==", phone).limit(1).get();
+  if (!existing.empty) {
+    const ref = existing.docs[0].ref;
+    await ref.collection("activity").add({ type: "INQUIRY_AGAIN", text: `استفسار جديد من النموذج الإلكتروني (${students.map((s) => s.name || s.grade).join("، ")})`, byName: "ولي الأمر (نموذج إلكتروني)", at: now });
+    await ref.update({ updatedAt: now, lastInboundAt: now });
+    return { code: existing.docs[0].data().code, existing: true };
+  }
+  const code = await newCode("leads", "code", "LD");
+  const ref = await db.collection("leads").add({
+    code, parentName, phone, altPhone: normalizePhone(d.altPhone) || "", district: str(d.district, 60), preferredContact: str(d.preferredContact, 20),
+    students, branch: str(d.branch, 40), suggestedBranch: "", source, campaign: str(d.campaign, 60), referrer: str(d.ref, 60),
+    stage: "INQUIRY", sideStatus: null, sideReason: "", interest: "", assignedTo: null, assignedToName: "",
+    nextFollowUp: Timestamp.fromMillis(Date.now() + 24 * 3600e3), stageEnteredAt: now, noAnswerCount: 0,
+    createdAt: now, updatedAt: now, lastInboundAt: now, firstResponseAt: null,
+  });
+  await ref.collection("activity").add({ type: "CREATED", text: "فتح الملف من النموذج الإلكتروني", byName: "ولي الأمر (نموذج إلكتروني)", at: now });
+  await notifyUsers(await platformOwners(), { title: "عميل محتمل جديد", body: `${parentName} — ${students.map((s) => s.grade).filter(Boolean).join("، ")}`, complaintId: ref.id, type: "LEAD_NEW" });
+  return { code };
+});
+
+// --- Platform data for the owner's student record ----------------------------
+// Everything about one current student across the system (complaints, tech,
+// lost & found, trips, leaves, re-enrollment) for the 360° profile.
+exports.getStudent360 = onCall(async (request) => {
+  await ownerCaller(request);
+  const studentId = normalizeDigits(request.data?.studentId);
+  if (!studentId) throw new HttpsError("invalid-argument", "رقم الطالب مطلوب.");
+  const [student, complaints, tickets, lost, enroll, leaves, pickups, reenroll] = await Promise.all([
+    db.collection("students").doc(studentId).get(),
+    db.collection("complaints").where("studentId", "==", studentId).get(),
+    db.collection("techSupportTickets").where("nationalId", "==", studentId).get(),
+    db.collection("lostFoundItems").where("studentId", "==", studentId).get(),
+    db.collectionGroup("enrollments").where("studentId", "==", studentId).get(),
+    db.collection("leaveRequests").where("studentId", "==", studentId).get(),
+    db.collection("authorizedPickups").where("studentId", "==", studentId).get(),
+    db.collection("reenrollments").where("studentId", "==", studentId).get(),
+  ]);
+  const ms = (t) => t?.toMillis?.() || null;
+  const tripDocs = await Promise.all(enroll.docs.map((d) => d.ref.parent.parent.get()));
+  return {
+    student: student.exists ? student.data() : null,
+    complaints: complaints.docs.map((d) => ({ id: d.id, number: d.data().complaintId, subject: d.data().subject, status: d.data().status, type: d.data().complaintType, at: ms(d.data().createdAt), visit: !!d.data().viaVisitQr })),
+    tickets: tickets.docs.map((d) => ({ id: d.id, number: d.data().ticketId, status: d.data().status, type: d.data().problemType, at: ms(d.data().createdAt) })),
+    lostFound: lost.docs.map((d) => ({ id: d.id, number: d.data().itemCode, item: d.data().itemName, status: d.data().status, at: ms(d.data().createdAt) })),
+    trips: enroll.docs.map((d, i) => ({ tripId: tripDocs[i].id, title: tripDocs[i].data()?.title || "", date: tripDocs[i].data()?.date || "", decision: d.data().decision, payStatus: d.data().payStatus || null, boarded: d.data().boarded ?? null })),
+    leaves: leaves.docs.map((d) => ({ id: d.id, code: d.data().code, reason: d.data().reason, status: d.data().status, at: ms(d.data().requestedAt), pickup: d.data().pickup?.name || "" })),
+    pickups: pickups.docs.map((d) => ({ id: d.id, ...d.data(), createdAt: ms(d.data().createdAt) })),
+    reenrollments: reenroll.docs.map((d) => ({ id: d.id, ...d.data(), updatedAt: ms(d.data().updatedAt) })),
+  };
 });

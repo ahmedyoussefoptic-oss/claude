@@ -1416,7 +1416,8 @@
       "viewed": "Record views",
       "appointment": "Visit appointment requests",
       "trips": "School trips",
-      "reminder": "Reminders"
+      "reminder": "Reminders",
+      "platform": "MIS platform"
     },
     "hints": {
       "assigned": "When feedback, a tech ticket or lost item is assigned to you",
@@ -1430,7 +1431,8 @@
       "viewed": "When a staff member opens a record for the first time",
       "appointment": "A parent requested a visit slot that needs confirming",
       "trips": "A trip awaiting your approval, your trip approved, or a payment receipt to review",
-      "reminder": "When a colleague sends you a reminder about a record assigned to you"
+      "reminder": "When a colleague sends you a reminder about a record assigned to you",
+      "platform": "New leave requests and new customer inquiries"
     },
     "channelsTitle": "Delivery (in addition to the in-app bell)",
     "channels": {
@@ -1946,5 +1948,406 @@
       "grade": "Grade",
       "photo": "Photo"
     }
+  },
+  "platform": {
+    "navTitle": "MIS Platform",
+    "student": "Student",
+    "nationalId": "National ID",
+    "grade": "Grade",
+    "notes": "Notes",
+    "code": "No.",
+    "attachment": "Attachment",
+    "chooseFile": "Choose file",
+    "exportExcel": "Export Excel",
+    "allStatuses": "All statuses",
+    "createdAt": "Created",
+    "hours": "{{n}} h",
+    "days": "{{n}} days",
+    "gender": {
+      "M": "Male",
+      "F": "Female"
+    },
+    "range": {
+      "TODAY": "Today & open",
+      "ALL": "All"
+    },
+    "studentPicker": {
+      "placeholder": "Search by national ID or student name"
+    },
+    "relations": {
+      "FATHER": "Father",
+      "MOTHER": "Mother",
+      "BROTHER": "Brother",
+      "SISTER": "Sister",
+      "UNCLE": "Uncle",
+      "GRANDPARENT": "Grandparent",
+      "DRIVER": "Driver",
+      "OTHER": "Other"
+    },
+    "home": {
+      "title": "Platform dashboard",
+      "subtitle": "Every Al Moktashef module on one screen.",
+      "ownerOnly": "Visible only to you as the system owner; no other user can see it.",
+      "leavesToday": "Leaves today",
+      "students": "Students",
+      "openComplaints": "Open complaints"
+    },
+    "leaves": {
+      "title": "Leave permissions",
+      "subtitle": "Students leaving during the school day: approval, calling the student, verified hand-over.",
+      "new": "New leave",
+      "newTitle": "Leave request (reception / phone)",
+      "copyParentLink": "Parent link",
+      "statPending": "Awaiting approval",
+      "statWaiting": "Approved · not handed over",
+      "statExited": "Left today",
+      "statRepeated": "Repeated ({{n}}+ this month)",
+      "empty": "No leave requests.",
+      "reason": "Reason",
+      "type": "Type",
+      "time": "Requested time",
+      "types": {
+        "FULL": "Leaves for the day",
+        "TEMPORARY": "Leaves and returns"
+      },
+      "reasons": {
+        "MEDICAL": "Medical appointment",
+        "ILLNESS": "Illness",
+        "FAMILY": "Family matter",
+        "OFFICIAL": "Official errand",
+        "OTHER": "Other"
+      },
+      "status": {
+        "PENDING": "Awaiting approval",
+        "APPROVED": "Approved",
+        "CALLED": "Student called",
+        "EXITED": "Left",
+        "RETURNED": "Returned",
+        "REJECTED": "Rejected",
+        "CANCELLED": "Cancelled"
+      },
+      "source": {
+        "PARENT": "Parent (link)",
+        "RECEPTION": "Reception"
+      },
+      "pickup": "Collected by",
+      "pickupHint": "Pick from the authorised list, or another person (needs the parent's confirmation).",
+      "noAuthorized": "No authorised list for this student yet; add it from the student's file in Current students.",
+      "otherPerson": "Another person (not authorised)",
+      "pickupName": "Name",
+      "relation": "Relation",
+      "nationalId": "National ID",
+      "pickStudent": "Choose the student.",
+      "pickupRequired": "Who will collect the student?",
+      "authorized": "Authorised",
+      "notAuthorized": "Not authorised",
+      "urgent": "Urgent",
+      "repeatedBadge": "{{n}} this month",
+      "approve": "Approve",
+      "reject": "Reject",
+      "rejectReason": "Reason",
+      "call": "Call the student",
+      "handOver": "Hand over",
+      "returned": "Mark returned",
+      "cancel": "Cancel",
+      "waApproved": "Tell the parent",
+      "waExit": "Confirm exit",
+      "wa": {
+        "approved": "Dear parent, the leave for {{name}} at {{time}} is approved. Please come to the school reception.",
+        "exit": "Dear parent, {{name}} left school at {{time}} with {{pickup}}."
+      },
+      "exitTitle": "Hand over the student",
+      "receiverName": "Person collecting",
+      "confirmExit": "Confirm exit",
+      "authorizedNote": "{{name}} is on the authorised list. Check their ID before handing over.",
+      "notAuthorizedNote": "{{name}} is not on the authorised list. Only hand over after confirming with the parent.",
+      "parentConfirmed": "I confirmed by phone with the parent (registered number) that this person may collect the student.",
+      "exitAt": "Exit time",
+      "exitedAt": "Left {{time}} with {{name}}",
+      "returnedAt": "Returned {{time}}"
+    },
+    "leads": {
+      "title": "New customers",
+      "subtitle": "Follow every interested family from first contact to enrollment.",
+      "new": "New lead",
+      "copyFormLink": "Inquiry form link",
+      "search": "Name, phone, file no.",
+      "allSources": "All sources",
+      "allAssignees": "All owners",
+      "statOpen": "Open files",
+      "statOverdue": "Overdue",
+      "statToday": "Follow-ups today",
+      "statNewWeek": "New this week",
+      "statEnrolledMonth": "Enrolled this month",
+      "closed": "Closed",
+      "all": "All",
+      "empty": "No files.",
+      "stage": "Stage",
+      "sideTitle": "Side status",
+      "view": {
+        "board": "Pipeline",
+        "list": "List",
+        "report": "Reports"
+      },
+      "stages": {
+        "INQUIRY": "New inquiry",
+        "QUALIFIED": "Qualified",
+        "VISIT_BOOKED": "Visit booked",
+        "VISITED": "Visited",
+        "TEST": "Admission test",
+        "RESULT": "Result",
+        "DOCUMENTS": "Documents",
+        "PAYMENT": "Payment",
+        "ENROLLED": "Enrolled"
+      },
+      "stageHint": {
+        "QUALIFIED": "Confirm grade, curriculum and branch.",
+        "VISIT_BOOKED": "Set the branch tour date.",
+        "VISITED": "Record the parent's interest after the tour.",
+        "TEST": "Set the test / interview date.",
+        "RESULT": "Record the admission result.",
+        "DOCUMENTS": "Collect the required documents.",
+        "PAYMENT": "Booking fee or first instalment.",
+        "ENROLLED": "Enter the academic number to close the file as enrolled."
+      },
+      "side": {
+        "POSTPONED": "Postponed",
+        "LOST": "Lost",
+        "UNQUALIFIED": "Unqualified",
+        "WAITLIST": "Waitlist",
+        "RESUMED": "Resumed"
+      },
+      "sideHint": {
+        "POSTPONED": "The parent asked to be contacted later — set the follow-up date.",
+        "LOST": "Decided not to enroll — choose the reason.",
+        "UNQUALIFIED": "Out of age range or curriculum unavailable — note the alternative.",
+        "WAITLIST": "No seat — follow up when one frees up."
+      },
+      "loss": {
+        "PRICE": "Price",
+        "DISTANCE": "Distance",
+        "OTHER_SCHOOL": "Chose another school",
+        "NO_SEAT": "No seat",
+        "BAD_SERVICE": "Poor service",
+        "NO_ANSWER": "No answer",
+        "OTHER": "Other"
+      },
+      "sources": {
+        "CALL_CENTER": "Call center",
+        "WHATSAPP": "Branch WhatsApp",
+        "WALK_IN": "Walk-in",
+        "WEBSITE": "Website",
+        "CAMPAIGN": "Ad campaign",
+        "REFERRAL": "Parent referral",
+        "OTHER": "Other"
+      },
+      "interest": {
+        "HIGH": "High",
+        "MEDIUM": "Medium",
+        "LOW": "Low"
+      },
+      "results": {
+        "ACCEPTED": "Accepted",
+        "CONDITIONAL": "Conditional",
+        "REJECTED": "Not accepted"
+      },
+      "contact": {
+        "CALL": "Call",
+        "WHATSAPP": "WhatsApp",
+        "VISIT": "Visit"
+      },
+      "docs": {
+        "nationalId": "ID",
+        "birthCertificate": "Birth certificate",
+        "vaccination": "Vaccinations",
+        "lastCertificate": "Last school report"
+      },
+      "activityTypes": {
+        "CALL": "Call",
+        "WHATSAPP": "WhatsApp",
+        "VISIT": "Visit",
+        "NOTE": "Note",
+        "NO_ANSWER": "No answer",
+        "CREATED": "File opened",
+        "EDITED": "Edited",
+        "STAGE": "Stage change",
+        "SIDE": "Side status",
+        "INQUIRY_AGAIN": "New inquiry"
+      },
+      "activity": {
+        "created": "File opened",
+        "edited": "File details edited"
+      },
+      "nextFollowUp": "Next follow-up",
+      "stageOverdue": "Stage overdue",
+      "followUpLate": "Follow-up missed",
+      "noAnswerCount": "No answer ×{{n}}",
+      "inStageSince": "In stage for {{ago}}",
+      "moveTo": "Move to: {{stage}}",
+      "setSide": "Side status",
+      "resume": "Resume",
+      "resumed": "Follow-up resumed",
+      "markNoAnswer": "Close: no answer",
+      "advanceMissing": "Fill in what this stage needs and the follow-up date.",
+      "logMissing": "Describe the contact.",
+      "followUpRequired": "Set the next follow-up.",
+      "visitAt": "Visit date",
+      "testAt": "Test date",
+      "testResult": "Admission result",
+      "academicNumber": "Academic number",
+      "paidAmount": "Amount paid",
+      "receipt": "Receipt",
+      "lossReason": "Loss reason",
+      "documents": "Documents",
+      "timeline": "Timeline",
+      "logTitle": "Log a contact",
+      "logPlaceholder": "What happened in this contact?",
+      "addLog": "Save contact",
+      "from": "from",
+      "waGreeting": "Hello {{name}}, this is Al Moktashef International Schools about your enrollment inquiry.",
+      "form": {
+        "newTitle": "New lead",
+        "editTitle": "Edit file",
+        "parent": "Parent",
+        "parentName": "Parent name",
+        "phone": "Mobile",
+        "altPhone": "Alternate mobile",
+        "district": "District",
+        "preferredContact": "Preferred contact",
+        "students": "Students",
+        "addStudent": "Add student",
+        "studentName": "Student name",
+        "gender": "Gender",
+        "birthDate": "Date of birth",
+        "curriculum": "Curriculum",
+        "currentSchool": "Current school",
+        "routing": "Routing",
+        "branch": "Requested branch",
+        "source": "Source",
+        "campaign": "Campaign",
+        "referrer": "Referrer",
+        "interest": "Interest",
+        "assignedTo": "Owner",
+        "required": "Enter the parent's name and a valid Saudi mobile.",
+        "studentRequired": "Add at least one student (name or grade).",
+        "duplicate": "A file with this number exists: {{code}} ({{name}}).",
+        "openExisting": "Open existing file"
+      },
+      "report": {
+        "total": "Total files",
+        "conversion": "Conversion",
+        "firstResponse": "Avg first response",
+        "journey": "Avg journey",
+        "overdue": "Overdue",
+        "funnel": "Conversion funnel",
+        "bySource": "Sources",
+        "byBranch": "By branch",
+        "byStaff": "Owners",
+        "lossReasons": "Loss reasons",
+        "seats": "Seats",
+        "capacity": "Capacity",
+        "remaining": "Remaining"
+      }
+    },
+    "students": {
+      "title": "Current students",
+      "subtitle": "One record per student with everything about them, and next year's re-enrollment follow-up.",
+      "tabs": {
+        "directory": "Students",
+        "reenroll": "Re-enrollment {{year}}"
+      },
+      "search": "Name, ID, class, mobile",
+      "allGrades": "All grades",
+      "allSections": "All sections",
+      "count": "{{n}} students",
+      "class": "Class",
+      "section": "Section",
+      "total": "Count",
+      "more": "Show more ({{n}})",
+      "kinds": {
+        "complaints": "Complaints",
+        "tickets": "Tech tickets",
+        "lostFound": "Lost & found",
+        "trips": "Trips",
+        "leaves": "Leaves"
+      },
+      "pickups": "Authorised to collect",
+      "noPickups": "No one authorised yet.",
+      "addPickup": "Add person",
+      "deactivate": "Disable",
+      "reactivate": "Re-enable"
+    },
+    "reenroll": {
+      "intent": "Parent decision",
+      "reason": "Reason",
+      "intents": {
+        "RETURNING": "Returning",
+        "UNDECIDED": "Undecided",
+        "NOT_RETURNING": "Not returning",
+        "NO_RESPONSE": "No response"
+      },
+      "reasons": {
+        "PRICE": "Fees",
+        "RELOCATION": "Moving away",
+        "ACADEMIC": "Academic level",
+        "SERVICE": "Service",
+        "TRANSPORT": "Transport",
+        "OTHER_SCHOOL": "Another school",
+        "PERSONAL": "Personal",
+        "OTHER": "Other"
+      }
+    },
+    "settings": {
+      "title": "Platform settings",
+      "subtitle": "Deadlines, limits and links for the platform modules.",
+      "saved": "Saved",
+      "links": "Parent links",
+      "joinLink": "Enrollment inquiry form",
+      "joinHint": "For the website, campaigns and branch QR codes; pick the source recorded on each file.",
+      "leaveLink": "Leave request link",
+      "leaveHint": "Send to parents or print as a QR code at reception.",
+      "referralHint": "Referral link: add ?ref=referrer_name to the form link.",
+      "leaves": "Leave permissions",
+      "leaveMonthlyLimit": "Monthly leave limit per student",
+      "leaveMonthlyLimitHint": "At this count the student is flagged as repeated for the counselor.",
+      "leaveUrgentMinutes": "Urgent alert (minutes)",
+      "leaveUrgentHint": "A request not approved this close to its time is marked urgent.",
+      "leadSla": "Stage limits for enrollment follow-up (working hours)",
+      "leadSlaHint": "Past it the file is overdue. 0 = no limit.",
+      "capacity": "Seats per grade",
+      "capacityHint": "Seats available for new students per grade and branch, for the seats report and waitlist.",
+      "pickBranch": "Choose a branch",
+      "reenroll": "Re-enrollment",
+      "academicYear": "Coming academic year",
+      "academicYearHint": "e.g. 2027-2028 — parent decisions are stored for this year."
+    }
+  },
+  "leaveRequest": {
+    "title": "Student leave request",
+    "subtitle": "Ask for your child to leave school during the day and name who will collect them.",
+    "time": "Requested time (today)",
+    "pickup": "Who will collect the student?",
+    "noAuthorized": "No authorised list on file; enter the person's details.",
+    "unauthorizedNote": "This person isn't on the authorised list; the school will call you to confirm before handing over.",
+    "attach": "Attach a document (medical appointment…) — optional",
+    "submit": "Send request",
+    "pickupRequired": "Who will collect the student?",
+    "openExists": "There's already an open request: {{code}}.",
+    "doneTitle": "Leave request received",
+    "doneBody": "The school will review it; the student is handed over after checking the collector's ID. Request number:"
+  },
+  "join": {
+    "pageTitle": "Enroll at Al Moktashef International Schools",
+    "title": "Register your interest in Al Moktashef International Schools",
+    "subtitle": "Leave your details and our admissions team will contact you shortly to help choose the right branch and curriculum.",
+    "parent": "Parent details",
+    "students": "Children",
+    "branch": "Preferred branch",
+    "anyBranch": "Any suitable branch",
+    "submit": "Send",
+    "doneTitle": "Thank you for your interest",
+    "doneBody": "We've received your request and admissions will contact you soon. Reference:",
+    "doneExisting": "You already have a request with us; this inquiry was added to it. Reference:",
+    "privacy": "Your details are used only to contact you about enrollment."
   }
 }

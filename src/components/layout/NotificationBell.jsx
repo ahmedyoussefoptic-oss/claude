@@ -40,6 +40,8 @@ const NOTIFICATION_TARGET_PATH = {
   REMINDER: '/complaints',
   IT_REMINDER: '/tech-support',
   LF_REMINDER: '/lost-found',
+  LEAVE_REQUESTED: '/platform/leaves',
+  LEAD_NEW: '/platform/leads',
 };
 
 function playChime() {
@@ -281,7 +283,7 @@ export default function NotificationBell() {
               <button onClick={() => setPrefsOpen(false)} className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-5 max-h-[70vh] overflow-y-auto">
-              <NotificationPrefsEditor prefs={prefsDraft.prefs} channels={prefsDraft.channels} onChange={setPrefsDraft} />
+              <NotificationPrefsEditor prefs={prefsDraft.prefs} channels={prefsDraft.channels} onChange={setPrefsDraft} showPlatform={userData?.isOwner === true} />
             </div>
             <div className="px-5 py-3.5 border-t border-slate-200 bg-slate-50 flex justify-end gap-2">
               <button onClick={() => setPrefsOpen(false)} className="px-4 py-2 text-sm rounded-xl border border-slate-300 bg-white">{t('common.cancel')}</button>

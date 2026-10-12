@@ -1,7 +1,7 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
-import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus } from 'lucide-react';
+import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
@@ -74,6 +74,17 @@ export default function AppLayout() {
   if (adminCan(userData, caps, 'archive')) {
     navItems.push({ name: t('nav.archive'), path: '/deleted-complaints', icon: Archive });
   }
+  // منصة المكتشف — the system owner only (also enforced in firestore.rules).
+  if (isOwner(userData)) {
+    navItems.push(
+      { divider: t('platform.navTitle'), path: '#platform' },
+      { name: t('platform.home.title'), path: '/platform/home', icon: LayoutGrid },
+      { name: t('platform.leaves.title'), path: '/platform/leaves', icon: DoorOpen },
+      { name: t('platform.leads.title'), path: '/platform/leads', icon: UserPlus },
+      { name: t('platform.students.title'), path: '/platform/students', icon: GraduationCap },
+      { name: t('platform.settings.title'), path: '/platform/settings', icon: Settings2 },
+    );
+  }
 
   if (!user) {
     return <Outlet />;
@@ -111,6 +122,9 @@ export default function AppLayout() {
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
+            if (item.divider) {
+              return <p key={item.path} className="pt-4 pb-1 px-3 text-[11px] font-bold text-amber-600 tracking-wide">{item.divider}</p>;
+            }
             const Icon = item.icon;
             const isActive = location.pathname.startsWith(item.path);
             return (

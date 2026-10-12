@@ -413,6 +413,29 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
+    // منصة المكتشف (leaves, new customers, current students, platform
+    // settings) — the system owner only, for now. Public parent pages write
+    // through Cloud Functions (Admin SDK), never directly.
+    match /leaveRequests/{id} {
+      allow read, write: if isOwner();
+    }
+    match /authorizedPickups/{id} {
+      allow read, write: if isOwner();
+    }
+    match /leads/{id} {
+      allow read, write: if isOwner();
+      match /activity/{a} {
+        allow read, create: if isOwner();
+        allow update, delete: if false;
+      }
+    }
+    match /reenrollments/{id} {
+      allow read, write: if isOwner();
+    }
+    match /platformSettings/{id} {
+      allow read, write: if isOwner();
+    }
+
     // Other collections — admins only, and never the collections matched
     // explicitly above (rules OR together, so a blanket admin rule would
     // override their restrictions: archives, settings lock, owner account).
@@ -421,7 +444,8 @@ service cloud.firestore {
         'users', 'branches', 'departments', 'complaintTypes', 'complaintSubTypes', 'problemTypes', 'platforms',
         'itemCategories', 'settings', 'settingsUnlocks', 'secureConfig', 'complaints', 'trips', 'tripVerify',
         'appointments', 'deletedComplaints', 'deletedLostFoundItems', 'deletedTechSupportTickets', 'lostFoundItems',
-        'techSupportTickets', 'students', 'notifications'
+        'techSupportTickets', 'students', 'notifications',
+        'leaveRequests', 'authorizedPickups', 'leads', 'reenrollments', 'platformSettings'
       ]);
     }
   }
