@@ -475,7 +475,7 @@ exports.calculateInitialSLA = onDocumentCreated({ document: "complaints/{complai
     });
   }
 
-  await ensureQualityAssigned(snap.ref, data);
+  await ensureQualityAssigned(snap.ref, data, { counselors: true });
 
   // Automatic WhatsApp receipt — not for a branch QR check-in (the parent
   // is standing at the branch; they get a thank-you after the meeting).
@@ -685,7 +685,9 @@ exports.handleSlaStatusChanges = onDocumentUpdated({ document: "complaints/{comp
   // keeps some existing assignees shouldn't re-notify them.
   const beforeAssigned = new Set(before.assignedTo || []);
   const newlyAssigned = (after.assignedTo || []).filter((uid) => !beforeAssigned.has(uid));
-  if (newlyAssigned.length > 0) {
+  // Old records assigned in bulk (counselor backfill) are added silently.
+  const silentAssign = after.silentAssignAt && !(before.silentAssignAt && before.silentAssignAt.isEqual(after.silentAssignAt));
+  if (newlyAssigned.length > 0 && !silentAssign) {
     await notifyUsers(newlyAssigned, {
       title: "تم إسناد ملاحظة لك",
       body: `الملاحظة رقم ${after.complaintId} تم إسنادها إليك للمعالجة.`,
@@ -1181,7 +1183,9 @@ async function findAutoAssignees({ branch, departments, stage, curriculum, users
   }
   const principals = users.filter((u) => u.isPrincipal === true && (u.access === "all" || inBranch(u)) && covers(u));
   const seen = new Set();
-  return [...specialists, ...principals, ...qualityOfficers(users, branch)]
+  // Complaints (not IT tickets) also go to the branch's student counselors.
+  const counselors = departments.includes("IT") ? [] : complaintCounselors(users, branch, stage, curriculum);
+  return [...specialists, ...principals, ...qualityOfficers(users, branch), ...counselors]
     .filter((u) => !seen.has(u.id) && seen.add(u.id))
     .map((u) => ({ id: u.id, name: u.name || "" }));
 }
@@ -1189,6 +1193,14 @@ async function findAutoAssignees({ branch, departments, stage, curriculum, users
 async function loadActiveUsers() {
   const snapshot = await db.collection("users").get();
   return snapshot.docs.map((d) => ({ id: d.id, ...d.data() })).filter((u) => u.active !== false);
+}
+
+// Student counselors (isCounselor) get every complaint in their branches,
+// within their grade / section limits when they have any.
+function complaintCounselors(users, branch, stage, curriculum) {
+  return users.filter((u) => u.isCounselor === true && u.active !== false && u.tripsAccess !== "tripsOnly"
+    && (u.access === "all" || (u.branches || []).includes(branch) || u.branch === branch)
+    && coversStage(u, stage) && coversCurriculum(u, curriculum));
 }
 
 function qualityOfficers(users, branch) {
@@ -1217,10 +1229,11 @@ function autoAssigneesFor(kind, record, users) {
 // already list them (staff-created records, converted tickets...). The
 // update re-fires the record's onUpdate trigger, which notifies them like
 // any other newly assigned person.
-async function ensureQualityAssigned(ref, data) {
+async function ensureQualityAssigned(ref, data, { counselors = false } = {}) {
   const users = await loadActiveUsers();
   const current = data.assignedTo || [];
-  const missing = qualityOfficers(users, data.branch).filter((u) => !current.includes(u.id));
+  const auto = [...qualityOfficers(users, data.branch), ...(counselors ? complaintCounselors(users, data.branch, data.stage, data.department) : [])];
+  const missing = auto.filter((u, i) => !current.includes(u.id) && auto.findIndex((x) => x.id === u.id) === i);
   if (!missing.length) return;
   await ref.update({
     assignedTo: [...current, ...missing.map((u) => u.id)],
@@ -3495,13 +3508,43 @@ async function assignLostFoundBacklog(onlyUser) {
   return added;
 }
 
+// Open (unresolved) complaints → their branch's counselors, silently.
+async function assignComplaintCounselorBacklog(onlyUser) {
+  const users = await loadActiveUsers();
+  const snap = await db.collection("complaints").where("status", "in", OPEN_STATUSES).get();
+  let added = 0;
+  for (const doc of snap.docs) {
+    const c = doc.data();
+    let list = complaintCounselors(users, c.branch, c.stage, c.department);
+    if (onlyUser) list = list.filter((u) => u.id === onlyUser);
+    const current = c.assignedTo || [];
+    const missing = list.filter((u) => !current.includes(u.id));
+    if (!missing.length) continue;
+    await doc.ref.update({
+      assignedTo: [...current, ...missing.map((u) => u.id)],
+      assignedToNames: [...(c.assignedToNames || []), ...missing.map((u) => u.name || "")],
+      ...(current.length ? {} : { assignedAt: Timestamp.now() }),
+      silentAssignAt: Timestamp.now(),
+    });
+    added += missing.length;
+  }
+  return added;
+}
+
 exports.lostFoundBacklogOnce = onSchedule("every 30 minutes", async () => {
   const markerRef = db.collection("meta").doc("migrations");
   const marker = await markerRef.get();
-  if (marker.exists && marker.data().lostFoundOfficersBackfill) return;
-  const added = await assignLostFoundBacklog(null);
-  await markerRef.set({ lostFoundOfficersBackfill: Timestamp.now(), lostFoundOfficersBackfillCount: added }, { merge: true });
-  console.log(`lost & found officers backfill: ${added} assignments added.`);
+  const m = marker.exists ? marker.data() : {};
+  if (!m.lostFoundOfficersBackfill) {
+    const added = await assignLostFoundBacklog(null);
+    await markerRef.set({ lostFoundOfficersBackfill: Timestamp.now(), lostFoundOfficersBackfillCount: added }, { merge: true });
+    console.log(`lost & found officers backfill: ${added} assignments added.`);
+  }
+  if (!m.complaintCounselorsBackfill) {
+    const added = await assignComplaintCounselorBacklog(null);
+    await markerRef.set({ complaintCounselorsBackfill: Timestamp.now(), complaintCounselorsBackfillCount: added }, { merge: true });
+    console.log(`complaint counselors backfill: ${added} assignments added.`);
+  }
 });
 
 exports.onUserLostFoundRole = onDocumentWritten("users/{uid}", async (event) => {
@@ -3511,9 +3554,15 @@ exports.onUserLostFoundRole = onDocumentWritten("users/{uid}", async (event) => 
   const isOfficer = (u) => u.isQuality === true || u.isCounselor === true;
   if (!isOfficer(after)) return;
   const scope = (u) => `${u.access || ""}|${(u.branches || []).join(",")}|${u.branch || ""}`;
-  if (isOfficer(before) && scope(before) === scope(after)) return;
+  const limits = (u) => `${(u.stages || []).join(",")}|${(u.curricula || []).join(",")}`;
+  if (isOfficer(before) && scope(before) === scope(after) && before.isCounselor === after.isCounselor && limits(before) === limits(after)) return;
   const added = await assignLostFoundBacklog(event.params.uid);
   console.log(`lost & found: ${added} old reports assigned to ${event.params.uid}`);
+  // Counselors also take over the open complaints of their branches.
+  if (after.isCounselor === true && (before.isCounselor !== true || scope(before) !== scope(after) || limits(before) !== limits(after))) {
+    const n = await assignComplaintCounselorBacklog(event.params.uid);
+    console.log(`complaints: ${n} open complaints assigned to counselor ${event.params.uid}`);
+  }
 });
 
 // --- Reminders -------------------------------------------------------------

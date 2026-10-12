@@ -853,7 +853,7 @@
     },
     "protectedAccount": "Protected account",
     "isCounselorLabel": "Student counselor",
-    "isCounselorHint": "Automatically assigned every lost & found report in their branches (new and existing), alongside the quality officers, and notified of each new one.",
+    "isCounselorHint": "Automatically assigned the complaints in their branches (within their grade/section limits, if any) and every lost & found report, alongside the quality officers — new ones with a notification, existing open ones silently.",
     "counselorTag": "Counselor",
     "curriculumFilterLabel": "Section (curriculum)"
   },
