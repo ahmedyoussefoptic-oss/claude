@@ -1,6 +1,6 @@
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const { onDocumentUpdated, onDocumentCreated, onDocumentWritten } = require("firebase-functions/v2/firestore");
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
 const { getFirestore, Timestamp, FieldValue } = require("firebase-admin/firestore");
@@ -2017,6 +2017,9 @@ function toIntlNumber(phone) {
   let digits = normalized.replace(/\D/g, "");
   if (digits.startsWith("00")) digits = digits.slice(2);
   if (digits.startsWith("0")) digits = "966" + digits.slice(1);
+  // Saudi mobiles typed without the leading 0 (5xxxxxxxx) or as 9660 5...
+  if (/^5\d{8}$/.test(digits)) digits = "966" + digits;
+  if (/^9660\d{9}$/.test(digits)) digits = "966" + digits.slice(4);
   return digits;
 }
 
@@ -2026,6 +2029,126 @@ function waParam(value) {
   const text = String(value == null ? "" : value).replace(/[\r\n\t]+/g, " - ").replace(/ {4,}/g, "   ").trim();
   return (text || "—").slice(0, 900);
 }
+
+// Every Taqnyat send goes through here. A message counts as accepted only
+// when the reply carries its WhatsApp message id — Taqnyat returns it as
+// statuses[0].message_id for text templates and statuses.message_id for
+// media ones; anything else (even with HTTP 200) is an error, and the raw
+// reply is kept so the reason is visible. Accepted messages are recorded
+// in waMessages (keyed by a hash of the id) so the delivery reports Taqnyat
+// posts to waDeliveryReport can be matched back to the record.
+const waMessageKey = (messageId) => crypto.createHash("sha1").update(String(messageId)).digest("hex");
+async function taqnyatSend(payload, meta = {}) {
+  const response = await fetch(TAQNYAT_MESSAGES_URL, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${TAQNYAT_WA_TOKEN.value()}`, "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const bodyText = await response.text();
+  let body = null;
+  try { body = JSON.parse(bodyText); } catch { /* non-JSON error page */ }
+  const st = body && (Array.isArray(body.statuses) ? body.statuses[0] : body.statuses);
+  const messageId = (st && (st.message_id || st.id)) ||
+    (body && Array.isArray(body.messages) && body.messages[0] && body.messages[0].id) ||
+    (body && body.message_id) || null;
+  if (!response.ok || !messageId) {
+    console.error("Taqnyat WhatsApp send failed", response.status, payload.template && payload.template.name, bodyText.slice(0, 500));
+    const providerReason = body && (body.reason || body.message || (body.error && (body.error.message || body.error)) || body.detail || (body.errors && JSON.stringify(body.errors)));
+    const reasonText = providerReason ? String(typeof providerReason === "string" ? providerReason : JSON.stringify(providerReason)).slice(0, 200) : bodyText.slice(0, 200);
+    const err = new HttpsError("internal", `لم يقبل مزوّد واتساب الرسالة (رمز ${response.status})${reasonText ? ` — ${reasonText}` : ""}. تحقق من اسم القالب واعتماده ولغته وعدد متغيراته.`);
+    err.providerStatus = response.status;
+    err.providerBody = bodyText.slice(0, 500);
+    throw err;
+  }
+  await db.collection("waMessages").doc(waMessageKey(messageId)).set({
+    messageId: String(messageId),
+    to: payload.to,
+    template: payload.template ? payload.template.name : null,
+    language: payload.template && payload.template.language ? payload.template.language.code : null,
+    status: "accepted",
+    sentAt: Timestamp.now(),
+    ...meta,
+  });
+  return { messageId: String(messageId), raw: bodyText.slice(0, 500) };
+}
+
+// Delivery reports (Taqnyat "callback"): set this function's URL as the
+// callback / webhook in the Taqnyat portal. Each report updates the matching
+// waMessages entry; a failed one is also written to the record's activity
+// log with the reason, so staff see that the parent did not get it.
+// Only messages this system sent (their id hash exists) are touched.
+const WA_FAILED_STATES = ["failed", "no_opt_in", "no_capability", "deleted"];
+exports.waDeliveryReport = onRequest(async (req, res) => {
+  if (req.method !== "POST") { res.status(200).send("ok"); return; }
+  try {
+    const body = req.body || {};
+    const list = [].concat(body.statuses || [], (body.entry || []).flatMap((e) => (e.changes || []).flatMap((c) => (c.value && c.value.statuses) || [])));
+    for (const st of list) {
+      const id = st && (st.id || st.message_id);
+      if (!id) continue;
+      const ref = db.collection("waMessages").doc(waMessageKey(id));
+      const snap = await ref.get();
+      if (!snap.exists) continue;
+      const state = String(st.status || st.state || "").toLowerCase();
+      const errors = st.errors || st.error || null;
+      const details = st.details || (Array.isArray(errors) && errors[0] && (errors[0].title || errors[0].message)) || (errors && errors.message) || "";
+      const now = Timestamp.now();
+      await ref.update({
+        status: state || "unknown",
+        ...(details ? { details: String(details).slice(0, 300) } : {}),
+        ...(errors ? { errors: JSON.stringify(errors).slice(0, 500) } : {}),
+        updatedAt: now,
+        history: FieldValue.arrayUnion({ status: state, at: Number(st.timestamp) || now.toMillis() }),
+      });
+      const m = snap.data();
+      if (WA_FAILED_STATES.includes(state) && m.collection && m.docId && !m.failureLogged) {
+        await ref.update({ failureLogged: true });
+        await db.collection(m.collection).doc(m.docId).collection("activityLog").add({
+          action: "WHATSAPP_API_FAILED",
+          actorId: null,
+          actorName: "واتساب API (تقرير التوصيل)",
+          metadata: { event: m.event || null, template: m.template || null, reason: `لم تصل الرسالة لولي الأمر (${state})${details ? ` — ${String(details).slice(0, 200)}` : ""}` },
+          createdAt: now,
+        });
+      }
+    }
+  } catch (err) {
+    console.error("waDeliveryReport", err);
+  }
+  res.status(200).send("ok");
+});
+
+// Admin tool (WhatsApp API settings → اختبار الإرسال): sends one template to
+// a number the admin enters, with sample values, and returns Taqnyat's raw
+// reply so template / language / variable problems show immediately.
+exports.testWhatsAppTemplate = onCall({ secrets: WA_SECRETS }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const callerSnap = await db.collection("users").doc(request.auth.uid).get();
+  if (!callerSnap.exists || callerSnap.data().role !== "ADMIN") throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
+  if (!WA_API_ENABLED) throw new HttpsError("failed-precondition", "واتساب API غير مفعّل في الخادم.");
+  const { phone, template, language, button } = request.data || {};
+  const to = toIntlNumber(phone);
+  if (!/^\d{10,15}$/.test(to)) throw new HttpsError("invalid-argument", "أدخل رقم جوال صحيحاً.");
+  if (typeof template !== "string" || !template.trim()) throw new HttpsError("invalid-argument", "اختر القالب.");
+  const settingsSnap = await db.collection("settings").doc("whatsappApi").get();
+  const lang = (typeof language === "string" && language.trim()) || (settingsSnap.exists && settingsSnap.data().language) || "ar";
+  const sample = ["ولي الأمر (اختبار)", "TEST-0000", "طالب تجريبي", "رسالة اختبار من نظام علاقات العملاء", `${PUBLIC_APP_URL}/track`];
+  const payload = {
+    to,
+    type: "template",
+    template: { name: template.trim(), language: { code: lang } },
+    components: [
+      { type: "body", parameters: sample.map((v) => ({ type: "text", text: v })) },
+      ...(button === false ? [] : [{ type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: "TEST-0000" }] }]),
+    ],
+  };
+  try {
+    const { messageId, raw } = await taqnyatSend(payload, { kind: "test", event: "test", by: request.auth.uid });
+    return { ok: true, messageId, raw, to };
+  } catch (err) {
+    return { ok: false, status: err.providerStatus || null, raw: err.providerBody || err.message, message: err.message, to };
+  }
+});
 
 // Exported only when WA_API_ENABLED (see TAQNYAT_WA_TOKEN above).
 // Shared sender for the manual callable and the automatic triggers below.
@@ -2115,21 +2238,7 @@ async function sendWaTemplate({ kind, ref, record, event, actorId, actorName, se
     ],
   };
 
-  const response = await fetch(TAQNYAT_MESSAGES_URL, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${TAQNYAT_WA_TOKEN.value()}`, "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const bodyText = await response.text();
-  let body = null;
-  try { body = JSON.parse(bodyText); } catch { /* non-JSON error page */ }
-  if (!response.ok) {
-    console.error("Taqnyat WhatsApp send failed", response.status, bodyText.slice(0, 500));
-    const providerReason = body && (body.message || (body.error && (body.error.message || body.error)) || body.detail);
-    const reasonText = providerReason ? ` — ${String(typeof providerReason === "string" ? providerReason : JSON.stringify(providerReason)).slice(0, 200)}` : "";
-    throw new HttpsError("internal", `تعذّر الإرسال عبر واتساب API (رمز ${response.status})${reasonText}. تحقق من اسم القالب واعتماده ورقم الفرع.`);
-  }
-  const messageId = (body && body.statuses && body.statuses.message_id) || null;
+  const { messageId } = await taqnyatSend(payload, { kind, collection: kindConfig.collection, docId: ref.id, event, recordNumber });
 
   // Same "sent by" fields the client's messageSentFields() writes, set here
   // so a sender without edit permission (an assignee) still records it.
@@ -2886,16 +2995,7 @@ async function sendTripNotice({ settings, trip, phone, studentName, branch, sect
       { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: `BR-${branch || (trip.branches || [])[0] || ""}${section ? `-${section}` : ""}` }] },
     ],
   };
-  const response = await fetch(TAQNYAT_MESSAGES_URL, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${TAQNYAT_WA_TOKEN.value()}`, "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    console.error("Taqnyat trip notice failed", response.status, text.slice(0, 300));
-    throw new Error(`تعذّر الإرسال عبر واتساب API (رمز ${response.status}).`);
-  }
+  await taqnyatSend(payload, { kind: "trip", tripId: trip.id || null, tripCode: trip.tripCode || null });
 }
 
 // Sends to many parents a few at a time; never throws.
@@ -4052,16 +4152,7 @@ async function sendLeadVisitMessage(cfg, v, kind, branchName) {
       { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: `BR-${v.branch || ""}` }] },
     ],
   };
-  const response = await fetch(TAQNYAT_MESSAGES_URL, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${TAQNYAT_WA_TOKEN.value()}`, "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    console.error("Taqnyat lead visit failed", response.status, text.slice(0, 300));
-    throw new Error(`تعذّر الإرسال عبر واتساب API (رمز ${response.status}).`);
-  }
+  await taqnyatSend(payload, { kind: "leadVisit", event: kind, collection: "leadVisits", docId: v.id || null });
 }
 
 // Sends to each visit a few at a time, logs it on the visit and the lead's

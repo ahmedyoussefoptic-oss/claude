@@ -9,6 +9,9 @@ export function toWhatsAppNumber(phone) {
   let digits = normalized.replace(/\D/g, '');
   if (digits.startsWith('00')) digits = digits.slice(2);
   if (digits.startsWith('0')) digits = '966' + digits.slice(1);
+  // Saudi mobiles typed without the leading 0 (5xxxxxxxx) or as 9660 5...
+  if (/^5\d{8}$/.test(digits)) digits = '966' + digits;
+  if (/^9660\d{9}$/.test(digits)) digits = '966' + digits.slice(4);
   return digits;
 }
 

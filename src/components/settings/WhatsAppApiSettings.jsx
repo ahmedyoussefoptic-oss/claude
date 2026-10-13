@@ -6,6 +6,7 @@ import { db } from '../../config/firebase';
 import { useBranches, useDepartments, ensureSeeded } from '../../hooks/useOrgData';
 import { useWhatsAppApi, DEFAULT_WA_API } from '../../hooks/useWhatsAppApi';
 import { toWhatsAppNumber } from '../../utils/whatsapp';
+import WhatsAppDiagnostics from './WhatsAppDiagnostics';
 
 const TEMPLATE_KEYS = ['complaintReceipt', 'complaintResolution', 'techReceipt', 'techResolution', 'visitMet', 'appointmentConfirmed', 'appointmentRescheduled', 'lostFoundReceipt', 'lostFoundReturned', 'tripNotice', 'tripAnnouncementImage'];
 
@@ -224,6 +225,8 @@ export default function WhatsAppApiSettings() {
         {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}
         {saved ? t('waApi.saved') : t('common.save')}
       </button>
+
+      <WhatsAppDiagnostics templates={draft.templates} language={draft.language} />
     </div>
   );
 }

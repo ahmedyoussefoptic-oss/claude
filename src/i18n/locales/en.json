@@ -2514,5 +2514,38 @@
     "converting": "Converting...",
     "successAlert": "Converted to feedback {{id}}",
     "error": "Could not convert the ticket. Please try again."
+  },
+  "waDiag": {
+    "title": "WhatsApp API diagnostics",
+    "callbackTitle": "Delivery report URL (callback)",
+    "callbackHint": "Add this URL in the Taqnyat portal as the message status callback / webhook. Then this page and each record's log show whether the parent received the message, and why not.",
+    "testTitle": "Test a template on your number",
+    "testHint": "Sends the chosen template to the number you enter (yours) with sample values and shows the provider's raw reply.",
+    "withButton": "With the \"contact the branch\" button",
+    "testBtn": "Send test",
+    "accepted": "The provider accepted the message",
+    "rejected": "The provider rejected the message",
+    "acceptedHint": "If it doesn't arrive within a minute, the problem is after acceptance (template approval, variable count or the number) — its status will show below once the report URL is set.",
+    "logTitle": "Latest messages and delivery status",
+    "logEmpty": "No messages recorded yet (recording starts now).",
+    "logHint": "\"Accepted\" means the provider received it; it changes to delivered or failed when delivery reports arrive.",
+    "colTime": "Time",
+    "colTemplate": "Template / record",
+    "colTo": "To",
+    "colStatus": "Status",
+    "colDetails": "Details",
+    "status": {
+      "accepted": "Accepted",
+      "queued": "Queued",
+      "dispatched": "Dispatched",
+      "sent": "Sent",
+      "delivered": "Delivered",
+      "read": "Read",
+      "failed": "Failed",
+      "no_opt_in": "Rejected (no opt-in)",
+      "no_capability": "No WhatsApp",
+      "deleted": "Deleted",
+      "unknown": "Unknown"
+    }
   }
 }
