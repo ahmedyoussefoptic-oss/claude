@@ -999,6 +999,15 @@ exports.trackComplaint = onCall(async (request) => {
       snapshot = converted;
     }
   }
+  // …and the other way: a ticket converted into a complaint
+  // (convertTechTicketToComplaint).
+  if (snapshot.empty && match.type === "techSupport") {
+    const converted = await db.collection("complaints").where("convertedFromId", "==", trackingId).limit(1).get();
+    if (!converted.empty) {
+      match = TRACKABLE_TYPES.find((t) => t.type === "complaint");
+      snapshot = converted;
+    }
+  }
   if (snapshot.empty) {
     throw new HttpsError("not-found", "عفواً، لم يتم العثور على سجل بهذا الرقم.");
   }
@@ -1666,6 +1675,127 @@ exports.convertComplaintToTechTicket = onCall(async (request) => {
   await db.recursiveDelete(complaintRef);
 
   return { ticketId, ticketDocId: ticketRef.id };
+});
+
+// The reverse move: a tech-support ticket that is really a general
+// complaint (a parent writing about grades or transport through the tech
+// form). Same all-or-nothing shape as above: the complaint is created with
+// the ticket's data and routed like any new complaint, the ticket is
+// archived to deletedTechSupportTickets and removed with its activity log.
+// The parent's IT- number keeps working (trackComplaint follows
+// convertedFromId).
+exports.convertTechTicketToComplaint = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  }
+  const { ticketDocId, complaintType, subType, subject, priority } = request.data || {};
+  for (const value of [ticketDocId, complaintType, subType, subject]) {
+    if (!value || typeof value !== "string" || !value.trim()) {
+      throw new HttpsError("invalid-argument", "يرجى تعبئة جميع الحقول المطلوبة.");
+    }
+  }
+
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  if (!callerDoc.exists || caller.active === false) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  }
+  const ticketRef = db.collection("techSupportTickets").doc(ticketDocId);
+  const ticketSnap = await ticketRef.get();
+  if (!ticketSnap.exists) {
+    throw new HttpsError("not-found", "لم يتم العثور على البلاغ.");
+  }
+  const ticket = ticketSnap.data();
+
+  // Mirrors firestore.rules: canEditRecord(branch) on the ticket plus
+  // canAccessTechSupport(), and the complaints section must be open to them.
+  const isAdminCaller = caller.role === "ADMIN";
+  const inScope = caller.access === "all" || (caller.branches || []).includes(ticket.branch) || caller.branch === ticket.branch;
+  const canEdit = isAdminCaller || (caller.perms?.edit === true && inScope);
+  const techMod = caller.modules ? caller.modules.techSupport : undefined;
+  const canAccessTech = isAdminCaller || (caller.tripsAccess !== "tripsOnly" && (techMod === true || (techMod === undefined && (caller.department === "IT" || caller.role === "CUSTOMER_SERVICE" || caller.isPrincipal === true || caller.isQuality === true))));
+  if (!canEdit || !canAccessTech || moduleOff(caller, "complaints")) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية تحويل هذا البلاغ.");
+  }
+  if (["SOLVED", "WAITING_CONFIRMATION", "CLOSED"].includes(ticket.status)) {
+    throw new HttpsError("failed-precondition", "لا يمكن تحويل بلاغ منتهٍ.");
+  }
+  const typeSnap = await db.collection("complaintTypes").doc(complaintType).get();
+  if (!typeSnap.exists) {
+    throw new HttpsError("invalid-argument", "نوع الملاحظة غير صحيح.");
+  }
+
+  const now = Timestamp.now();
+  const actorName = caller.name || "مستخدم";
+  const complaintId = `COM-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const assignees = await findAutoAssignees({ branch: ticket.branch, departments: [complaintType], stage: ticket.stage, curriculum: ticket.department });
+  const logsSnapshot = await ticketRef.collection("activityLog").orderBy("createdAt", "asc").get();
+  const reason = `تحويل إلى ملاحظة ${complaintId}`;
+
+  const complaintRef = db.collection("complaints").doc();
+  const batch = db.batch();
+  batch.set(complaintRef, {
+    parentName: ticket.parentName || "",
+    parentPhone: ticket.parentPhone || "",
+    parentEmail: "",
+    studentName: ticket.studentName || "",
+    studentId: ticket.nationalId || "",
+    branch: ticket.branch || "",
+    department: ticket.department || "",
+    stage: ticket.stage || "",
+    grade: ticket.grade || "",
+    complaintType,
+    subType: subType.trim(),
+    extraTypes: [],
+    subject: subject.trim().slice(0, 200),
+    details: ticket.details || subject.trim(),
+    complaintId,
+    convertedFromId: ticket.ticketId || null,
+    priority: ["NORMAL", "HIGH", "URGENT"].includes(priority) ? priority : "NORMAL",
+    source: ticket.source || null,
+    receiver: ticket.receiver || request.auth.uid,
+    status: "RECEIVED",
+    attachments: ticket.attachments || [],
+    assignedTo: assignees.map((a) => a.id),
+    assignedToNames: assignees.map((a) => a.name),
+    assignedAt: assignees.length ? now : null,
+    reopened: false,
+    isOverdue: false,
+    createdAt: ticket.createdAt || now,
+    updatedAt: now,
+  });
+  batch.set(complaintRef.collection("activityLog").doc(), {
+    action: "CONVERTED_FROM_TICKET",
+    actorId: request.auth.uid,
+    actorName,
+    metadata: { note: `رقم البلاغ التقني الأصلي: ${ticket.ticketId}` },
+    createdAt: now,
+  });
+  if (assignees.length) {
+    batch.set(complaintRef.collection("activityLog").doc(), {
+      action: "COMPLAINT_ASSIGNED",
+      actorId: null,
+      actorName: "النظام (إسناد تلقائي)",
+      metadata: { toUserIds: assignees.map((a) => a.id), toUserNames: assignees.map((a) => a.name), addedNames: assignees.map((a) => a.name) },
+      createdAt: now,
+    });
+  }
+  batch.set(db.collection("deletedTechSupportTickets").doc(), {
+    ticket: { ...ticket, id: ticketDocId },
+    activityLog: [
+      ...logsSnapshot.docs.map((d) => d.data()),
+      { action: "TICKET_CONVERTED", actorId: request.auth.uid, actorName, metadata: { reason }, createdAt: now },
+    ],
+    reason,
+    convertedToComplaintId: complaintId,
+    deletedBy: request.auth.uid,
+    deletedByName: actorName,
+    deletedAt: now,
+  });
+  await batch.commit();
+  await db.recursiveDelete(ticketRef);
+
+  return { complaintId, complaintDocId: complaintRef.id };
 });
 
 // Uploads one file for a tech-support resolution message (screenshot,

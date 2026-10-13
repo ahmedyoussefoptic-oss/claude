@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAdminPermissions, adminCan } from '../../config/adminPermissions';
-import { X, Clock, CheckCircle2, User, Phone, MapPin, Loader2, Trash2, UserPlus, MessageCircle, MessageSquare, ShieldCheck, Link2, Share2, Pencil, Paperclip, Plus } from 'lucide-react';
+import { X, Clock, CheckCircle2, User, Phone, MapPin, Loader2, Trash2, UserPlus, MessageCircle, MessageSquare, ShieldCheck, Link2, Share2, Pencil, Paperclip, Plus, FileText } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../../config/firebase';
@@ -12,7 +13,8 @@ import { messageSentFields } from '../../utils/messageSent';
 import { useUsers } from '../../hooks/useUsers';
 import { useBranches, useDepartments, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
 import { ROLES } from '../../config/roles';
-import { userBranches } from '../../utils/scope';
+import { userBranches, canSeeModule } from '../../utils/scope';
+import TicketConvertModal from './TicketConvertModal';
 import { TICKET_STATUS_BADGE } from '../../config/techSupport';
 import { waLink, shareLink, buildCredentialMessage, buildTechSupportReceiptMessage, buildTechSupportResolutionMessage, buildTechSupportShareMessage, toWhatsAppNumber, appendAttachmentLinks, appendResolutionLinks } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
@@ -71,6 +73,17 @@ function TechSupportDetailsInner({ ticket, onClose }) {
   const inScope = isAdmin || userData?.access === 'all' || userBranches(userData).includes(ticket.branch);
   const canEdit = isAdmin || (inScope && userData?.perms?.edit === true);
   const canDelete = isAdmin ? adminCan(userData, adminCaps, 'delete') : (inScope && userData?.perms?.delete === true);
+  // Converting moves the record into the complaints module, so that section
+  // must be open to the employee too (see convertTechTicketToComplaint).
+  const canConvert = canEdit && canSeeModule(userData, 'complaints') && !['SOLVED', 'WAITING_CONFIRMATION', 'CLOSED'].includes(ticket.status);
+  const [showConvert, setShowConvert] = useState(false);
+  const navigate = useNavigate();
+  const handleConverted = ({ complaintId, complaintDocId }) => {
+    setShowConvert(false);
+    alert(t('ticketConvert.successAlert', { id: complaintId }));
+    onClose();
+    navigate(`/complaints?openId=${complaintDocId}`);
+  };
 
   useEffect(() => {
     const q = query(collection(db, `techSupportTickets/${ticket.id}/activityLog`), orderBy('createdAt', 'desc'));
@@ -434,6 +447,12 @@ function TechSupportDetailsInner({ ticket, onClose }) {
                 {t('techSupportDetails.escalateBtn')}
               </button>
             )}
+            {canConvert && (
+              <button disabled={loading} onClick={() => setShowConvert(true)} className="px-4 py-2 bg-white border border-primary/40 text-primary rounded-lg text-sm font-medium hover:bg-primary/5 transition-colors flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                {t('techSupportDetails.convertToComplaintBtn')}
+              </button>
+            )}
             {canDelete && (
               <button disabled={loading} onClick={handleDelete} className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors flex items-center gap-2 mr-auto">
                 <Trash2 className="w-4 h-4" />
@@ -699,6 +718,7 @@ function TechSupportDetailsInner({ ticket, onClose }) {
         </div>
       </div>
       {showEdit && <TechSupportEditForm ticket={ticket} onClose={() => setShowEdit(false)} />}
+      {showConvert && <TicketConvertModal ticket={ticket} onClose={() => setShowConvert(false)} onConverted={handleConverted} />}
     </div>
   );
 }

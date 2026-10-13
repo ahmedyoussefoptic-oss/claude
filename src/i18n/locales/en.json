@@ -596,7 +596,8 @@
       "VISIT_CHECKED_IN": "You checked in at the branch",
       "VISIT_MET": "Meeting held",
       "APPOINTMENT_CONFIRMED": "Your visit is confirmed",
-      "APPOINTMENT_RESCHEDULED": "An alternative visit time was set"
+      "APPOINTMENT_RESCHEDULED": "An alternative visit time was set",
+      "CONVERTED_FROM_TICKET": "Your request was transferred to the relevant department as feedback"
     },
     "pageTitle": "Feedback & Reports Tracking Portal",
     "pageSubtitle": "Enter your feedback or report number to check its current status.",
@@ -1133,7 +1134,8 @@
     "attachmentUploadError": "Could not upload the attachments. Please try again.",
     "resolutionLinksLabel": "Links sent to the parent",
     "linkLabelPlaceholder": "Link description (optional)",
-    "addLinkBtn": "Add link"
+    "addLinkBtn": "Add link",
+    "convertToComplaintBtn": "Convert to feedback"
   },
   "actions": {
     "complaint": {
@@ -1160,7 +1162,8 @@
       "APPOINTMENT_REQUESTED": "Visit appointment requested",
       "APPOINTMENT_CONFIRMED": "Visit appointment confirmed",
       "APPOINTMENT_RESCHEDULED": "Alternative visit time set",
-      "REMINDER_SENT": "Reminder sent"
+      "REMINDER_SENT": "Reminder sent",
+      "CONVERTED_FROM_TICKET": "Converted from a tech-support ticket"
     },
     "lostFound": {
       "ITEM_REGISTERED": "Item registered",
@@ -1193,7 +1196,8 @@
       "TICKET_EDITED": "Ticket details edited",
       "WHATSAPP_API_SENT": "Sent to parent via WhatsApp API",
       "WHATSAPP_API_FAILED": "Automatic WhatsApp API send failed",
-      "REMINDER_SENT": "Reminder sent"
+      "REMINDER_SENT": "Reminder sent",
+      "TICKET_CONVERTED": "Ticket converted to feedback"
     }
   },
   "complaintEdit": {
@@ -2501,5 +2505,14 @@
     "doneBody": "We've received your request and admissions will contact you soon. Reference:",
     "doneExisting": "You already have a request with us; this inquiry was added to it. Reference:",
     "privacy": "Your details are used only to contact you about enrollment."
+  },
+  "ticketConvert": {
+    "title": "Convert ticket to feedback",
+    "description": "This ticket and its data move to the feedback records and are auto-assigned by category and branch; it is removed from tech support (a copy stays in the deleted archive). The parent's tracking number keeps working, and they receive the new feedback number.",
+    "typeLabel": "Feedback category",
+    "confirmBtn": "Convert",
+    "converting": "Converting...",
+    "successAlert": "Converted to feedback {{id}}",
+    "error": "Could not convert the ticket. Please try again."
   }
 }
