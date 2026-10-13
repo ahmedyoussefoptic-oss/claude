@@ -2089,7 +2089,9 @@ exports.waDeliveryReport = onRequest(async (req, res) => {
       const ref = db.collection("waMessages").doc(waMessageKey(id));
       const snap = await ref.get();
       if (!snap.exists) continue;
-      const state = String(st.status || st.state || "").toLowerCase();
+      // Taqnyat: state = queued|sent|delivered|read|failed|…, status = success|failure.
+      const rawState = String(st.state || "").toLowerCase();
+      const state = rawState || (String(st.status || "").toLowerCase() === "failure" ? "failed" : String(st.status || "").toLowerCase());
       const errors = st.errors || st.error || null;
       const details = st.details || (Array.isArray(errors) && errors[0] && (errors[0].title || errors[0].message)) || (errors && errors.message) || "";
       const now = Timestamp.now();
