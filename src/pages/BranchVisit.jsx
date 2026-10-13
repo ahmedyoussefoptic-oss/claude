@@ -26,7 +26,8 @@ export default function BranchVisit() {
   const [saved, setSaved] = useState(null);
   // 'appointment' = arriving for a booked visit, 'walkin' = new visit,
   // 'book' = booking a visit appointment for later.
-  const [mode, setMode] = useState(null);
+  // ?mode=book opens the booking directly (link sent after a declined walk-in meeting).
+  const [mode, setMode] = useState(() => (searchParams.get('mode') === 'book' ? 'book' : null));
   const [apptNo, setApptNo] = useState('');
   const [apptLast4, setApptLast4] = useState('');
   const [apptBusy, setApptBusy] = useState(false);

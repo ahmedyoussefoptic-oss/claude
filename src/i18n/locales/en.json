@@ -1430,7 +1430,7 @@
     "waitingForText": "Waiting {{time}}",
     "waitedText": "waited {{time}}",
     "noVisitsToday": "No visits today",
-    "statusNotMet": "Not met · booked",
+    "statusNotMet": "Not met",
     "bookButton": "Book a meeting",
     "bookTitle": "Book a meeting for the parent",
     "bookNote": "Note (optional)",
@@ -2547,5 +2547,26 @@
       "deleted": "Deleted",
       "unknown": "Unknown"
     }
+  },
+  "visitDecline": {
+    "button": "Decline the meeting",
+    "title": "Decline the parent's meeting",
+    "reason": "Reason",
+    "reasonPlaceholder": "e.g. the officer is in a meeting until the end of the day",
+    "reasonRequired": "Please write the reason.",
+    "optParent": "Send the parent a link to pick a time",
+    "optParentHint": "They get the branch's meeting booking link and choose a day and time from the available slots.",
+    "optStaff": "Set the meeting time now",
+    "optStaffHint": "You choose the day and time; it is booked as confirmed on the same record.",
+    "confirm": "Confirm",
+    "doneParent": "Recorded. Send the parent this message with the booking link:",
+    "doneStaff": "Recorded and booked. Send the parent this message:",
+    "sendWa": "Send to the parent on WhatsApp",
+    "copyLink": "Copy booking link",
+    "msgGreeting": "Hello {{parent}},\nRegarding your visit today to Al Moktashef International Schools — {{branch}} (student {{student}}):",
+    "msgParentBooks": "We apologise that the meeting could not take place today ({{reason}}).\nPlease choose a meeting time that suits you here:\n{{link}}",
+    "msgStaffBooked": "We apologise that the meeting could not take place today ({{reason}}).\nYour meeting is booked for: {{when}}\nOn arrival, scan the QR code at reception, choose \"I have an appointment\" and enter record number {{number}}.",
+    "rowReason": "Declined: {{reason}}",
+    "rowParentBooks": "Parent asked to book a time"
   }
 }

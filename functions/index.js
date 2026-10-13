@@ -3883,6 +3883,9 @@ exports.bookMeetingFromVisit = onCall({ secrets: WA_SECRETS }, async (request) =
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   const { complaintDocId, slot } = request.data || {};
   const note = String(request.data?.note || "").trim().slice(0, 300);
+  // Set when the staff member declines the walk-in meeting and books the
+  // new time themselves (VisitDeclineDialog).
+  const reason = String(request.data?.reason || "").trim().slice(0, 300);
   const callerDoc = await db.collection("users").doc(request.auth.uid).get();
   const caller = callerDoc.data();
   if (!callerDoc.exists || caller.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
@@ -3891,7 +3894,7 @@ exports.bookMeetingFromVisit = onCall({ secrets: WA_SECRETS }, async (request) =
   if (!snap.exists) throw new HttpsError("not-found", "لم يتم العثور على الزيارة.");
   const record = snap.data();
   const inScope = caller.role === "ADMIN" || caller.access === "all" || (caller.branches || []).includes(record.branch) || caller.branch === record.branch;
-  const allowed = caller.role === "RECEPTIONIST" ? inScope : canManageAppointment(caller, record, request.auth.uid) || (inScope && caller.isQuality === true);
+  const allowed = caller.role === "RECEPTIONIST" ? inScope : canManageAppointment(caller, record, request.auth.uid) || (inScope && caller.isQuality === true) || (record.assignedTo || []).includes(request.auth.uid);
   if (!allowed) throw new HttpsError("permission-denied", "لا تملك صلاحية حجز موعد لهذه الزيارة.");
   if (!record.viaVisitQr || record.visitStatus !== "WAITING") throw new HttpsError("failed-precondition", "هذه الزيارة ليست بانتظار المقابلة.");
 
@@ -3906,7 +3909,8 @@ exports.bookMeetingFromVisit = onCall({ secrets: WA_SECRETS }, async (request) =
   const appointment = { ...reserved, status: "CONFIRMED", fromVisit: true, decidedAt: now, decidedBy: request.auth.uid, decidedByName: actorName };
   await ref.update({
     appointment,
-    visitStatus: "NOT_MET", visitNotMetAt: now, visitNotMetByName: actorName,
+    visitStatus: "NOT_MET", visitNotMetAt: now, visitNotMetByName: actorName, visitNotMetMode: "STAFF_BOOKED",
+    ...(reason ? { visitDeclineReason: reason } : {}),
     hasInternalComment: true, updatedAt: now,
     ...(record.status === "RECEIVED" ? { status: "IN_PROGRESS" } : {}),
   });
@@ -3914,12 +3918,49 @@ exports.bookMeetingFromVisit = onCall({ secrets: WA_SECRETS }, async (request) =
   await logs.add({ action: "APPOINTMENT_CONFIRMED", actorId: request.auth.uid, actorName, metadata: { when, fromVisit: true }, createdAt: now });
   await logs.add({
     action: "INTERNAL_COMMENT_ADDED", actorId: request.auth.uid, actorName,
-    metadata: { comment: `⏳ لم تتم مقابلة ولي الأمر أثناء زيارته للفرع، وحُجز له موعد مقابلة: ${when}.${note ? `\n${note}` : ""}`, visit: true },
+    metadata: { comment: `${reason ? `🙏 اعتذر ${actorName} عن مقابلة ولي الأمر أثناء زيارته للفرع: ${reason}\n` : "⏳ لم تتم مقابلة ولي الأمر أثناء زيارته للفرع، و"}${reason ? "و" : ""}حُجز له موعد مقابلة: ${when}.${note ? `\n${note}` : ""}`, visit: true },
     createdAt: now,
   });
   // The internal comment above already notifies the assignees.
   await autoSendWa("complaint", ref, "appointmentConfirmed");
   return { ok: true, when };
+});
+
+// The staff member declines the walk-in meeting and asks the parent to
+// pick a new meeting time themselves: the visit is marked NOT_MET
+// (PARENT_BOOKS) with the reason, logged as an internal comment, and the
+// booking link (the branch QR page opened on "book an appointment") is
+// returned so the caller can send it to the parent on WhatsApp.
+exports.declineVisitMeeting = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const { complaintDocId } = request.data || {};
+  const reason = String(request.data?.reason || "").trim().slice(0, 300);
+  if (!reason) throw new HttpsError("invalid-argument", "يرجى كتابة سبب الاعتذار.");
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  if (!callerDoc.exists || caller.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  const ref = db.collection("complaints").doc(String(complaintDocId || ""));
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "لم يتم العثور على الزيارة.");
+  const record = snap.data();
+  const inScope = caller.role === "ADMIN" || caller.access === "all" || (caller.branches || []).includes(record.branch) || caller.branch === record.branch;
+  const allowed = caller.role === "RECEPTIONIST" ? inScope : canManageAppointment(caller, record, request.auth.uid) || (inScope && caller.isQuality === true) || (record.assignedTo || []).includes(request.auth.uid);
+  if (!allowed) throw new HttpsError("permission-denied", "لا تملك صلاحية الاعتذار عن هذه الزيارة.");
+  if (!record.viaVisitQr || record.visitStatus !== "WAITING") throw new HttpsError("failed-precondition", "هذه الزيارة ليست بانتظار المقابلة.");
+  const now = Timestamp.now();
+  const actorName = caller.name || "مستخدم";
+  const bookLink = `${PUBLIC_APP_URL}/visit?branch=${encodeURIComponent(record.branch || "")}&mode=book`;
+  await ref.update({
+    visitStatus: "NOT_MET", visitNotMetAt: now, visitNotMetByName: actorName, visitNotMetMode: "PARENT_BOOKS", visitDeclineReason: reason,
+    hasInternalComment: true, updatedAt: now,
+    ...(record.status === "RECEIVED" ? { status: "IN_PROGRESS" } : {}),
+  });
+  await ref.collection("activityLog").add({
+    action: "INTERNAL_COMMENT_ADDED", actorId: request.auth.uid, actorName,
+    metadata: { comment: `🙏 اعتذر ${actorName} عن مقابلة ولي الأمر أثناء زيارته للفرع: ${reason}\nوطُلب من ولي الأمر اختيار موعد مقابلة جديد عبر رابط الحجز.`, visit: true },
+    createdAt: now,
+  });
+  return { ok: true, bookLink };
 });
 
 // Trip cover image (shown on the trip page, the poster and — with the

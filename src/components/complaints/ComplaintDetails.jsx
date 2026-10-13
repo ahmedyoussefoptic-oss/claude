@@ -21,6 +21,7 @@ import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiS
 import ErrorBoundary from '../common/ErrorBoundary';
 import ComplaintEditForm from './ComplaintEditForm';
 import ComplaintConvertModal from './ComplaintConvertModal';
+import VisitDeclineDialog from '../visits/VisitDeclineDialog';
 import RecordViewers from '../common/RecordViewers';
 import AppointmentPanel from '../appointments/AppointmentPanel';
 import { complaintStatusLabel, complaintTypesOf } from '../../config/complaintTypes';
@@ -224,6 +225,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
   const navigate = useNavigate();
   const [showEdit, setShowEdit] = useState(false);
   const [showConvert, setShowConvert] = useState(false);
+  const [showDecline, setShowDecline] = useState(false);
 
   // Branch QR check-in (see BranchVisit.jsx): a parent waiting at the
   // branch. Confirming goes through the confirmBranchVisit Cloud Function so
@@ -575,6 +577,14 @@ function ComplaintDetailsInner({ complaint, onClose }) {
                         <p className="text-xs text-slate-500">{t('waApi.visitAutoNote')}</p>
                       )}
                     </div>
+                    <button
+                      type="button"
+                      disabled={visitSaving}
+                      onClick={() => setShowDecline(true)}
+                      className="px-4 py-2 bg-white border border-rose-300 text-rose-700 rounded-lg text-sm font-medium hover:bg-rose-100 transition-colors flex items-center gap-2 mr-auto"
+                    >
+                      {t('visitDecline.button')}
+                    </button>
                     <button
                       disabled={visitSaving}
                       onClick={handleConfirmVisit}
@@ -1103,6 +1113,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
 
       </div>
       {showEdit && <ComplaintEditForm complaint={complaint} onClose={() => setShowEdit(false)} />}
+      {showDecline && <VisitDeclineDialog visit={complaint} branchName={branchName} onClose={() => setShowDecline(false)} />}
       {showConvert && <ComplaintConvertModal complaint={complaint} onClose={() => setShowConvert(false)} onConverted={handleConverted} />}
     </div>
   );

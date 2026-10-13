@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { Armchair, Handshake, Clock, CalendarDays, CalendarPlus, Phone, Loader2, CheckCircle2 } from 'lucide-react';
+import { Armchair, Handshake, Clock, CalendarDays, CalendarPlus, Phone, Loader2, CheckCircle2, HeartHandshake, Building2 } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
@@ -15,6 +15,7 @@ import { formatMinutes } from '../utils/duration';
 import { normalizeAssignees } from '../utils/assignees';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import AppointmentPicker from '../components/appointments/AppointmentPicker';
+import VisitDeclineDialog from '../components/visits/VisitDeclineDialog';
 
 const isToday = (ts) => {
   if (!ts?.toDate) return false;
@@ -150,6 +151,8 @@ export default function BranchVisits() {
   const [now, setNow] = useState(() => Date.now());
   const [confirming, setConfirming] = useState(null);
   const [booking, setBooking] = useState(null);
+  const [declining, setDeclining] = useState(null);
+  const [branchFilter, setBranchFilter] = useState('');
   // Staff open the visit's full record; reception only sees this list.
   const [openId, setOpenId] = useState(null);
   const isReceptionist = userData?.role === 'RECEPTIONIST';
@@ -177,7 +180,12 @@ export default function BranchVisits() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userData?.role, userData?.access, userData?.branches?.join(','), userData?.recordScope]);
 
+  // Branches this user can pick from (all for admins / all-branch access).
+  const branchOptions = (userData?.role === 'ADMIN' || userData?.access === 'all') ? branches : branches.filter((b) => userBranches(userData).includes(b.id));
+  const scoped = useMemo(() => (branchFilter ? visits.filter((v) => v.branch === branchFilter) : visits), [visits, branchFilter]);
+
   const stats = useMemo(() => {
+    const visits = scoped;
     const today = visits.filter((v) => isToday(v.visitArrivedAt));
     const metToday = today.filter((v) => v.visitStatus === 'MET' && v.visitMetAt);
     // Today's visits: arrival → meeting, or → now for those still waiting.
@@ -188,9 +196,9 @@ export default function BranchVisits() {
       metToday: metToday.length,
       avgWait: waits.length ? Math.round(waits.reduce((s, m) => s + m, 0) / waits.length) : null,
     };
-  }, [visits, now]);
+  }, [scoped, now]);
 
-  const shown = visits.filter((v) => (range === 'ALL' || isToday(v.visitArrivedAt) || v.visitStatus === 'WAITING')
+  const shown = scoped.filter((v) => (range === 'ALL' || isToday(v.visitArrivedAt) || v.visitStatus === 'WAITING')
     && (statusFilter === 'ALL' || v.visitStatus === statusFilter));
 
   const chip = (active, onClick, label) => (
@@ -223,6 +231,18 @@ export default function BranchVisits() {
           {chip(statusFilter === 'WAITING', () => setStatusFilter('WAITING'), t('branchVisits.statusWaiting'))}
           {chip(statusFilter === 'MET', () => setStatusFilter('MET'), t('branchVisits.statusMet'))}
           {chip(statusFilter === 'NOT_MET', () => setStatusFilter('NOT_MET'), t('branchVisits.statusNotMet'))}
+          {branchOptions.length > 1 && (
+            <>
+              <span className="w-px h-6 bg-slate-200 mx-1" />
+              <label className="flex items-center gap-1.5 text-sm text-slate-600">
+                <Building2 className="w-4 h-4" />
+                <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white">
+                  <option value="">{t('common.allBranches')}</option>
+                  {branchOptions.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+              </label>
+            </>
+          )}
         </div>
 
         {loading ? (
@@ -263,6 +283,12 @@ export default function BranchVisits() {
                     <span className={`inline-block px-2.5 py-1 rounded-md text-xs font-medium border ${waiting ? 'bg-rose-100 text-rose-700 border-rose-200' : notMet ? 'bg-indigo-100 text-indigo-700 border-indigo-200' : 'bg-teal-100 text-teal-700 border-teal-200'}`}>
                       {waiting ? t('branchVisits.statusWaiting') : notMet ? t('branchVisits.statusNotMet') : t('branchVisits.statusMet')}
                     </span>
+                    {notMet && v.visitDeclineReason && (
+                      <p className="text-xs text-rose-700 max-w-xs">{t('visitDecline.rowReason', { reason: v.visitDeclineReason })}</p>
+                    )}
+                    {notMet && !v.appointment?.start && v.visitNotMetMode === 'PARENT_BOOKS' && (
+                      <p className="text-xs font-medium text-indigo-700">{t('visitDecline.rowParentBooks')}{v.visitNotMetByName && <span className="block text-[11px] text-slate-400 font-normal">{t('branchVisits.bookedBy', { name: v.visitNotMetByName })}</span>}</p>
+                    )}
                     {notMet && v.appointment?.start && (
                       <p className="text-xs font-medium text-indigo-700">
                         {t('branchVisits.meetingBooked', { when: format(v.appointment.start.toDate(), 'EEEE d MMMM · p', { locale: dateLocale }) })}
@@ -283,6 +309,11 @@ export default function BranchVisits() {
                         {isReceptionist && (
                           <button onClick={(e) => { e.stopPropagation(); setConfirming(v); }} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-teal-600 text-white flex items-center gap-1">
                             <CheckCircle2 className="w-3.5 h-3.5" />{t('branchVisits.confirmButton')}
+                          </button>
+                        )}
+                        {!isReceptionist && (
+                          <button onClick={(e) => { e.stopPropagation(); setDeclining(v); }} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 flex items-center gap-1">
+                            <HeartHandshake className="w-3.5 h-3.5" />{t('visitDecline.button')}
                           </button>
                         )}
                         <button onClick={(e) => { e.stopPropagation(); setBooking(v); }} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-indigo-300 text-indigo-700 hover:bg-indigo-50 flex items-center gap-1">
@@ -308,6 +339,7 @@ export default function BranchVisits() {
       </div>
       {confirming && <ConfirmMeetingDialog visit={confirming} onClose={() => setConfirming(null)} />}
       {booking && <BookMeetingDialog visit={booking} onClose={() => setBooking(null)} />}
+      {declining && <VisitDeclineDialog visit={declining} branchName={branchName(declining.branch)} onClose={() => setDeclining(null)} />}
       {openId && visits.find((v) => v.id === openId) && (
         <ComplaintDetails complaint={visits.find((v) => v.id === openId)} onClose={() => setOpenId(null)} />
       )}
