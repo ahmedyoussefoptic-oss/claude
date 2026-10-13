@@ -11,7 +11,7 @@ import Watermark from '../common/Watermark';
 import SystemCredit from '../common/SystemCredit';
 import LanguageSwitcher from '../common/LanguageSwitcher';
 import logo from '../../assets/logo.png';
-import { canAccessTechSupport, canSeeTrips, tripsAccessOf } from '../../utils/scope';
+import { canSeeModule, tripsAccessOf } from '../../utils/scope';
 
 const ownerClaimTried = new Set();
 
@@ -41,26 +41,26 @@ export default function AppLayout() {
   const isReceptionist = role === 'RECEPTIONIST';
   // Staff limited to the trips section see only that tab.
   const tripsOnly = !isReceptionist && tripsAccessOf(userData) === 'tripsOnly';
-  const homePath = isReceptionist ? '/visits' : tripsOnly ? '/trips' : null;
-  const navItems = isReceptionist ? [{ name: t('nav.branchVisits'), path: '/visits', icon: Armchair }] : tripsOnly ? [{ name: t('nav.trips'), path: '/trips', icon: Bus }] : [
-    { name: t('nav.dashboard'), path: '/dashboard', icon: LayoutDashboard },
-    { name: t('nav.complaints'), path: '/complaints', icon: FileText },
-    { name: t('nav.lostFound'), path: '/lost-found', icon: PackageSearch },
-    { name: t('nav.flowMap'), path: '/flow-map', icon: Map },
-    { name: t('nav.advancedSearch'), path: '/search', icon: Search },
-    { name: t('nav.studentRecords'), path: '/students', icon: GraduationCap },
-    { name: t('nav.reports'), path: '/reports', icon: FileBarChart },
-    { name: t('nav.branchVisits'), path: '/visits', icon: Armchair },
-    ...(canSeeTrips(userData) ? [{ name: t('nav.trips'), path: '/trips', icon: Bus }] : []),
+  // Every section is shown only if the employee may see it (Users page →
+  // sections; see canSeeModule). Tech-support tickets hold national IDs and
+  // account credentials, so by default only IT, Customer Service,
+  // principals and quality officers get that one.
+  const moduleNav = [
+    ['dashboard', '/dashboard', LayoutDashboard, 'nav.dashboard'],
+    ['complaints', '/complaints', FileText, 'nav.complaints'],
+    ['lostFound', '/lost-found', PackageSearch, 'nav.lostFound'],
+    ['techSupport', '/tech-support', Wrench, 'nav.techSupport'],
+    ['flowMap', '/flow-map', Map, 'nav.flowMap'],
+    ['search', '/search', Search, 'nav.advancedSearch'],
+    ['students', '/students', GraduationCap, 'nav.studentRecords'],
+    ['reports', '/reports', FileBarChart, 'nav.reports'],
+    ['visits', '/visits', Armchair, 'nav.branchVisits'],
+    ['trips', '/trips', Bus, 'nav.trips'],
   ];
-
-  // Tech Support tickets can hold national IDs and account credentials, so
-  // access is restricted to the IT department's own specialists, admins,
-  // and Customer Service (they're the ones who take the parent's call and
-  // log the ticket in the first place, before it reaches IT).
-  if (!isReceptionist && !tripsOnly && canAccessTechSupport(userData)) {
-    navItems.splice(3, 0, { name: t('nav.techSupport'), path: '/tech-support', icon: Wrench });
-  }
+  const navItems = moduleNav.filter(([key]) => canSeeModule(userData, key)).map(([, path, icon, label]) => ({ name: t(label), path, icon }));
+  // A section the employee may not see redirects to their first allowed one.
+  const blockedModule = userData && moduleNav.find(([key, path]) => (location.pathname === path || location.pathname.startsWith(`${path}/`)) && !canSeeModule(userData, key));
+  const homePath = blockedModule ? (navItems[0]?.path || '/no-access') : null;
 
   if (!tripsOnly && (role === 'ADMIN' ? adminCan(userData, caps, 'users') : userData?.perms?.users)) {
     navItems.push({ name: t('nav.users'), path: '/users', icon: User });
@@ -89,7 +89,7 @@ export default function AppLayout() {
   if (!user) {
     return <Outlet />;
   }
-  if (homePath && !location.pathname.startsWith(homePath)) {
+  if (homePath && homePath !== '/no-access') {
     return <Navigate to={homePath} replace />;
   }
 
@@ -189,7 +189,9 @@ export default function AppLayout() {
           <NotificationBell />
         </div>
         <div className="p-4 md:p-8 flex-1 overflow-x-hidden">
-          <Outlet />
+          {homePath === '/no-access' ? (
+            <div className="max-w-lg mx-auto mt-16 bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-600">{t('nav.noAccess')}</div>
+          ) : <Outlet />}
         </div>
         <SystemCredit />
       </main>

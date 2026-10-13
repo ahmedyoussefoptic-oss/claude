@@ -174,7 +174,7 @@ exports.createStaffUser = onCall(async (request) => {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
-  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, isCounselor, stages, curricula, notificationPrefs, notificationChannels, tripsAccess } = request.data || {};
+  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, isCounselor, stages, curricula, notificationPrefs, notificationChannels, tripsAccess, modules, recordScope } = request.data || {};
   if (!name || !email || !password || !role) {
     throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
   }
@@ -225,6 +225,7 @@ exports.createStaffUser = onCall(async (request) => {
     stages: Array.isArray(stages) ? stages.filter((st) => typeof st === "string") : [],
     curricula: Array.isArray(curricula) ? curricula.filter((c) => typeof c === "string") : [],
     tripsAccess: ["tripsOnly", "none"].includes(tripsAccess) && role !== "ADMIN" ? tripsAccess : "all",
+    ...(role !== "ADMIN" ? cleanUserModules(modules, recordScope) : {}),
     active: active !== false,
     createdAt: Timestamp.now(),
     createdBy: request.auth.uid,
@@ -232,6 +233,22 @@ exports.createStaffUser = onCall(async (request) => {
 
   return { uid: userRecord.uid };
 });
+
+// Per-employee visibility (Users page): which sections they see
+// (`modules`, missing key = the role's default) and whether they see every
+// record of their branches or only the ones assigned to them
+// (`recordScope`). Mirrored in src/utils/scope.js and firestore.rules.
+const USER_MODULE_KEYS = ["dashboard", "complaints", "techSupport", "lostFound", "visits", "trips", "students", "search", "flowMap", "reports"];
+function cleanUserModules(modules, recordScope) {
+  const out = {};
+  if (modules && typeof modules === "object") {
+    const m = Object.fromEntries(USER_MODULE_KEYS.filter((k) => typeof modules[k] === "boolean").map((k) => [k, modules[k]]));
+    if (Object.keys(m).length) out.modules = m;
+  }
+  if (recordScope === "assigned") out.recordScope = "assigned";
+  return out;
+}
+const moduleOff = (u, key) => !!u.modules && u.modules[key] === false;
 
 // Sets a new password for an existing staff account via the Admin SDK.
 // Only callers who are ADMIN or hold the "users" permission may call this.
@@ -570,7 +587,7 @@ exports.handleItTicketAssignment = onDocumentUpdated({ document: "techSupportTic
 // assignLostFoundBacklog) goes to its branch's quality officers and student
 // counselors (users flagged isQuality / isCounselor).
 function lostFoundOfficers(users, branch) {
-  return users.filter((u) => (u.isQuality === true || u.isCounselor === true) && u.active !== false && u.tripsAccess !== "tripsOnly"
+  return users.filter((u) => (u.isQuality === true || u.isCounselor === true) && u.active !== false && u.tripsAccess !== "tripsOnly" && !moduleOff(u, "lostFound")
     && (u.access === "all" || (u.branches || []).includes(branch) || u.branch === branch));
 }
 // Adds the given officers to an item; `silent` marks the write so the
@@ -1167,7 +1184,9 @@ async function findPublicAssignees(branch, department, stage, curriculum) {
 async function findAutoAssignees({ branch, departments, stage, curriculum, users: preloaded }) {
   // Staff limited to the trips section (tripsAccess "tripsOnly") never get
   // complaints or tickets.
-  const users = (preloaded || await loadActiveUsers()).filter((u) => u.tripsAccess !== "tripsOnly");
+  // Nor do staff whose complaints / tech-support section is turned off.
+  const section = departments.includes("IT") ? "techSupport" : "complaints";
+  const users = (preloaded || await loadActiveUsers()).filter((u) => u.tripsAccess !== "tripsOnly" && !moduleOff(u, section));
   const inBranch = (u) => (u.branches || []).includes(branch) || u.branch === branch;
   const covers = (u) => coversStage(u, stage) && coversCurriculum(u, curriculum);
   const specialists = [];
@@ -1199,7 +1218,7 @@ async function loadActiveUsers() {
 // Student counselors (isCounselor) get every complaint in their branches,
 // within their grade / section limits when they have any.
 function complaintCounselors(users, branch, stage, curriculum) {
-  return users.filter((u) => u.isCounselor === true && u.active !== false && u.tripsAccess !== "tripsOnly"
+  return users.filter((u) => u.isCounselor === true && u.active !== false && u.tripsAccess !== "tripsOnly" && !moduleOff(u, "complaints")
     && (u.access === "all" || (u.branches || []).includes(branch) || u.branch === branch)
     && coversStage(u, stage) && coversCurriculum(u, curriculum));
 }

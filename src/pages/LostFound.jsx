@@ -11,7 +11,7 @@ import { useBranches, useItemCategories } from '../hooks/useOrgData';
 import { ITEM_STATUS_BADGE } from '../config/lostFound';
 import ReminderButton from '../components/common/ReminderButton';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
-import { branchScopeConstraintValues } from '../utils/scope';
+import { scopeConstraints } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -66,9 +66,7 @@ export default function LostFound() {
   useEffect(() => {
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
-    if (userData.access !== 'all') {
-      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
-    }
+    constraints.unshift(...scopeConstraints(userData));
     const q = query(collection(db, 'lostFoundItems'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setItems(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
@@ -76,7 +74,7 @@ export default function LostFound() {
     });
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
+  }, [userData?.access, userData?.branch, userData?.branches?.join(','), userData?.recordScope]);
 
   const filteredItems = useMemo(() => {
     return items.filter((item) => {

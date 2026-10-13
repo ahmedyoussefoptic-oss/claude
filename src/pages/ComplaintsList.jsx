@@ -11,7 +11,7 @@ import { useBranches, useComplaintTypes, useDepartments } from '../hooks/useOrgD
 import ReminderButton from '../components/common/ReminderButton';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { normalizeAssignees } from '../utils/assignees';
-import { branchScopeConstraintValues } from '../utils/scope';
+import { scopeConstraints } from '../utils/scope';
 import { formatDuration } from '../utils/duration';
 import { useSlaSettings, elapsedMs } from '../utils/businessTime';
 import { studentKey } from '../utils/studentKey';
@@ -114,12 +114,7 @@ export default function ComplaintsList() {
     // (once the matching security rule is in place) fail outright.
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
-    if (userData.access !== 'all') {
-      // A branch-scoped account with no branch assigned must see nothing,
-      // not everything — branchScopeConstraintValues falls back to
-      // '__NONE__', which matches no real branch id.
-      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
-    }
+    constraints.unshift(...scopeConstraints(userData));
     const q = query(collection(db, 'complaints'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => {
@@ -131,7 +126,7 @@ export default function ComplaintsList() {
     });
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
+  }, [userData?.access, userData?.branch, userData?.branches?.join(','), userData?.recordScope]);
 
   const getStatusBadge = (status) => {
     switch (status) {

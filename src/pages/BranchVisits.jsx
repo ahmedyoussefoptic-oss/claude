@@ -9,7 +9,7 @@ import { db, functions } from '../config/firebase';
 import { useUsers } from '../hooks/useUsers';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
-import { branchScopeConstraintValues, userBranches } from '../utils/scope';
+import { scopeConstraints, userBranches } from '../utils/scope';
 import StatCard from '../components/dashboard/StatCard';
 import { formatMinutes } from '../utils/duration';
 import { normalizeAssignees } from '../utils/assignees';
@@ -163,9 +163,7 @@ export default function BranchVisits() {
   useEffect(() => {
     if (!userData) return;
     const constraints = [where('viaVisitQr', '==', true)];
-    if (userData.role !== 'ADMIN' && userData.access !== 'all') {
-      constraints.push(where('branch', 'in', branchScopeConstraintValues(userData)));
-    }
+    constraints.push(...scopeConstraints(userData, { adminAll: true }));
     const unsubscribe = onSnapshot(query(collection(db, 'complaints'), ...constraints), (snapshot) => {
       const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data(), ...normalizeAssignees(d.data()) }));
       list.sort((a, b) => (b.visitArrivedAt?.toMillis?.() || 0) - (a.visitArrivedAt?.toMillis?.() || 0));
@@ -177,7 +175,7 @@ export default function BranchVisits() {
     });
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userData?.role, userData?.access, userData?.branches?.join(',')]);
+  }, [userData?.role, userData?.access, userData?.branches?.join(','), userData?.recordScope]);
 
   const stats = useMemo(() => {
     const today = visits.filter((v) => isToday(v.visitArrivedAt));

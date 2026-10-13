@@ -7,7 +7,7 @@ import useAuthStore from '../stores/useAuthStore';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import TechSupportDetails from '../components/techSupport/TechSupportDetails';
 import { normalizeAssignees } from '../utils/assignees';
-import { branchScopeConstraintValues } from '../utils/scope';
+import { scopeConstraints } from '../utils/scope';
 import { formatDuration } from '../utils/duration';
 import { RESOLVED_TICKET_STATUSES, isTicketOverdue } from '../config/techSupport';
 import { format } from 'date-fns';
@@ -92,9 +92,7 @@ export default function Reports() {
   useEffect(() => {
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
-    if (userData.access !== 'all') {
-      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
-    }
+    constraints.unshift(...scopeConstraints(userData));
     const q = query(collection(db, 'complaints'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setComplaints(snapshot.docs.map((d) => {
@@ -104,14 +102,12 @@ export default function Reports() {
     });
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
+  }, [userData?.access, userData?.branch, userData?.branches?.join(','), userData?.recordScope]);
 
   useEffect(() => {
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
-    if (userData.access !== 'all') {
-      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
-    }
+    constraints.unshift(...scopeConstraints(userData));
     const q = query(collection(db, 'techSupportTickets'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setTechTickets(snapshot.docs.map((d) => {
@@ -121,7 +117,7 @@ export default function Reports() {
     });
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
+  }, [userData?.access, userData?.branch, userData?.branches?.join(','), userData?.recordScope]);
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {

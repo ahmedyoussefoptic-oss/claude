@@ -11,7 +11,7 @@ import TechSupportForm from '../components/techSupport/TechSupportForm';
 import { TICKET_STATUS_BADGE, OPEN_TICKET_STATUSES, isTicketOverdue } from '../config/techSupport';
 import ReminderButton from '../components/common/ReminderButton';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
-import { branchScopeConstraintValues } from '../utils/scope';
+import { scopeConstraints } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -77,9 +77,7 @@ export default function TechSupport() {
   useEffect(() => {
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
-    if (userData.access !== 'all') {
-      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
-    }
+    constraints.unshift(...scopeConstraints(userData));
     const q = query(collection(db, 'techSupportTickets'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       // Normalizes tickets created before assignedTo became an array
@@ -95,7 +93,7 @@ export default function TechSupport() {
     });
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
+  }, [userData?.access, userData?.branch, userData?.branches?.join(','), userData?.recordScope]);
 
   // Everything except the status chip — chips count within this set.
   const baseTickets = useMemo(() => {

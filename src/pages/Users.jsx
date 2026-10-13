@@ -7,7 +7,8 @@ import { ROLES, ROLE_LABELS } from '../config/roles';
 import { useAdminPermissions, adminCan, isOwner } from '../config/adminPermissions';
 import { useBranches, useDepartments } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
-import { userBranches } from '../utils/scope';
+import { userBranches, MODULE_KEYS, canSeeModule } from '../utils/scope';
+import ModuleAccessEditor, { moduleOverrides } from '../components/users/ModuleAccessEditor';
 import { STAGES } from '../config/complaintTypes';
 import NotificationPrefsEditor from '../components/common/NotificationPrefsEditor';
 import { Users as UsersIcon, Plus, Loader2, Mail, Lock, Phone, Briefcase, User as UserIcon, Pencil, Trash2, KeyRound, X, SlidersHorizontal, RotateCcw } from 'lucide-react';
@@ -44,6 +45,8 @@ const emptyForm = {
   isQuality: false,
   isCounselor: false,
   tripsAccess: 'all',
+  modules: {},
+  recordScope: 'branch',
   notificationPrefs: {},
   notificationChannels: {},
   stages: [],
@@ -116,6 +119,8 @@ export default function Users() {
       isQuality: u.isQuality === true,
       isCounselor: u.isCounselor === true,
       tripsAccess: ['tripsOnly', 'none'].includes(u.tripsAccess) ? u.tripsAccess : 'all',
+      modules: u.modules && typeof u.modules === 'object' ? u.modules : {},
+      recordScope: u.recordScope === 'assigned' ? 'assigned' : 'branch',
       notificationPrefs: u.notificationPrefs || {},
       notificationChannels: u.notificationChannels || {},
       stages: Array.isArray(u.stages) ? u.stages : [],
@@ -142,6 +147,11 @@ export default function Users() {
     try {
       const department = form.role === ROLES.SPECIALIST ? (form.department || null) : null;
       const branches = form.access === 'all' ? [] : form.branches;
+      // Sections and record scope (ModuleAccessEditor); admins and
+      // reception keep their fixed views.
+      const restricted = form.role === ROLES.ADMIN || form.role === ROLES.RECEPTIONIST;
+      const modules = restricted ? {} : moduleOverrides({ ...form, department });
+      const recordScope = restricted ? 'branch' : (form.recordScope === 'assigned' ? 'assigned' : 'branch');
       if (editingId) {
         await updateDoc(doc(db, 'users', editingId), {
           name: form.name,
@@ -157,6 +167,8 @@ export default function Users() {
           isQuality: form.isQuality,
           isCounselor: form.isCounselor,
           tripsAccess: form.role === ROLES.ADMIN ? 'all' : form.tripsAccess,
+          modules,
+          recordScope,
           notificationPrefs: form.notificationPrefs,
           notificationChannels: form.notificationChannels,
           stages: form.stages,
@@ -182,6 +194,8 @@ export default function Users() {
           isQuality: form.isQuality,
           isCounselor: form.isCounselor,
           tripsAccess: form.role === ROLES.ADMIN ? 'all' : form.tripsAccess,
+          modules,
+          recordScope,
           notificationPrefs: form.notificationPrefs,
           notificationChannels: form.notificationChannels,
           stages: form.stages,
@@ -536,22 +550,7 @@ export default function Users() {
             </div>
 
             {form.role !== ROLES.ADMIN && form.role !== ROLES.RECEPTIONIST && (
-              <div className="md:col-span-2 bg-sky-50 border border-sky-100 rounded-xl p-4">
-                <p className="text-sm font-bold text-slate-800 mb-2">🚌 {t('users.tripsAccessLabel')}</p>
-                <div className="flex flex-wrap gap-2">
-                  {['all', 'tripsOnly', 'none'].map((v) => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => setForm((p) => ({ ...p, tripsAccess: v }))}
-                      className={`px-3 py-1.5 rounded-lg text-sm border ${form.tripsAccess === v ? 'bg-primary text-white border-primary font-medium' : 'bg-white text-slate-600 border-slate-200'}`}
-                    >
-                      {t(`users.tripsAccess.${v}`)}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-xs text-slate-600 mt-2">{t(`users.tripsAccessHint.${form.tripsAccess}`)}</p>
-              </div>
+              <ModuleAccessEditor form={form} setForm={setForm} />
             )}
 
             <div className="md:col-span-2 bg-amber-50 border border-amber-100 rounded-xl p-4">
@@ -728,6 +727,16 @@ export default function Users() {
                       {u.role !== 'ADMIN' && ['tripsOnly', 'none'].includes(u.tripsAccess) && (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-sky-100 text-sky-700 mr-1 mt-1">
                           🚌 {t(`users.tripsAccessTag.${u.tripsAccess}`)}
+                        </span>
+                      )}
+                      {u.role !== 'ADMIN' && u.role !== 'RECEPTIONIST' && u.tripsAccess !== 'tripsOnly' && u.modules && Object.keys(u.modules).length > 0 && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 mr-1 mt-1" title={MODULE_KEYS.filter((k) => canSeeModule(u, k)).map((k) => t(`users.modules.keys.${k}`)).join(listSep)}>
+                          👁 {t('users.modules.customTag', { n: MODULE_KEYS.filter((k) => canSeeModule(u, k)).length })}
+                        </span>
+                      )}
+                      {u.role !== 'ADMIN' && u.recordScope === 'assigned' && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 mr-1 mt-1">
+                          🎯 {t('users.modules.assignedTag')}
                         </span>
                       )}
                       {u.isQuality && (

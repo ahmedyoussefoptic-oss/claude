@@ -5,7 +5,7 @@ import { ChevronLeft, Loader2 } from 'lucide-react';
 import { db } from '../config/firebase';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
-import { branchScopeConstraintValues, userBranches } from '../utils/scope';
+import { userBranches, scopeConstraints } from '../utils/scope';
 
 const MAIN_FLOW_KEYS = ['RECEIVED', 'IN_PROGRESS', 'WAITING_PARENT_RESPONSE', 'SOLVED', 'CLOSED'];
 const EXCEPTION_FLOW_KEYS = [
@@ -25,10 +25,7 @@ export default function FlowMap() {
   useEffect(() => {
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
-    if (userData.access !== 'all') {
-      // Branch-scoped staff only ever see their own branch(es)' flow.
-      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
-    }
+    constraints.unshift(...scopeConstraints(userData));
     const q = query(collection(db, 'complaints'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setComplaints(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -36,7 +33,7 @@ export default function FlowMap() {
     });
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
+  }, [userData?.access, userData?.branch, userData?.branches?.join(','), userData?.recordScope]);
 
   const scoped = useMemo(() => {
     return complaints.filter((c) => {

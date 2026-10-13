@@ -54,7 +54,28 @@ service cloud.firestore {
       return tripsAccess() == 'tripsOnly';
     }
     function canSeeTrips() {
-      return isAuthenticated() && !isReceptionist() && tripsAccess() != 'none';
+      return isAuthenticated() && !isReceptionist() && tripsAccess() != 'none' &&
+        (isAdmin() || tripsAccess() == 'tripsOnly' || modAllowed('trips'));
+    }
+    // Per-employee sections (Users page): users.modules.{key} == false hides
+    // that section; a missing key keeps the role's default. Mirrors
+    // src/utils/scope.js canSeeModule().
+    function modAllowed(key) {
+      return myDoc() != null && myDoc().get('modules', {}).get(key, true) != false;
+    }
+    // Complaint records feed every one of these sections.
+    function complaintsData() {
+      return modAllowed('complaints') || modAllowed('dashboard') || modAllowed('reports') ||
+        modAllowed('search') || modAllowed('flowMap') || modAllowed('students');
+    }
+    // users.recordScope == 'assigned': the employee only sees the records
+    // assigned to them (queries filter assignedTo array-contains uid);
+    // otherwise everything in their branches.
+    function assignedOnly() {
+      return myDoc() != null && myDoc().get('role', null) != 'ADMIN' && myDoc().get('recordScope', 'branch') == 'assigned';
+    }
+    function recordInScope(data) {
+      return assignedOnly() ? request.auth.uid in data.assignedTo : inMyScope(data.branch);
     }
     // System owner ("منشئ النظام", set only by the claimSystemOwner function)
     // always has every power; other ADMIN accounts have the capabilities the
@@ -91,7 +112,8 @@ service cloud.firestore {
     // parent's call and log the ticket before it ever reaches IT.
     function canAccessTechSupport() {
       return isAdmin() ||
-        (myDoc() != null && !isTripsOnly() && (
+        (myDoc() != null && !isTripsOnly() && myDoc().get('modules', {}).get('techSupport', null) == true) ||
+        (myDoc() != null && !isTripsOnly() && myDoc().get('modules', {}).get('techSupport', null) == null && (
           myDoc().get('department', null) == 'IT' ||
           myDoc().get('role', null) == 'CUSTOMER_SERVICE' ||
           // School principals are auto-assigned every public-link ticket in
@@ -242,8 +264,9 @@ service cloud.firestore {
       // Listing requires authentication AND being in scope of the branch —
       // callers must filter their query by `branch` for this to resolve.
       allow list: if isAuthenticated() && !isTripsOnly() && (isAdmin() || (
-        inMyScope(resource.data.branch) &&
-        (!isReceptionist() || resource.data.get('viaVisitQr', false) == true)
+        recordInScope(resource.data) &&
+        (!isReceptionist() || resource.data.get('viaVisitQr', false) == true) &&
+        (isReceptionist() || complaintsData() || (modAllowed('visits') && resource.data.get('viaVisitQr', false) == true))
       ));
       // Creating complaints is allowed by public (via form) or authenticated staff
       allow create: if true;
@@ -353,7 +376,7 @@ service cloud.firestore {
     // Lost & Found items collection
     match /lostFoundItems/{itemId} {
       allow get: if true;
-      allow list: if isAuthenticated() && !isReceptionist() && !isTripsOnly() && (isAdmin() || inMyScope(resource.data.branch));
+      allow list: if isAuthenticated() && !isReceptionist() && !isTripsOnly() && (isAdmin() || (modAllowed('lostFound') && recordInScope(resource.data)));
       allow create: if true;
       allow update: if (isAuthenticated() && canEditRecord(resource.data.branch)) ||
         isParentSurveyUpdate('RETURNED', ['CLOSED'], ['satisfactionRate', 'satisfactionDetails', 'parentFeedback', 'status', 'closedAt', 'updatedAt']);
@@ -380,8 +403,9 @@ service cloud.firestore {
       // instead of a narrow anonymous update rule like the other two
       // collections get, so this stays "staff must be signed in, no
       // exceptions" end to end.
-      allow get: if canAccessTechSupport() && (isAdmin() || inMyScope(resource.data.branch));
-      allow list: if canAccessTechSupport() && (isAdmin() || inMyScope(resource.data.branch));
+      allow get: if canAccessTechSupport() && (isAdmin() || inMyScope(resource.data.branch) ||
+        (resource.data.get('assignedTo', []) is list && request.auth.uid in resource.data.get('assignedTo', [])));
+      allow list: if canAccessTechSupport() && (isAdmin() || recordInScope(resource.data));
       allow create: if canAccessTechSupport();
       allow update: if canAccessTechSupport() && canEditRecord(resource.data.branch);
       allow delete: if canAccessTechSupport() && canDeleteRecord(resource.data.branch);

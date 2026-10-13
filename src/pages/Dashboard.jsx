@@ -11,7 +11,7 @@ import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
 import { OPEN_TICKET_STATUSES, isTicketOverdue } from '../config/techSupport';
 import ComplaintForm from '../components/complaints/ComplaintForm';
 import PublicLinkModal from '../components/common/PublicLinkModal';
-import { branchScopeConstraintValues, canAccessTechSupport } from '../utils/scope';
+import { canAccessTechSupport, canSeeModule, scopeConstraints } from '../utils/scope';
 import { isComplaintOverdue, complaintHasType, complaintTypesOf } from '../config/complaintTypes';
 import { useSlaSettings, businessMs } from '../utils/businessTime';
 
@@ -22,16 +22,14 @@ function useBranchScopedCollection(collectionName, userData, enabled = true) {
   useEffect(() => {
     if (!userData || !enabled) return;
     const constraints = [orderBy('createdAt', 'desc')];
-    if (userData.access !== 'all') {
-      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
-    }
+    constraints.unshift(...scopeConstraints(userData));
     const q = query(collection(db, collectionName), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setDocs(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
     });
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [collectionName, userData?.access, userData?.branch, userData?.branches?.join(','), enabled]);
+  }, [collectionName, userData?.access, userData?.branch, userData?.branches?.join(','), userData?.recordScope, enabled]);
   return docs;
 }
 
@@ -64,7 +62,9 @@ export default function Dashboard() {
   // permission-denied listener, so skip the query entirely for them.
   const canSeeTechSupport = canAccessTechSupport(userData);
   const techTickets = useBranchScopedCollection('techSupportTickets', userData, canSeeTechSupport);
-  const lostFoundItems = useBranchScopedCollection('lostFoundItems', userData);
+  const canSeeLostFound = canSeeModule(userData, 'lostFound');
+  const canSeeVisits = canSeeModule(userData, 'visits');
+  const lostFoundItems = useBranchScopedCollection('lostFoundItems', userData, canSeeLostFound);
   const techStats = useMemo(() => ({
     open: techTickets.filter((t) => OPEN_TICKET_STATUSES.includes(t.status)).length,
     overdue: techTickets.filter(isTicketOverdue).length,
@@ -95,9 +95,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
-    if (userData.access !== 'all') {
-      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
-    }
+    constraints.unshift(...scopeConstraints(userData));
     const q = query(collection(db, 'complaints'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -132,7 +130,7 @@ export default function Dashboard() {
     });
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
+  }, [userData?.access, userData?.branch, userData?.branches?.join(','), userData?.recordScope]);
 
   // Average resolution time, counting only working time when Settings say so.
   const sla = useSlaSettings();
@@ -347,7 +345,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div>
+      {canSeeVisits && <div>
         <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">{t('dashboard.branchVisitsTitle')}</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <StatCard
@@ -373,7 +371,7 @@ export default function Dashboard() {
             to="/visits"
           />
         </div>
-      </div>
+      </div>}
 
       <div>
         <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wide mb-3">{t('dashboard.systemOverview')}</h2>
@@ -403,20 +401,20 @@ export default function Dashboard() {
               />
             </>
           )}
-          <StatCard
+          {canSeeLostFound && <StatCard
             title={t('dashboard.unclaimedItems')}
             value={lostFoundStats.unclaimed.toString()}
             icon={PackageSearch}
             gradient="from-teal-500 to-cyan-600"
             to="/lost-found?filter=UNCLAIMED"
-          />
-          <StatCard
+          />}
+          {canSeeLostFound && <StatCard
             title={t('dashboard.returnedItems')}
             value={lostFoundStats.returned.toString()}
             icon={PackageCheck}
             gradient="from-lime-500 to-green-600"
             to="/lost-found?filter=RETURNED"
-          />
+          />}
         </div>
       </div>
 

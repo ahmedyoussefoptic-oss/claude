@@ -8,7 +8,7 @@ import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
 import useAuthStore from '../stores/useAuthStore';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import { normalizeAssignees } from '../utils/assignees';
-import { branchScopeConstraintValues } from '../utils/scope';
+import { scopeConstraints } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -63,9 +63,7 @@ export default function Search() {
   useEffect(() => {
     if (!userData) return;
     const constraints = [orderBy('createdAt', 'desc')];
-    if (userData.access !== 'all') {
-      constraints.unshift(where('branch', 'in', branchScopeConstraintValues(userData)));
-    }
+    constraints.unshift(...scopeConstraints(userData));
     const q = query(collection(db, 'complaints'), ...constraints);
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setComplaints(snapshot.docs.map((d) => {
@@ -76,7 +74,7 @@ export default function Search() {
     });
     return () => unsubscribe();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userData?.access, userData?.branch, userData?.branches?.join(',')]);
+  }, [userData?.access, userData?.branch, userData?.branches?.join(','), userData?.recordScope]);
 
   const handleFilterChange = (e) => {
     const { name, value } = e.target;

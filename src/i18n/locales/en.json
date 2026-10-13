@@ -61,7 +61,8 @@
     "studentRecords": "Student Records",
     "branchQr": "Branch visit QR",
     "branchVisits": "Branch visits",
-    "trips": "School Trips"
+    "trips": "School Trips",
+    "noAccess": "No sections are enabled for your account yet. Ask the system admin to choose the sections you can see."
   },
   "app": {
     "brand": "Al Moktashef International",
@@ -855,7 +856,44 @@
     "isCounselorLabel": "Student counselor",
     "isCounselorHint": "Automatically assigned the complaints in their branches (within their grade/section limits, if any) and every lost & found report, alongside the quality officers — new ones with a notification, existing open ones silently.",
     "counselorTag": "Counselor",
-    "curriculumFilterLabel": "Section (curriculum)"
+    "curriculumFilterLabel": "Section (curriculum)",
+    "modules": {
+      "title": "Sections this employee can see",
+      "custom": "Custom",
+      "defaultTag": "By role (default)",
+      "hint": "Choose the sections shown to this employee. An unchecked section is hidden and cannot be opened — enforced in the database too — and nothing from it is auto-assigned to them.",
+      "presets": {
+        "default": "Role default",
+        "complaintsOnly": "Complaints only",
+        "lostFoundOnly": "Lost & found only",
+        "visitsOnly": "Branch visits only",
+        "tripsOnly": "Trips only"
+      },
+      "keys": {
+        "dashboard": "Dashboard",
+        "complaints": "Complaints",
+        "techSupport": "Tech support",
+        "lostFound": "Lost & found",
+        "visits": "Branch visits",
+        "trips": "School trips",
+        "students": "Student records",
+        "search": "Advanced search",
+        "flowMap": "Flow map",
+        "reports": "Reports"
+      },
+      "noneWarning": "No section selected — the employee will see nothing after signing in.",
+      "scopeTitle": "Record scope",
+      "scope": {
+        "branch": "All records of their branches",
+        "assigned": "Only records assigned to them"
+      },
+      "scopeHint": {
+        "branch": "Sees every complaint, ticket and lost item in their branches (or all branches with full access).",
+        "assigned": "Sees only the complaints, tech tickets and lost items assigned to them personally — in lists, dashboard, reports and search."
+      },
+      "customTag": "{{n}} custom sections",
+      "assignedTag": "Assigned only"
+    }
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",
