@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next';
-import { FileText, Clock, AlertTriangle, CheckCircle2, Star, Gauge, Repeat, TrendingUp, ShieldCheck, Ban, Percent, Wrench, ShieldAlert, GraduationCap, Briefcase, AlertOctagon, Building2 } from 'lucide-react';
+import { FileText, Clock, AlertTriangle, CheckCircle2, Star, Gauge, Repeat, TrendingUp, ShieldCheck, Ban, Percent, Wrench, ShieldAlert, GraduationCap, Briefcase, AlertOctagon, Building2, Timer, Hourglass, CalendarCheck2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { formatDuration } from '../../utils/duration';
 import { isEscalatedResolved, complaintStatusLabel, complaintHasType, complaintTypesLabel } from '../../config/complaintTypes';
 import { isTicketEscalatedResolved } from '../../config/techSupport';
-import { complaintMetrics, ticketMetrics } from '../../utils/reportMetrics';
+import { complaintMetrics, ticketMetrics, timingRows, timingByAssignee } from '../../utils/reportMetrics';
 import { useSlaSettings, elapsedMs } from '../../utils/businessTime';
 
 const TYPE_ICONS = { ACADEMIC: GraduationCap, ADMINISTRATIVE: Briefcase, BEHAVIORAL: AlertOctagon };
@@ -53,6 +53,24 @@ export default function ComplaintsReport({
   const typeName = (id) => complaintTypes.find((ct) => ct.id === id)?.name || id;
   const dur = (ms) => formatDuration(ms, t);
   const sat = (v) => (v == null ? '—' : `${v.toFixed(1)} / 5`);
+  // Resolution / delay per record (complaints + merged tech tickets).
+  const timing = timingRows(complaints, includeTech ? tickets : [], sla);
+  const timingOf = new Map(timing.map((r) => [r.rec.id, r]));
+  const allM = includeTech ? {
+    measuredCount: m.measuredCount + tm.measuredCount, onTimeCount: m.onTimeCount + tm.onTimeCount, delayedCount: m.delayedCount + tm.delayedCount, openDelayed: m.openDelayed + tm.openDelayed,
+    delayBuckets: Object.fromEntries(Object.keys(m.delayBuckets).map((k) => [k, m.delayBuckets[k] + tm.delayBuckets[k]])),
+  } : m;
+  const lateList = timing.filter((r) => r.delayMs > 0);
+  const allAvgDelay = lateList.length ? lateList.reduce((s, r) => s + r.delayMs, 0) / lateList.length : null;
+  const allMaxDelay = lateList.length ? Math.max(...lateList.map((r) => r.delayMs)) : null;
+  const topDelayed = [...lateList].sort((a, b) => b.delayMs - a.delayMs).slice(0, 10);
+  const byAssignee = timingByAssignee(timing);
+  const delayCell = (r) => (r?.delayMs == null ? <span className="text-slate-300">—</span>
+    : r.delayMs === 0 ? <span className="text-emerald-700">{t('reports.timing.onTimeCell')}</span>
+      : <span className="text-red-700 font-medium">{dur(r.delayMs)}{!r.resolved && <span className="font-normal text-red-500"> · {t('reports.timing.ongoing')}</span>}</span>);
+  const recStatus = (r) => (r.kind === 'ticket'
+    ? (isTicketEscalatedResolved(r.rec) ? t('statuses.complaint.ESCALATED_RESOLVED') : t(`statuses.techSupport.${r.rec.status}`, r.rec.status))
+    : complaintStatusLabel(r.rec, t));
 
   const branchRows = branches
     .map((b) => {
@@ -147,6 +165,91 @@ export default function ComplaintsReport({
         )}
       </section>
 
+      {/* 1b. Resolution and delay times */}
+      <section className="break-inside-avoid">
+        <SectionTitle sub={t('reports.timing.sub')}>{t('reports.timing.title')}</SectionTitle>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 print:grid-cols-4">
+          <Box title={t('reports.avgResolutionTime')} value={dur(m.avgResolutionMs)} sub={m.medianResolutionMs != null ? t('reports.timing.medianSub', { v: dur(m.medianResolutionMs) }) : undefined} icon={Clock} gradient="from-cyan-500 to-sky-600" />
+          <Box title={t('reports.timing.onTime')} value={allM.onTimeCount} sub={allM.measuredCount ? t('reports.timing.onTimeSub', { pct: `${Math.round((allM.onTimeCount / allM.measuredCount) * 100)}%` }) : undefined} icon={CalendarCheck2} gradient="from-emerald-500 to-teal-600" />
+          <Box title={t('reports.timing.delayed')} value={allM.delayedCount} sub={t('reports.timing.delayedSub', { open: allM.openDelayed })} icon={Hourglass} gradient="from-red-500 to-rose-600" />
+          <Box title={t('reports.timing.avgDelay')} value={dur(allAvgDelay)} sub={allMaxDelay != null ? t('reports.timing.maxDelaySub', { v: dur(allMaxDelay) }) : undefined} icon={Timer} gradient="from-orange-500 to-red-500" />
+        </div>
+        {includeTech && (
+          <p className="text-[11px] text-slate-500 mt-2">{t('dashboard.categories.techSupport')} — {t('reports.avgResolutionTime')}: <b>{dur(tm.avgResolutionMs)}</b> · {t('reports.timing.avgDelay')}: <b>{dur(tm.avgDelayMs)}</b></p>
+        )}
+
+        {allM.measuredCount > 0 && (
+          <div className="mt-4">
+            <p className="text-xs font-bold text-slate-400 mb-2">{t('reports.timing.distribution')}</p>
+            <div className="h-6 rounded-lg overflow-hidden flex text-[11px] text-white font-medium">
+              {[['onTime', allM.onTimeCount, 'bg-emerald-500'], ['lt1d', allM.delayBuckets.lt1d, 'bg-amber-400'], ['d1to3', allM.delayBuckets.d1to3, 'bg-orange-500'], ['gt3d', allM.delayBuckets.gt3d, 'bg-red-600']].filter(([, n]) => n > 0).map(([k, n, c]) => (
+                <div key={k} className={`${c} h-full flex items-center justify-center`} style={{ width: `${(n / allM.measuredCount) * 100}%` }}>{n}</div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500 pt-1.5">
+              {[['onTime', allM.onTimeCount, 'bg-emerald-500'], ['lt1d', allM.delayBuckets.lt1d, 'bg-amber-400'], ['d1to3', allM.delayBuckets.d1to3, 'bg-orange-500'], ['gt3d', allM.delayBuckets.gt3d, 'bg-red-600']].map(([k, n, c]) => (
+                <span key={k} className="flex items-center gap-1"><span className={`w-3 h-3 rounded-sm ${c}`} />{t(`reports.timing.buckets.${k}`)}: <b className="text-slate-700">{n}</b></span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {byAssignee.length > 0 && (
+          <div className="mt-5 overflow-x-auto">
+            <p className="text-xs font-bold text-slate-400 mb-1">{t('reports.timing.byAssignee')} <span className="font-normal">— {t('reports.timing.byAssigneeSub')}</span></p>
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  {[t('reports.employeeLabel'), t('reports.full.colTotal'), t('reports.resolvedCount'), t('reports.avgResolutionTime'), t('reports.timing.medianResolution'), t('reports.timing.delayedCol'), t('reports.timing.openDelayedCol'), t('reports.timing.avgDelay'), t('reports.timing.maxDelay')].map((h) => <th key={h} className={thWrap}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {byAssignee.map((a) => (
+                  <tr key={a.name || '—'} className="border-b border-slate-100">
+                    <td className="py-1.5 px-2 text-slate-800 whitespace-nowrap font-medium">{a.name || t('reports.unassigned')}</td>
+                    <td className={`${tdc} font-bold`}>{a.total}</td>
+                    <td className={`${tdc} text-emerald-700`}>{num(a.resolved)}</td>
+                    <td className={`${tdc} whitespace-nowrap`}>{dur(a.avgResolutionMs)}</td>
+                    <td className={`${tdc} whitespace-nowrap text-slate-500`}>{dur(a.medianResolutionMs)}</td>
+                    <td className={`${tdc} text-red-700`}>{num(a.delayedCount)}</td>
+                    <td className={`${tdc} text-orange-700`}>{num(a.openDelayed)}</td>
+                    <td className={`${tdc} whitespace-nowrap text-red-700`}>{dur(a.avgDelayMs)}</td>
+                    <td className={`${tdc} whitespace-nowrap text-slate-600`}>{dur(a.maxDelayMs)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="mt-5 overflow-x-auto">
+          <p className="text-xs font-bold text-slate-400 mb-1">{t('reports.timing.topDelayed')}</p>
+          {topDelayed.length === 0 ? <p className="text-xs text-emerald-700">{t('reports.timing.noDelayed')}</p> : (
+            <table className="w-full text-xs border-collapse">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  {[t('reports.full.recordNumber'), t('common.date'), t('common.branch'), t('reports.specialistShort'), t('common.status'), t('reports.timing.dueDate'), t('reports.resolutionTime'), t('reports.timing.delay')].map((h) => <th key={h} className={thWrap}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {topDelayed.map((r) => (
+                  <tr key={r.rec.id} onClick={() => (r.kind === 'ticket' ? onOpenTicket(r.rec) : onOpenComplaint(r.rec))} className="border-b border-slate-100 cursor-pointer hover:bg-slate-50">
+                    <td className="py-1.5 px-2 text-slate-800" dir="ltr">{r.number}</td>
+                    <td className="py-1.5 px-2 text-slate-600" dir="ltr">{r.rec.createdAt?.toDate ? format(r.rec.createdAt.toDate(), 'yyyy-MM-dd') : '—'}</td>
+                    <td className="py-1.5 px-2 text-slate-600">{branchName(r.branch)}</td>
+                    <td className="py-1.5 px-2 text-slate-600">{r.names.join(listSep) || '—'}</td>
+                    <td className="py-1.5 px-2 text-slate-600">{recStatus(r)}</td>
+                    <td className="py-1.5 px-2 text-slate-600" dir="ltr">{r.rec.dueDate?.toDate ? format(r.rec.dueDate.toDate(), 'yyyy-MM-dd HH:mm') : '—'}</td>
+                    <td className="py-1.5 px-2 text-slate-600">{dur(r.resolutionMs)}</td>
+                    <td className="py-1.5 px-2">{delayCell(r)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </section>
+
       {/* 2. Per-branch detailed counters */}
       {branchRows.length > 0 && (
         <section>
@@ -176,6 +279,7 @@ export default function ComplaintsReport({
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
                       <span>{t('reports.full.resolutionRate')}: <b className="text-slate-900">{pct(r.m.resolutionRate)}</b></span>
                       <span>{t('dashboard.avgResolution')}: <b className="text-slate-900">{dur(r.m.avgResolutionMs)}</b></span>
+                      <span>{t('reports.timing.avgDelay')}: <b className="text-red-700">{dur(r.m.avgDelayMs)}</b>{r.m.delayedCount > 0 && ` (${r.m.delayedCount})`}</span>
                       <span>{t('dashboard.slaCompliance')}: <b className="text-slate-900">{pct(r.m.slaCompliance)}</b></span>
                       <span>{t('dashboard.satisfaction')}: <b className="text-slate-900">{sat(r.m.satisfaction)}</b></span>
                     </div>
@@ -248,6 +352,8 @@ export default function ComplaintsReport({
                   <th className={thWrap}>{t('statuses.complaint.ESCALATED_RESOLVED')}</th>
                   <th className={thWrap}>{t('reports.full.overdue')}</th>
                   <th className={thWrap}>{t('reports.avgResolutionTime')}</th>
+                  <th className={thWrap}>{t('reports.timing.delayedCol')}</th>
+                  <th className={thWrap}>{t('reports.timing.avgDelay')}</th>
                   <th className={thWrap}>{t('dashboard.slaCompliance')}</th>
                   <th className={thWrap}>{t('reports.satisfactionAvg')}</th>
                   {includeTech && <th className={thWrap}>{t('reports.full.techTotalCol')}</th>}
@@ -267,6 +373,8 @@ export default function ComplaintsReport({
                     <td className={`${tdc} text-teal-700`}>{num(r.m.escalatedResolved)}</td>
                     <td className={`${tdc} text-red-700`}>{num(r.m.overdue)}</td>
                     <td className={`${tdc} text-slate-600 whitespace-nowrap`}>{dur(r.m.avgResolutionMs)}</td>
+                    <td className={`${tdc} text-red-700`}>{num(r.m.delayedCount)}</td>
+                    <td className={`${tdc} text-red-700 whitespace-nowrap`}>{dur(r.m.avgDelayMs)}</td>
                     <td className={`${tdc} text-slate-600`}>{pct(r.m.slaCompliance)}</td>
                     <td className={`${tdc} text-slate-600 whitespace-nowrap`}>{sat(r.m.satisfaction)}</td>
                     {includeTech && <td className={`${tdc} text-violet-700`}>{num(r.tm.total)}</td>}
@@ -284,6 +392,8 @@ export default function ComplaintsReport({
                   <td className={`${tdc} text-teal-700`}>{m.escalatedResolved}</td>
                   <td className={`${tdc} text-red-700`}>{m.overdue}</td>
                   <td className={`${tdc} whitespace-nowrap`}>{dur(m.avgResolutionMs)}</td>
+                  <td className={`${tdc} text-red-700`}>{m.delayedCount}</td>
+                  <td className={`${tdc} text-red-700 whitespace-nowrap`}>{dur(m.avgDelayMs)}</td>
                   <td className={tdc}>{pct(m.slaCompliance)}</td>
                   <td className={`${tdc} whitespace-nowrap`}>{sat(m.satisfaction)}</td>
                   {includeTech && <td className={`${tdc} text-violet-700`}>{tm.total}</td>}
@@ -359,7 +469,9 @@ export default function ComplaintsReport({
                 <th className={th}>{t('common.type')}</th>
                 <th className={th}>{t('reports.specialistShort')}</th>
                 <th className={th}>{t('common.status')}</th>
+                <th className={th}>{t('reports.timing.dueDate')}</th>
                 <th className={th}>{t('reports.resolutionTime')}</th>
+                <th className={th}>{t('reports.timing.delay')}</th>
                 <th className={th}>{t('reports.studentNameColumn')}</th>
                 <th className={th}>{t('reports.stageColumn')}</th>
               </tr>
@@ -373,7 +485,9 @@ export default function ComplaintsReport({
                   <td className="py-1.5 px-2 text-slate-600">{complaintTypesLabel(c, typeName, listSep)}</td>
                   <td className="py-1.5 px-2 text-slate-600">{c.assignedToNames?.join(listSep) || '—'}</td>
                   <td className={`py-1.5 px-2 ${isEscalatedResolved(c) ? 'text-teal-700 font-medium' : 'text-slate-600'}`}>{complaintStatusLabel(c, t)}</td>
+                  <td className="py-1.5 px-2 text-slate-600" dir="ltr">{c.dueDate?.toDate ? format(c.dueDate.toDate(), 'yyyy-MM-dd HH:mm') : '—'}</td>
                   <td className="py-1.5 px-2 text-slate-600">{c.solvedAt && c.createdAt ? dur(elapsedMs(c.createdAt, c.solvedAt, sla)) : '—'}</td>
+                  <td className="py-1.5 px-2">{delayCell(timingOf.get(c.id))}</td>
                   <td className="py-1.5 px-2 text-slate-600">{c.studentName || '—'}</td>
                   <td className="py-1.5 px-2 text-slate-600">{c.stage || '—'}</td>
                 </tr>
@@ -388,7 +502,9 @@ export default function ComplaintsReport({
                   <td className={`py-1.5 px-2 ${isTicketEscalatedResolved(tk) ? 'text-teal-700 font-medium' : 'text-slate-600'}`}>
                     {isTicketEscalatedResolved(tk) ? t('statuses.complaint.ESCALATED_RESOLVED') : t(`statuses.techSupport.${tk.status}`, tk.status)}
                   </td>
+                  <td className="py-1.5 px-2 text-slate-600" dir="ltr">{tk.dueDate?.toDate ? format(tk.dueDate.toDate(), 'yyyy-MM-dd HH:mm') : '—'}</td>
                   <td className="py-1.5 px-2 text-slate-600">{tk.resolutionMessageSentAt && tk.createdAt ? dur(elapsedMs(tk.createdAt, tk.resolutionMessageSentAt, sla)) : '—'}</td>
+                  <td className="py-1.5 px-2">{delayCell(timingOf.get(tk.id))}</td>
                   <td className="py-1.5 px-2 text-slate-600">{tk.studentName || '—'}</td>
                   <td className="py-1.5 px-2 text-slate-600">{tk.stage || '—'}</td>
                 </tr>

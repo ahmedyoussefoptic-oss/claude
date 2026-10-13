@@ -16,7 +16,7 @@ import logo from '../assets/logo.png';
 import { Printer, FileSpreadsheet, RotateCcw, Star } from 'lucide-react';
 import VisitsReport from '../components/reports/VisitsReport';
 import ComplaintsReport from '../components/reports/ComplaintsReport';
-import { complaintMetrics, ticketMetrics } from '../utils/reportMetrics';
+import { complaintMetrics, ticketMetrics, timingRows, timingByAssignee } from '../utils/reportMetrics';
 import { useSlaSettings, elapsedMs, businessMs } from '../utils/businessTime';
 import { canAccessTechSupport } from '../utils/scope';
 import { complaintStatusLabel, complaintHasType, complaintTypesLabel } from '../config/complaintTypes';
@@ -307,6 +307,12 @@ export default function Reports() {
         [t('statuses.complaint.REJECTED'), m.rejected],
         [t('dashboard.reopened'), m.reopened],
         [t('dashboard.avgResolution'), formatDuration(m.avgResolutionMs, t)],
+        [t('reports.timing.medianResolution'), formatDuration(m.medianResolutionMs, t)],
+        [t('reports.timing.onTime'), m.onTimeCount],
+        [t('reports.timing.delayed'), m.delayedCount],
+        [t('reports.timing.openDelayedCol'), m.openDelayed],
+        [t('reports.timing.avgDelay'), formatDuration(m.avgDelayMs, t)],
+        [t('reports.timing.maxDelay'), formatDuration(m.maxDelayMs, t)],
         [t('dashboard.slaCompliance'), pctText(m.slaCompliance)],
         [t('dashboard.satisfaction'), satText(m.satisfaction)],
         ...complaintTypes.map((ct) => [ct.name, results.filter((c) => complaintHasType(c, ct.id)).length]),
@@ -317,6 +323,8 @@ export default function Reports() {
           [`${t('dashboard.categories.techSupport')} — ${t('reports.resolvedCount')}`, tm.resolved],
           [t('dashboard.overdueTechTickets'), tm.overdue],
           [`${t('dashboard.categories.techSupport')} — ${t('reports.avgResolutionTime')}`, formatDuration(tm.avgResolutionMs, t)],
+          [`${t('dashboard.categories.techSupport')} — ${t('reports.timing.delayed')}`, tm.delayedCount],
+          [`${t('dashboard.categories.techSupport')} — ${t('reports.timing.avgDelay')}`, formatDuration(tm.avgDelayMs, t)],
         );
       }
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), sheetName(t('reports.generalSummary')));
@@ -352,11 +360,32 @@ export default function Reports() {
           [t('statuses.complaint.ESCALATED_RESOLVED')]: bm.escalatedResolved,
           [t('reports.full.overdue')]: bm.overdue,
           [t('reports.avgResolutionTime')]: formatDuration(bm.avgResolutionMs, t),
+          [t('reports.timing.delayedCol')]: bm.delayedCount,
+          [t('reports.timing.avgDelay')]: formatDuration(bm.avgDelayMs, t),
           [t('dashboard.slaCompliance')]: pctText(bm.slaCompliance),
           [t('reports.satisfactionAvg')]: satText(bm.satisfaction),
           ...(mergeTech ? { [t('reports.full.techTotalCol')]: bt.length, [t('reports.full.techResolvedCol')]: ticketMetrics(bt, sla).resolved } : {}),
         });
       });
+      // Resolution & delay per employee.
+      const timing = timingRows(results, mergeTech ? ticketResults : [], sla);
+      const timingOf = new Map(timing.map((r) => [r.rec.id, r]));
+      const delayText = (r) => (r?.delayMs == null ? '' : r.delayMs === 0 ? t('reports.timing.onTimeCell') : `${formatDuration(r.delayMs, t)}${r.resolved ? '' : ` (${t('reports.timing.ongoing')})`}`);
+      const dueText = (rec) => (rec.dueDate?.toDate ? format(rec.dueDate.toDate(), 'yyyy-MM-dd HH:mm') : '');
+      const byAssignee = timingByAssignee(timing);
+      if (byAssignee.length) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(byAssignee.map((a) => ({
+          [t('reports.employeeLabel')]: a.name || t('reports.unassigned'),
+          [t('reports.full.colTotal')]: a.total,
+          [t('reports.resolvedCount')]: a.resolved,
+          [t('reports.avgResolutionTime')]: formatDuration(a.avgResolutionMs, t),
+          [t('reports.timing.medianResolution')]: formatDuration(a.medianResolutionMs, t),
+          [t('reports.timing.delayedCol')]: a.delayedCount,
+          [t('reports.timing.openDelayedCol')]: a.openDelayed,
+          [t('reports.timing.avgDelay')]: formatDuration(a.avgDelayMs, t),
+          [t('reports.timing.maxDelay')]: formatDuration(a.maxDelayMs, t),
+        }))), sheetName(t('reports.timing.sheet')));
+      }
       if (perBranch.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(perBranch), sheetName(t('reports.full.perBranchTitle')));
       if (comparison.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(comparison), sheetName(t('reports.full.comparisonTitle')));
 
@@ -377,7 +406,9 @@ export default function Reports() {
             [t('complaintForm.subTypeLabel')]: c.subType || '',
             [t('reports.specialistShort')]: c.assignedToNames?.join(listSep) || '',
             [t('common.status')]: complaintStatusLabel(c, t),
+            [t('reports.timing.dueDate')]: dueText(c),
             [t('reports.resolutionTime')]: c.solvedAt && c.createdAt ? formatDuration(elapsedMs(c.createdAt, c.solvedAt, sla), t) : '',
+            [t('reports.timing.delay')]: delayText(timingOf.get(c.id)),
             [t('reports.studentNameColumn')]: c.studentName || '',
             [t('reports.stageColumn')]: c.stage || '',
           })),
@@ -389,7 +420,9 @@ export default function Reports() {
             [t('complaintForm.subTypeLabel')]: problemTypeName(tk.problemType),
             [t('reports.specialistShort')]: tk.assignedToNames?.join(listSep) || '',
             [t('common.status')]: t(`statuses.techSupport.${tk.status}`, tk.status),
+            [t('reports.timing.dueDate')]: dueText(tk),
             [t('reports.resolutionTime')]: tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(elapsedMs(tk.createdAt, tk.resolutionMessageSentAt, sla), t) : '',
+            [t('reports.timing.delay')]: delayText(timingOf.get(tk.id)),
             [t('reports.studentNameColumn')]: tk.studentName || '',
             [t('reports.stageColumn')]: tk.stage || '',
           })) : []),

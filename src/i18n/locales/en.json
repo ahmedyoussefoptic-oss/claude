@@ -1025,6 +1025,37 @@
       "recordNumber": "No.",
       "resolvedOfTotal": "{{resolved}} of {{total}}",
       "multiCategoryNote": "{{count}} multi-category records counted under each category"
+    },
+    "timing": {
+      "title": "Resolution & delay time",
+      "sub": "Counted in working time per the SLA settings. Delay = time past the resolution deadline until resolved, or until now for unresolved records.",
+      "medianSub": "Median: {{v}}",
+      "onTime": "Within deadline",
+      "onTimeSub": "{{pct}} of records with a deadline",
+      "delayed": "Past deadline",
+      "delayedSub": "{{open}} still unresolved",
+      "avgDelay": "Average delay",
+      "maxDelaySub": "Longest delay: {{v}}",
+      "maxDelay": "Longest delay",
+      "distribution": "Delay distribution",
+      "buckets": {
+        "onTime": "Within deadline",
+        "lt1d": "Late < 1 day",
+        "d1to3": "Late 1–3 days",
+        "gt3d": "Late > 3 days"
+      },
+      "byAssignee": "Resolution & delay by employee",
+      "byAssigneeSub": "A record counts for each of its assignees",
+      "topDelayed": "Most delayed records",
+      "noDelayed": "No records past their deadline in this report.",
+      "dueDate": "Resolution deadline",
+      "delay": "Delay",
+      "ongoing": "ongoing",
+      "onTimeCell": "On time",
+      "delayedCol": "Late",
+      "openDelayedCol": "Late & unresolved",
+      "medianResolution": "Median resolution time",
+      "sheet": "Resolution & delay"
     }
   },
   "techSupportDetails": {
