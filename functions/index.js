@@ -2055,7 +2055,16 @@ async function taqnyatSend(payload, meta = {}) {
     console.error("Taqnyat WhatsApp send failed", response.status, payload.template && payload.template.name, bodyText.slice(0, 500));
     const providerReason = body && (body.reason || body.message || (body.error && (body.error.message || body.error)) || body.detail || (body.errors && JSON.stringify(body.errors)));
     const reasonText = providerReason ? String(typeof providerReason === "string" ? providerReason : JSON.stringify(providerReason)).slice(0, 200) : bodyText.slice(0, 200);
-    const err = new HttpsError("internal", `لم يقبل مزوّد واتساب الرسالة (رمز ${response.status})${reasonText ? ` — ${reasonText}` : ""}. تحقق من اسم القالب واعتماده ولغته وعدد متغيراته.`);
+    // Taqnyat can answer HTTP 200 with its own code in `message` (e.g. 402).
+    const code = body && /^\d{3}$/.test(String(body.message || "")) ? body.message : response.status;
+    const known = /limit for sending utility/i.test(reasonText)
+      ? "انتهى حد/رصيد رسائل الخدمات (Utility) في حساب تقنيات — يلزم شحن الباقة أو رفع الحد"
+      : /invalid recipient|not allow to send/i.test(reasonText) ? "رقم المستلم غير صالح أو غير مسموح الإرسال له"
+        : /object not found|does not exist|132001/i.test(reasonText) ? "اسم القالب أو لغته غير موجودة في الحساب"
+          : /bearer|no such bot/i.test(reasonText) ? "رمز الربط (Token) غير صحيح" : "";
+    const err = new HttpsError("internal", known
+      ? `لم يقبل مزوّد واتساب الرسالة (رمز ${code}): ${known}.`
+      : `لم يقبل مزوّد واتساب الرسالة (رمز ${code})${reasonText ? ` — ${reasonText}` : ""}. تحقق من اسم القالب واعتماده ولغته وعدد متغيراته.`);
     err.providerStatus = response.status;
     err.providerBody = bodyText.slice(0, 500);
     throw err;
