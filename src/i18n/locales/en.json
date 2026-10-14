@@ -1083,8 +1083,6 @@
         "d1to3": "Late 1–3 days",
         "gt3d": "Late > 3 days"
       },
-      "byAssignee": "Resolution & delay by employee",
-      "byAssigneeSub": "A record counts for each of its assignees",
       "topDelayed": "Most delayed records",
       "noDelayed": "No records past their deadline in this report.",
       "dueDate": "Resolution deadline",
@@ -1094,7 +1092,12 @@
       "delayedCol": "Late",
       "openDelayedCol": "Late & unresolved",
       "medianResolution": "Median resolution time",
-      "sheet": "Resolution & delay"
+      "sheet": "Resolution & delay",
+      "byBranch": "Delay and escalation by branch",
+      "byBranchSub": "Each record counts once, in its branch — it usually has several assignees",
+      "delayRate": "Delay rate",
+      "escalatedCol": "Escalated",
+      "openEscalatedCol": "Escalated & unresolved"
     }
   },
   "techSupportDetails": {

@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { formatDuration } from '../../utils/duration';
 import { isEscalatedResolved, complaintStatusLabel, complaintHasType, complaintTypesLabel } from '../../config/complaintTypes';
 import { isTicketEscalatedResolved } from '../../config/techSupport';
-import { complaintMetrics, ticketMetrics, timingRows, timingByAssignee } from '../../utils/reportMetrics';
+import { complaintMetrics, ticketMetrics, timingRows, timingByBranch } from '../../utils/reportMetrics';
 import { useSlaSettings, elapsedMs } from '../../utils/businessTime';
 
 const TYPE_ICONS = { ACADEMIC: GraduationCap, ADMINISTRATIVE: Briefcase, BEHAVIORAL: AlertOctagon };
@@ -64,7 +64,9 @@ export default function ComplaintsReport({
   const allAvgDelay = lateList.length ? lateList.reduce((s, r) => s + r.delayMs, 0) / lateList.length : null;
   const allMaxDelay = lateList.length ? Math.max(...lateList.map((r) => r.delayMs)) : null;
   const topDelayed = [...lateList].sort((a, b) => b.delayMs - a.delayMs).slice(0, 10);
-  const byAssignee = timingByAssignee(timing);
+  const byBranch = timingByBranch(timing);
+  const branchTotals = byBranch.reduce((o, b) => ({ total: o.total + b.total, resolved: o.resolved + b.resolved, delayed: o.delayed + b.delayedCount, openDelayed: o.openDelayed + b.openDelayed, escalated: o.escalated + b.escalated, openEscalated: o.openEscalated + b.openEscalated }), { total: 0, resolved: 0, delayed: 0, openDelayed: 0, escalated: 0, openEscalated: 0 });
+  const pctOf = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : '—');
   const delayCell = (r) => (r?.delayMs == null ? <span className="text-slate-300">—</span>
     : r.delayMs === 0 ? <span className="text-emerald-700">{t('reports.timing.onTimeCell')}</span>
       : <span className="text-red-700 font-medium">{dur(r.delayMs)}{!r.resolved && <span className="font-normal text-red-500"> · {t('reports.timing.ongoing')}</span>}</span>);
@@ -194,29 +196,46 @@ export default function ComplaintsReport({
           </div>
         )}
 
-        {byAssignee.length > 0 && (
+        {byBranch.length > 0 && (
           <div className="mt-5 overflow-x-auto">
-            <p className="text-xs font-bold text-slate-400 mb-1">{t('reports.timing.byAssignee')} <span className="font-normal">— {t('reports.timing.byAssigneeSub')}</span></p>
+            <p className="text-xs font-bold text-slate-400 mb-1">{t('reports.timing.byBranch')} <span className="font-normal">— {t('reports.timing.byBranchSub')}</span></p>
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200">
-                  {[t('reports.employeeLabel'), t('reports.full.colTotal'), t('reports.resolvedCount'), t('reports.avgResolutionTime'), t('reports.timing.medianResolution'), t('reports.timing.delayedCol'), t('reports.timing.openDelayedCol'), t('reports.timing.avgDelay'), t('reports.timing.maxDelay')].map((h) => <th key={h} className={thWrap}>{h}</th>)}
+                  {[t('common.branch'), t('reports.full.colTotal'), t('reports.resolvedCount'), t('reports.avgResolutionTime'), t('reports.timing.delayedCol'), t('reports.timing.delayRate'), t('reports.timing.openDelayedCol'), t('reports.timing.escalatedCol'), t('reports.timing.openEscalatedCol'), t('reports.timing.avgDelay'), t('reports.timing.maxDelay')].map((h) => <th key={h} className={thWrap}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
-                {byAssignee.map((a) => (
-                  <tr key={a.name || '—'} className="border-b border-slate-100">
-                    <td className="py-1.5 px-2 text-slate-800 whitespace-nowrap font-medium">{a.name || t('reports.unassigned')}</td>
-                    <td className={`${tdc} font-bold`}>{a.total}</td>
-                    <td className={`${tdc} text-emerald-700`}>{num(a.resolved)}</td>
-                    <td className={`${tdc} whitespace-nowrap`}>{dur(a.avgResolutionMs)}</td>
-                    <td className={`${tdc} whitespace-nowrap text-slate-500`}>{dur(a.medianResolutionMs)}</td>
-                    <td className={`${tdc} text-red-700`}>{num(a.delayedCount)}</td>
-                    <td className={`${tdc} text-orange-700`}>{num(a.openDelayed)}</td>
-                    <td className={`${tdc} whitespace-nowrap text-red-700`}>{dur(a.avgDelayMs)}</td>
-                    <td className={`${tdc} whitespace-nowrap text-slate-600`}>{dur(a.maxDelayMs)}</td>
+                {byBranch.map((b) => (
+                  <tr key={b.branch || '—'} className="border-b border-slate-100">
+                    <td className="py-1.5 px-2 text-slate-800 whitespace-nowrap font-medium">{b.branch ? branchName(b.branch) : '—'}</td>
+                    <td className={`${tdc} font-bold`}>{b.total}</td>
+                    <td className={`${tdc} text-emerald-700`}>{num(b.resolved)}</td>
+                    <td className={`${tdc} whitespace-nowrap`}>{dur(b.avgResolutionMs)}</td>
+                    <td className={`${tdc} text-red-700 font-bold`}>{num(b.delayedCount)}</td>
+                    <td className={`${tdc} text-red-700`}>{pctOf(b.delayedCount, b.measuredCount)}</td>
+                    <td className={`${tdc} text-orange-700`}>{num(b.openDelayed)}</td>
+                    <td className={`${tdc} text-orange-700 font-bold`}>{num(b.escalated)}</td>
+                    <td className={`${tdc} text-orange-700`}>{num(b.openEscalated)}</td>
+                    <td className={`${tdc} whitespace-nowrap text-red-700`}>{dur(b.avgDelayMs)}</td>
+                    <td className={`${tdc} whitespace-nowrap text-slate-600`}>{dur(b.maxDelayMs)}</td>
                   </tr>
                 ))}
+                {byBranch.length > 1 && (
+                  <tr className="bg-slate-50 font-bold">
+                    <td className="py-1.5 px-2 text-slate-900">{t('reports.full.totalRow')}</td>
+                    <td className={tdc}>{branchTotals.total}</td>
+                    <td className={`${tdc} text-emerald-700`}>{branchTotals.resolved}</td>
+                    <td className={tdc}>{dur(m.avgResolutionMs)}</td>
+                    <td className={`${tdc} text-red-700`}>{branchTotals.delayed}</td>
+                    <td className={`${tdc} text-red-700`}>{pctOf(allM.delayedCount, allM.measuredCount)}</td>
+                    <td className={`${tdc} text-orange-700`}>{branchTotals.openDelayed}</td>
+                    <td className={`${tdc} text-orange-700`}>{branchTotals.escalated}</td>
+                    <td className={`${tdc} text-orange-700`}>{branchTotals.openEscalated}</td>
+                    <td className={`${tdc} text-red-700`}>{dur(allAvgDelay)}</td>
+                    <td className={tdc}>{dur(allMaxDelay)}</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -228,7 +247,7 @@ export default function ComplaintsReport({
             <table className="w-full text-xs border-collapse">
               <thead>
                 <tr className="border-b border-slate-200">
-                  {[t('reports.full.recordNumber'), t('common.date'), t('common.branch'), t('reports.specialistShort'), t('common.status'), t('reports.timing.dueDate'), t('reports.resolutionTime'), t('reports.timing.delay')].map((h) => <th key={h} className={thWrap}>{h}</th>)}
+                  {[t('reports.full.recordNumber'), t('common.date'), t('common.branch'), t('common.status'), t('reports.timing.dueDate'), t('reports.resolutionTime'), t('reports.timing.delay')].map((h) => <th key={h} className={thWrap}>{h}</th>)}
                 </tr>
               </thead>
               <tbody>
@@ -237,7 +256,6 @@ export default function ComplaintsReport({
                     <td className="py-1.5 px-2 text-slate-800" dir="ltr">{r.number}</td>
                     <td className="py-1.5 px-2 text-slate-600" dir="ltr">{r.rec.createdAt?.toDate ? format(r.rec.createdAt.toDate(), 'yyyy-MM-dd') : '—'}</td>
                     <td className="py-1.5 px-2 text-slate-600">{branchName(r.branch)}</td>
-                    <td className="py-1.5 px-2 text-slate-600">{r.names.join(listSep) || '—'}</td>
                     <td className="py-1.5 px-2 text-slate-600">{recStatus(r)}</td>
                     <td className="py-1.5 px-2 text-slate-600" dir="ltr">{r.rec.dueDate?.toDate ? format(r.rec.dueDate.toDate(), 'yyyy-MM-dd HH:mm') : '—'}</td>
                     <td className="py-1.5 px-2 text-slate-600">{dur(r.resolutionMs)}</td>

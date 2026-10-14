@@ -16,7 +16,7 @@ import logo from '../assets/logo.png';
 import { Printer, FileSpreadsheet, RotateCcw, Star } from 'lucide-react';
 import VisitsReport from '../components/reports/VisitsReport';
 import ComplaintsReport from '../components/reports/ComplaintsReport';
-import { complaintMetrics, ticketMetrics, timingRows, timingByAssignee } from '../utils/reportMetrics';
+import { complaintMetrics, ticketMetrics, timingRows, timingByBranch } from '../utils/reportMetrics';
 import { useSlaSettings, elapsedMs, businessMs } from '../utils/businessTime';
 import { canAccessTechSupport } from '../utils/scope';
 import { complaintStatusLabel, complaintHasType, complaintTypesLabel } from '../config/complaintTypes';
@@ -363,21 +363,25 @@ export default function Reports() {
           ...(mergeTech ? { [t('reports.full.techTotalCol')]: bt.length, [t('reports.full.techResolvedCol')]: ticketMetrics(bt, sla).resolved } : {}),
         });
       });
-      // Resolution & delay per employee.
+      // Resolution, delay and escalation per branch (not per employee — a
+      // complaint usually has several assignees).
       const timing = timingRows(results, mergeTech ? ticketResults : [], sla);
       const timingOf = new Map(timing.map((r) => [r.rec.id, r]));
       const delayText = (r) => (r?.delayMs == null ? '' : r.delayMs === 0 ? t('reports.timing.onTimeCell') : `${formatDuration(r.delayMs, t)}${r.resolved ? '' : ` (${t('reports.timing.ongoing')})`}`);
       const dueText = (rec) => (rec.dueDate?.toDate ? format(rec.dueDate.toDate(), 'yyyy-MM-dd HH:mm') : '');
-      const byAssignee = timingByAssignee(timing);
-      if (byAssignee.length) {
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(byAssignee.map((a) => ({
-          [t('reports.employeeLabel')]: a.name || t('reports.unassigned'),
+      const byBranchTiming = timingByBranch(timing);
+      if (byBranchTiming.length) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(byBranchTiming.map((a) => ({
+          [t('common.branch')]: a.branch ? branchName(a.branch) : '—',
           [t('reports.full.colTotal')]: a.total,
           [t('reports.resolvedCount')]: a.resolved,
           [t('reports.avgResolutionTime')]: formatDuration(a.avgResolutionMs, t),
           [t('reports.timing.medianResolution')]: formatDuration(a.medianResolutionMs, t),
           [t('reports.timing.delayedCol')]: a.delayedCount,
+          [t('reports.timing.delayRate')]: a.measuredCount ? `${Math.round((100 * a.delayedCount) / a.measuredCount)}%` : '—',
           [t('reports.timing.openDelayedCol')]: a.openDelayed,
+          [t('reports.timing.escalatedCol')]: a.escalated,
+          [t('reports.timing.openEscalatedCol')]: a.openEscalated,
           [t('reports.timing.avgDelay')]: formatDuration(a.avgDelayMs, t),
           [t('reports.timing.maxDelay')]: formatDuration(a.maxDelayMs, t),
         }))), sheetName(t('reports.timing.sheet')));

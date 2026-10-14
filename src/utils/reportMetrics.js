@@ -1,4 +1,4 @@
-import { isComplaintOverdue, isEscalatedResolved } from '../config/complaintTypes';
+import { isComplaintOverdue, isEscalatedResolved, wasComplaintEscalated } from '../config/complaintTypes';
 import { RESOLVED_TICKET_STATUSES, isTicketOverdue, isTicketEscalatedResolved } from '../config/techSupport';
 import { businessMs } from './businessTime';
 
@@ -58,28 +58,33 @@ function timingStats(resolutions, delays) {
 // the exports (complaints, plus tech tickets when merged).
 export function timingRows(complaints, tickets, cfg, now = Date.now()) {
   return [
-    ...complaints.map((c) => ({ kind: 'complaint', rec: c, number: c.complaintId, branch: c.branch, names: c.assignedToNames || [], resolved: isResolved(c), resolutionMs: complaintResolutionMs(c, cfg), delayMs: complaintDelayMs(c, cfg, now) })),
-    ...tickets.map((tk) => ({ kind: 'ticket', rec: tk, number: tk.ticketId, branch: tk.branch, names: tk.assignedToNames || [], resolved: RESOLVED_TICKET_STATUSES.includes(tk.status), resolutionMs: ticketResolutionMs(tk, cfg), delayMs: ticketDelayMs(tk, cfg, now) })),
+    ...complaints.map((c) => ({ kind: 'complaint', rec: c, number: c.complaintId, branch: c.branch, names: c.assignedToNames || [], resolved: isResolved(c), escalated: wasComplaintEscalated(c), resolutionMs: complaintResolutionMs(c, cfg), delayMs: complaintDelayMs(c, cfg, now) })),
+    ...tickets.map((tk) => ({ kind: 'ticket', rec: tk, number: tk.ticketId, branch: tk.branch, names: tk.assignedToNames || [], resolved: RESOLVED_TICKET_STATUSES.includes(tk.status), escalated: Boolean(tk.escalation > 0 || tk.isOverdue), resolutionMs: ticketResolutionMs(tk, cfg), delayMs: ticketDelayMs(tk, cfg, now) })),
   ];
 }
 
-// Per assignee (a record counts for each of its assignees; '' = unassigned).
-export function timingByAssignee(rows) {
+// Lateness and escalation are counted per branch, not per employee: a
+// complaint usually has several assignees, so no single person can be held
+// responsible for its delay. Each record counts once, in its branch.
+export function timingByBranch(rows) {
   const map = new Map();
-  rows.forEach((r) => (r.names.length ? r.names : ['']).forEach((name) => {
-    if (!map.has(name)) map.set(name, []);
-    map.get(name).push(r);
-  }));
-  return [...map.entries()].map(([name, list]) => {
+  rows.forEach((r) => {
+    const key = r.branch || '';
+    if (!map.has(key)) map.set(key, []);
+    map.get(key).push(r);
+  });
+  return [...map.entries()].map(([branch, list]) => {
     const res = list.map((r) => r.resolutionMs).filter((v) => v != null);
     const delays = list.map((r) => r.delayMs).filter((v) => v != null);
     return {
-      name, total: list.length, resolved: list.filter((r) => r.resolved).length,
+      branch, total: list.length, resolved: list.filter((r) => r.resolved).length,
       avgResolutionMs: res.length ? res.reduce((s, v) => s + v, 0) / res.length : null,
       openDelayed: list.filter((r) => !r.resolved && r.delayMs > 0).length,
+      escalated: list.filter((r) => r.escalated).length,
+      openEscalated: list.filter((r) => r.escalated && !r.resolved).length,
       ...timingStats(res, delays),
     };
-  }).sort((a, b) => b.delayedCount - a.delayedCount || b.total - a.total);
+  }).sort((a, b) => b.delayedCount - a.delayedCount || b.escalated - a.escalated || b.total - a.total);
 }
 
 // Every number the report shows for a set of complaints. The status
