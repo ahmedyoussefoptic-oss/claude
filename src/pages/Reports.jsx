@@ -386,6 +386,27 @@ export default function Reports() {
           [t('reports.timing.maxDelay')]: formatDuration(a.maxDelayMs, t),
         }))), sheetName(t('reports.timing.sheet')));
       }
+      // Late, unresolved records per branch, with their details.
+      const openLateRows = timing.filter((r) => !r.resolved && r.rec.status !== 'REJECTED' && (r.delayMs > 0 || r.escalated))
+        .sort((a, b) => String(branchName(a.branch)).localeCompare(String(branchName(b.branch)), 'ar') || (b.delayMs || 0) - (a.delayMs || 0));
+      if (openLateRows.length) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(openLateRows.map((r) => ({
+          [t('common.branch')]: branchName(r.branch),
+          [t('reports.full.recordNumber')]: r.number,
+          [t('common.date')]: r.rec.createdAt?.toDate ? format(r.rec.createdAt.toDate(), 'yyyy-MM-dd') : '',
+          [t('common.type')]: r.kind === 'ticket' ? `${t('dashboard.categories.techSupport')} — ${problemTypeName(r.rec.problemType)}` : complaintTypesLabel(r.rec, typeName, listSep),
+          [t('complaintForm.subTypeLabel')]: r.kind === 'ticket' ? '' : (r.rec.subType || ''),
+          [t('common.status')]: r.kind === 'ticket' ? t(`statuses.techSupport.${r.rec.status}`, r.rec.status) : complaintStatusLabel(r.rec, t),
+          [t('reports.openLate.escalatedTag')]: r.escalated ? '✓' : '',
+          [t('reports.studentNameColumn')]: r.rec.studentName || '',
+          [t('reports.stageColumn')]: [r.rec.stage, r.rec.grade].filter(Boolean).join(' — '),
+          [t('common.parent')]: r.rec.parentName || '',
+          [t('reports.openLate.details')]: r.kind === 'ticket' ? (r.rec.details || '') : [r.rec.subject, r.rec.details].filter(Boolean).join(' — '),
+          [t('reports.openLate.assignees')]: (r.names || []).join(listSep),
+          [t('reports.timing.dueDate')]: dueText(r.rec),
+          [t('reports.timing.delay')]: delayText(r),
+        }))), sheetName(t('reports.openLate.sheet')));
+      }
       if (perBranch.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(perBranch), sheetName(t('reports.full.perBranchTitle')));
       if (comparison.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(comparison), sheetName(t('reports.full.comparisonTitle')));
 

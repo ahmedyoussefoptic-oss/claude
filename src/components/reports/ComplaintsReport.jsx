@@ -67,6 +67,20 @@ export default function ComplaintsReport({
   const byBranch = timingByBranch(timing);
   const branchTotals = byBranch.reduce((o, b) => ({ total: o.total + b.total, resolved: o.resolved + b.resolved, delayed: o.delayed + b.delayedCount, openDelayed: o.openDelayed + b.openDelayed, escalated: o.escalated + b.escalated, openEscalated: o.openEscalated + b.openEscalated }), { total: 0, resolved: 0, delayed: 0, openDelayed: 0, escalated: 0, openEscalated: 0 });
   const pctOf = (a, b) => (b ? `${Math.round((100 * a) / b)}%` : '—');
+  // Open records past their deadline (or escalated), grouped by branch with
+  // their details — the follow-up list for each branch.
+  const openLate = timing.filter((r) => !r.resolved && r.rec.status !== 'REJECTED' && (r.delayMs > 0 || r.escalated))
+    .sort((a, b) => (b.delayMs || 0) - (a.delayMs || 0));
+  const openLateByBranch = [...openLate.reduce((map, r) => map.set(r.branch || '', [...(map.get(r.branch || '') || []), r]), new Map()).entries()]
+    .sort((a, b) => b[1].length - a[1].length);
+  const recCategory = (r) => (r.kind === 'ticket'
+    ? `${t('dashboard.categories.techSupport')} — ${problemTypeName(r.rec.problemType)}`
+    : [complaintTypesLabel(r.rec, typeName, listSep), r.rec.subType].filter(Boolean).join(' / '));
+  const recText = (r) => {
+    const text = r.kind === 'ticket' ? r.rec.details : [r.rec.subject, r.rec.details && r.rec.details !== r.rec.subject ? r.rec.details : ''].filter(Boolean).join(' — ');
+    const flat = String(text || '').replace(/\s+/g, ' ').trim();
+    return flat.length > 320 ? `${flat.slice(0, 320)}…` : flat;
+  };
   const delayCell = (r) => (r?.delayMs == null ? <span className="text-slate-300">—</span>
     : r.delayMs === 0 ? <span className="text-emerald-700">{t('reports.timing.onTimeCell')}</span>
       : <span className="text-red-700 font-medium">{dur(r.delayMs)}{!r.resolved && <span className="font-normal text-red-500"> · {t('reports.timing.ongoing')}</span>}</span>);
@@ -266,6 +280,45 @@ export default function ComplaintsReport({
             </table>
           )}
         </div>
+      </section>
+
+      {/* 1c. Late, unresolved records per branch — with details */}
+      <section>
+        <SectionTitle sub={t('reports.openLate.sub')}>{t('reports.openLate.title')} ({openLate.length})</SectionTitle>
+        {openLate.length === 0 ? <p className="text-sm text-emerald-700">{t('reports.openLate.none')}</p> : (
+          <div className="space-y-4">
+            {openLateByBranch.map(([branch, list]) => (
+              <div key={branch || '—'} className="rounded-xl border border-red-200 overflow-hidden break-inside-avoid">
+                <div className="flex flex-wrap items-center justify-between gap-2 bg-red-50 px-4 py-2.5 border-b border-red-200">
+                  <p className="font-bold text-slate-900 flex items-center gap-2"><Building2 className="w-4 h-4 text-red-600" />{branch ? branchName(branch) : '—'}</p>
+                  <span className="text-xs text-red-700 font-bold">{t('reports.openLate.count', { n: list.length })}{list.some((r) => r.escalated) && ` · ${t('reports.openLate.escalatedCount', { n: list.filter((r) => r.escalated).length })}`}</span>
+                </div>
+                <div className="divide-y divide-slate-100">
+                  {list.map((r) => (
+                    <div key={r.rec.id} onClick={() => (r.kind === 'ticket' ? onOpenTicket(r.rec) : onOpenComplaint(r.rec))} className="px-4 py-3 text-xs cursor-pointer hover:bg-slate-50 break-inside-avoid">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                        <span className="font-mono font-bold text-slate-900" dir="ltr">{r.number}</span>
+                        <span className="text-slate-500" dir="ltr">{r.rec.createdAt?.toDate ? format(r.rec.createdAt.toDate(), 'yyyy-MM-dd') : ''}</span>
+                        <span className="text-slate-700">{recCategory(r)}</span>
+                        <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">{recStatus(r)}</span>
+                        {r.escalated && <span className="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 font-bold">{t('reports.openLate.escalatedTag')}</span>}
+                        <span className="mr-auto">{delayCell(r)}</span>
+                      </div>
+                      <p className="text-slate-600 mt-1">
+                        {t('common.student')}: <b className="text-slate-800">{r.rec.studentName || '—'}</b>
+                        {(r.rec.stage || r.rec.grade) && <span dir="ltr"> ({[r.rec.stage, r.rec.grade].filter(Boolean).join(' — ')})</span>}
+                        {' · '}{t('common.parent')}: {r.rec.parentName || '—'}
+                        {r.rec.dueDate?.toDate && <> {' · '}{t('reports.timing.dueDate')}: <span dir="ltr">{format(r.rec.dueDate.toDate(), 'yyyy-MM-dd HH:mm')}</span></>}
+                      </p>
+                      {recText(r) && <p className="text-slate-700 mt-1 leading-relaxed">{recText(r)}</p>}
+                      <p className="text-slate-500 mt-1">{t('reports.openLate.assignees')}: {r.names.join(listSep) || t('reports.unassigned')}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* 2. Per-branch detailed counters */}

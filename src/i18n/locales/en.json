@@ -1098,6 +1098,17 @@
       "delayRate": "Delay rate",
       "escalatedCol": "Escalated",
       "openEscalatedCol": "Escalated & unresolved"
+    },
+    "openLate": {
+      "title": "Late, unresolved complaints — by branch",
+      "sub": "Every open record past its deadline or escalated, with its details, grouped by branch. Click one to open it.",
+      "none": "No late open complaints in this report.",
+      "count": "{{n}} late",
+      "escalatedCount": "{{n}} escalated",
+      "escalatedTag": "Escalated",
+      "assignees": "Assigned to",
+      "details": "Details",
+      "sheet": "Late unresolved"
     }
   },
   "techSupportDetails": {
