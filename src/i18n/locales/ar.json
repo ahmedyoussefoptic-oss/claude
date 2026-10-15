@@ -947,7 +947,11 @@
     "availableVariables": "المتغيرات المتاحة:",
     "savedCheck": "تم الحفظ ✓",
     "parentRelatedFlag": "يخص ولي الأمر",
-    "appointmentFlag": "حجز موعد زيارة"
+    "appointmentFlag": "حجز موعد زيارة",
+    "dragToReorder": "اسحب لإعادة الترتيب",
+    "moveUp": "نقل للأعلى",
+    "moveDown": "نقل للأسفل",
+    "reorderHint": "رتّب العناصر بالسحب أو بالأسهم — يظهر الترتيب نفسه في كل القوائم المنسدلة بالنظام ونماذج أولياء الأمور."
   },
   "flowMap": {
     "title": "خريطة مسار الملاحظات",

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { doc, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, writeBatch } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import {
   useBranches,
@@ -22,26 +22,7 @@ import useAuthStore from '../stores/useAuthStore';
 import { isOwner } from '../config/adminPermissions';
 import { parseStudentRows, upsertStudents } from '../utils/students';
 import { DEFAULT_TEMPLATES, TEMPLATE_PLACEHOLDERS } from '../utils/whatsapp';
-import {
-  Settings as SettingsIcon,
-  Pencil,
-  Check,
-  X,
-  Plus,
-  Trash2,
-  Building2,
-  GraduationCap,
-  Upload,
-  Users as UsersIcon,
-  Loader2,
-  MessageCircle,
-  RotateCcw,
-  Tag,
-  Tags,
-  Wrench,
-  Monitor,
-  Package,
-} from 'lucide-react';
+import { Settings as SettingsIcon, Pencil, Check, X, Plus, Trash2, Building2, GraduationCap, Upload, Users as UsersIcon, Loader2, MessageCircle, RotateCcw, Tag, Tags, Wrench, Monitor, Package, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 
 function MessageTemplatesEditor() {
   const { t, i18n } = useTranslation();
@@ -238,6 +219,51 @@ function StudentImport() {
   );
 }
 
+// Re-numbers a list after the admin moves an item (arrows or drag): every
+// item gets order = its new position, in one batch. Seeds the collection
+// first in case it is still showing the built-in fallback (ensureSeeded).
+// Every dropdown reading these lists (useOrgData) sorts by `order`.
+async function saveOrder(collectionName, list, from, to) {
+  if (to < 0 || to >= list.length || from === to) return;
+  await ensureSeeded(collectionName);
+  const next = [...list];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved);
+  const batch = writeBatch(db);
+  next.forEach((item, index) => batch.set(doc(db, collectionName, item.id), { order: index + 1 }, { merge: true }));
+  await batch.commit();
+}
+
+// Up / down arrows plus a drag handle for one row of an orderable list.
+function useReorder(collectionName, list, setError) {
+  const [dragIndex, setDragIndex] = useState(null);
+  const [overIndex, setOverIndex] = useState(null);
+  const move = async (from, to) => {
+    try { await saveOrder(collectionName, list, from, to); } catch (err) { setError(err.message); }
+  };
+  const rowProps = (index) => ({
+    draggable: true,
+    onDragStart: (e) => { setDragIndex(index); e.dataTransfer.effectAllowed = 'move'; },
+    onDragOver: (e) => { e.preventDefault(); if (overIndex !== index) setOverIndex(index); },
+    onDragLeave: () => setOverIndex((v) => (v === index ? null : v)),
+    onDrop: (e) => { e.preventDefault(); const from = dragIndex; setDragIndex(null); setOverIndex(null); if (from != null) move(from, index); },
+    onDragEnd: () => { setDragIndex(null); setOverIndex(null); },
+    className: `${dragIndex === index ? 'opacity-40' : ''} ${overIndex === index && dragIndex !== index ? 'bg-primary/5 ring-1 ring-primary/30 rounded-lg' : ''}`,
+  });
+  return { move, rowProps };
+}
+
+function ReorderControls({ index, count, move }) {
+  const { t } = useTranslation();
+  return (
+    <span className="flex items-center gap-0.5 shrink-0">
+      <GripVertical className="w-4 h-4 text-slate-300 cursor-grab" title={t('settings.dragToReorder')} />
+      <button type="button" disabled={index === 0} onClick={() => move(index, index - 1)} className="p-1 text-slate-400 hover:text-primary hover:bg-primary/10 rounded disabled:opacity-25" title={t('settings.moveUp')}><ChevronUp className="w-4 h-4" /></button>
+      <button type="button" disabled={index === count - 1} onClick={() => move(index, index + 1)} className="p-1 text-slate-400 hover:text-primary hover:bg-primary/10 rounded disabled:opacity-25" title={t('settings.moveDown')}><ChevronDown className="w-4 h-4" /></button>
+    </span>
+  );
+}
+
 function EditableList({ title, icon: Icon, items, collectionName, flag }) {
   const { t } = useTranslation();
   const [editingId, setEditingId] = useState(null);
@@ -246,6 +272,7 @@ function EditableList({ title, icon: Icon, items, collectionName, flag }) {
   const [newId, setNewId] = useState('');
   const [newName, setNewName] = useState('');
   const [error, setError] = useState(null);
+  const { move, rowProps } = useReorder(collectionName, items, setError);
 
   const startEdit = (item) => {
     setEditingId(item.id);
@@ -321,6 +348,7 @@ function EditableList({ title, icon: Icon, items, collectionName, flag }) {
         </button>
       </div>
 
+      <p className="text-xs text-slate-400 mb-3">{t('settings.reorderHint')}</p>
       {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{error}</div>}
 
       {adding && (
@@ -345,8 +373,8 @@ function EditableList({ title, icon: Icon, items, collectionName, flag }) {
       )}
 
       <ul className="divide-y divide-slate-100">
-        {items.map((item) => (
-          <li key={item.id} className="py-3 flex items-center gap-3">
+        {items.map((item, index) => (
+          <li key={item.id} {...(editingId === item.id ? {} : rowProps(index))} className={`py-3 flex items-center gap-3 ${editingId === item.id ? '' : rowProps(index).className}`}>
             {editingId === item.id ? (
               <>
                 <input
@@ -365,6 +393,7 @@ function EditableList({ title, icon: Icon, items, collectionName, flag }) {
               </>
             ) : (
               <>
+                <ReorderControls index={index} count={items.length} move={move} />
                 <span className="flex-1 text-sm text-slate-800">{item.name}</span>
                 {flag && (
                   <button
@@ -404,6 +433,7 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
   const [error, setError] = useState(null);
 
   const filtered = subTypes.filter((s) => s.parentType === activeType);
+  const { move, rowProps } = useReorder('complaintSubTypes', filtered, setError);
 
   const startEdit = (item) => {
     setEditingId(item.id);
@@ -508,8 +538,8 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
       )}
 
       <ul className="divide-y divide-slate-100">
-        {filtered.map((item) => (
-          <li key={item.id} className="py-3 flex items-center gap-3">
+        {filtered.map((item, index) => (
+          <li key={item.id} {...(editingId === item.id ? {} : rowProps(index))} className={`py-3 flex items-center gap-3 ${editingId === item.id ? '' : rowProps(index).className}`}>
             {editingId === item.id ? (
               <>
                 <input
@@ -528,6 +558,7 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
               </>
             ) : (
               <>
+                <ReorderControls index={index} count={filtered.length} move={move} />
                 <span className="flex-1 text-sm text-slate-800">{item.name}</span>
                 <button
                   type="button"

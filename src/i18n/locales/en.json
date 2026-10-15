@@ -943,7 +943,11 @@
     "availableVariables": "Available variables:",
     "savedCheck": "Saved ✓",
     "parentRelatedFlag": "Parent's account",
-    "appointmentFlag": "Visit appointment"
+    "appointmentFlag": "Visit appointment",
+    "dragToReorder": "Drag to reorder",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "reorderHint": "Reorder by dragging or with the arrows — the same order appears in every dropdown in the system and the parent forms."
   },
   "flowMap": {
     "title": "Complaint Flow Map",
