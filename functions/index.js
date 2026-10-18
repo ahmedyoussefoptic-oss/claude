@@ -25,6 +25,8 @@ const STALE_TOKEN_ERRORS = new Set([
 const GMAIL_USER = defineSecret("GMAIL_USER");
 const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
 const EMAIL_SECRETS = [GMAIL_USER, GMAIL_APP_PASSWORD];
+// The school name in parent emails (another school's copy sets SCHOOL_NAME in functions/.env).
+const SCHOOL_NAME = process.env.SCHOOL_NAME || "مدارس المكتشف العالمية";
 // Bearer token of the school's Taqnyat WhatsApp Business API application
 // (Taqnyat portal > Developers > Application). Set once with:
 //   npx firebase-tools functions:secrets:set TAQNYAT_WA_TOKEN
@@ -43,7 +45,7 @@ async function sendEmail(to, subject, text) {
       auth: { user: GMAIL_USER.value(), pass: GMAIL_APP_PASSWORD.value() },
     });
     await transporter.sendMail({
-      from: `"مدارس مكتشف العالمية" <${GMAIL_USER.value()}>`,
+      from: `"${SCHOOL_NAME}" <${GMAIL_USER.value()}>`,
       to,
       subject,
       text,
@@ -461,7 +463,7 @@ exports.calculateInitialSLA = onDocumentCreated({ document: "complaints/{complai
     await sendEmail(
       data.parentEmail,
       `تم استلام ملاحظتكم رقم ${data.complaintId}`,
-      `مرحباً ${data.parentName}،\n\nشكراً لتواصلكم مع مدارس مكتشف العالمية.\nتم استلام ملاحظتكم رقم ${data.complaintId} الخاصة بالطالب/ة ${data.studentName} وسيتم التواصل معكم قريباً.\n\nيمكنكم متابعة حالة الملاحظة عبر الرابط التالي:\nhttps://mis-complaints.web.app/track?id=${data.complaintId}\n\nمدارس مكتشف العالمية`
+      `مرحباً ${data.parentName}،\n\nشكراً لتواصلكم مع ${SCHOOL_NAME}.\nتم استلام ملاحظتكم رقم ${data.complaintId} الخاصة بالطالب/ة ${data.studentName} وسيتم التواصل معكم قريباً.\n\nيمكنكم متابعة حالة الملاحظة عبر الرابط التالي:\n${PUBLIC_APP_URL}/track?id=${data.complaintId}\n\n${SCHOOL_NAME}`
     );
   }
 
@@ -661,7 +663,7 @@ exports.emailOnNotification = onDocumentCreated({ document: "notifications/{noti
   if (!email) return;
   if ((userDoc.data().notificationChannels || {}).email === false) return;
 
-  await sendEmail(email, data.title, `${data.body}\n\nhttps://mis-complaints.web.app/complaints`);
+  await sendEmail(email, data.title, `${data.body}\n\n${PUBLIC_APP_URL}/complaints`);
 });
 
 // Pushes a Web Push notification to a staff member's registered devices so
@@ -682,7 +684,7 @@ exports.pushOnNotification = onDocumentCreated("notifications/{notificationId}",
     tokens,
     notification: { title: data.title, body: data.body },
     data: { complaintId: data.complaintId || "", type: data.type || "" },
-    webpush: { fcmOptions: { link: "https://mis-complaints.web.app/complaints" } },
+    webpush: { fcmOptions: { link: `${PUBLIC_APP_URL}/complaints` } },
   });
 
   const staleTokens = response.responses
@@ -1997,7 +1999,8 @@ exports.backfillWasEscalated = onSchedule("every 30 minutes", async () => {
 //   (the /contact page redirects to the branch/section WhatsApp chat)
 // ---------------------------------------------------------------------------
 const TAQNYAT_MESSAGES_URL = "https://api.taqnyat.sa/wa/v2/messages/";
-const PUBLIC_APP_URL = "https://mis-complaints.web.app";
+// Another school's copy sets PUBLIC_APP_URL / SCHOOL_NAME in functions/.env.
+const PUBLIC_APP_URL = (process.env.PUBLIC_APP_URL || "https://mis-complaints.web.app").replace(/\/+$/, "");
 const WA_TEMPLATE_KEYS = {
   complaint: { receipt: "complaintReceipt", resolution: "complaintResolution", visitMet: "visitMet", appointmentConfirmed: "appointmentConfirmed", appointmentRescheduled: "appointmentRescheduled" },
   techSupport: { receipt: "techReceipt", resolution: "techResolution" },
@@ -3658,8 +3661,16 @@ exports.claimSystemOwner = onCall(async (request) => {
   const email = String(request.auth.token.email || "").trim().toLowerCase();
   if (!ownerEmail || email !== ownerEmail) throw new HttpsError("permission-denied", "غير مصرح.");
   const ref = db.collection("users").doc(request.auth.uid);
-  const snap = await ref.get();
-  if (!snap.exists) throw new HttpsError("failed-precondition", "لا يوجد ملف مستخدم لهذا الحساب.");
+  let snap = await ref.get();
+  // First run of a new installation: the owner account was created in
+  // Firebase Authentication only — create its profile here.
+  if (!snap.exists) {
+    await ref.set({
+      name: request.auth.token.name || email.split("@")[0], email, role: "ADMIN", access: "all", branches: [],
+      active: true, createdAt: Timestamp.now(), createdBy: request.auth.uid,
+    });
+    snap = await ref.get();
+  }
   const others = await db.collection("users").where("isOwner", "==", true).get();
   const batch = db.batch();
   others.docs.filter((d) => d.id !== ref.id).forEach((d) => batch.update(d.ref, { isOwner: FieldValue.delete() }));

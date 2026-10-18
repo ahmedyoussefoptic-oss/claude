@@ -14,7 +14,7 @@ const TEMPLATE_KEYS = ['complaintReceipt', 'complaintResolution', 'techReceipt',
 // All four share the same variables (see sendWhatsAppApiMessage):
 // {{1}} parent, {{2}} number, {{3}} student, {{4}} branch / resolution,
 // {{5}} tracking link — plus a URL button
-// https://mis-complaints.web.app/contact/{{1}} (record number).
+// <app origin>/contact/{{1}} (record number).
 const NOTICE = 'هذا الرقم مخصص للإشعارات فقط ولا يستقبل الردود، للتواصل مع الفرع اضغط زر "تواصل مع الفرع".';
 const SUGGESTED = {
   complaintReceipt: `مرحباً {{1}}،\nتم استلام ملاحظتكم رقم {{2}} الخاصة بالطالب/ة {{3}} في {{4}}، وسيتم التواصل معكم قريباً.\nلمتابعة حالة الملاحظة: {{5}}\n\n${NOTICE}`,
@@ -203,7 +203,7 @@ export default function WhatsAppApiSettings() {
           <ul className="list-disc pr-5 space-y-1 text-xs">
             <li>{t('waApi.guideCategory')}</li>
             <li>{t('waApi.guideVars')}</li>
-            <li>{t('waApi.guideButton')} <code dir="ltr" className="bg-white px-1 rounded">https://mis-complaints.web.app/contact/{'{{1}}'}</code> — {t('waApi.guideButtonExample')} <code dir="ltr" className="bg-white px-1 rounded">COM-2026-1234</code></li>
+            <li>{t('waApi.guideButton')} <code dir="ltr" className="bg-white px-1 rounded">{window.location.origin}/contact/{'{{1}}'}</code> — {t('waApi.guideButtonExample')} <code dir="ltr" className="bg-white px-1 rounded">COM-2026-1234</code></li>
           </ul>
           {TEMPLATE_KEYS.map((k) => (
             <div key={k}>

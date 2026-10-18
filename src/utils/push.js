@@ -1,12 +1,12 @@
 import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
-import { db, app } from '../config/firebase';
+import { db, app, MESSAGING_SW_URL } from '../config/firebase';
 
 // Firebase Web Push requires a VAPID key pair tied to this specific Firebase
 // project — issued from Firebase Console → Project settings → Cloud
 // Messaging tab → "Web Push certificates". It is a public key (safe to embed
 // client-side), but it can only be generated from that console screen, so it
-// is filled in once and kept here rather than passed in from an env var.
-const VAPID_KEY = 'BFYyKTYCHtA5wj1V9Ff1gXHRsQGDfZl6O6txJ0wDR8IWNjOBW4U1rCbMC2GCHDBpBxhwsg2Cek27ZAyiGNJ4Ejc';
+// is filled in once. Another school's copy sets VITE_FIREBASE_VAPID_KEY.
+const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY || 'BFYyKTYCHtA5wj1V9Ff1gXHRsQGDfZl6O6txJ0wDR8IWNjOBW4U1rCbMC2GCHDBpBxhwsg2Cek27ZAyiGNJ4Ejc';
 
 export function pushSupported() {
   return !!VAPID_KEY && typeof window !== 'undefined' && 'Notification' in window && 'serviceWorker' in navigator;
@@ -25,7 +25,7 @@ export async function enablePushNotifications(uid) {
 
   try {
     const { getMessaging, getToken } = await import('firebase/messaging');
-    const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+    const registration = await navigator.serviceWorker.register(MESSAGING_SW_URL);
     const messaging = getMessaging(app);
     const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: registration });
     if (!token) return { ok: false, reason: 'no-token' };

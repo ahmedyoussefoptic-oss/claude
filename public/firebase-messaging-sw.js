@@ -5,13 +5,16 @@
 importScripts('https://www.gstatic.com/firebasejs/12.18.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/12.18.0/firebase-messaging-compat.js');
 
+// Another school's copy registers this script with its config in the URL
+// (see MESSAGING_SW_URL in src/config/firebase.js).
+const swParams = new URLSearchParams(self.location.search);
 firebase.initializeApp({
-  apiKey: "AIzaSyDkUAbMWSuQcHRz0-cwQjRvE3kXuJqBoX8",
-  authDomain: "mis-complaints.firebaseapp.com",
-  projectId: "mis-complaints",
-  storageBucket: "mis-complaints.firebasestorage.app",
-  messagingSenderId: "276652032120",
-  appId: "1:276652032120:web:d981177284c52e64b6ad8d",
+  apiKey: swParams.get('apiKey') || "AIzaSyDkUAbMWSuQcHRz0-cwQjRvE3kXuJqBoX8",
+  authDomain: swParams.get('authDomain') || "mis-complaints.firebaseapp.com",
+  projectId: swParams.get('projectId') || "mis-complaints",
+  storageBucket: swParams.get('storageBucket') || "mis-complaints.firebasestorage.app",
+  messagingSenderId: swParams.get('messagingSenderId') || "276652032120",
+  appId: swParams.get('appId') || "1:276652032120:web:d981177284c52e64b6ad8d",
 });
 
 const messaging = firebase.messaging();

@@ -4,6 +4,7 @@ import './index.css'
 import './i18n'
 import App from './App.jsx'
 import ErrorBoundary from './components/common/ErrorBoundary.jsx'
+import { MESSAGING_SW_URL } from './config/firebase';
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
@@ -21,7 +22,7 @@ createRoot(document.getElementById('root')).render(
 // safe to call alongside that flow.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/firebase-messaging-sw.js').catch((err) => {
+    navigator.serviceWorker.register(MESSAGING_SW_URL).catch((err) => {
       console.error('Service worker registration failed:', err);
     });
   });

@@ -12,7 +12,7 @@ import { Field, inputCls, btn } from '../../components/platform/ui';
 // Suggested WhatsApp template for visit confirmations / reminders
 // (sendLeadVisitReminders fills the five variables and the button).
 const VISIT_TEMPLATE = 'مرحباً {{1}}،\nموعد {{2}} في مدارس المكتشف العالمية\nالموعد: {{3}}\n{{4}}\nللتواصل مع الفرع: {{5}}\n\nهذا الرقم مخصص للإشعارات فقط ولا يستقبل الردود، للتواصل مع الفرع اضغط زر "تواصل مع الفرع".';
-const VISIT_TEMPLATE_VARS = '{{1}} ولي الأمر · {{2}} نوع الموعد · {{3}} التاريخ والوقت · {{4}} نص التأكيد أو التذكير · {{5}} رابط التواصل مع الفرع — زر الرابط: https://mis-complaints.web.app/contact/{{1}}';
+const VISIT_TEMPLATE_VARS = '{{1}} ولي الأمر · {{2}} نوع الموعد · {{3}} التاريخ والوقت · {{4}} نص التأكيد أو التذكير · {{5}} رابط التواصل مع الفرع — زر الرابط: ' + window.location.origin + '/contact/{{1}}';
 
 // إعدادات المنصة — limits and deadlines for the platform modules, seats per
 // grade, and the public links/QR codes for parents.

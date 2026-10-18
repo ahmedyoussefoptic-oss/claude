@@ -1,0 +1,33 @@
+{
+  "school": {
+    "nameAr": "مدارس النور الأهلية",
+    "brandAr": "النور الأهلية",
+    "shortNameAr": "النور",
+    "nameEn": "Al Noor Private Schools",
+    "brandEn": "Al Noor Private",
+    "shortNameEn": "Al Noor",
+    "lmsName": "منصة المدرسة"
+  },
+  "firebase": {
+    "apiKey": "YOUR_API_KEY",
+    "authDomain": "YOUR_PROJECT_ID.firebaseapp.com",
+    "projectId": "YOUR_PROJECT_ID",
+    "storageBucket": "YOUR_PROJECT_ID.firebasestorage.app",
+    "messagingSenderId": "YOUR_SENDER_ID",
+    "appId": "YOUR_APP_ID",
+    "vapidKey": "YOUR_WEB_PUSH_KEY",
+    "functionsRegion": "us-central1"
+  },
+  "appUrl": "https://YOUR_PROJECT_ID.web.app",
+  "ownerEmail": "owner@school.edu.sa",
+  "whatsappApi": false,
+  "logo": "./logo.png",
+  "branches": [
+    { "id": "MAIN", "name": "الفرع الرئيسي" },
+    { "id": "GIRLS", "name": "فرع البنات" }
+  ],
+  "departments": [
+    { "id": "NATIONAL", "name": "القسم الأهلي" },
+    { "id": "INTERNATIONAL", "name": "القسم العالمي" }
+  ]
+}

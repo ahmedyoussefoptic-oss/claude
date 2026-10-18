@@ -4,9 +4,9 @@ import { collection, onSnapshot, orderBy, query, limit } from 'firebase/firestor
 import { httpsCallable } from 'firebase/functions';
 import { Send, Loader2, Copy, Check, Activity } from 'lucide-react';
 import { format } from 'date-fns';
-import { db, functions } from '../../config/firebase';
+import { db, functions, firebaseConfig, FUNCTIONS_REGION } from '../../config/firebase';
 
-const CALLBACK_URL = 'https://us-central1-mis-complaints.cloudfunctions.net/waDeliveryReport';
+const CALLBACK_URL = `https://${FUNCTIONS_REGION}-${firebaseConfig.projectId}.cloudfunctions.net/waDeliveryReport`;
 const STATUS_STYLES = {
   accepted: 'bg-slate-100 text-slate-600', queued: 'bg-slate-100 text-slate-600', dispatched: 'bg-sky-100 text-sky-700', sent: 'bg-sky-100 text-sky-700',
   delivered: 'bg-emerald-100 text-emerald-700', read: 'bg-emerald-100 text-emerald-700',

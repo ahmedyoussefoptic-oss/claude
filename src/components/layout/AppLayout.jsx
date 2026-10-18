@@ -24,7 +24,9 @@ export default function AppLayout() {
   // email (claimSystemOwner); anyone else gets a harmless refusal. Once per
   // page load and account.
   useEffect(() => {
-    if (!user || !userData || isOwner(userData) || ownerClaimTried.has(user.uid)) return;
+    // Runs without a profile too: on a new installation the owner's profile
+    // is created by claimSystemOwner on first sign-in.
+    if (!user || isOwner(userData) || ownerClaimTried.has(user.uid)) return;
     ownerClaimTried.add(user.uid);
     httpsCallable(functions, 'claimSystemOwner')().then(() => refreshUserData()).catch(() => {});
   }, [user, userData, refreshUserData]);
