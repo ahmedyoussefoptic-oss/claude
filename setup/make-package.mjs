@@ -21,7 +21,7 @@ const tar = execFileSync('git', ['archive', '--format=tar', 'HEAD'], { cwd: ROOT
 execFileSync('tar', ['-x', '-C', out], { input: tar });
 
 const drop = [
-  '.agents', 'docs', 'lib', 'assets', 'uploads', 'data', '.htaccess', 'skills-lock.json',
+  '.agents', '.claude', '.DS_Store', 'docs', 'lib', 'assets', 'uploads', 'data', '.htaccess', 'skills-lock.json',
   'api.php', 'config.php', 'cron.php', 'index.php', 'install.php', 'login.php', 'logout.php', 'track.php',
   'complaints-system.md', 'complaints-system-technical-spec.md', 'README.md', 'دليل_التثبيت.md',
   'setup/make-package.mjs',
