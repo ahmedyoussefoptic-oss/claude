@@ -2062,6 +2062,7 @@ async function taqnyatSend(payload, meta = {}) {
     const code = body && /^\d{3}$/.test(String(body.message || "")) ? body.message : response.status;
     const known = /limit for sending utility/i.test(reasonText)
       ? "انتهى حد/رصيد رسائل الخدمات (Utility) في حساب تقنيات — يلزم شحن الباقة أو رفع الحد"
+      : /number blocked|blocked/i.test(reasonText) ? "رقم ولي الأمر محظور: قام بحظر رقم واتساب المدرسة أو أوقف استقبال رسائلها، أو الرقم في قائمة الحظر لدى تقنيات — تواصل معه هاتفياً أو عبر واتساب الفرع"
       : /invalid recipient|not allow to send/i.test(reasonText) ? "رقم المستلم غير صالح أو غير مسموح الإرسال له"
         : /object not found|does not exist|132001/i.test(reasonText) ? "اسم القالب أو لغته غير موجودة في الحساب"
           : /bearer|no such bot/i.test(reasonText) ? "رمز الربط (Token) غير صحيح" : "";
