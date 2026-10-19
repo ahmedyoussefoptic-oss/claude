@@ -12,6 +12,7 @@ import { waLink, buildReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { STAGES } from '../../config/complaintTypes';
+import { reserveRecordNumber } from '../../utils/recordNumber';
 import { classOptionsForStage } from '../../config/techSupport';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import ExtraTypesEditor, { cleanExtraTypes } from './ExtraTypesEditor';
@@ -164,11 +165,7 @@ export default function ComplaintForm({ onClose }) {
     }
   };
 
-  const generateComplaintId = async () => {
-    const year = new Date().getFullYear();
-    const randomId = Math.floor(1000 + Math.random() * 9000);
-    return `COM-${year}-${randomId}`;
-  };
+  const generateComplaintId = () => reserveRecordNumber('complaint', 'COM');
 
   const handleSubmit = async (e) => {
     e.preventDefault();

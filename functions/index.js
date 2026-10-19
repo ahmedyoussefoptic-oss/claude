@@ -27,6 +27,22 @@ const GMAIL_APP_PASSWORD = defineSecret("GMAIL_APP_PASSWORD");
 const EMAIL_SECRETS = [GMAIL_USER, GMAIL_APP_PASSWORD];
 // The school name in parent emails (another school's copy sets SCHOOL_NAME in functions/.env).
 const SCHOOL_NAME = process.env.SCHOOL_NAME || "مدارس المكتشف العالمية";
+
+// Record numbers (COM- / IT- / LF-) are sequential per prefix and year from
+// a counter (counters/{PREFIX}-{year}) inside a transaction, so two records
+// can never share a number. They start at 10001: the older random 4-digit
+// numbers (1000–9999) stay unique against the new ones.
+async function nextRecordNumber(prefix) {
+  const year = new Date().getFullYear();
+  const ref = db.collection("counters").doc(`${prefix}-${year}`);
+  const n = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const next = (snap.exists ? snap.data().last || 10000 : 10000) + 1;
+    tx.set(ref, { last: next, updatedAt: Timestamp.now() }, { merge: true });
+    return next;
+  });
+  return `${prefix}-${year}-${n}`;
+}
 // Bearer token of the school's Taqnyat WhatsApp Business API application
 // (Taqnyat portal > Developers > Application). Set once with:
 //   npx firebase-tools functions:secrets:set TAQNYAT_WA_TOKEN
@@ -1333,7 +1349,7 @@ exports.submitPublicComplaint = onCall(async (request) => {
   }
 
   const year = new Date().getFullYear();
-  const complaintId = `COM-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const complaintId = await nextRecordNumber("COM");
   const bucket = getStorage().bucket();
 
   const attachments = [];
@@ -1435,7 +1451,7 @@ exports.submitPublicLostFoundItem = onCall(async (request) => {
   }
 
   const year = new Date().getFullYear();
-  const itemCode = `LF-${year}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const itemCode = await nextRecordNumber("LF");
   const bucket = getStorage().bucket();
 
   let photoUrl = null;
@@ -1502,7 +1518,7 @@ exports.submitPublicTechSupportTicket = onCall(async (request) => {
     throw new HttpsError("invalid-argument", `يمكن إرفاق ${MAX_PUBLIC_ATTACHMENTS} ملفات كحد أقصى.`);
   }
 
-  const ticketId = `IT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const ticketId = await nextRecordNumber("IT");
   const bucket = getStorage().bucket();
   const attachments = [];
   for (const att of attachmentsInput) {
@@ -1607,7 +1623,7 @@ exports.convertComplaintToTechTicket = onCall(async (request) => {
 
   const now = Timestamp.now();
   const actorName = caller.name || "مستخدم";
-  const ticketId = `IT-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const ticketId = await nextRecordNumber("IT");
   const assignee = await findEligibleItSpecialist(complaint.branch, complaint.stage, complaint.department);
   const logsSnapshot = await complaintRef.collection("activityLog").orderBy("createdAt", "asc").get();
   const reason = `تحويل إلى بلاغ تقني ${ticketId}`;
@@ -1729,7 +1745,7 @@ exports.convertTechTicketToComplaint = onCall(async (request) => {
 
   const now = Timestamp.now();
   const actorName = caller.name || "مستخدم";
-  const complaintId = `COM-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const complaintId = await nextRecordNumber("COM");
   const assignees = await findAutoAssignees({ branch: ticket.branch, departments: [complaintType], stage: ticket.stage, curriculum: ticket.department });
   const logsSnapshot = await ticketRef.collection("activityLog").orderBy("createdAt", "asc").get();
   const reason = `تحويل إلى ملاحظة ${complaintId}`;
@@ -1798,6 +1814,14 @@ exports.convertTechTicketToComplaint = onCall(async (request) => {
   await db.recursiveDelete(ticketRef);
 
   return { complaintId, complaintDocId: complaintRef.id };
+});
+
+// Staff forms (complaint / tech ticket / lost & found) get their number here.
+exports.reserveRecordNumber = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const prefix = { complaint: "COM", techSupport: "IT", lostFound: "LF" }[request.data?.kind];
+  if (!prefix) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  return { number: await nextRecordNumber(prefix) };
 });
 
 // Uploads one file for a tech-support resolution message (screenshot,
@@ -3465,7 +3489,7 @@ async function openComplaintFromSurvey(ref, trip, e, survey) {
   const users = await loadActiveUsers();
   const coordinator = users.find((u) => u.id === trip.createdBy);
   const labels = { organization: "التنظيم", safety: "السلامة والإشراف", benefit: "الفائدة التعليمية", cost: "مناسبة التكلفة" };
-  const complaintId = `COM-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`;
+  const complaintId = await nextRecordNumber("COM");
   const now = Timestamp.now();
   const docRef = db.collection("complaints").doc();
   await docRef.set({

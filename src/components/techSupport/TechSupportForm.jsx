@@ -8,7 +8,8 @@ import { messageSentFields } from '../../utils/messageSent';
 import { useBranches, useDepartments, useProblemTypes, usePlatforms } from '../../hooks/useOrgData';
 import { useUsers } from '../../hooks/useUsers';
 import { STAGES } from '../../config/complaintTypes';
-import { RELATIONS, generateTicketId, classOptionsForStage } from '../../config/techSupport';
+import { RELATIONS, classOptionsForStage } from '../../config/techSupport';
+import { reserveRecordNumber } from '../../utils/recordNumber';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { waLink, buildTechSupportReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
@@ -102,7 +103,7 @@ export default function TechSupportForm({ onClose }) {
     setError(null);
 
     try {
-      const ticketId = generateTicketId();
+      const ticketId = await reserveRecordNumber('techSupport', 'IT');
       const now = serverTimestamp();
       const assignee = findItSpecialist();
 

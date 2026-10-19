@@ -10,7 +10,7 @@ import { useUsers } from '../../hooks/useUsers';
 import { useBranches, useDepartments, useItemCategories } from '../../hooks/useOrgData';
 import { STAGES } from '../../config/complaintTypes';
 import { classOptionsForStage } from '../../config/techSupport';
-import { generateItemCode } from '../../config/lostFound';
+import { reserveRecordNumber } from '../../utils/recordNumber';
 import { lookupStudentById, searchStudentsByName } from '../../utils/students';
 import { waLink, buildLostFoundReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
@@ -92,7 +92,7 @@ export default function LostFoundForm({ onClose }) {
     setError(null);
 
     try {
-      const itemCode = generateItemCode();
+      const itemCode = await reserveRecordNumber('lostFound', 'LF');
 
       let photoUrl = null;
       if (photo) {
