@@ -1,4 +1,4 @@
-export const STAGES = ['KG1', 'KG2', 'KG3', 'G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'G11', 'G12'];
+export const STAGES = ['KG1', 'KG2', 'KG3', 'G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'G11', 'G12', 'SEN'];
 
 export const COMPLAINT_TYPES = [
   { id: 'ACADEMIC', name: 'أكاديمية' },

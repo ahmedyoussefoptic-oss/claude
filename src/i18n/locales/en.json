@@ -917,7 +917,7 @@
     "subTypeNamePlaceholder": "Sub-type name",
     "noSubTypesYet": "No sub-types for this type yet",
     "studentImportTitle": "Student data import",
-    "studentImportDescription": "Upload an Excel file with the columns: id_num, name, branch_name, stage_name, grade_name, class_name, mobile, and optionally gender (male/female) for boys-/girls-only trips. Data is merged with existing records by national ID — no student missing from the new file is deleted.",
+    "studentImportDescription": "Upload the student roster Excel with columns: id_num, name, name_ar, branch_name, stage_name, grade_name, class_name, mobile, father_id (parent national ID). Existing students are updated, new ones added; forms then auto-fill from a student name, student ID, parent mobile or parent ID.",
     "chooseExcelFile": "Choose an Excel file",
     "foundRecords": "Found {{count}} valid student record(s) to import.",
     "skippedRows": "Skipped {{count}} row(s) due to a missing ID or name (rows: {{rows}}).",
@@ -947,7 +947,13 @@
     "dragToReorder": "Drag to reorder",
     "moveUp": "Move up",
     "moveDown": "Move down",
-    "reorderHint": "Reorder by dragging or with the arrows — the same order appears in every dropdown in the system and the parent forms."
+    "reorderHint": "Reorder by dragging or with the arrows — the same order appears in every dropdown in the system and the parent forms.",
+    "importNew": "New students: {{count}}",
+    "importUpdated": "Existing students updated: {{count}}",
+    "importWithParentId": "With parent ID: {{count}}",
+    "importNoMobile": "Without a valid mobile: {{count}}",
+    "importUnmatchedBranches": "Branches not matching Settings (won't be linked): {{list}}",
+    "importDeactivateMissing": "Hide {{count}} students who are in the system but not in this file (moved / graduated) — their data and records are kept, they just stop appearing in search."
   },
   "flowMap": {
     "title": "Complaint Flow Map",

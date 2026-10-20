@@ -2774,9 +2774,9 @@ function tripTargets(trip, s, branchOf) {
 async function tripRoster(trip) {
   const branchOf = await branchResolver();
   const snap = await db.collection("students").get();
-  return snap.docs.map((d) => d.data()).filter((s) => s.nationalId && tripTargets(trip, s, branchOf)).map((s) => ({
+  return snap.docs.map((d) => d.data()).filter((s) => s.nationalId && s.active !== false && tripTargets(trip, s, branchOf)).map((s) => ({
     id: String(s.nationalId),
-    name: s.name || "",
+    name: s.nameAr || s.name || "",
     grade: studentGrade(s),
     className: s.className || "",
     branch: branchOf(s),
@@ -3176,7 +3176,7 @@ exports.verifyTripStudent = onCall(async (request) => {
   const v = await verifyTripParent(ref, trip, request.data?.studentId, request.data?.last4);
   const [e, survey] = await Promise.all([ref.collection("enrollments").doc(v.studentId).get(), ref.collection("surveys").doc(v.studentId).get()]);
   return {
-    studentName: v.student.name || "", grade: v.grade, className: v.student.className || "",
+    studentName: v.student.nameAr || v.student.name || "", grade: v.grade, className: v.student.className || "",
     enrollment: publicEnrollment(e.exists ? e.data() : null, trip),
     participated: e.exists && tookPart(e.data(), trip),
     surveyDone: survey.exists,
@@ -3233,7 +3233,7 @@ exports.submitTripConsent = onCall(async (request) => {
 
   const now = Timestamp.now();
   const record = {
-    studentId: v.studentId, studentName: v.student.name || "", branch: v.branch, grade: v.grade, section: v.section,
+    studentId: v.studentId, studentName: v.student.nameAr || v.student.name || "", branch: v.branch, grade: v.grade, section: v.section,
     className: v.student.className || "", parentPhone: v.student.mobile || "",
     decision, declineReason, payMethod, payStatus, receipt: payMethod === "BANK" ? receipt : null,
     pledge: decision === "APPROVED" ? pledge : null,
@@ -4094,7 +4094,7 @@ exports.getLeaveContext = onCall(async (request) => {
   const pickups = await db.collection("authorizedPickups").where("studentId", "==", v.studentId).where("active", "==", true).get();
   const open = await db.collection("leaveRequests").where("studentId", "==", v.studentId).where("status", "in", LEAVE_ACTIVE).get();
   return {
-    studentName: v.student.name || "", grade: v.grade, className: v.student.className || "",
+    studentName: v.student.nameAr || v.student.name || "", grade: v.grade, className: v.student.className || "",
     pickups: pickups.docs.map((d) => ({ id: d.id, name: d.data().name, relation: d.data().relation })),
     open: open.docs.map((d) => ({ code: d.data().code, status: d.data().status, requestedAt: d.data().requestedAt?.toMillis?.() || null })),
   };
@@ -4122,13 +4122,13 @@ exports.submitLeaveRequest = onCall(async (request) => {
   const code = await newCode("leaveRequests", "code", "LV");
   const now = Timestamp.now();
   const ref = await db.collection("leaveRequests").add({
-    code, studentId: v.studentId, studentName: v.student.name || "", branch: v.branch, grade: v.grade, className: v.student.className || "", section: v.section,
+    code, studentId: v.studentId, studentName: v.student.nameAr || v.student.name || "", branch: v.branch, grade: v.grade, className: v.student.className || "", section: v.section,
     parentPhone: v.student.mobile || "", reason, note: str(d.note, 300), type: d.type === "TEMPORARY" ? "TEMPORARY" : "FULL",
     requestedAt: Timestamp.fromMillis(requestedMs), pickup, attachment, source: "PARENT", status: "PENDING",
     history: [{ action: "REQUESTED", at: now, byName: "ولي الأمر (رابط الاستئذان)" }], createdAt: now, updatedAt: now,
   });
   await notifyUsers(await platformOwners(), {
-    title: "طلب استئذان جديد", body: `${v.student.name || ""} — ${pickup.name}${pickup.authorized ? "" : " (غير مفوّض)"}`, complaintId: ref.id, type: "LEAVE_REQUESTED",
+    title: "طلب استئذان جديد", body: `${v.student.nameAr || v.student.name || ""} — ${pickup.name}${pickup.authorized ? "" : " (غير مفوّض)"}`, complaintId: ref.id, type: "LEAVE_REQUESTED",
   });
   return { code };
 });

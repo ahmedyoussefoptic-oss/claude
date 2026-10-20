@@ -20,7 +20,7 @@ import SettingsGate from '../components/settings/SettingsGate';
 import OwnerSettings from '../components/settings/OwnerSettings';
 import useAuthStore from '../stores/useAuthStore';
 import { isOwner } from '../config/adminPermissions';
-import { parseStudentRows, upsertStudents } from '../utils/students';
+import { parseStudentRows, upsertStudents, listStudentIds } from '../utils/students';
 import { DEFAULT_TEMPLATES, TEMPLATE_PLACEHOLDERS } from '../utils/whatsapp';
 import { Settings as SettingsIcon, Pencil, Check, X, Plus, Trash2, Building2, GraduationCap, Upload, Users as UsersIcon, Loader2, MessageCircle, RotateCcw, Tag, Tags, Wrench, Monitor, Package, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 
@@ -123,6 +123,7 @@ function StudentImport() {
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState(null); // { done, total }
   const [result, setResult] = useState(null); // { count } | { error }
+  const [deactivateMissing, setDeactivateMissing] = useState(false);
 
   const handleFile = async (e) => {
     const file = e.target.files?.[0];
@@ -135,8 +136,13 @@ function StudentImport() {
       const workbook = XLSX.read(buffer, { type: 'array' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
-      const { records, skipped } = parseStudentRows(rows, branches);
-      setParsed({ records, skipped, fileName: file.name });
+      const parsedRows = parseStudentRows(rows, branches);
+      // Who is in the roster now but not in this file (moved / graduated).
+      const inFile = new Set(parsedRows.records.map((r) => r.nationalId));
+      const current = await listStudentIds();
+      const missing = current.filter((id) => !inFile.has(id));
+      const newCount = parsedRows.records.filter((r) => !current.includes(r.nationalId)).length;
+      setParsed({ ...parsedRows, fileName: file.name, missing, newCount });
     } catch {
       setResult({ error: t('settings.fileReadError') });
     } finally {
@@ -149,7 +155,7 @@ function StudentImport() {
     setImporting(true);
     setResult(null);
     try {
-      const count = await upsertStudents(parsed.records, (done, total) => setProgress({ done, total }));
+      const count = await upsertStudents(parsed.records, (done, total) => setProgress({ done, total }), deactivateMissing ? parsed.missing : []);
       setResult({ count });
       setParsed(null);
     } catch (err) {
@@ -186,6 +192,21 @@ function StudentImport() {
           <p className="text-slate-700">
             <span className="font-medium">{parsed.fileName}</span> — {t('settings.foundRecords', { count: parsed.records.length })}
           </p>
+          <ul className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 text-xs text-slate-600">
+            <li>{t('settings.importNew', { count: parsed.newCount })}</li>
+            <li>{t('settings.importUpdated', { count: parsed.records.length - parsed.newCount })}</li>
+            <li>{t('settings.importWithParentId', { count: parsed.records.length - parsed.missingParentId })}</li>
+            <li className={parsed.missingMobile ? 'text-amber-600' : ''}>{t('settings.importNoMobile', { count: parsed.missingMobile })}</li>
+            {Object.keys(parsed.unmatchedBranches).length > 0 && (
+              <li className="text-red-600 sm:col-span-2">{t('settings.importUnmatchedBranches', { list: Object.entries(parsed.unmatchedBranches).map(([n, c]) => `${n} (${c})`).join('، ') })}</li>
+            )}
+          </ul>
+          {parsed.missing.length > 0 && (
+            <label className="flex items-start gap-2 mt-3 text-xs text-slate-700">
+              <input type="checkbox" checked={deactivateMissing} onChange={(e) => setDeactivateMissing(e.target.checked)} className="mt-0.5" />
+              <span>{t('settings.importDeactivateMissing', { count: parsed.missing.length })}</span>
+            </label>
+          )}
           {parsed.skipped.length > 0 && (
             <p className="text-amber-600 mt-1">
               {t('settings.skippedRows', { count: parsed.skipped.length, rows: parsed.skipped.slice(0, 10).join(', ') + (parsed.skipped.length > 10 ? '...' : '') })}

@@ -40,7 +40,7 @@ export default function CurrentStudents() {
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id || '';
 
   useEffect(() => {
-    getDocs(collection(db, 'students')).then((snap) => setStudents(snap.docs.map((d) => d.data()).filter((s) => s.nationalId))).catch(() => setStudents([]));
+    getDocs(collection(db, 'students')).then((snap) => setStudents(snap.docs.map((d) => d.data()).filter((s) => s.nationalId && s.active !== false))).catch(() => setStudents([]));
   }, []);
   useEffect(() => onSnapshot(query(collection(db, 'reenrollments'), where('year', '==', year)), (snap) => {
     setReenroll(Object.fromEntries(snap.docs.map((d) => [d.data().studentId, d.data()])));
@@ -53,7 +53,7 @@ export default function CurrentStudents() {
     if (section && s.stageName !== section) return false;
     if (intent && (reenroll[s.nationalId]?.intent || 'NO_RESPONSE') !== intent) return false;
     const q = term.trim();
-    if (q && !`${s.name} ${s.nationalId} ${s.className} ${s.mobile}`.includes(q)) return false;
+    if (q && !`${s.name} ${s.nameAr || ''} ${s.nationalId} ${s.className} ${s.mobile} ${s.parentNationalId || ''}`.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
   }).sort((a, b) => GRADE_ORDER.indexOf(rosterGrade(a)) - GRADE_ORDER.indexOf(rosterGrade(b)) || String(a.className).localeCompare(String(b.className)) || String(a.name).localeCompare(String(b.name), 'ar')), [students, branch, grade, section, intent, term, reenroll]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -159,7 +159,7 @@ export default function CurrentStudents() {
                     const r = reenroll[s.nationalId];
                     return (
                       <tr key={s.nationalId} className="hover:bg-slate-50">
-                        <td className="px-3 py-2 cursor-pointer" onClick={() => setOpenId(s.nationalId)}><p className="font-medium text-slate-900 hover:text-primary">{s.name}</p><p className="text-xs text-slate-400" dir="ltr">{s.nationalId}</p></td>
+                        <td className="px-3 py-2 cursor-pointer" onClick={() => setOpenId(s.nationalId)}><p className="font-medium text-slate-900 hover:text-primary">{s.nameAr || s.name}</p>{s.nameAr && s.name !== s.nameAr && <p className="text-[11px] text-slate-400">{s.name}</p>}<p className="text-xs text-slate-400" dir="ltr">{s.nationalId}</p></td>
                         <td className="px-3 py-2 text-slate-600">{branchName(branchOf(s)) || s.branchName}</td>
                         <td className="px-3 py-2 text-slate-600" dir="ltr">{rosterGrade(s)} <span className="text-xs text-slate-400">{s.className}</span></td>
                         <td className="px-3 py-2 text-slate-600">{s.stageName}</td>

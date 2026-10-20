@@ -10,7 +10,7 @@ import { useBranches, useDepartments, useComplaintTypes, useSubTypes } from '../
 import { useUsers } from '../../hooks/useUsers';
 import { waLink, buildReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
-import { lookupStudentById, searchStudentsByName } from '../../utils/students';
+import { lookupStudentById, searchStudentsByName, searchStudents, studentFormValues, studentDisplayName, withCurrentOption } from '../../utils/students';
 import { STAGES } from '../../config/complaintTypes';
 import { reserveRecordNumber } from '../../utils/recordNumber';
 import { classOptionsForStage } from '../../config/techSupport';
@@ -91,12 +91,16 @@ export default function ComplaintForm({ onClose }) {
   const studentNameSearchTimer = useRef(null);
 
   const applyStudent = (student) => {
+    const v = studentFormValues(student);
     setFormData((prev) => ({
       ...prev,
-      studentName: student.name || prev.studentName,
-      studentId: student.nationalId || prev.studentId,
-      branch: student.branch || prev.branch,
-      parentPhone: student.mobile || prev.parentPhone,
+      studentName: v.studentName || prev.studentName,
+      studentId: v.studentId || prev.studentId,
+      branch: v.branch || prev.branch,
+      department: v.department || prev.department,
+      stage: v.stage || prev.stage,
+      grade: v.grade || prev.grade,
+      parentPhone: prev.parentPhone || v.parentPhone,
     }));
     setStudentSuggestions([]);
   };
@@ -105,6 +109,15 @@ export default function ComplaintForm({ onClose }) {
     if (!formData.studentId) return;
     const student = await lookupStudentById(formData.studentId);
     if (student) applyStudent(student);
+  };
+
+  // Parent mobile (or ID) typed first: their children in the roster — one
+  // fills the form, several are offered under the student name.
+  const handleParentLookupBlur = async (value) => {
+    if (!value || formData.studentId) return;
+    const kids = await searchStudents(value);
+    if (kids.length === 1) applyStudent(kids[0]);
+    else if (kids.length > 1) setStudentSuggestions(kids);
   };
 
   const handleStudentNameChange = (e) => {
@@ -339,7 +352,7 @@ export default function ComplaintForm({ onClose }) {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.phone')} <span className="text-red-500">*</span></label>
-                  <input type="tel" name="parentPhone" value={formData.parentPhone} onChange={handleChange} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
+                  <input type="tel" name="parentPhone" value={formData.parentPhone} onChange={handleChange} onBlur={(e) => handleParentLookupBlur(e.target.value)} required dir="ltr" className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.emailLabel')}</label>
@@ -369,8 +382,11 @@ export default function ComplaintForm({ onClose }) {
                           onMouseDown={() => applyStudent(s)}
                           className="px-4 py-2 text-sm hover:bg-slate-50 cursor-pointer flex items-center justify-between"
                         >
-                          <span>{s.name}</span>
-                          <span className="text-xs text-slate-400" dir="ltr">{s.nationalId}</span>
+                          <span className="min-w-0">
+                            <span className="block text-slate-900">{studentDisplayName(s)}</span>
+                            <span className="block text-[11px] text-slate-500">{[s.nameAr && s.name !== s.nameAr ? s.name : '', s.branchName, s.gradeName, s.className].filter(Boolean).join(' · ')}</span>
+                          </span>
+                          <span className="text-xs text-slate-400 shrink-0" dir="ltr">{s.nationalId}</span>
                         </li>
                       ))}
                     </ul>
@@ -408,7 +424,7 @@ export default function ComplaintForm({ onClose }) {
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.gradeLabel')} <span className="text-red-500">*</span></label>
                   <select name="grade" value={formData.grade} onChange={handleChange} required disabled={!formData.stage} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white disabled:text-slate-400 disabled:bg-slate-50">
                     <option value="">{t('techSupportForm.selectClass')}</option>
-                    {classOptionsForStage(formData.stage).map((g) => <option key={g} value={g}>{g}</option>)}
+                    {withCurrentOption(classOptionsForStage(formData.stage), formData.grade).map((g) => <option key={g} value={g}>{g}</option>)}
                   </select>
                 </div>
               </div>

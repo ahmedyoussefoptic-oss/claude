@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Loader2, X } from 'lucide-react';
-import { lookupStudentById, searchStudentsByName } from '../../utils/students';
+import { lookupStudentById, searchStudentsByName, studentDisplayName } from '../../utils/students';
 import { inputCls } from './ui';
 import { rosterGrade } from '../../config/platform';
 
@@ -37,7 +37,7 @@ export default function StudentPicker({ value, onChange, branchName }) {
     return (
       <div className="flex items-center justify-between gap-2 bg-sky-50 border border-sky-100 rounded-xl px-3 py-2">
         <div className="text-sm">
-          <p className="font-medium text-slate-900">{value.name}</p>
+          <p className="font-medium text-slate-900">{studentDisplayName(value)}</p>
           <p className="text-xs text-slate-500"><span dir="ltr">{value.nationalId}</span> · {branchName?.(value.branch) || value.branchName} · <span dir="ltr">{rosterGrade(value)} {value.className}</span></p>
         </div>
         <button type="button" onClick={() => onChange(null)} className="p-1 text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
@@ -54,7 +54,7 @@ export default function StudentPicker({ value, onChange, branchName }) {
           {results.map((s) => (
             <li key={s.nationalId}>
               <button type="button" onClick={() => { onChange(s); setResults([]); setTerm(''); }} className="w-full text-start px-3 py-2 hover:bg-slate-50 text-sm">
-                <span className="font-medium text-slate-900">{s.name}</span>
+                <span className="font-medium text-slate-900">{studentDisplayName(s)}</span>
                 <span className="text-xs text-slate-500 block"><span dir="ltr">{s.nationalId}</span> · {branchName?.(s.branch) || s.branchName} · <span dir="ltr">{rosterGrade(s)} {s.className}</span></span>
               </button>
             </li>

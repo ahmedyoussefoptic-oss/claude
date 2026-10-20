@@ -11,7 +11,7 @@ import { useBranches, useDepartments, useItemCategories } from '../../hooks/useO
 import { STAGES } from '../../config/complaintTypes';
 import { classOptionsForStage } from '../../config/techSupport';
 import { reserveRecordNumber } from '../../utils/recordNumber';
-import { lookupStudentById, searchStudentsByName } from '../../utils/students';
+import { lookupStudentById, searchStudentsByName, searchStudents, studentFormValues, studentDisplayName, withCurrentOption } from '../../utils/students';
 import { waLink, buildLostFoundReceiptMessage } from '../../utils/whatsapp';
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
@@ -62,11 +62,15 @@ export default function LostFoundForm({ onClose }) {
   const studentNameSearchTimer = useRef(null);
 
   const applyStudent = (student) => {
+    const v = studentFormValues(student);
     setFormData((prev) => ({
       ...prev,
-      studentName: student.name || prev.studentName,
-      studentId: student.nationalId || prev.studentId,
-      branch: student.branch || prev.branch,
+      studentName: v.studentName || prev.studentName,
+      studentId: v.studentId || prev.studentId,
+      branch: v.branch || prev.branch,
+      department: v.department || prev.department,
+      stage: v.stage || prev.stage,
+      grade: v.grade || prev.grade,
     }));
     setStudentSuggestions([]);
   };
@@ -304,8 +308,11 @@ export default function LostFoundForm({ onClose }) {
                             onMouseDown={() => applyStudent(s)}
                             className="px-4 py-2 text-sm hover:bg-slate-50 cursor-pointer flex items-center justify-between"
                           >
-                            <span>{s.name}</span>
-                            <span className="text-xs text-slate-400" dir="ltr">{s.nationalId}</span>
+                            <span className="min-w-0">
+                              <span className="block text-slate-900">{studentDisplayName(s)}</span>
+                              <span className="block text-[11px] text-slate-500">{[s.nameAr && s.name !== s.nameAr ? s.name : '', s.branchName, s.gradeName, s.className].filter(Boolean).join(' · ')}</span>
+                            </span>
+                            <span className="text-xs text-slate-400 shrink-0" dir="ltr">{s.nationalId}</span>
                           </li>
                         ))}
                       </ul>
@@ -335,7 +342,7 @@ export default function LostFoundForm({ onClose }) {
                     <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.gradeLabel')}</label>
                     <select name="grade" value={formData.grade} onChange={handleChange} disabled={!formData.stage} className="w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none text-sm bg-white disabled:text-slate-400 disabled:bg-slate-50">
                       <option value="">{t('techSupportForm.selectClass')}</option>
-                      {classOptionsForStage(formData.stage).map((g) => <option key={g} value={g}>{g}</option>)}
+                      {withCurrentOption(classOptionsForStage(formData.stage), formData.grade).map((g) => <option key={g} value={g}>{g}</option>)}
                     </select>
                   </div>
                 </div>
