@@ -310,7 +310,7 @@ export default function LostFoundForm({ onClose }) {
                           >
                             <span className="min-w-0">
                               <span className="block text-slate-900">{studentDisplayName(s)}</span>
-                              <span className="block text-[11px] text-slate-500">{[s.nameAr && s.name !== s.nameAr ? s.name : '', s.branchName, s.gradeName, s.className].filter(Boolean).join(' · ')}</span>
+                              <span className="block text-[11px] text-slate-500">{[s.nameAr && s.name !== s.nameAr ? s.name : '', branches.find((b) => b.id === s.branch)?.name || s.branchName, s.gradeName, s.className].filter(Boolean).join(' · ')}</span>
                             </span>
                             <span className="text-xs text-slate-400 shrink-0" dir="ltr">{s.nationalId}</span>
                           </li>

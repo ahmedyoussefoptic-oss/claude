@@ -143,7 +143,10 @@ export function parseStudentRows(rows, branches) {
       nationalId,
       name: name || nameAr,
       nameAr,
-      branchName,
+      // The system's name for the branch (the file says e.g. «السلامة بنات»
+      // for «السلامة 1»); the file's spelling is kept alongside.
+      branchName: branches.find((b) => b.id === branch)?.name || branchName,
+      branchNameFile: branchName,
       branch,
       stageName,
       gradeName,

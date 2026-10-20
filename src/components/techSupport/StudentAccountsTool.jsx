@@ -122,7 +122,7 @@ export default function StudentAccountsTool({ onClose }) {
             <ul className="border border-slate-200 rounded-xl divide-y divide-slate-100">
               {matches.map((m) => (
                 <li key={m.nationalId}><button type="button" onClick={() => load(m.nationalId)} className="w-full text-start px-4 py-2 hover:bg-slate-50 text-sm flex justify-between gap-2">
-                  <span><b>{studentDisplayName(m)}</b> <span className="text-xs text-slate-500">{[m.branchName, m.gradeName, m.className].filter(Boolean).join(' · ')}</span></span>
+                  <span><b>{studentDisplayName(m)}</b> <span className="text-xs text-slate-500">{[m.branch ? branchName(m.branch) : m.branchName, m.gradeName, m.className].filter(Boolean).join(' · ')}</span></span>
                   <span className="text-xs text-slate-400" dir="ltr">{m.nationalId}</span>
                 </button></li>
               ))}
