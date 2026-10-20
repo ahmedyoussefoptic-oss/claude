@@ -5,7 +5,7 @@ import { httpsCallable } from 'firebase/functions';
 import { doc, collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import QRCode from 'qrcode';
 import {
-  X, Loader2, Pencil, Send, CheckCircle2, XCircle, Lock, Unlock, Flag, Ban, Link2, Copy, Check, QrCode, MessageCircle,
+  X, Loader2, Pencil, CheckCircle2, Lock, Unlock, Flag, Ban, Link2, Copy, Check, QrCode, MessageCircle,
   AlertTriangle, MapPin, Clock, Users as UsersIcon, Wallet, Bus, FileDown, Printer, Paperclip, Search, UserPlus, Trash2, HeartPulse,
   Home, NotebookPen, Star, ThumbsUp, ClipboardList,
 } from 'lucide-react';
@@ -351,9 +351,6 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
           {tab === 'overview' && (
             <>
               {trip.imageUrl && <img src={trip.imageUrl} alt="" className="w-full max-h-56 object-cover rounded-2xl border border-slate-100" />}
-              {trip.status === 'DRAFT' && trip.rejectionReason && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl p-3">{t('trips.rejectedNote', { name: trip.rejectedByName || '', reason: trip.rejectionReason })}</div>
-              )}
               {trip.status === 'CANCELLED' && (
                 <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl p-3">{t('trips.cancelledNote', { name: trip.cancelledByName || '', reason: trip.cancelReason || '' })}</div>
               )}
@@ -365,14 +362,9 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                 {perms.manage && ['DRAFT', 'PENDING_APPROVAL', 'OPEN', 'CLOSED'].includes(trip.status) && (
                   <button onClick={() => onEdit(trip)} className={`${btn} border border-slate-300 bg-white text-slate-700`}><Pencil className="w-4 h-4" />{t('common.edit')}</button>
                 )}
-                {perms.manage && trip.status === 'DRAFT' && (
-                  <button disabled={!!busy} onClick={() => action('submit')} className={`${btn} bg-amber-500 text-white`}>{spin('submit', Send)}{t('trips.actions.submit')}</button>
-                )}
-                {perms.approve && trip.status === 'PENDING_APPROVAL' && (
-                  <>
-                    <button disabled={!!busy} onClick={() => action('approve')} className={`${btn} bg-emerald-600 text-white`}>{spin('approve', CheckCircle2)}{t('trips.actions.approve')}</button>
-                    <button disabled={!!busy} onClick={() => withReason('reject', t('trips.actions.reject'))} className={`${btn} bg-rose-50 text-rose-700 border border-rose-200`}><XCircle className="w-4 h-4" />{t('trips.actions.reject')}</button>
-                  </>
+                {/* Trips are entered after their approval; older drafts just open. */}
+                {perms.manage && ['DRAFT', 'PENDING_APPROVAL'].includes(trip.status) && (
+                  <button disabled={!!busy} onClick={() => action('open')} className={`${btn} bg-emerald-600 text-white`}>{spin('open', Unlock)}{t('trips.actions.open')}</button>
                 )}
                 {perms.manage && trip.status === 'OPEN' && (
                   <button disabled={!!busy} onClick={() => action('close')} className={`${btn} bg-sky-600 text-white`}>{spin('close', Lock)}{t('trips.actions.close')}</button>
@@ -387,7 +379,6 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                   <button disabled={!!busy} onClick={() => withReason('cancel', t('trips.actions.cancel'))} className={`${btn} text-rose-600 hover:bg-rose-50`}><Ban className="w-4 h-4" />{t('trips.actions.cancel')}</button>
                 )}
               </div>
-              {trip.status === 'PENDING_APPROVAL' && !perms.approve && <p className="text-sm text-amber-700">{t('trips.awaitingApproval')}</p>}
 
               {isPublic && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">

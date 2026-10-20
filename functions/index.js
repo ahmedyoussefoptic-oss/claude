@@ -2925,7 +2925,9 @@ exports.saveTrip = onCall(async (request) => {
     const ref = db.collection("trips").doc();
     const tripCode = await newTripCode();
     await ref.set({
-      ...trip, tripCode, status: "DRAFT", stats: {},
+      // Trips are entered after they were approved outside the system, so a
+      // new trip opens straight away (no draft / approval step).
+      ...trip, tripCode, status: "OPEN", stats: {}, preApproved: true, openedAt: now,
       createdBy: caller.uid, createdByName: caller.name || "", createdAt: now, updatedAt: now,
     });
     await tripLog(ref, "TRIP_CREATED", caller);
@@ -2949,6 +2951,8 @@ async function tripApprovers(branches) {
 }
 
 const TRIP_TRANSITIONS = {
+  // Trips older than the no-approval flow still in draft / awaiting approval.
+  open: { from: ["DRAFT", "PENDING_APPROVAL"], to: "OPEN", perm: "manage" },
   submit: { from: ["DRAFT"], to: "PENDING_APPROVAL", perm: "manage" },
   approve: { from: ["PENDING_APPROVAL"], to: "OPEN", perm: "approve" },
   reject: { from: ["PENDING_APPROVAL"], to: "DRAFT", perm: "approve", reason: true },
@@ -2971,6 +2975,7 @@ exports.tripAction = onCall({ secrets: WA_SECRETS, timeoutSeconds: 300 }, async 
   const now = Timestamp.now();
   const update = { status: rule.to, updatedAt: now };
   if (action === "submit") Object.assign(update, { submittedAt: now, rejectionReason: FieldValue.delete() });
+  if (action === "open") Object.assign(update, { openedAt: now, preApproved: true, rejectionReason: FieldValue.delete() });
   if (action === "approve") Object.assign(update, { approvedAt: now, approvedBy: caller.uid, approvedByName: caller.name || "" });
   if (action === "reject") Object.assign(update, { rejectionReason: reason, rejectedByName: caller.name || "" });
   if (action === "cancel") Object.assign(update, { cancelReason: reason, cancelledByName: caller.name || "" });

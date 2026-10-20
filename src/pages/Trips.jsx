@@ -60,7 +60,7 @@ export default function Trips() {
   const today = ymd(new Date());
   const stats = useMemo(() => ({
     upcoming: trips.filter((tr) => ['OPEN', 'CLOSED'].includes(tr.status) && tr.date >= today).length,
-    pending: trips.filter((tr) => tr.status === 'PENDING_APPROVAL').length,
+    open: trips.filter((tr) => tr.status === 'OPEN').length,
     confirmed: trips.filter((tr) => tr.date >= today && tr.status !== 'CANCELLED').reduce((s, tr) => s + (tr.stats?.confirmed || 0), 0),
     review: trips.filter((tr) => tr.status !== 'CANCELLED').reduce((s, tr) => s + (tr.stats?.review || 0), 0),
   }), [trips, today]);
@@ -106,7 +106,7 @@ export default function Trips() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title={t('trips.statUpcoming')} value={String(stats.upcoming)} icon={CalendarDays} gradient="from-sky-500 to-blue-600" />
-        <StatCard title={t('trips.statPending')} value={String(stats.pending)} icon={Hourglass} gradient="from-amber-400 to-orange-500" />
+        <StatCard title={t('trips.statOpen')} value={String(stats.open)} icon={Hourglass} gradient="from-amber-400 to-orange-500" />
         <StatCard title={t('trips.statConfirmed')} value={String(stats.confirmed)} icon={CheckCircle2} gradient="from-emerald-500 to-teal-600" />
         <StatCard title={t('trips.statReview')} value={String(stats.review)} icon={Wallet} gradient="from-violet-500 to-purple-600" />
       </div>

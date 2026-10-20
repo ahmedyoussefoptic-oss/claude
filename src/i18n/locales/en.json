@@ -1588,9 +1588,9 @@
   },
   "trips": {
     "title": "School Trips",
-    "subtitle": "Trip schedule and approval, parent consents and payment receipts, and the boarding list.",
+    "subtitle": "Approved trips, parent consents and payment receipts, and the boarding list.",
     "newTrip": "New trip",
-    "statUpcoming": "Upcoming approved trips",
+    "statUpcoming": "Upcoming trips",
     "statPending": "Awaiting approval",
     "statConfirmed": "Confirmed students (upcoming)",
     "statReview": "Receipts awaiting review",
@@ -1610,9 +1610,9 @@
     "unlimited": "No limit",
     "notFound": "Trip not found.",
     "status": {
-      "DRAFT": "Draft",
-      "PENDING_APPROVAL": "Awaiting approval",
-      "OPEN": "Approved · registration open",
+      "DRAFT": "Draft (old)",
+      "PENDING_APPROVAL": "Awaiting approval (old)",
+      "OPEN": "Registration open",
       "CLOSED": "Registration closed",
       "COMPLETED": "Completed",
       "CANCELLED": "Cancelled"
@@ -1636,7 +1636,7 @@
     "form": {
       "newTitle": "New trip",
       "editTitle": "Edit trip",
-      "subtitle": "The trip is saved as a draft, then sent to the branch principal for approval before parents are notified.",
+      "subtitle": "Trips are entered after their approval and open for registration right away — then send the announcement from the trip page.",
       "basics": "Basics",
       "titleLabel": "Trip name",
       "titlePlaceholder": "e.g. Ithra science center trip",
@@ -1693,7 +1693,8 @@
       "close": "Close registration",
       "reopen": "Reopen registration",
       "complete": "Mark as completed",
-      "cancel": "Cancel trip"
+      "cancel": "Cancel trip",
+      "open": "Open registration"
     },
     "reasonLabel": "Reason",
     "awaitingApproval": "Awaiting the branch principal's approval.",
@@ -1743,7 +1744,8 @@
       "TRIP_INCIDENT": "added a trip note",
       "TRIP_SURVEY_SENT": "sent the survey",
       "TRIP_IMAGE_SET": "set the trip image",
-      "TRIP_PLEDGE_SET": "set the pledge template"
+      "TRIP_PLEDGE_SET": "set the pledge template",
+      "TRIP_OPEN": "Opened registration"
     },
     "allStudents": "All",
     "searchStudents": "Search by name, ID or class",
@@ -1864,7 +1866,8 @@
     "pledgeOptionalShort": "Optional",
     "pledgeTemplateLink": "Template",
     "viewPledge": "Pledge sheet",
-    "pledgeMissing": "Pledge sheet missing"
+    "pledgeMissing": "Pledge sheet missing",
+    "statOpen": "Registration open"
   },
   "tripConsent": {
     "times": "{{from}} to {{to}}",
