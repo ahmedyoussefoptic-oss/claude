@@ -536,6 +536,9 @@ exports.calculateItTicketSla = onDocumentCreated({ document: "techSupportTickets
   const snap = event.data;
   if (!snap) return;
   const data = snap.data();
+  // Account-data sends (sendStudentAccounts) are created already solved
+  // and send their own message — no receipt, assignment or SLA.
+  if (data.source === "ACCOUNTS_TOOL") return;
 
   if (data.assignedTo?.length) {
     await notifyUsers(data.assignedTo, {
@@ -1814,6 +1817,118 @@ exports.convertTechTicketToComplaint = onCall(async (request) => {
   await db.recursiveDelete(ticketRef);
 
   return { complaintId, complaintDocId: complaintRef.id };
+});
+
+// --- Student platform accounts (Classera + MIS student portal) -------------
+// studentAccounts/{nationalId} holds both logins (imported by an admin from
+// the "Student Logins by Campus" workbook). Clients can never read it
+// (firestore.rules): IT / tech-support staff see one student's logins only
+// through getStudentAccounts, and send them only to the parent mobile
+// registered in the student roster through sendStudentAccounts. Every view
+// and send is written to accountAccessLog.
+async function accountsCaller(request) {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const snap = await db.collection("users").doc(request.auth.uid).get();
+  const c = snap.data();
+  if (!snap.exists || c.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  const techMod = c.modules ? c.modules.techSupport : undefined;
+  const canTech = c.role === "ADMIN" || (c.tripsAccess !== "tripsOnly" && (techMod === true || (techMod === undefined && (c.department === "IT" || c.role === "CUSTOMER_SERVICE" || c.isPrincipal === true || c.isQuality === true))));
+  if (!canTech) throw new HttpsError("permission-denied", "حسابات الطلاب متاحة لفريق الدعم التقني فقط.");
+  return { uid: request.auth.uid, ...c };
+}
+async function loadStudentAccounts(caller, rawId) {
+  const nationalId = normalizeDigits(rawId).replace(/\D/g, "");
+  if (!/^\d{6,15}$/.test(nationalId)) throw new HttpsError("invalid-argument", "أدخل رقم هوية الطالب.");
+  const [accSnap, stuSnap] = await Promise.all([db.collection("studentAccounts").doc(nationalId).get(), db.collection("students").doc(nationalId).get()]);
+  if (!accSnap.exists && !stuSnap.exists) throw new HttpsError("not-found", "لا يوجد طالب بهذا الرقم في السجل.");
+  const acc = accSnap.exists ? accSnap.data() : {};
+  const student = stuSnap.exists ? stuSnap.data() : {};
+  const branch = student.branch || acc.branch || "";
+  const inScope = caller.role === "ADMIN" || caller.access === "all" || (caller.branches || []).includes(branch) || caller.branch === branch;
+  if (!inScope) throw new HttpsError("permission-denied", "هذا الطالب في فرع خارج نطاق صلاحيتك.");
+  return { nationalId, acc, student, branch, hasAccounts: accSnap.exists };
+}
+const accountLog = (caller, studentId, action, extra = {}) => db.collection("accountAccessLog").add({
+  studentId, action, byId: caller.uid, byName: caller.name || "", at: Timestamp.now(), ...extra,
+});
+
+exports.getStudentAccounts = onCall(async (request) => {
+  const caller = await accountsCaller(request);
+  const { nationalId, acc, student, branch, hasAccounts } = await loadStudentAccounts(caller, request.data?.nationalId);
+  await accountLog(caller, nationalId, "VIEW");
+  const mobile = student.mobile || acc.mobile || "";
+  return {
+    student: {
+      nationalId, name: student.nameAr || student.name || acc.name || "", nameEn: student.name || "",
+      branch, branchName: student.branchName || acc.sheet || "", stageName: student.stageName || "", gradeName: student.gradeName || acc.grade || "",
+      className: student.className || acc.className || "", mobile, parentNationalId: student.parentNationalId || "",
+      inRoster: Object.keys(student).length > 0,
+    },
+    hasAccounts,
+    classera: acc.classera || null,
+    portal: acc.portal || null,
+    lastSentAt: acc.lastSentAt ? acc.lastSentAt.toMillis() : null,
+    lastSentByName: acc.lastSentByName || "",
+  };
+});
+
+// Sends both logins to the parent's registered mobile through the existing
+// "tech resolution" WhatsApp template, recorded as a solved tech-support
+// ticket (problem type ACCOUNT_CREDENTIALS) so it shows in reports and the
+// parent's tracking link.
+exports.sendStudentAccounts = onCall({ secrets: WA_SECRETS }, async (request) => {
+  const caller = await accountsCaller(request);
+  const { nationalId, acc, student, branch, hasAccounts } = await loadStudentAccounts(caller, request.data?.nationalId);
+  if (!hasAccounts) throw new HttpsError("not-found", "لا توجد حسابات مسجّلة لهذا الطالب.");
+  const systems = Array.isArray(request.data?.systems) && request.data.systems.length ? request.data.systems : ["classera", "portal"];
+  const parts = [];
+  if (systems.includes("classera") && acc.classera && acc.classera.username) parts.push(`كلاسيرا: اسم المستخدم ${acc.classera.username} — كلمة المرور ${acc.classera.password || "(غير مسجلة)"}`);
+  if (systems.includes("portal") && acc.portal && acc.portal.username) parts.push(`بوابة الطالب: اسم المستخدم ${acc.portal.username} — كلمة المرور ${acc.portal.password || "(غير مسجلة)"}`);
+  if (!parts.length) throw new HttpsError("failed-precondition", "لا توجد بيانات دخول للنظام المختار.");
+  const phone = student.mobile || acc.mobile || "";
+  if (!toIntlNumber(phone)) throw new HttpsError("failed-precondition", "لا يوجد جوال مسجل لولي الأمر في سجل الطلاب.");
+
+  const problemRef = db.collection("problemTypes").doc("ACCOUNT_CREDENTIALS");
+  if (!(await problemRef.get()).exists) await problemRef.set({ name: "طلب بيانات الدخول (كلاسيرا وبوابة الطالب)", order: 99, active: true });
+
+  const now = Timestamp.now();
+  const studentName = student.nameAr || student.name || acc.name || "";
+  const ticketId = await nextRecordNumber("IT");
+  const ref = db.collection("techSupportTickets").doc();
+  const record = {
+    studentName, nationalId, academicId: "", branch, department: student.department || "", stage: student.stage || "", grade: student.grade || student.className || "",
+    parentName: `ولي أمر الطالب/ة ${studentName}`, relation: "", parentPhone: normalizeDigits(phone), parentNationalId: student.parentNationalId || "",
+    problemType: "ACCOUNT_CREDENTIALS", platform: "OTHER", platformLink: "",
+    details: "طلب بيانات الدخول — أُرسلت من أداة حسابات الطلاب", resolutionNote: parts.join(" | "),
+    ticketId, receiver: caller.uid, source: "ACCOUNTS_TOOL", status: "SOLVED", solvedAt: now,
+    assignedTo: [caller.uid], assignedToNames: [caller.name || ""], assignedAt: now, isOverdue: false, reopenCount: 0, createdAt: now, updatedAt: now,
+  };
+  await ref.set(record);
+  await ref.collection("activityLog").add({ action: "TICKET_CREATED", actorId: caller.uid, actorName: caller.name || "", metadata: { note: "إرسال بيانات الدخول من أداة حسابات الطلاب" }, createdAt: now });
+
+  const settingsSnap = await db.collection("settings").doc("whatsappApi").get();
+  const settings = settingsSnap.exists ? settingsSnap.data() : {};
+  let sent = false;
+  let error = null;
+  if (WA_API_ENABLED && settings.enabled) {
+    try {
+      await sendWaTemplate({ kind: "techSupport", ref, record, event: "resolution", actorId: caller.uid, actorName: caller.name || "", settings });
+      sent = true;
+    } catch (err) {
+      error = err.message;
+      await ref.collection("activityLog").add({ action: "WHATSAPP_API_FAILED", actorId: caller.uid, actorName: caller.name || "", metadata: { event: "resolution", reason: err.message }, createdAt: Timestamp.now() });
+    }
+  } else {
+    error = "الإرسال عبر واتساب API غير مفعّل.";
+  }
+  if (sent) {
+    const t2 = Timestamp.now();
+    await ref.update({ status: "CLOSED", closedAt: t2, resolutionMessageSentAt: t2, resolutionMessageSentBy: caller.uid, resolutionMessageSentByName: caller.name || "" });
+    await ref.collection("activityLog").add({ action: "CREDENTIALS_SENT", actorId: caller.uid, actorName: caller.name || "", metadata: { sentToPhone: record.parentPhone, viaApi: true, systems }, createdAt: t2 });
+    await db.collection("studentAccounts").doc(nationalId).set({ lastSentAt: t2, lastSentByName: caller.name || "", sendCount: FieldValue.increment(1) }, { merge: true });
+  }
+  await accountLog(caller, nationalId, "SEND", { ok: sent, ticketId, systems, ...(error ? { error: String(error).slice(0, 200) } : {}) });
+  return { ok: sent, error, ticketId, ticketDocId: ref.id, phone: record.parentPhone, message: `${record.parentName}،\nبيانات الدخول للطالب/ة ${studentName}:\n${parts.join("\n")}\n${SCHOOL_NAME}` };
 });
 
 // Staff forms (complaint / tech ticket / lost & found) get their number here.

@@ -953,7 +953,13 @@
     "importWithParentId": "With parent ID: {{count}}",
     "importNoMobile": "Without a valid mobile: {{count}}",
     "importUnmatchedBranches": "Branches not matching Settings (won't be linked): {{list}}",
-    "importDeactivateMissing": "Hide {{count}} students who are in the system but not in this file (moved / graduated) — their data and records are kept, they just stop appearing in search."
+    "importDeactivateMissing": "Hide {{count}} students who are in the system but not in this file (moved / graduated) — their data and records are kept, they just stop appearing in search.",
+    "accountsTitle": "Import student accounts (Classera & student portal)",
+    "accountsDescription": "Upload the \"Student Logins by Campus\" workbook (one sheet per campus, Classera left, portal right). Logins are stored where only the tech-support «Student accounts» tool can read them; every view and send is logged.",
+    "accountsNone": "No Username / Password columns found in the file.",
+    "accountsFound": "{{count}} students from {{sheets}} sheets",
+    "accountsStats": "Both systems: {{both}} · Classera only: {{classera}} · Portal only: {{portal}} · No portal password: {{noPortalPw}}",
+    "accountsDone": "Imported accounts for {{count}} students."
   },
   "flowMap": {
     "title": "Complaint Flow Map",
@@ -2595,5 +2601,30 @@
     "msgStaffBooked": "We apologise that the meeting could not take place today ({{reason}}).\nYour meeting is booked for: {{when}}\nOn arrival, scan the QR code at reception, choose \"I have an appointment\" and enter record number {{number}}.",
     "rowReason": "Declined: {{reason}}",
     "rowParentBooks": "Parent asked to book a time"
+  },
+  "studentAccounts": {
+    "title": "Student accounts",
+    "placeholder": "Student ID, name, or parent mobile",
+    "show": "Show",
+    "hint": "Shows the student's data and their Classera and student-portal logins. Every view and send is logged under your name.",
+    "notFound": "No student found.",
+    "nationalId": "National ID",
+    "gradeClass": "Curriculum · grade · class",
+    "parentMobile": "Parent mobile (registered)",
+    "noMobile": "No registered mobile",
+    "classera": "Classera",
+    "portal": "MIS student portal",
+    "username": "Username",
+    "password": "Password",
+    "empty": "Not set",
+    "noAccount": "No account in this system.",
+    "noAccounts": "No accounts on file for this student — import the accounts file in Settings.",
+    "lastSent": "Last sent to the parent: {{when}} ({{name}})",
+    "sendHint": "The selected logins go only to the parent's registered mobile, on WhatsApp, recorded as a solved tech ticket.",
+    "send": "Send to parent",
+    "sentOk": "Logins sent to {{phone}} — ticket {{ticket}}",
+    "sentFailed": "Not sent automatically — ticket {{ticket}} recorded; you can send it manually",
+    "sendManual": "Send manually on WhatsApp",
+    "openTicket": "Open ticket"
   }
 }

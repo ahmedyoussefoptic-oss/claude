@@ -21,6 +21,7 @@ import OwnerSettings from '../components/settings/OwnerSettings';
 import useAuthStore from '../stores/useAuthStore';
 import { isOwner } from '../config/adminPermissions';
 import { parseStudentRows, upsertStudents, listStudentIds } from '../utils/students';
+import { parseAccountsWorkbook, importStudentAccounts } from '../utils/studentAccounts';
 import { DEFAULT_TEMPLATES, TEMPLATE_PLACEHOLDERS } from '../utils/whatsapp';
 import { Settings as SettingsIcon, Pencil, Check, X, Plus, Trash2, Building2, GraduationCap, Upload, Users as UsersIcon, Loader2, MessageCircle, RotateCcw, Tag, Tags, Wrench, Monitor, Package, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
 
@@ -111,6 +112,64 @@ function MessageTemplatesEditor() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// Classera + MIS portal logins (studentAccounts) — counts only are shown
+// here; the logins themselves are read only through the tech-support tool.
+function StudentAccountsImport() {
+  const { t } = useTranslation();
+  const inputRef = useRef(null);
+  const [parsed, setParsed] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(null);
+  const [result, setResult] = useState(null);
+  const onFile = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setResult(null); setParsed(null);
+    try {
+      const XLSX = await import('xlsx');
+      const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+      const out = parseAccountsWorkbook(XLSX, wb);
+      if (!out.records.length) throw new Error(t('settings.accountsNone'));
+      setParsed({ ...out, fileName: file.name });
+    } catch (err) {
+      setResult({ error: err.message || t('settings.fileReadError') });
+    } finally {
+      if (inputRef.current) inputRef.current.value = '';
+    }
+  };
+  const run = async () => {
+    setBusy(true); setResult(null);
+    try {
+      const count = await importStudentAccounts(parsed.records, (done, total) => setProgress({ done, total }));
+      setResult({ count }); setParsed(null);
+    } catch (err) {
+      setResult({ error: err.message });
+    } finally {
+      setBusy(false); setProgress(null);
+    }
+  };
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+      <h3 className="font-bold text-slate-900 flex items-center gap-2 mb-2"><UsersIcon className="w-5 h-5 text-primary" />{t('settings.accountsTitle')}</h3>
+      <p className="text-sm text-slate-500 mb-4">{t('settings.accountsDescription')}</p>
+      <input ref={inputRef} type="file" accept=".xlsx,.xls" onChange={onFile} className="hidden" id="accounts-file-input" />
+      <label htmlFor="accounts-file-input" className="inline-flex items-center gap-2 px-4 py-2.5 border border-dashed border-slate-300 rounded-xl text-sm text-slate-600 hover:border-primary hover:text-primary cursor-pointer"><Upload className="w-4 h-4" />{t('settings.chooseExcelFile')}</label>
+      {parsed && (
+        <div className="mt-4 bg-slate-50 border border-slate-100 rounded-xl p-4 text-sm space-y-2">
+          <p><b>{parsed.fileName}</b> — {t('settings.accountsFound', { count: parsed.records.length, sheets: parsed.stats.sheets })}</p>
+          <p className="text-xs text-slate-600">{t('settings.accountsStats', { both: parsed.stats.both, classera: parsed.stats.classeraOnly, portal: parsed.stats.portalOnly, noPortalPw: parsed.stats.noPortalPassword })}</p>
+          <div className="flex gap-2">
+            <button onClick={run} disabled={busy} className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium flex items-center gap-2 disabled:opacity-60">{busy && <Loader2 className="w-4 h-4 animate-spin" />}{busy ? t('settings.importingProgress', { progress: progress ? `(${progress.done}/${progress.total})` : '' }) : t('settings.confirmImportMerge')}</button>
+            <button onClick={() => setParsed(null)} disabled={busy} className="px-4 py-2 text-slate-500 text-sm hover:bg-slate-100 rounded-lg">{t('common.cancel')}</button>
+          </div>
+        </div>
+      )}
+      {result?.count != null && <div className="mt-4 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl p-3 text-sm">{t('settings.accountsDone', { count: result.count })}</div>}
+      {result?.error && <div className="mt-4 bg-red-50 text-red-600 border border-red-100 rounded-xl p-3 text-sm">{result.error}</div>}
     </div>
   );
 }
@@ -638,6 +697,7 @@ export default function Settings() {
       <EditableList title={t('settings.platformsTitle')} icon={Monitor} items={platforms} collectionName="platforms" flag={{ key: 'parentRelated', label: t('settings.parentRelatedFlag') }} />
       <EditableList title={t('settings.itemCategoriesTitle')} icon={Package} items={itemCategories} collectionName="itemCategories" />
       <StudentImport />
+      <StudentAccountsImport />
       <SlaSettings />
       <AppointmentSettings />
       <MessageTemplatesEditor />

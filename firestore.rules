@@ -456,6 +456,16 @@ service cloud.firestore {
     match /reenrollments/{id} {
       allow read, write: if isOwner();
     }
+    // Student platform logins: never readable by clients — only through
+    // getStudentAccounts / sendStudentAccounts; imported by an admin.
+    match /studentAccounts/{id} {
+      allow read: if false;
+      allow write: if canWriteSettings();
+    }
+    match /accountAccessLog/{id} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
     match /leadVisits/{id} {
       allow read, write: if isOwner();
     }
@@ -472,7 +482,7 @@ service cloud.firestore {
         'itemCategories', 'settings', 'settingsUnlocks', 'secureConfig', 'complaints', 'trips', 'tripVerify',
         'appointments', 'deletedComplaints', 'deletedLostFoundItems', 'deletedTechSupportTickets', 'lostFoundItems',
         'techSupportTickets', 'students', 'notifications',
-        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings'
+        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog'
       ]);
     }
   }

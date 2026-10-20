@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, Plus, ChevronLeft, Loader2, Wrench, Link2, MessageSquare } from 'lucide-react';
+import { Search, Plus, ChevronLeft, Loader2, Wrench, Link2, MessageSquare, KeyRound } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches, useDepartments, useProblemTypes } from '../hooks/useOrgData';
 import TechSupportDetails from '../components/techSupport/TechSupportDetails';
 import TechSupportForm from '../components/techSupport/TechSupportForm';
+import StudentAccountsTool from '../components/techSupport/StudentAccountsTool';
 import { TICKET_STATUS_BADGE, OPEN_TICKET_STATUSES, isTicketOverdue } from '../config/techSupport';
 import ReminderButton from '../components/common/ReminderButton';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
@@ -29,6 +30,7 @@ export default function TechSupport() {
   const location = useLocation();
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [showNewForm, setShowNewForm] = useState(false);
+  const [showAccounts, setShowAccounts] = useState(false);
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -125,11 +127,18 @@ export default function TechSupport() {
           <h1 className="text-2xl font-bold text-slate-900">{t('techSupportList.title')}</h1>
           <p className="text-slate-500 mt-1">{t('techSupportList.subtitle')}</p>
         </div>
-        <button onClick={() => setShowNewForm(true)} className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2">
-          <Plus className="w-4 h-4" />
-          {t('techSupportList.newTicket')}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={() => setShowAccounts(true)} className="px-4 py-2.5 bg-white border border-primary/40 text-primary rounded-xl hover:bg-primary/5 font-medium text-sm transition-colors flex items-center gap-2">
+            <KeyRound className="w-4 h-4" />
+            {t('studentAccounts.title')}
+          </button>
+          <button onClick={() => setShowNewForm(true)} className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2">
+            <Plus className="w-4 h-4" />
+            {t('techSupportList.newTicket')}
+          </button>
+        </div>
       </div>
+      {showAccounts && <StudentAccountsTool onClose={() => setShowAccounts(false)} />}
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col min-h-[400px]">
         <div className="p-4 border-b border-slate-100 flex flex-col sm:flex-row gap-4 items-center justify-between bg-slate-50/50">
