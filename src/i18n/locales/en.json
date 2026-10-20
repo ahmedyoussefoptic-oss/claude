@@ -788,7 +788,8 @@
       "ADMINISTRATIVE": "Administrative Affairs",
       "ACADEMIC": "Academic Affairs",
       "BEHAVIORAL": "Student Guidance & Counseling",
-      "IT": "IT"
+      "IT": "IT",
+      "FINANCE": "Finance"
     },
     "departmentHint": "For administrative/academic/behavioral complaints, this determines which complaint types they handle. Choose \"IT\" for the tech support team — without a staff member in this department, tech support tickets won't be auto-assigned to anyone.",
     "multiBranchHint": "More than one branch can be selected — the staff member will only see data for the branches checked here. Leave empty if they shouldn't see any branch.",

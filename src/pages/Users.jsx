@@ -13,7 +13,9 @@ import { STAGES } from '../config/complaintTypes';
 import NotificationPrefsEditor from '../components/common/NotificationPrefsEditor';
 import { Users as UsersIcon, Plus, Loader2, Mail, Lock, Phone, Briefcase, User as UserIcon, Pencil, Trash2, KeyRound, X, SlidersHorizontal, RotateCcw } from 'lucide-react';
 
-const DEPARTMENT_IDS = ['ADMINISTRATIVE', 'ACADEMIC', 'BEHAVIORAL', 'IT'];
+// Specialist departments — the same ids as complaint categories (auto-
+// assignment matches them); FINANCE pairs with a category coded FINANCE.
+const DEPARTMENT_IDS = ['ADMINISTRATIVE', 'ACADEMIC', 'BEHAVIORAL', 'FINANCE', 'IT'];
 
 // Collapses a user's grade list into ranges in STAGES order for display,
 // e.g. [G1, G2, G3, G4, G5, G9] -> "G1–G5، G9".
