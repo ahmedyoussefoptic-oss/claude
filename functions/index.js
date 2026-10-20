@@ -2881,8 +2881,15 @@ async function branchResolver() {
     byName.set(name, d.id);
     byName.set(name.replace(/^فرع\s+/, ""), d.id);
   });
-  return (s) => s.branch || byName.get(String(s.branchName || "").trim().replace(/^فرع\s+/, "")) || "";
+  // This school's roster file spells some branches differently.
+  Object.entries(ROSTER_BRANCH_ALIASES).forEach(([name, id]) => { if (!byName.has(name)) byName.set(name, id); });
+  return (s) => s.branch || byName.get(String(s.branchName || "").trim().replace(/^فرع\s+/, "").replace(/\s+/g, " ")) || "";
 }
+const ROSTER_BRANCH_ALIASES = {
+  "السلامة بنات": "AL_SALAMA_GIRLS",
+  "التربية الخاصة - السلامة 2": "AL_SALAMA_BOYS",
+  "السلامة 2 - التربيه الخاصة": "AL_SALAMA_BOYS",
+};
 
 // Student gender from the roster ("gender" column, imported as M / F) —
 // the current roster file has none, so it is often unknown ("").
