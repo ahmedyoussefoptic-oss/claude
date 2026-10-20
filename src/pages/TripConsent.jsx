@@ -12,7 +12,7 @@ import { ENROLLMENT_STATUS_STYLES, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GEND
 
 // Post-trip parent survey (submitTripSurvey): four 1–5 ratings, "would you
 // recommend it", and a free comment.
-function SurveyForm({ code, studentId, last4, onDone }) {
+function SurveyForm({ code, studentId, parentMobile, onDone }) {
   const { t } = useTranslation();
   const [ratings, setRatings] = useState({});
   const [recommend, setRecommend] = useState(null);
@@ -25,7 +25,7 @@ function SurveyForm({ code, studentId, last4, onDone }) {
     if (TRIP_RATINGS.some((k) => !ratings[k]) || recommend === null) { setError(t('tripConsent.survey.incomplete')); return; }
     setBusy(true);
     try {
-      await call('submitTripSurvey', { tripCode: code, studentId, last4, ratings, recommend, comment });
+      await call('submitTripSurvey', { tripCode: code, studentId, parentMobile, ratings, recommend, comment });
       onDone();
     } catch (err) {
       setError(err.message);
@@ -81,7 +81,7 @@ export default function TripConsent() {
   const [trip, setTrip] = useState(null);
   const [loadError, setLoadError] = useState(null);
   const [studentId, setStudentId] = useState('');
-  const [last4, setLast4] = useState('');
+  const [parentMobile, setParentMobile] = useState('');
   const [student, setStudent] = useState(null);
   const [decision, setDecision] = useState('');
   const [declineReason, setDeclineReason] = useState('');
@@ -114,7 +114,7 @@ export default function TripConsent() {
     setBusy(true);
     setError(null);
     try {
-      const data = await call('verifyTripStudent', { tripCode: code, studentId, last4 });
+      const data = await call('verifyTripStudent', { tripCode: code, studentId, parentMobile });
       setStudent(data);
       const en = data.enrollment;
       if (en) {
@@ -147,7 +147,7 @@ export default function TripConsent() {
     const paid = decision === 'APPROVED' && trip.fee > 0;
     if (paid && !payMethod) { setError(t('tripConsent.pickPayMethod')); return; }
     if (decision === 'APPROVED' && !agree) { setError(t('tripConsent.mustAgree')); return; }
-    if (decision === 'APPROVED' && trip.pledgeRequired && !pledge && !student?.enrollment?.pledgeName) { setError(t('tripConsent.pledgeRequired')); return; }
+    if (paid && payMethod === 'BANK' && !receipt && !student?.enrollment?.receiptName) { setError(t('tripConsent.receiptRequired')); return; }
     setBusy(true);
     try {
       const file = paid && payMethod === 'BANK' && receipt
@@ -156,7 +156,7 @@ export default function TripConsent() {
       const pledgeFile = decision === 'APPROVED' && pledge
         ? { fileName: pledge.name, mimeType: pledge.type || 'application/octet-stream', base64Data: await fileToBase64(pledge) }
         : null;
-      const data = await call('submitTripConsent', { tripCode: code, studentId, last4, decision, declineReason, payMethod, healthNotes, emergencyPhone, agree, receipt: file, pledge: pledgeFile });
+      const data = await call('submitTripConsent', { tripCode: code, studentId, parentMobile, decision, declineReason, payMethod, healthNotes, emergencyPhone, agree, receipt: file, pledge: pledgeFile });
       setDone(data.enrollment);
     } catch (err) {
       setError(err.message);
@@ -224,7 +224,7 @@ export default function TripConsent() {
                 <p className="text-xs text-slate-500">{t('tripConsent.student')}</p>
                 <p className="font-bold text-slate-900 mb-4">{student.studentName}</p>
                 {student.participated
-                  ? <SurveyForm code={code} studentId={studentId} last4={last4} onDone={() => setSurveyDone(true)} />
+                  ? <SurveyForm code={code} studentId={studentId} parentMobile={parentMobile} onDone={() => setSurveyDone(true)} />
                   : <p className="text-sm text-slate-600">{t('tripConsent.survey.notParticipant')}</p>}
               </div>
             ) : done ? (
@@ -246,8 +246,8 @@ export default function TripConsent() {
                     <input required inputMode="numeric" dir="ltr" value={studentId} onChange={(e) => setStudentId(e.target.value)} className={inputCls} />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('tripConsent.last4')}</label>
-                    <input required inputMode="numeric" maxLength={4} dir="ltr" value={last4} onChange={(e) => setLast4(e.target.value)} className={inputCls} />
+                    <label className="block text-sm font-medium text-slate-700 mb-1">{t('tripConsent.parentMobile')}</label>
+                    <input required inputMode="tel" placeholder="05xxxxxxxx" dir="ltr" value={parentMobile} onChange={(e) => setParentMobile(e.target.value)} className={inputCls} />
                   </div>
                 </div>
                 {error && <p className="text-sm text-red-600">{error}</p>}
@@ -255,6 +255,8 @@ export default function TripConsent() {
                   {busy && <Loader2 className="w-4 h-4 animate-spin" />}{t('tripConsent.continue')}
                 </button>
               </form>
+            ) : student.lockedByOther ? (
+              <div className={`${card} text-center text-slate-600 space-y-2`}><p className="font-bold text-slate-900">{student.studentName}</p><p>{t('tripConsent.lockedByOther')}</p></div>
             ) : (
               <form onSubmit={submit} className={`${card} space-y-4`}>
                 <div>
@@ -321,7 +323,7 @@ export default function TripConsent() {
                                 {trip.bankDetails && <p className="text-sm text-slate-700 whitespace-pre-wrap">{trip.bankDetails}</p>}
                                 <label className="flex items-center gap-2 text-sm text-primary cursor-pointer">
                                   <Paperclip className="w-4 h-4" />
-                                  {receipt ? receipt.name : t('tripConsent.attachReceipt')}
+                                  {receipt ? receipt.name : student?.enrollment?.receiptName ? t('tripConsent.receiptReplace', { name: student.enrollment.receiptName }) : t('tripConsent.attachReceipt')}<span className="text-red-500">*</span>
                                   <input type="file" accept="image/*,application/pdf" className="hidden" onChange={(e) => pickReceipt(e.target.files?.[0])} />
                                 </label>
                                 <p className="text-xs text-slate-500">{t('tripConsent.receiptHint')}</p>
@@ -332,7 +334,7 @@ export default function TripConsent() {
                         )}
 
                         <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 space-y-2">
-                          <p className="text-sm font-medium text-slate-700">{t('tripConsent.pledgeTitle')}{trip.pledgeRequired && <span className="text-red-500"> *</span>}</p>
+                          <p className="text-sm font-medium text-slate-700">{t('tripConsent.pledgeTitle')} <span className="text-xs font-normal text-slate-500">({t('tripConsent.optional')})</span></p>
                           {trip.pledgeTemplate?.fileUrl && (
                             <a href={trip.pledgeTemplate.fileUrl} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1"><Paperclip className="w-4 h-4" />{t('tripConsent.pledgeDownload')}</a>
                           )}

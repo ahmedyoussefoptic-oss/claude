@@ -1796,7 +1796,7 @@
       "returned": "العودة"
     },
     "healthNotes": "ملاحظات صحية أو حساسية",
-    "emergencyPhone": "رقم للطوارئ يوم الرحلة",
+    "emergencyPhone": "رقم تواصل إضافي",
     "offRoster": "لم يعد ضمن الصفوف المستهدفة",
     "noMobile": "لا يوجد جوال مسجل لولي الأمر",
     "byStaff": "سجّله {{name}}",
@@ -1897,13 +1897,19 @@
     "pledgeTemplateLink": "النموذج",
     "viewPledge": "ورقة التعهد",
     "pledgeMissing": "لم تُرفق ورقة التعهد",
-    "statOpen": "التسجيل مفتوح"
+    "statOpen": "التسجيل مفتوح",
+    "byBranchTitle": "الطلاب المستهدفون حسب الفرع",
+    "byBranchTotal": "الإجمالي: {{total}} طالباً · الموافقات: {{approved}}",
+    "byBranchRow": "{{approved}} موافقة من {{total}} ({{pct}}%)",
+    "byBranchDeclined": "اعتذر {{n}}",
+    "byBranchDeclinedLegend": "اعتذروا",
+    "byBranchNoReply": "لم يردّوا"
   },
   "tripConsent": {
     "times": "من {{from}} إلى {{to}}",
     "deadline": "آخر موعد للرد على الدعوة: {{date}}",
     "verifyTitle": "بيانات الطالب",
-    "verifyHint": "للتحقق من ولي الأمر: أدخل رقم هوية الطالب وآخر 4 أرقام من جوال ولي الأمر المسجل في المدرسة.",
+    "verifyHint": "أدخل رقم هوية الطالب ورقم جوالك — يُستخدم رقمك للتواصل معك بخصوص الرحلة.",
     "studentId": "رقم هوية الطالب",
     "last4": "آخر 4 أرقام من جوال ولي الأمر",
     "continue": "متابعة",
@@ -1954,7 +1960,12 @@
     "pledgeAttach": "إرفاق ورقة التعهد (صورة أو PDF)",
     "pledgeReplace": "مرفقة: {{name}} — اضغط للاستبدال",
     "pledgeHint": "صوّر ورقة التعهد المرسلة مع الطالب بعد توقيعها وأرفقها هنا. الحد الأقصى 4 ميجابايت.",
-    "pledgeRequired": "يرجى إرفاق ورقة التعهد موقّعة."
+    "pledgeRequired": "يرجى إرفاق ورقة التعهد موقّعة.",
+    "parentMobile": "رقم جوال ولي الأمر",
+    "receiptRequired": "يرجى إرفاق سند التحويل البنكي.",
+    "receiptReplace": "السند المرفق: {{name}} — اضغط لاستبداله",
+    "optional": "اختياري",
+    "lockedByOther": "تم تسجيل الرد على هذه الرحلة لهذا الطالب من رقم جوال آخر. للتعديل يرجى التواصل مع الفرع."
   },
   "ownerSettings": {
     "title": "إعدادات منشئ النظام",

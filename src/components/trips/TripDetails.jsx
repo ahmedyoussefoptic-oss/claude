@@ -184,7 +184,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
     setLog(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
   }, (err) => console.error(err)), [tripId]);
 
-  const needRoster = perms.seeStudents && ['students', 'boarding'].includes(tab) && !roster;
+  const needRoster = perms.seeStudents && ['overview', 'students', 'boarding'].includes(tab) && !roster;
   useEffect(() => {
     if (!needRoster) return;
     call('getTripRoster', { id: tripId }).then((d) => setRoster(d.students)).catch((err) => setRosterError(err.message));
@@ -202,6 +202,20 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
   }, [roster, enrollments, trip]);
 
   const counts = useMemo(() => Object.fromEntries(ENROLLMENT_STATUSES.map((s) => [s, rows.filter((r) => r.status === s).length])), [rows]);
+  // Overview: targeted students per branch and how many approved.
+  const byBranch = useMemo(() => {
+    const m = new Map();
+    rows.filter((r) => !r.offRoster).forEach((r) => {
+      const k = r.branch || '';
+      const b = m.get(k) || { branch: k, total: 0, approved: 0, declined: 0, confirmed: 0 };
+      b.total++;
+      if (r.e?.decision === 'APPROVED') b.approved++;
+      if (r.e?.decision === 'DECLINED') b.declined++;
+      if (r.status === 'CONFIRMED') b.confirmed++;
+      m.set(k, b);
+    });
+    return [...m.values()].sort((a, b) => b.total - a.total);
+  }, [rows]);
 
   if (!trip) {
     return (
@@ -396,6 +410,37 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                 </div>
               )}
 
+              {perms.seeStudents && roster && byBranch.length > 0 && (
+                <div className="border border-slate-100 rounded-2xl p-4">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+                    <p className="font-bold text-slate-900 flex items-center gap-1.5"><UsersIcon className="w-4 h-4 text-primary" />{t('trips.byBranchTitle')}</p>
+                    <p className="text-sm text-slate-600">{t('trips.byBranchTotal', { total: byBranch.reduce((n, b) => n + b.total, 0), approved: byBranch.reduce((n, b) => n + b.approved, 0) })}</p>
+                  </div>
+                  <div className="space-y-2.5">
+                    {byBranch.map((b) => {
+                      const pct = b.total ? Math.round((100 * b.approved) / b.total) : 0;
+                      return (
+                        <div key={b.branch || '—'} className="text-sm">
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-slate-800 font-medium">{branchName(b.branch) || '—'}</span>
+                            <span className="text-xs text-slate-600 tabular-nums">{t('trips.byBranchRow', { approved: b.approved, total: b.total, pct })}{b.declined > 0 && <span className="text-rose-600"> · {t('trips.byBranchDeclined', { n: b.declined })}</span>}</span>
+                          </div>
+                          <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden flex">
+                            <div className="h-full bg-emerald-500" style={{ width: `${b.total ? (100 * b.approved) / b.total : 0}%` }} />
+                            <div className="h-full bg-rose-300" style={{ width: `${b.total ? (100 * b.declined) / b.total : 0}%` }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-4 text-[11px] text-slate-500 mt-2">
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />{t('trips.statApproved')}</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-rose-300" />{t('trips.byBranchDeclinedLegend')}</span>
+                    <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-slate-100 border border-slate-200" />{t('trips.byBranchNoReply')}</span>
+                  </div>
+                </div>
+              )}
+
               {isPublic && perms.manage && (
                 <div className="border border-sky-100 bg-sky-50/50 rounded-2xl p-4 space-y-3">
                   <p className="text-sm font-bold text-slate-800">{t('trips.shareTitle')}</p>
@@ -435,7 +480,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                   <p><span className="text-slate-500">{t('trips.form.payDeadline')}: </span>{trip.payDeadline && format(dayToDate(trip.payDeadline), 'EEEE d MMMM', { locale: dateLocale })}</p>
                   {trip.fee > 0 && <p><span className="text-slate-500">{t('trips.form.payMethods')}: </span>{(trip.payMethods || []).map((m) => t(`trips.payMethod.${m}`)).join(sep)}</p>}
                   {trip.bankDetails && <p className="whitespace-pre-wrap"><span className="text-slate-500">{t('trips.form.bankDetails')}: </span>{trip.bankDetails}</p>}
-                  <p><span className="text-slate-500">{t('trips.pledgeLabel')}: </span>{trip.pledgeRequired ? t('trips.pledgeRequiredShort') : t('trips.pledgeOptionalShort')}
+                  <p><span className="text-slate-500">{t('trips.pledgeLabel')}: </span>{t('trips.pledgeOptionalShort')}
                     {trip.pledgeTemplate?.fileUrl && <a href={trip.pledgeTemplate.fileUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline mr-2 inline-flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />{t('trips.pledgeTemplateLink')}</a>}
                   </p>
                 </div>
@@ -524,8 +569,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                         <td className="px-3 py-2.5 text-xs text-slate-600">
                           {r.e?.payMethod && <p>{t(`trips.payMethod.${r.e.payMethod}`)}</p>}
                           {r.e?.pledge?.fileUrl && <a href={r.e.pledge.fileUrl} target="_blank" rel="noreferrer" className="text-indigo-700 hover:underline flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />{t('trips.viewPledge')}</a>}
-                          {r.e?.decision === 'APPROVED' && trip.pledgeRequired && !r.e?.pledge && <p className="text-rose-600">{t('trips.pledgeMissing')}</p>}
-                          {r.e?.receipt?.fileUrl && <a href={r.e.receipt.fileUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />{t('trips.viewReceipt')}</a>}
+                                                    {r.e?.receipt?.fileUrl && <a href={r.e.receipt.fileUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />{t('trips.viewReceipt')}</a>}
                           {r.e?.payStatus === 'PAID' && <p className="text-emerald-700">{t('trips.paidBy', { name: r.e.reviewedByName || '' })}{r.e.cashReceiptNo && ` · ${r.e.cashReceiptNo}`}</p>}
                         </td>
                         <td className="px-3 py-2.5">

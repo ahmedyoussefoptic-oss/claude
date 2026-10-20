@@ -200,10 +200,6 @@ function TripFormInner({ trip, allTrips, onClose, onSaved }) {
                 )}
               </Field>
             </div>
-            <label className="flex items-start gap-2 text-sm text-slate-700">
-              <input type="checkbox" className="mt-1" checked={!!form.pledgeRequired} onChange={(e) => setForm((f) => ({ ...f, pledgeRequired: e.target.checked }))} />
-              <span>{t('trips.form.pledgeRequired')}<span className="block text-[11px] text-slate-400">{t('trips.form.pledgeRequiredHint')}</span></span>
-            </label>
           </Section>
 
           <Section title={t('trips.form.operations')}>

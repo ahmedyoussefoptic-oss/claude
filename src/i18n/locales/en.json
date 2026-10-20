@@ -1772,7 +1772,7 @@
       "returned": "Return"
     },
     "healthNotes": "Health notes or allergies",
-    "emergencyPhone": "Emergency number on the day",
+    "emergencyPhone": "Additional contact number",
     "offRoster": "No longer in the targeted grades",
     "noMobile": "No parent mobile on record",
     "byStaff": "Recorded by {{name}}",
@@ -1873,13 +1873,19 @@
     "pledgeTemplateLink": "Template",
     "viewPledge": "Pledge sheet",
     "pledgeMissing": "Pledge sheet missing",
-    "statOpen": "Registration open"
+    "statOpen": "Registration open",
+    "byBranchTitle": "Targeted students by branch",
+    "byBranchTotal": "Total: {{total}} students · Approved: {{approved}}",
+    "byBranchRow": "{{approved}} of {{total}} approved ({{pct}}%)",
+    "byBranchDeclined": "{{n}} declined",
+    "byBranchDeclinedLegend": "Declined",
+    "byBranchNoReply": "No reply"
   },
   "tripConsent": {
     "times": "{{from}} to {{to}}",
     "deadline": "Response deadline: {{date}}",
     "verifyTitle": "Student details",
-    "verifyHint": "To verify you're the parent: enter the student's national ID and the last 4 digits of the parent mobile registered with the school.",
+    "verifyHint": "Enter the student's national ID and your mobile number — we'll use it to contact you about the trip.",
     "studentId": "Student national ID",
     "last4": "Last 4 digits of the parent's mobile",
     "continue": "Continue",
@@ -1930,7 +1936,12 @@
     "pledgeAttach": "Attach the pledge sheet (photo or PDF)",
     "pledgeReplace": "Attached: {{name}} — tap to replace",
     "pledgeHint": "Photograph the pledge sheet sent home with the student after signing it and attach it here. Max 4 MB.",
-    "pledgeRequired": "Please attach the signed pledge sheet."
+    "pledgeRequired": "Please attach the signed pledge sheet.",
+    "parentMobile": "Parent mobile number",
+    "receiptRequired": "Please attach the bank transfer receipt.",
+    "receiptReplace": "Attached: {{name}} — tap to replace",
+    "optional": "optional",
+    "lockedByOther": "A reply for this student was already made from another mobile number. To change it, please contact the branch."
   },
   "ownerSettings": {
     "title": "System owner settings",

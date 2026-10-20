@@ -3254,7 +3254,7 @@ async function publicTripView(trip) {
     surveyOpen: trip.status === "COMPLETED",
     gender: trip.gender || "ALL",
     imageUrl: trip.imageUrl || "",
-    pledgeRequired: trip.pledgeRequired === true,
+    pledgeRequired: false, // the pledge sheet is optional
     pledgeTemplate: trip.pledgeTemplate ? { fileName: trip.pledgeTemplate.fileName, fileUrl: trip.pledgeTemplate.fileUrl } : null,
   };
 }
@@ -3264,54 +3264,59 @@ exports.getPublicTrip = onCall(async (request) => {
   return publicTripView(trip);
 });
 
-// The parent proves who they are with the student's national ID and the
-// last 4 digits of the mobile number registered for that student. Failed
-// attempts are counted per trip+student to stop guessing.
-async function verifyTripParent(tripRef, trip, studentIdRaw, last4Raw) {
+// The parent identifies the student by national ID and types their own
+// mobile number (it becomes the trip's contact number). Unknown IDs are
+// counted per trip+student to stop guessing. `known` = the number matches
+// the roster or the one that already answered for this student.
+async function verifyTripParent(tripRef, trip, studentIdRaw, parentMobileRaw) {
   const studentId = normalizeDigits(studentIdRaw);
-  const last4 = normalizeDigits(last4Raw);
-  if (!/^\d{5,15}$/.test(studentId) || !/^\d{4}$/.test(last4)) {
-    throw new HttpsError("invalid-argument", "أدخل رقم هوية الطالب وآخر 4 أرقام من الجوال.");
-  }
+  const intl = toIntlNumber(parentMobileRaw);
+  if (!/^\d{5,15}$/.test(studentId)) throw new HttpsError("invalid-argument", "أدخل رقم هوية الطالب.");
+  if (!/^9665\d{8}$/.test(intl)) throw new HttpsError("invalid-argument", "أدخل رقم جوال ولي الأمر (05xxxxxxxx).");
+  const parentMobile = `0${intl.slice(3)}`;
   const guardRef = db.collection("tripVerify").doc(`${tripRef.id}_${studentId}`);
   const guard = (await guardRef.get()).data() || {};
   const recent = guard.lastAt && Date.now() - guard.lastAt.toMillis() < 3600 * 1000;
   if (recent && (guard.failures || 0) >= 8) {
     throw new HttpsError("resource-exhausted", "محاولات كثيرة، حاول بعد ساعة أو تواصل مع الفرع.");
   }
-  const fail = async (message) => {
-    await guardRef.set({ failures: (recent ? guard.failures || 0 : 0) + 1, lastAt: Timestamp.now() });
-    throw new HttpsError("not-found", message);
-  };
   const studentSnap = await db.collection("students").doc(studentId).get();
-  if (!studentSnap.exists) return fail("لم يتم العثور على الطالب. تأكد من رقم الهوية.");
+  if (!studentSnap.exists || studentSnap.data().active === false) {
+    await guardRef.set({ failures: (recent ? guard.failures || 0 : 0) + 1, lastAt: Timestamp.now() });
+    throw new HttpsError("not-found", "لم يتم العثور على الطالب. تأكد من رقم الهوية.");
+  }
   const s = studentSnap.data();
-  const mobile = normalizeDigits(s.mobile).replace(/\D/g, "");
-  if (!mobile || mobile.slice(-4) !== last4) return fail("البيانات غير مطابقة لسجل الطالب. تأكد من آخر 4 أرقام من جوال ولي الأمر المسجل في المدرسة.");
   const branchOf = await branchResolver();
   if (!tripTargets(trip, s, branchOf)) throw new HttpsError("failed-precondition", "هذه الرحلة غير مخصصة لصف الطالب أو فرعه.");
   if (guard.failures) await guardRef.delete();
-  return { studentId, student: s, branch: branchOf(s), grade: studentGrade(s), section: studentSection(s) };
+  const e = (await tripRef.collection("enrollments").doc(studentId).get()).data() || null;
+  const same = (v) => toIntlNumber(v) === intl;
+  const known = same(s.mobile) || (e && same(e.parentPhone));
+  return { studentId, student: s, branch: branchOf(s), grade: studentGrade(s), section: studentSection(s), parentMobile, known, existing: e };
 }
 
 // A confirmed student not marked absent at boarding.
 const tookPart = (e, trip) => enrollmentStatus(e, trip.fee) === "CONFIRMED" && e.boarded !== false;
 
-const publicEnrollment = (e, trip) => (e ? {
+// Health notes / extra number only back to the number that answered (or
+// the roster's); anyone else sees the status alone.
+const publicEnrollment = (e, trip, full = true) => (e ? {
   decision: e.decision, declineReason: e.declineReason || null, payMethod: e.payMethod || null, payStatus: e.payStatus || null,
   payRejectReason: e.payRejectReason || "", status: enrollmentStatus(e, trip.fee),
-  healthNotes: e.healthNotes || "", emergencyPhone: e.emergencyPhone || "",
+  healthNotes: full ? e.healthNotes || "" : "", emergencyPhone: full ? e.emergencyPhone || "" : "",
   receiptName: e.receipt?.fileName || "",
   pledgeName: e.pledge?.fileName || "",
 } : null);
 
 exports.verifyTripStudent = onCall(async (request) => {
   const { ref, trip } = await tripByCode(request.data?.tripCode);
-  const v = await verifyTripParent(ref, trip, request.data?.studentId, request.data?.last4);
+  const v = await verifyTripParent(ref, trip, request.data?.studentId, request.data?.parentMobile);
   const [e, survey] = await Promise.all([ref.collection("enrollments").doc(v.studentId).get(), ref.collection("surveys").doc(v.studentId).get()]);
   return {
     studentName: v.student.nameAr || v.student.name || "", grade: v.grade, className: v.student.className || "",
-    enrollment: publicEnrollment(e.exists ? e.data() : null, trip),
+    enrollment: publicEnrollment(e.exists ? e.data() : null, trip, v.known),
+    // A reply already made from another number can't be changed from this one.
+    lockedByOther: !!(e.exists && e.data().source === "parent" && !v.known),
     participated: e.exists && tookPart(e.data(), trip),
     surveyDone: survey.exists,
   };
@@ -3330,7 +3335,10 @@ exports.submitTripConsent = onCall(async (request) => {
   if (trip.status !== "OPEN" || riyadhDay() > trip.payDeadline) {
     throw new HttpsError("failed-precondition", "انتهى موعد التسجيل في هذه الرحلة. للاستفسار تواصل مع الفرع.");
   }
-  const v = await verifyTripParent(ref, trip, d.studentId, d.last4);
+  const v = await verifyTripParent(ref, trip, d.studentId, d.parentMobile);
+  if (v.existing && v.existing.source === "parent" && !v.known) {
+    throw new HttpsError("permission-denied", "تم تسجيل الرد على هذه الرحلة من رقم جوال آخر. للتعديل تواصل مع الفرع.");
+  }
   const decision = d.decision === "DECLINED" ? "DECLINED" : d.decision === "APPROVED" ? "APPROVED" : null;
   if (!decision) throw new HttpsError("invalid-argument", "اختر الموافقة أو الاعتذار.");
   const declineReason = decision === "DECLINED" && TRIP_DECLINE_REASONS.includes(d.declineReason) ? d.declineReason : null;
@@ -3344,17 +3352,18 @@ exports.submitTripConsent = onCall(async (request) => {
   if (existing && existing.payStatus === "PAID") {
     throw new HttpsError("failed-precondition", "تم تأكيد المشاركة ودفع الرسوم. لأي تعديل تواصل مع الفرع.");
   }
-  // Signed pledge sheet (ورقة التعهد) — required when the trip asks for it.
+  // Signed pledge sheet (ورقة التعهد) — optional.
   let pledge = existing?.pledge || null;
   if (decision === "APPROVED" && d.pledge) {
     pledge = await uploadPublicAttachment(getStorage().bucket(), `trips/${ref.id}/pledges/${v.studentId}`, d.pledge);
   }
-  if (decision === "APPROVED" && trip.pledgeRequired && !pledge) {
-    throw new HttpsError("invalid-argument", "يرجى إرفاق ورقة التعهد موقّعة.");
-  }
   let receipt = existing?.receipt || null;
   if (paid && payMethod === "BANK" && d.receipt) {
     receipt = await uploadPublicAttachment(getStorage().bucket(), `trips/${ref.id}/receipts/${v.studentId}`, d.receipt);
+  }
+  // Paying by bank transfer needs the transfer receipt.
+  if (paid && payMethod === "BANK" && !receipt) {
+    throw new HttpsError("invalid-argument", "يرجى إرفاق سند التحويل البنكي.");
   }
   // A new receipt goes to finance; without one, a receipt already under
   // review (or already rejected) keeps its state; otherwise awaiting payment.
@@ -3368,7 +3377,7 @@ exports.submitTripConsent = onCall(async (request) => {
   const now = Timestamp.now();
   const record = {
     studentId: v.studentId, studentName: v.student.nameAr || v.student.name || "", branch: v.branch, grade: v.grade, section: v.section,
-    className: v.student.className || "", parentPhone: v.student.mobile || "",
+    className: v.student.className || "", parentPhone: v.parentMobile, rosterPhone: v.student.mobile || "",
     decision, declineReason, payMethod, payStatus, receipt: payMethod === "BANK" ? receipt : null,
     pledge: decision === "APPROVED" ? pledge : null,
     healthNotes: str(d.healthNotes, 500), emergencyPhone: str(d.emergencyPhone, 30),
@@ -3388,7 +3397,7 @@ exports.submitTripConsent = onCall(async (request) => {
     await notifyUsers(await tripFinanceUsers(v.branch, trip), { title: "سند دفع رحلة بانتظار المراجعة", body: `${record.studentName} — ${trip.title}`, complaintId: ref.id, type: "TRIP_RECEIPT" });
   }
   const saved = { ...existing, ...record };
-  return { enrollment: publicEnrollment(saved, trip) };
+  return { enrollment: publicEnrollment(saved, trip, true) };
 });
 
 // --- Staff: payment review, manual consent, boarding ----------------------
@@ -3669,7 +3678,7 @@ exports.submitTripSurvey = onCall(async (request) => {
   const d = request.data || {};
   const { ref, trip } = await tripByCode(d.tripCode);
   if (trip.status !== "COMPLETED") throw new HttpsError("failed-precondition", "الاستبيان متاح بعد تنفيذ الرحلة.");
-  const v = await verifyTripParent(ref, trip, d.studentId, d.last4);
+  const v = await verifyTripParent(ref, trip, d.studentId, d.parentMobile);
   const enrollSnap = await ref.collection("enrollments").doc(v.studentId).get();
   if (!enrollSnap.exists || !tookPart(enrollSnap.data(), trip)) throw new HttpsError("failed-precondition", "الاستبيان لأولياء أمور الطلاب المشاركين في الرحلة.");
   const surveyRef = ref.collection("surveys").doc(v.studentId);
