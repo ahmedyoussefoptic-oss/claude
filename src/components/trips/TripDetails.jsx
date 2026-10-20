@@ -16,6 +16,7 @@ import useAuthStore from '../../stores/useAuthStore';
 import { useBranches, useDepartments } from '../../hooks/useOrgData';
 import { useUsers } from '../../hooks/useUsers';
 import { useWhatsAppApi } from '../../hooks/useWhatsAppApi';
+import { userBranches } from '../../utils/scope';
 import logo from '../../assets/logo.png';
 import {
   TRIP_STATUS_STYLES, ENROLLMENT_STATUSES, ENROLLMENT_STATUS_STYLES, TRIP_PAY_METHODS, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES,
@@ -318,6 +319,8 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
   // Boarding sheets: one per branch (each on its own printed page).
   const boardBranches = [...new Set(confirmedRows.map((r) => r.branch || ''))].sort((a, b) => branchName(a).localeCompare(branchName(b), 'ar'));
   const boardRows = boardBranch === 'ALL' ? confirmedRows : confirmedRows.filter((r) => (r.branch || '') === boardBranch);
+  // The trip's supervisors who cover a branch (all-branch staff cover every one).
+  const supervisorsOf = (branch) => (trip.supervisors || []).map((id) => users.find((u) => u.id === id)).filter((u) => u && (u.access === 'all' || userBranches(u).includes(branch))).map((u) => u.name || u.email);
   const parentPhoneOf = (r) => r.e?.parentPhone || r.e?.rosterPhone || '';
   const printBoarding = () => {
     const logoUrl = new URL(logo, window.location.origin).href;
@@ -334,10 +337,11 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
     ${info(t('trips.sheet.departTime'), trip.departTime)}
     ${info(t('trips.sheet.meetingPoint'), trip.meetingPoint)}
     ${info(t('trips.sheet.count'), String(list.length))}
+    ${info(t('trips.sheet.supervisors'), supervisorsOf(branch).join(sep) || '—')}
   </div>
   <table><thead><tr><th>#</th><th>${escapeHtml(t('trips.col.student'))}</th><th>${escapeHtml(t('trips.col.grade'))}</th><th>${escapeHtml(t('trips.sheet.parentPhone'))}</th><th>${escapeHtml(t('trips.emergencyPhone'))}</th><th>${escapeHtml(t('trips.healthNotes'))}</th><th>${escapeHtml(t('trips.col.boarded'))}</th><th>${escapeHtml(t('trips.col.returned'))}</th></tr></thead>
   <tbody>${list.map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td dir="ltr">${escapeHtml(`${r.grade || ''} ${r.className || ''}`)}</td><td dir="ltr">${escapeHtml(parentPhoneOf(r))}</td><td dir="ltr">${escapeHtml(r.e?.emergencyPhone || '')}</td><td>${escapeHtml(r.e?.healthNotes || '')}</td><td></td><td></td></tr>`).join('')}</tbody></table>
-  <div class="sign"><span>${escapeHtml(t('trips.sheet.supervisor'))}: ${escapeHtml(supervisorNames.join(sep))}</span><span>${escapeHtml(t('trips.sheet.signature'))}: ..................</span></div>
+  <div class="sign"><span>${escapeHtml(t('trips.sheet.supervisor'))}: ${escapeHtml(supervisorsOf(branch).join(sep) || '—')}</span><span>${escapeHtml(t('trips.sheet.signature'))}: ..................</span></div>
 </section>`;
     };
     const list = boardBranch === 'ALL' ? boardBranches : [boardBranch];
@@ -685,6 +689,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                   )}
                 </div>
               </div>
+              {boardBranch !== 'ALL' && <p className="text-sm text-slate-700">{t('trips.sheet.supervisors')}: {supervisorsOf(boardBranch).join(sep) || '—'}</p>}
               <p className="text-xs text-slate-500">{t('trips.arrivedHint')}</p>
               {arrivalResult && <p className="text-sm text-emerald-700">{arrivalResult.whatsapp ? t('trips.arrivalSent', arrivalResult) : t('trips.arrivalNoWa')}</p>}
               {trip.arrivedAt && <p className="text-xs text-slate-500">{t('trips.arrivedAt', { time: format(trip.arrivedAt.toDate(), 'p', { locale: dateLocale }), name: trip.arrivedByName || '' })}</p>}

@@ -1891,7 +1891,8 @@
       "parentPhone": "Parent mobile",
       "supervisor": "Supervisor",
       "signature": "Signature",
-      "allBranches": "All branches (one sheet each)"
+      "allBranches": "All branches (one sheet each)",
+      "supervisors": "Supervisors in charge"
     }
   },
   "tripConsent": {

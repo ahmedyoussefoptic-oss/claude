@@ -1915,7 +1915,8 @@
       "parentPhone": "جوال ولي الأمر",
       "supervisor": "المشرف",
       "signature": "التوقيع",
-      "allBranches": "كل الفروع (كشف لكل فرع)"
+      "allBranches": "كل الفروع (كشف لكل فرع)",
+      "supervisors": "المشرفون المسؤولون"
     }
   },
   "tripConsent": {
