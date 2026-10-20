@@ -28,6 +28,7 @@ export default function StudentAccountsTool({ onClose }) {
   const [copied, setCopied] = useState('');
   const [systems, setSystems] = useState({ classera: true, portal: true });
   const [sent, setSent] = useState(null);
+  const [target, setTarget] = useState({ mode: 'registered', phone: '', reason: '' });
 
   const load = async (id) => {
     setBusy('load'); setError(null); setData(null); setSent(null); setMatches([]); setShow({});
@@ -35,6 +36,7 @@ export default function StudentAccountsTool({ onClose }) {
       const { data: res } = await httpsCallable(functions, 'getStudentAccounts')({ nationalId: id });
       setData(res);
       setSystems({ classera: !!res.classera, portal: !!res.portal });
+      setTarget({ mode: res.student?.mobile ? 'registered' : 'other', phone: '', reason: '' });
     } catch (err) {
       setError(err.message);
     } finally {
@@ -59,7 +61,8 @@ export default function StudentAccountsTool({ onClose }) {
   const send = async () => {
     setBusy('send'); setError(null); setSent(null);
     try {
-      const { data: res } = await httpsCallable(functions, 'sendStudentAccounts')({ nationalId: data.student.nationalId, systems: Object.keys(systems).filter((k) => systems[k]) });
+      const alt = target.mode === 'other' ? { altPhone: target.phone, altReason: target.reason } : {};
+      const { data: res } = await httpsCallable(functions, 'sendStudentAccounts')({ nationalId: data.student.nationalId, systems: Object.keys(systems).filter((k) => systems[k]), ...alt });
       setSent(res);
     } catch (err) {
       setError(err.message);
@@ -154,11 +157,31 @@ export default function StudentAccountsTool({ onClose }) {
                   </div>
                 </div>
               ) : data.hasAccounts && (
+                <div className="space-y-3">
+                <div className="border border-slate-200 rounded-2xl p-3 space-y-2 text-sm">
+                  <p className="text-xs font-bold text-slate-600">{t('studentAccounts.sendTo')}</p>
+                  <label className={`flex items-center gap-2 ${s.mobile ? '' : 'opacity-50'}`}>
+                    <input type="radio" disabled={!s.mobile} checked={target.mode === 'registered'} onChange={() => setTarget((x) => ({ ...x, mode: 'registered' }))} />
+                    {t('studentAccounts.toRegistered')} <span dir="ltr" className="font-mono text-slate-600">{s.mobile || '—'}</span>
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="radio" checked={target.mode === 'other'} onChange={() => setTarget((x) => ({ ...x, mode: 'other' }))} />
+                    {t('studentAccounts.toOther')}
+                  </label>
+                  {target.mode === 'other' && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pr-6">
+                      <input value={target.phone} onChange={(e) => setTarget((x) => ({ ...x, phone: e.target.value }))} placeholder="05xxxxxxxx" dir="ltr" className="px-3 py-2 border border-slate-200 rounded-xl text-sm" />
+                      <input value={target.reason} onChange={(e) => setTarget((x) => ({ ...x, reason: e.target.value }))} placeholder={t('studentAccounts.otherReason')} className="px-3 py-2 border border-slate-200 rounded-xl text-sm" />
+                      <p className="sm:col-span-2 text-[11px] text-amber-700">{t('studentAccounts.otherWarning')}</p>
+                    </div>
+                  )}
+                </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-xs text-slate-500">{t('studentAccounts.sendHint')}</p>
-                  <button type="button" disabled={!!busy || !s.mobile || !(systems.classera || systems.portal)} onClick={send} className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium flex items-center gap-2 disabled:opacity-50">
+                  <button type="button" disabled={!!busy || !(systems.classera || systems.portal) || (target.mode === 'registered' ? !s.mobile : (!/^0?5\d{8}$/.test(target.phone.replace(/\D/g, '').replace(/^966/, '')) || target.reason.trim().length < 2))} onClick={send} className="px-5 py-2.5 rounded-xl bg-emerald-600 text-white text-sm font-medium flex items-center gap-2 disabled:opacity-50">
                     {busy === 'send' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}{t('studentAccounts.send')}
                   </button>
+                </div>
                 </div>
               )}
             </>

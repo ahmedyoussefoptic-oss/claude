@@ -1885,8 +1885,19 @@ exports.sendStudentAccounts = onCall({ secrets: WA_SECRETS }, async (request) =>
   if (systems.includes("classera") && acc.classera && acc.classera.username) parts.push(`كلاسيرا: اسم المستخدم ${acc.classera.username} — كلمة المرور ${acc.classera.password || "(غير مسجلة)"}`);
   if (systems.includes("portal") && acc.portal && acc.portal.username) parts.push(`بوابة الطالب: اسم المستخدم ${acc.portal.username} — كلمة المرور ${acc.portal.password || "(غير مسجلة)"}`);
   if (!parts.length) throw new HttpsError("failed-precondition", "لا توجد بيانات دخول للنظام المختار.");
-  const phone = student.mobile || acc.mobile || "";
-  if (!toIntlNumber(phone)) throw new HttpsError("failed-precondition", "لا يوجد جوال مسجل لولي الأمر في سجل الطلاب.");
+  // Another mobile of the parent (e.g. the mother's): Saudi mobile only,
+  // with a reason, and both are logged on the ticket and the access log.
+  const registeredPhone = student.mobile || acc.mobile || "";
+  const altRaw = String(request.data?.altPhone || "").trim();
+  const altReason = String(request.data?.altReason || "").trim().slice(0, 120);
+  let phone = registeredPhone;
+  if (altRaw) {
+    const intl = toIntlNumber(altRaw);
+    if (!/^9665\d{8}$/.test(intl)) throw new HttpsError("invalid-argument", "أدخل رقم جوال سعودي صحيح (05xxxxxxxx).");
+    if (altReason.length < 2) throw new HttpsError("invalid-argument", "اكتب صلة هذا الرقم بولي الأمر (مثال: جوال الأم).");
+    phone = `0${intl.slice(3)}`;
+  }
+  if (!toIntlNumber(phone)) throw new HttpsError("failed-precondition", "لا يوجد جوال مسجل لولي الأمر في سجل الطلاب — أدخل رقماً آخر لولي الأمر.");
 
   const problemRef = db.collection("problemTypes").doc("ACCOUNT_CREDENTIALS");
   if (!(await problemRef.get()).exists) await problemRef.set({ name: "طلب بيانات الدخول (كلاسيرا وبوابة الطالب)", order: 99, active: true });
@@ -1900,11 +1911,12 @@ exports.sendStudentAccounts = onCall({ secrets: WA_SECRETS }, async (request) =>
     parentName: `ولي أمر الطالب/ة ${studentName}`, relation: "", parentPhone: normalizeDigits(phone), parentNationalId: student.parentNationalId || "",
     problemType: "ACCOUNT_CREDENTIALS", platform: "OTHER", platformLink: "",
     details: "طلب بيانات الدخول — أُرسلت من أداة حسابات الطلاب", resolutionNote: parts.join(" | "),
+    ...(altRaw ? { sentToAlternate: true, alternateReason: altReason, registeredPhone: normalizeDigits(registeredPhone) } : {}),
     ticketId, receiver: caller.uid, source: "ACCOUNTS_TOOL", status: "SOLVED", solvedAt: now,
     assignedTo: [caller.uid], assignedToNames: [caller.name || ""], assignedAt: now, isOverdue: false, reopenCount: 0, createdAt: now, updatedAt: now,
   };
   await ref.set(record);
-  await ref.collection("activityLog").add({ action: "TICKET_CREATED", actorId: caller.uid, actorName: caller.name || "", metadata: { note: "إرسال بيانات الدخول من أداة حسابات الطلاب" }, createdAt: now });
+  await ref.collection("activityLog").add({ action: "TICKET_CREATED", actorId: caller.uid, actorName: caller.name || "", metadata: { note: altRaw ? `إرسال بيانات الدخول إلى رقم آخر لولي الأمر (${altReason}) بدلاً من الرقم المسجل` : "إرسال بيانات الدخول من أداة حسابات الطلاب" }, createdAt: now });
 
   const settingsSnap = await db.collection("settings").doc("whatsappApi").get();
   const settings = settingsSnap.exists ? settingsSnap.data() : {};
@@ -1927,7 +1939,7 @@ exports.sendStudentAccounts = onCall({ secrets: WA_SECRETS }, async (request) =>
     await ref.collection("activityLog").add({ action: "CREDENTIALS_SENT", actorId: caller.uid, actorName: caller.name || "", metadata: { sentToPhone: record.parentPhone, viaApi: true, systems }, createdAt: t2 });
     await db.collection("studentAccounts").doc(nationalId).set({ lastSentAt: t2, lastSentByName: caller.name || "", sendCount: FieldValue.increment(1) }, { merge: true });
   }
-  await accountLog(caller, nationalId, "SEND", { ok: sent, ticketId, systems, ...(error ? { error: String(error).slice(0, 200) } : {}) });
+  await accountLog(caller, nationalId, "SEND", { ok: sent, ticketId, systems, ...(altRaw ? { toAlternate: record.parentPhone, alternateReason: altReason } : {}), ...(error ? { error: String(error).slice(0, 200) } : {}) });
   return { ok: sent, error, ticketId, ticketDocId: ref.id, phone: record.parentPhone, message: `${record.parentName}،\nبيانات الدخول للطالب/ة ${studentName}:\n${parts.join("\n")}\n${SCHOOL_NAME}` };
 });
 
