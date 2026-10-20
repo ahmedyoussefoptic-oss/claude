@@ -1791,9 +1791,9 @@
       "remove": "Remove response",
       "hint": "For consents received by phone or on paper. Transfer receipts are uploaded by the parent from the trip link."
     },
-    "boardingList": "Boarding list",
+    "boardingList": "Bus boarding sheet",
     "students": "students",
-    "printBoarding": "Print boarding list",
+    "printBoarding": "Print bus boarding sheet",
     "boardingCounts": "{{boarded}} boarded and {{returned}} returned of {{total}} confirmed students.",
     "noConfirmed": "No confirmed students yet.",
     "present": "Present",
@@ -1880,7 +1880,19 @@
     "byBranchRow": "{{approved}} of {{total}} approved ({{pct}}%)",
     "byBranchDeclined": "{{n}} declined",
     "byBranchDeclinedLegend": "Declined",
-    "byBranchNoReply": "No reply"
+    "byBranchNoReply": "No reply",
+    "sheet": {
+      "branch": "Branch",
+      "stage": "Grade level",
+      "date": "Date",
+      "departTime": "Departure",
+      "meetingPoint": "Meeting point",
+      "count": "Students",
+      "parentPhone": "Parent mobile",
+      "supervisor": "Supervisor",
+      "signature": "Signature",
+      "allBranches": "All branches (one sheet each)"
+    }
   },
   "tripConsent": {
     "times": "{{from}} to {{to}}",

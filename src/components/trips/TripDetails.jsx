@@ -157,6 +157,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
   const [announceResult, setAnnounceResult] = useState(null);
   const [studentFilter, setStudentFilter] = useState('ALL');
   const [search, setSearch] = useState('');
+  const [boardBranch, setBoardBranch] = useState('ALL');
 
   const perms = tripPermissions(userData, trip, user?.uid);
 
@@ -314,13 +315,37 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
   };
 
   const confirmedRows = rows.filter((r) => r.status === 'CONFIRMED');
+  // Boarding sheets: one per branch (each on its own printed page).
+  const boardBranches = [...new Set(confirmedRows.map((r) => r.branch || ''))].sort((a, b) => branchName(a).localeCompare(branchName(b), 'ar'));
+  const boardRows = boardBranch === 'ALL' ? confirmedRows : confirmedRows.filter((r) => (r.branch || '') === boardBranch);
+  const parentPhoneOf = (r) => r.e?.parentPhone || r.e?.rosterPhone || '';
   const printBoarding = () => {
-    const body = `<div style="padding:12mm">
-  <h2 style="margin:0 0 2mm">${escapeHtml(trip.title)} — ${escapeHtml(t('trips.boardingList'))}</h2>
-  <p style="margin:0 0 6mm;color:#475569">${escapeHtml(format(dayToDate(trip.date), 'EEEE d MMMM yyyy', { locale: dateLocale }))} · ${escapeHtml(trip.departTime || '')} · ${confirmedRows.length} ${escapeHtml(t('trips.students'))}</p>
-  <table><thead><tr><th>#</th><th>${escapeHtml(t('trips.col.student'))}</th><th>${escapeHtml(t('trips.col.grade'))}</th><th>${escapeHtml(t('trips.healthNotes'))}</th><th>${escapeHtml(t('trips.emergencyPhone'))}</th><th>${escapeHtml(t('trips.col.boarded'))}</th><th>${escapeHtml(t('trips.col.returned'))}</th></tr></thead>
-  <tbody>${confirmedRows.map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td dir="ltr">${escapeHtml(`${r.grade || ''} ${r.className || ''}`)}</td><td>${escapeHtml(r.e?.healthNotes || '')}</td><td dir="ltr">${escapeHtml(r.e?.emergencyPhone || '')}</td><td></td><td></td></tr>`).join('')}</tbody></table></div>`;
-    printHtml(trip.title, body, `@page { size: A4; margin: 10mm } table { width: 100%; border-collapse: collapse; font-size: 10pt } th, td { border: 1px solid #cbd5e1; padding: 2mm; text-align: right } th { background: #f1f5f9 } td:nth-child(6), td:nth-child(7) { width: 16mm }`);
+    const logoUrl = new URL(logo, window.location.origin).href;
+    const when = format(dayToDate(trip.date), 'EEEE d MMMM yyyy', { locale: dateLocale });
+    const info = (label, value) => (value ? `<div><b>${escapeHtml(label)}:</b> ${escapeHtml(value)}</div>` : '');
+    const sheet = (branch) => {
+      const list = confirmedRows.filter((r) => (r.branch || '') === branch);
+      return `<section class="sheet">
+  <header><img src="${logoUrl}" alt=""><div><h2>${escapeHtml(t('trips.boardingList'))}</h2><div class="trip">${escapeHtml(trip.title)}${trip.destination ? ` — ${escapeHtml(trip.destination)}` : ''}</div></div></header>
+  <div class="info">
+    ${info(t('trips.sheet.branch'), branchName(branch) || '—')}
+    ${info(t('trips.sheet.stage'), `${stageText} — ${sectionText}`)}
+    ${info(t('trips.sheet.date'), when)}
+    ${info(t('trips.sheet.departTime'), trip.departTime)}
+    ${info(t('trips.sheet.meetingPoint'), trip.meetingPoint)}
+    ${info(t('trips.sheet.count'), String(list.length))}
+  </div>
+  <table><thead><tr><th>#</th><th>${escapeHtml(t('trips.col.student'))}</th><th>${escapeHtml(t('trips.col.grade'))}</th><th>${escapeHtml(t('trips.sheet.parentPhone'))}</th><th>${escapeHtml(t('trips.emergencyPhone'))}</th><th>${escapeHtml(t('trips.healthNotes'))}</th><th>${escapeHtml(t('trips.col.boarded'))}</th><th>${escapeHtml(t('trips.col.returned'))}</th></tr></thead>
+  <tbody>${list.map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td dir="ltr">${escapeHtml(`${r.grade || ''} ${r.className || ''}`)}</td><td dir="ltr">${escapeHtml(parentPhoneOf(r))}</td><td dir="ltr">${escapeHtml(r.e?.emergencyPhone || '')}</td><td>${escapeHtml(r.e?.healthNotes || '')}</td><td></td><td></td></tr>`).join('')}</tbody></table>
+  <div class="sign"><span>${escapeHtml(t('trips.sheet.supervisor'))}: ${escapeHtml(supervisorNames.join(sep))}</span><span>${escapeHtml(t('trips.sheet.signature'))}: ..................</span></div>
+</section>`;
+    };
+    const list = boardBranch === 'ALL' ? boardBranches : [boardBranch];
+    printHtml(`${trip.title} — ${t('trips.boardingList')}`, list.map(sheet).join(''), `@page { size: A4; margin: 10mm } .sheet { padding: 2mm; break-after: page } .sheet:last-child { break-after: auto }
+  header { display: flex; align-items: center; gap: 5mm; border-bottom: 0.6mm solid #0369a1; padding-bottom: 3mm; margin-bottom: 3mm } header img { height: 16mm } h2 { margin: 0; color: #0369a1 } .trip { font-size: 12pt; font-weight: bold; margin-top: 1mm }
+  .info { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5mm 6mm; font-size: 10pt; margin-bottom: 4mm; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 2mm; padding: 3mm }
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt } th, td { border: 1px solid #cbd5e1; padding: 1.8mm; text-align: right } th { background: #f1f5f9 } thead { display: table-header-group } tr { break-inside: avoid }
+  td:nth-child(1) { width: 8mm } td:nth-child(7), td:nth-child(8) { width: 14mm } .sign { display: flex; justify-content: space-between; margin-top: 8mm; font-size: 10pt }`);
   };
 
   const tabs = [
@@ -648,8 +673,12 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
           {tab === 'boarding' && roster && (
             <>
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-sm text-slate-600">{t('trips.boardingCounts', { boarded: confirmedRows.filter((r) => r.e?.boarded === true).length, returned: confirmedRows.filter((r) => r.e?.returned === true).length, total: confirmedRows.length })}</p>
+                <p className="text-sm text-slate-600">{t('trips.boardingCounts', { boarded: boardRows.filter((r) => r.e?.boarded === true).length, returned: boardRows.filter((r) => r.e?.returned === true).length, total: boardRows.length })}</p>
                 <div className="flex flex-wrap gap-2">
+                  <select value={boardBranch} onChange={(e) => setBoardBranch(e.target.value)} className="px-3 py-2 bg-white border border-slate-300 rounded-xl text-sm">
+                    <option value="ALL">{t('trips.sheet.allBranches')}</option>
+                    {boardBranches.map((b) => <option key={b} value={b}>{branchName(b) || '—'} ({confirmedRows.filter((r) => (r.branch || '') === b).length})</option>)}
+                  </select>
                   <button onClick={printBoarding} className={`${btn} border border-slate-300 bg-white text-slate-700`}><Printer className="w-4 h-4" />{t('trips.printBoarding')}</button>
                   {trip.date === format(new Date(), 'yyyy-MM-dd') && (
                     <button disabled={!!busy} onClick={announceArrival} className={`${btn} bg-emerald-600 text-white`}>{spin('arrival', Home)}{t('trips.arrived')}</button>
@@ -659,14 +688,18 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
               <p className="text-xs text-slate-500">{t('trips.arrivedHint')}</p>
               {arrivalResult && <p className="text-sm text-emerald-700">{arrivalResult.whatsapp ? t('trips.arrivalSent', arrivalResult) : t('trips.arrivalNoWa')}</p>}
               {trip.arrivedAt && <p className="text-xs text-slate-500">{t('trips.arrivedAt', { time: format(trip.arrivedAt.toDate(), 'p', { locale: dateLocale }), name: trip.arrivedByName || '' })}</p>}
-              {confirmedRows.length === 0 ? <p className="py-10 text-center text-slate-400 text-sm">{t('trips.noConfirmed')}</p> : (
+              {boardRows.length === 0 ? <p className="py-10 text-center text-slate-400 text-sm">{t('trips.noConfirmed')}</p> : (
                 <ul className="divide-y divide-slate-100 border border-slate-100 rounded-2xl">
-                  {confirmedRows.map((r) => (
+                  {boardRows.map((r) => (
                     <li key={r.id} className="p-3 flex flex-col sm:flex-row sm:items-center gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-slate-900">{r.name} <span className="text-xs text-slate-400" dir="ltr">{r.grade} {r.className}</span></p>
                         {r.e?.healthNotes && <p className="text-xs text-rose-600 flex items-center gap-1"><HeartPulse className="w-3.5 h-3.5" />{r.e.healthNotes}</p>}
-                        {r.e?.emergencyPhone && <a href={`tel:${r.e.emergencyPhone}`} className="text-xs text-slate-500" dir="ltr">{r.e.emergencyPhone}</a>}
+                        <p className="text-xs text-slate-500 flex flex-wrap gap-x-3">
+                          {boardBranch === 'ALL' && <span>{branchName(r.branch)}</span>}
+                          {parentPhoneOf(r) && <span>{t('trips.sheet.parentPhone')}: <a href={`tel:${parentPhoneOf(r)}`} className="text-primary" dir="ltr">{parentPhoneOf(r)}</a></span>}
+                          {r.e?.emergencyPhone && <span>{t('trips.emergencyPhone')}: <a href={`tel:${r.e.emergencyPhone}`} className="text-primary" dir="ltr">{r.e.emergencyPhone}</a></span>}
+                        </p>
                         {(r.e?.incidents || []).map((x, i) => (
                           <p key={i} className="text-xs text-amber-800 bg-amber-50 rounded-md px-2 py-1 mt-1">{x.note} <span className="text-amber-600">— {x.byName}{x.at?.toDate ? ` · ${format(x.at.toDate(), 'p', { locale: dateLocale })}` : ''}</span></p>
                         ))}

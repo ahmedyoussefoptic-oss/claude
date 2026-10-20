@@ -1815,9 +1815,9 @@
       "remove": "حذف الرد",
       "hint": "للموافقات التي تصل بالهاتف أو ورقياً. سندات التحويل يرفعها ولي الأمر من رابط الرحلة."
     },
-    "boardingList": "كشف الركوب",
+    "boardingList": "كشف صعود الحافلة",
     "students": "طالب",
-    "printBoarding": "طباعة كشف الركوب",
+    "printBoarding": "طباعة كشف صعود الحافلة",
     "boardingCounts": "صعد {{boarded}} وعاد {{returned}} من {{total}} طالباً مؤكداً.",
     "noConfirmed": "لا يوجد طلاب مؤكدون بعد.",
     "present": "حاضر",
@@ -1904,7 +1904,19 @@
     "byBranchRow": "{{approved}} موافقة من {{total}} ({{pct}}%)",
     "byBranchDeclined": "اعتذر {{n}}",
     "byBranchDeclinedLegend": "اعتذروا",
-    "byBranchNoReply": "لم يردّوا"
+    "byBranchNoReply": "لم يردّوا",
+    "sheet": {
+      "branch": "الفرع",
+      "stage": "المرحلة الدراسية",
+      "date": "التاريخ",
+      "departTime": "وقت الانطلاق",
+      "meetingPoint": "مكان التجمع",
+      "count": "عدد الطلاب",
+      "parentPhone": "جوال ولي الأمر",
+      "supervisor": "المشرف",
+      "signature": "التوقيع",
+      "allBranches": "كل الفروع (كشف لكل فرع)"
+    }
   },
   "tripConsent": {
     "times": "من {{from}} إلى {{to}}",
