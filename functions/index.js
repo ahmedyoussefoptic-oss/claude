@@ -1826,6 +1826,8 @@ exports.convertTechTicketToComplaint = onCall(async (request) => {
 // through getStudentAccounts, and send them only to the parent mobile
 // registered in the student roster through sendStudentAccounts. Every view
 // and send is written to accountAccessLog.
+// The MIS student portal's login page, included with its account.
+const STUDENT_PORTAL_URL = process.env.STUDENT_PORTAL_URL || "https://misedu.net";
 async function accountsCaller(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   const snap = await db.collection("users").doc(request.auth.uid).get();
@@ -1883,7 +1885,7 @@ exports.sendStudentAccounts = onCall({ secrets: WA_SECRETS }, async (request) =>
   const systems = Array.isArray(request.data?.systems) && request.data.systems.length ? request.data.systems : ["classera", "portal"];
   const parts = [];
   if (systems.includes("classera") && acc.classera && acc.classera.username) parts.push(`كلاسيرا: اسم المستخدم ${acc.classera.username} — كلمة المرور ${acc.classera.password || "(غير مسجلة)"}`);
-  if (systems.includes("portal") && acc.portal && acc.portal.username) parts.push(`بوابة الطالب: اسم المستخدم ${acc.portal.username} — كلمة المرور ${acc.portal.password || "(غير مسجلة)"}`);
+  if (systems.includes("portal") && acc.portal && acc.portal.username) parts.push(`بوابة الطالب (الرابط: ${STUDENT_PORTAL_URL}): اسم المستخدم ${acc.portal.username} — كلمة المرور ${acc.portal.password || "(غير مسجلة)"}`);
   if (!parts.length) throw new HttpsError("failed-precondition", "لا توجد بيانات دخول للنظام المختار.");
   // Another mobile of the parent (e.g. the mother's): Saudi mobile only,
   // with a reason, and both are logged on the ticket and the access log.
