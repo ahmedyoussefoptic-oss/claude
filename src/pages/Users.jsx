@@ -46,6 +46,7 @@ const emptyForm = {
   isPrincipal: false,
   isQuality: false,
   isCounselor: false,
+  platformAccess: false,
   tripsAccess: 'all',
   modules: {},
   recordScope: 'branch',
@@ -120,6 +121,7 @@ export default function Users() {
       isPrincipal: u.isPrincipal === true,
       isQuality: u.isQuality === true,
       isCounselor: u.isCounselor === true,
+      platformAccess: u.platformAccess === true,
       tripsAccess: ['tripsOnly', 'none'].includes(u.tripsAccess) ? u.tripsAccess : 'all',
       modules: u.modules && typeof u.modules === 'object' ? u.modules : {},
       recordScope: u.recordScope === 'assigned' ? 'assigned' : 'branch',
@@ -156,6 +158,8 @@ export default function Users() {
       const recordScope = restricted ? 'branch' : (form.recordScope === 'assigned' ? 'assigned' : 'branch');
       if (editingId) {
         await updateDoc(doc(db, 'users', editingId), {
+          // منصة المكتشف is shared by the owner only (firestore.rules).
+          ...(isOwner(me) ? { platformAccess: form.platformAccess } : {}),
           name: form.name,
           phone: form.phone || null,
           jobTitle: form.jobTitle || null,
@@ -198,6 +202,7 @@ export default function Users() {
           tripsAccess: form.role === ROLES.ADMIN ? 'all' : form.tripsAccess,
           modules,
           recordScope,
+          platformAccess: isOwner(me) && form.platformAccess,
           notificationPrefs: form.notificationPrefs,
           notificationChannels: form.notificationChannels,
           stages: form.stages,
@@ -591,6 +596,20 @@ export default function Users() {
               <p className="text-xs text-slate-600 mt-2">{t('users.isCounselorHint')}</p>
             </div>
 
+            {isOwner(me) && (
+              <div className="md:col-span-2 bg-amber-50 border border-amber-200 rounded-xl p-4">
+                <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={form.platformAccess}
+                    onChange={(e) => setForm((p) => ({ ...p, platformAccess: e.target.checked }))}
+                  />
+                  👑 {t('users.platformAccessLabel')}
+                </label>
+                <p className="text-xs text-slate-600 mt-2">{t('users.platformAccessHint')}</p>
+              </div>
+            )}
+
             <div className="md:col-span-2 bg-slate-50 border border-slate-100 rounded-xl p-4">
               <NotificationPrefsEditor
                 prefs={form.notificationPrefs}
@@ -749,6 +768,11 @@ export default function Users() {
                       {u.isCounselor && (
                         <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-violet-100 text-violet-700 mr-1 mt-1">
                           🧭 {t('users.counselorTag')}
+                        </span>
+                      )}
+                      {u.platformAccess && !isOwner(u) && (
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 mr-1 mt-1">
+                          👑 {t('users.platformTag')}
                         </span>
                       )}
                     </td>

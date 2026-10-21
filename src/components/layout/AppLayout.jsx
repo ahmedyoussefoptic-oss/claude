@@ -5,7 +5,7 @@ import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, M
 import { useEffect, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
-import { useAdminPermissions, adminCan, isOwner } from '../../config/adminPermissions';
+import { useAdminPermissions, adminCan, isOwner, canSeePlatform } from '../../config/adminPermissions';
 import NotificationBell from './NotificationBell';
 import Watermark from '../common/Watermark';
 import SystemCredit from '../common/SystemCredit';
@@ -76,15 +76,16 @@ export default function AppLayout() {
   if (adminCan(userData, caps, 'archive')) {
     navItems.push({ name: t('nav.archive'), path: '/deleted-complaints', icon: Archive });
   }
-  // منصة المكتشف — the system owner only (also enforced in firestore.rules).
-  if (isOwner(userData)) {
+  // منصة المكتشف — the owner and the users the owner shared it with; its
+  // settings, the owner only (also enforced in firestore.rules).
+  if (canSeePlatform(userData)) {
     navItems.push(
       { divider: t('platform.navTitle'), path: '#platform' },
       { name: t('platform.home.title'), path: '/platform/home', icon: LayoutGrid },
       { name: t('platform.leaves.title'), path: '/platform/leaves', icon: DoorOpen },
       { name: t('platform.leads.title'), path: '/platform/leads', icon: UserPlus },
       { name: t('platform.students.title'), path: '/platform/students', icon: GraduationCap },
-      { name: t('platform.settings.title'), path: '/platform/settings', icon: Settings2 },
+      ...(isOwner(userData) ? [{ name: t('platform.settings.title'), path: '/platform/settings', icon: Settings2 }] : []),
     );
   }
 

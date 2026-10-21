@@ -83,6 +83,10 @@ service cloud.firestore {
     function isOwner() {
       return myDoc() != null && myDoc().get('isOwner', false) == true;
     }
+    // منصة المكتشف: the owner and the users the owner shared it with.
+    function platformUser() {
+      return isOwner() || (myDoc() != null && myDoc().get('platformAccess', false) == true && myDoc().get('active', true) != false);
+    }
     function adminPerm(cap) {
       let p = /databases/$(database)/documents/settings/adminPermissions;
       return isOwner() || (isAdmin() && (!exists(p) || get(p).data.get(cap, true) == true));
@@ -172,7 +176,8 @@ service cloud.firestore {
       // isOwner is never written by a client, and the owner's account can
       // only be changed by the owner. Admin accounts are managed by the owner
       // or admins allowed to (adminPermissions.manageAdmins).
-      allow create: if request.resource.data.get('isOwner', false) != true && (
+      // platformAccess (منصة المكتشف) is granted by the owner only.
+      allow create: if request.resource.data.get('isOwner', false) != true && (request.resource.data.get('platformAccess', false) != true || isOwner()) && (
         (adminPerm('users') && (request.resource.data.role != 'ADMIN' || adminPerm('manageAdmins'))) ||
         (!isAdmin() && myPerm('users') && !grantsAdminPower(request.resource.data))
       );
@@ -180,7 +185,7 @@ service cloud.firestore {
         (adminPerm('users') && (resource.data.role != 'ADMIN' || adminPerm('manageAdmins'))) ||
         (!isAdmin() && myPerm('users') && resource.data.role != 'ADMIN')
       );
-      allow update: if request.resource.data.get('isOwner', false) == resource.data.get('isOwner', false) && ((
+      allow update: if request.resource.data.get('isOwner', false) == resource.data.get('isOwner', false) && (request.resource.data.get('platformAccess', false) == resource.data.get('platformAccess', false) || isOwner()) && ((
         (resource.data.get('isOwner', false) != true || request.auth.uid == userId) &&
         adminPerm('users') &&
         ((resource.data.role != 'ADMIN' && request.resource.data.role != 'ADMIN') || adminPerm('manageAdmins') || request.auth.uid == userId)
@@ -437,24 +442,24 @@ service cloud.firestore {
       allow create, delete: if false;
     }
 
-    // منصة المكتشف (leaves, new customers, current students, platform
-    // settings) — the system owner only, for now. Public parent pages write
+    // منصة المكتشف (leaves, new customers, current students) — the system
+    // owner and the users the owner shared it with; its settings, the owner. Public parent pages write
     // through Cloud Functions (Admin SDK), never directly.
     match /leaveRequests/{id} {
-      allow read, write: if isOwner();
+      allow read, write: if platformUser();
     }
     match /authorizedPickups/{id} {
-      allow read, write: if isOwner();
+      allow read, write: if platformUser();
     }
     match /leads/{id} {
-      allow read, write: if isOwner();
+      allow read, write: if platformUser();
       match /activity/{a} {
-        allow read, create: if isOwner();
+        allow read, create: if platformUser();
         allow update, delete: if false;
       }
     }
     match /reenrollments/{id} {
-      allow read, write: if isOwner();
+      allow read, write: if platformUser();
     }
     // Student platform logins: never readable by clients — only through
     // getStudentAccounts / sendStudentAccounts; imported by an admin.
@@ -467,10 +472,11 @@ service cloud.firestore {
       allow write: if false;
     }
     match /leadVisits/{id} {
-      allow read, write: if isOwner();
+      allow read, write: if platformUser();
     }
     match /platformSettings/{id} {
-      allow read, write: if isOwner();
+      allow read: if platformUser();
+      allow write: if isOwner();
     }
 
     // Other collections — admins only, and never the collections matched

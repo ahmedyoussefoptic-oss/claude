@@ -24,7 +24,7 @@ import TripConsent from './pages/TripConsent';
 import Settings from './pages/Settings';
 import DeletedComplaints from './pages/DeletedComplaints';
 import { ROLES } from './config/roles';
-import { isOwner } from './config/adminPermissions';
+import { isOwner, canSeePlatform } from './config/adminPermissions';
 import PlatformHome from './pages/platform/PlatformHome';
 import Leaves from './pages/platform/Leaves';
 import Leads from './pages/platform/Leads';
@@ -33,11 +33,17 @@ import PlatformSettings from './pages/platform/PlatformSettings';
 import LeaveRequest from './pages/LeaveRequest';
 import JoinInquiry from './pages/JoinInquiry';
 
-// منصة المكتشف pages: the system owner only (firestore.rules enforce it too).
+// منصة المكتشف pages: the owner and the users the owner shared them with;
+// its settings, the owner only (firestore.rules enforce both).
 function OwnerOnly({ children }) {
   const { userData } = useAuthStore();
   if (!userData) return null;
   return isOwner(userData) ? children : <Navigate to="/dashboard" replace />;
+}
+function PlatformOnly({ children }) {
+  const { userData } = useAuthStore();
+  if (!userData) return null;
+  return canSeePlatform(userData) ? children : <Navigate to="/dashboard" replace />;
 }
 
 function App() {
@@ -80,10 +86,10 @@ function App() {
           <Route path="visits" element={<BranchVisits />} />
           <Route path="trips" element={<Trips />} />
           <Route path="platform" element={<Navigate to="/platform/home" replace />} />
-          <Route path="platform/home" element={<OwnerOnly><PlatformHome /></OwnerOnly>} />
-          <Route path="platform/leaves" element={<OwnerOnly><Leaves /></OwnerOnly>} />
-          <Route path="platform/leads" element={<OwnerOnly><Leads /></OwnerOnly>} />
-          <Route path="platform/students" element={<OwnerOnly><CurrentStudents /></OwnerOnly>} />
+          <Route path="platform/home" element={<PlatformOnly><PlatformHome /></PlatformOnly>} />
+          <Route path="platform/leaves" element={<PlatformOnly><Leaves /></PlatformOnly>} />
+          <Route path="platform/leads" element={<PlatformOnly><Leads /></PlatformOnly>} />
+          <Route path="platform/students" element={<PlatformOnly><CurrentStudents /></PlatformOnly>} />
           <Route path="platform/settings" element={<OwnerOnly><PlatformSettings /></OwnerOnly>} />
           <Route path="branch-qr" element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN]} allowPrincipal>

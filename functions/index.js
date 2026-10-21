@@ -192,7 +192,7 @@ exports.createStaffUser = onCall(async (request) => {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
-  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, isCounselor, stages, curricula, notificationPrefs, notificationChannels, tripsAccess, modules, recordScope } = request.data || {};
+  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, isCounselor, stages, curricula, notificationPrefs, notificationChannels, tripsAccess, modules, recordScope, platformAccess } = request.data || {};
   if (!name || !email || !password || !role) {
     throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
   }
@@ -243,6 +243,8 @@ exports.createStaffUser = onCall(async (request) => {
     stages: Array.isArray(stages) ? stages.filter((st) => typeof st === "string") : [],
     curricula: Array.isArray(curricula) ? curricula.filter((c) => typeof c === "string") : [],
     tripsAccess: ["tripsOnly", "none"].includes(tripsAccess) && role !== "ADMIN" ? tripsAccess : "all",
+    // Only the owner shares منصة المكتشف.
+    platformAccess: caller.isOwner === true && platformAccess === true,
     ...(role !== "ADMIN" ? cleanUserModules(modules, recordScope) : {}),
     active: active !== false,
     createdAt: Timestamp.now(),
@@ -3077,6 +3079,7 @@ exports.saveTrip = onCall(async (request) => {
     return { id: ref.id, tripCode };
   }
   const { ref, trip: current } = await loadTrip(id, caller, "manage");
+  await checkTripPassword(caller, request.data?.tripPassword);
   if (!TRIP_EDITABLE.includes(current.status)) {
     throw new HttpsError("failed-precondition", "لا يمكن تعديل رحلة منتهية أو ملغاة.");
   }
@@ -3114,6 +3117,7 @@ exports.tripAction = onCall({ secrets: WA_SECRETS, timeoutSeconds: 300 }, async 
   const { ref, trip } = await loadTrip(id, caller, rule.perm);
   if (!rule.from.includes(trip.status)) throw new HttpsError("failed-precondition", "لا يمكن تنفيذ هذا الإجراء في حالة الرحلة الحالية.");
   if (rule.reason && !reason) throw new HttpsError("invalid-argument", "اكتب السبب.");
+  if (action === "cancel") await checkTripPassword(caller, request.data?.tripPassword);
 
   const now = Timestamp.now();
   const update = { status: rule.to, updatedAt: now };
@@ -3905,13 +3909,13 @@ exports.setSettingsPassword = onCall(async (request) => {
   const now = Timestamp.now();
   if (!next) {
     await db.collection("secureConfig").doc("settingsLock").delete();
-    await db.collection("settings").doc("security").set({ lockEnabled: false, updatedAt: now, updatedByName: caller.name || "" });
+    await db.collection("settings").doc("security").set({ lockEnabled: false, updatedAt: now, updatedByName: caller.name || "" }, { merge: true });
     return { lockEnabled: false };
   }
   if (typeof next !== "string" || next.length < 6) throw new HttpsError("invalid-argument", "يجب ألا تقل كلمة السر عن 6 أحرف.");
   const salt = crypto.randomBytes(16).toString("hex");
   await db.collection("secureConfig").doc("settingsLock").set({ salt, hash: hashPassword(next, salt), updatedAt: now });
-  await db.collection("settings").doc("security").set({ lockEnabled: true, updatedAt: now, updatedByName: caller.name || "" });
+  await db.collection("settings").doc("security").set({ lockEnabled: true, updatedAt: now, updatedByName: caller.name || "" }, { merge: true });
   // Changing the password ends every open unlock except the owner's own.
   const unlocks = await db.collection("settingsUnlocks").get();
   const batch = db.batch();
@@ -3937,6 +3941,57 @@ exports.unlockSettings = onCall(async (request) => {
   const expiresAt = Timestamp.fromMillis(Date.now() + SETTINGS_UNLOCK_MINUTES * 60000);
   await db.collection("settingsUnlocks").doc(caller.uid).set({ expiresAt });
   return { expiresAt: expiresAt.toMillis() };
+});
+
+// --- Trip password ---------------------------------------------------------
+// The owner may require a password to edit or cancel a trip; everyone except
+// the owner enters it. The hash lives in secureConfig/tripLock and
+// settings/security.tripLockEnabled says whether it is on.
+async function checkTripPassword(caller, password) {
+  if (caller.isOwner === true) return;
+  const flag = await db.collection("settings").doc("security").get();
+  if (!flag.exists || flag.data().tripLockEnabled !== true) return;
+  const guardRef = db.collection("secureConfig").doc(`tripAttempts_${caller.uid}`);
+  const guard = (await guardRef.get()).data() || {};
+  const recent = guard.lastAt && Date.now() - guard.lastAt.toMillis() < 15 * 60000;
+  if (recent && (guard.failures || 0) >= 5) throw new HttpsError("resource-exhausted", "محاولات كثيرة خاطئة، حاول بعد 15 دقيقة.");
+  const snap = await db.collection("secureConfig").doc("tripLock").get();
+  let ok = !snap.exists;
+  if (snap.exists) {
+    const { salt, hash } = snap.data();
+    const candidate = Buffer.from(hashPassword(password || "", salt), "hex");
+    const stored = Buffer.from(hash, "hex");
+    ok = candidate.length === stored.length && crypto.timingSafeEqual(candidate, stored);
+  }
+  if (!ok) {
+    await guardRef.set({ failures: (recent ? guard.failures || 0 : 0) + 1, lastAt: Timestamp.now() });
+    throw new HttpsError("permission-denied", "الرقم السري للرحلات غير صحيح.");
+  }
+  if (guard.failures) await guardRef.delete();
+}
+
+exports.setTripPassword = onCall(async (request) => {
+  const caller = await adminCaller(request);
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "تغيير الرقم السري للرحلات متاح لمنشئ النظام فقط.");
+  const next = request.data?.next;
+  const now = Timestamp.now();
+  if (!next) {
+    await db.collection("secureConfig").doc("tripLock").delete();
+    await db.collection("settings").doc("security").set({ tripLockEnabled: false, updatedAt: now }, { merge: true });
+    return { tripLockEnabled: false };
+  }
+  if (typeof next !== "string" || next.length < 4) throw new HttpsError("invalid-argument", "يجب ألا يقل الرقم السري عن 4 خانات.");
+  const salt = crypto.randomBytes(16).toString("hex");
+  await db.collection("secureConfig").doc("tripLock").set({ salt, hash: hashPassword(next, salt), updatedAt: now });
+  await db.collection("settings").doc("security").set({ tripLockEnabled: true, updatedAt: now }, { merge: true });
+  return { tripLockEnabled: true };
+});
+
+// Checks the password before the trip form opens (saveTrip checks it again).
+exports.verifyTripPassword = onCall(async (request) => {
+  const caller = await tripCaller(request);
+  await checkTripPassword(caller, request.data?.password);
+  return { ok: true };
 });
 
 exports.lockSettings = onCall(async (request) => {
@@ -4187,20 +4242,27 @@ exports.setTripMedia = onCall(async (request) => {
 
 // ===========================================================================
 // منصة المكتشف — leave permissions, new-customer (enrollment) follow-up and
-// current students. Visible ONLY to the system owner for now: firestore.rules
-// restrict every platform collection to isOwner(), and the staff callables
-// below check it too. The public endpoints (parent leave request, inquiry
+// current students. Visible to the system owner and the users the owner
+// shares it with (users.platformAccess, set by the owner only): firestore.rules
+// restrict every platform collection to them, and the staff callables below
+// check it too. The public endpoints (parent leave request, inquiry
 // form) only create records; they never return platform data.
 // ===========================================================================
+// The owner, or a user the owner shared the platform with (users.platformAccess).
+const hasPlatform = (u) => u.isOwner === true || (u.platformAccess === true && u.active !== false);
 async function ownerCaller(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   const snap = await db.collection("users").doc(request.auth.uid).get();
-  if (!snap.exists || snap.data().isOwner !== true) throw new HttpsError("permission-denied", "هذا القسم متاح لمنشئ النظام فقط.");
+  if (!snap.exists || !hasPlatform(snap.data())) throw new HttpsError("permission-denied", "منصة المكتشف متاحة لمن يحددهم منشئ النظام فقط.");
   return { uid: request.auth.uid, ...snap.data() };
 }
+// Who is notified of platform events: the owner and the users with access.
 async function platformOwners() {
-  const snap = await db.collection("users").where("isOwner", "==", true).get();
-  return snap.docs.map((d) => d.id);
+  const [owners, shared] = await Promise.all([
+    db.collection("users").where("isOwner", "==", true).get(),
+    db.collection("users").where("platformAccess", "==", true).get(),
+  ]);
+  return [...new Set([...owners.docs, ...shared.docs].filter((d) => hasPlatform(d.data())).map((d) => d.id))];
 }
 async function loadPlatformSettings() {
   const snap = await db.collection("platformSettings").doc("main").get();

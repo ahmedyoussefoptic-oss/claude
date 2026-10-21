@@ -895,7 +895,10 @@
       },
       "customTag": "{{n}} custom sections",
       "assignedTag": "Assigned only"
-    }
+    },
+    "platformAccessLabel": "Access to the Al Moktashef platform",
+    "platformAccessHint": "Shows the platform section (leaves, new customers, current students) and its notifications. Platform settings stay yours only.",
+    "platformTag": "Platform"
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",
@@ -1895,7 +1898,10 @@
       "supervisors": "Supervisors in charge"
     },
     "bankLetter": "IBAN letter — Saudi National Bank (PDF)",
-    "bankLetterAttached": "Attached for parents automatically: IBAN letter — SNB (PDF)"
+    "bankLetterAttached": "Attached for parents automatically: IBAN letter — SNB (PDF)",
+    "passwordLabel": "Trip password",
+    "passwordEditTitle": "Edit trip",
+    "passwordCancelTitle": "Cancel trip"
   },
   "tripConsent": {
     "times": "{{from}} to {{to}}",
@@ -2007,7 +2013,15 @@
     "unlock": "Unlock",
     "unlockedUntil": "Settings unlocked for about {{minutes}} minutes.",
     "lockNow": "Lock now",
-    "noSettingsAccess": "You don't have access to Settings."
+    "noSettingsAccess": "You don't have access to Settings.",
+    "tripPwTitle": "Password to edit or cancel trips",
+    "tripPwOnHint": "On: everyone but you enters it to edit or cancel a trip.",
+    "tripPwOffHint": "Off: trip managers edit and cancel trips directly.",
+    "tripPwNew": "Password",
+    "tripPwNewChange": "New password",
+    "tripPwTooShort": "At least 4 characters.",
+    "tripPwSaved": "Trip password saved.",
+    "tripPwRemoved": "Trip password removed."
   },
   "visitsReport": {
     "optInclude": "Merge the branch visits report into the general report",

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { Crown, ShieldCheck, KeyRound, Loader2, Check } from 'lucide-react';
+import { Crown, ShieldCheck, KeyRound, Loader2, Check, Bus } from 'lucide-react';
 import { db, functions } from '../../config/firebase';
 import { ADMIN_CAPS, useAdminPermissions } from '../../config/adminPermissions';
 
@@ -22,8 +22,31 @@ export default function OwnerSettings() {
   const [pwBusy, setPwBusy] = useState(false);
   const [pwError, setPwError] = useState(null);
   const [pwDone, setPwDone] = useState(null);
+  const [tripLock, setTripLock] = useState(false);
+  const [tripPw, setTripPw] = useState('');
+  const [tripBusy, setTripBusy] = useState(false);
+  const [tripMsg, setTripMsg] = useState(null);
 
-  useEffect(() => onSnapshot(doc(db, 'settings', 'security'), (snap) => setLockEnabled(snap.exists() && snap.data().lockEnabled === true), () => {}), []);
+  useEffect(() => onSnapshot(doc(db, 'settings', 'security'), (snap) => {
+    setLockEnabled(snap.exists() && snap.data().lockEnabled === true);
+    setTripLock(snap.exists() && snap.data().tripLockEnabled === true);
+  }, () => {}), []);
+
+  // Password for editing / cancelling trips (everyone but the owner).
+  const saveTripPassword = async (remove) => {
+    setTripMsg(null);
+    if (!remove && tripPw.length < 4) { setTripMsg({ error: t('ownerSettings.tripPwTooShort') }); return; }
+    setTripBusy(true);
+    try {
+      const { data } = await httpsCallable(functions, 'setTripPassword')({ next: remove ? '' : tripPw });
+      setTripMsg({ ok: data.tripLockEnabled ? t('ownerSettings.tripPwSaved') : t('ownerSettings.tripPwRemoved') });
+      setTripPw('');
+    } catch (err) {
+      setTripMsg({ error: err.message });
+    } finally {
+      setTripBusy(false);
+    }
+  };
 
   const toggleCap = async (cap) => {
     setSavingCap(cap);
@@ -100,6 +123,20 @@ export default function OwnerSettings() {
             <button disabled={pwBusy || !current} onClick={() => savePassword(true)} className="px-4 py-2 rounded-xl text-sm text-rose-600 border border-rose-200 bg-white disabled:opacity-50">{t('ownerSettings.pwRemove')}</button>
           )}
         </div>
+      </section>
+
+      <section>
+        <p className="text-sm font-bold text-slate-800 flex items-center gap-2 mb-2"><Bus className="w-4 h-4 text-primary" />{t('ownerSettings.tripPwTitle')}</p>
+        <p className="text-xs text-slate-500 mb-3">{tripLock ? t('ownerSettings.tripPwOnHint') : t('ownerSettings.tripPwOffHint')}</p>
+        <div className="flex flex-wrap items-end gap-2">
+          <div className="w-56"><label className="block text-xs text-slate-600 mb-1">{tripLock ? t('ownerSettings.tripPwNewChange') : t('ownerSettings.tripPwNew')}</label><input type="password" autoComplete="new-password" value={tripPw} onChange={(e) => setTripPw(e.target.value)} className={inputCls} /></div>
+          <button disabled={tripBusy || !tripPw} onClick={() => saveTripPassword(false)} className="px-4 py-2 rounded-xl text-sm bg-primary text-white font-medium flex items-center gap-2 disabled:opacity-50">
+            {tripBusy && <Loader2 className="w-4 h-4 animate-spin" />}{tripLock ? t('ownerSettings.pwChange') : t('ownerSettings.pwSet')}
+          </button>
+          {tripLock && <button disabled={tripBusy} onClick={() => saveTripPassword(true)} className="px-4 py-2 rounded-xl text-sm text-rose-600 border border-rose-200 bg-white disabled:opacity-50">{t('ownerSettings.pwRemove')}</button>}
+        </div>
+        {tripMsg?.error && <p className="text-sm text-red-600 mt-2">{tripMsg.error}</p>}
+        {tripMsg?.ok && <p className="text-sm text-emerald-700 mt-2 flex items-center gap-1"><Check className="w-4 h-4" />{tripMsg.ok}</p>}
       </section>
     </div>
   );

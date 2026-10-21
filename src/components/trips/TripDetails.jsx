@@ -38,6 +38,42 @@ function printHtml(title, body, extraCss = '') {
   win.document.close();
 }
 
+// The owner's trip password (edit / cancel), checked on the server.
+function TripPasswordDialog({ title, onCancel, onConfirm }) {
+  const { t } = useTranslation();
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const confirm = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await call('verifyTripPassword', { password });
+      await onConfirm(password);
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 z-[130] flex items-center justify-center p-4">
+      <form onSubmit={confirm} className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-5 space-y-3">
+        <h3 className="font-bold text-slate-900 flex items-center gap-2"><Lock className="w-4 h-4 text-primary" />{title}</h3>
+        <label className="block text-xs text-slate-600">{t('trips.passwordLabel')}</label>
+        <input autoFocus type="password" autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} className={inputCls} />
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onCancel} className="px-4 py-2 text-sm rounded-xl border border-slate-300 bg-white">{t('common.cancel')}</button>
+          <button disabled={busy || !password} className="px-5 py-2 text-sm rounded-xl bg-primary text-white font-medium flex items-center gap-2 disabled:opacity-50">
+            {busy && <Loader2 className="w-4 h-4 animate-spin" />}{t('common.confirm')}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // Small dialog for a reason / note before a server action.
 function NoteDialog({ title, label, required, onCancel, onConfirm, busy }) {
   const { t } = useTranslation();
@@ -154,6 +190,9 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
   const [busy, setBusy] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [dialog, setDialog] = useState(null);
+  const [pwDialog, setPwDialog] = useState(null);
+  const [tripLockOn, setTripLockOn] = useState(false);
+  useEffect(() => onSnapshot(doc(db, 'settings', 'security'), (snap) => setTripLockOn(snap.exists() && snap.data().tripLockEnabled === true), () => {}), []);
   const [copied, setCopied] = useState(false);
   const [announceResult, setAnnounceResult] = useState(null);
   const [studentFilter, setStudentFilter] = useState('ALL');
@@ -241,8 +280,12 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
       setBusy(null);
     }
   };
-  const action = (name, reason) => run(name, () => call('tripAction', { id: trip.id, action: name, reason }));
-  const withReason = (name, title) => setDialog({ title, label: t('trips.reasonLabel'), required: true, onConfirm: async (reason) => { await action(name, reason); setDialog(null); } });
+  const action = (name, reason, tripPassword) => run(name, () => call('tripAction', { id: trip.id, action: name, reason, tripPassword }));
+  // Editing / cancelling a trip needs the owner's trip password when it is on.
+  const needTripPassword = tripLockOn && userData?.isOwner !== true;
+  const withTripPassword = (title, next) => (needTripPassword ? setPwDialog({ title, onConfirm: (pw) => { setPwDialog(null); next(pw); } }) : next(undefined));
+  const startEdit = () => withTripPassword(t('trips.passwordEditTitle'), (pw) => onEdit(trip, pw));
+  const startCancel = () => withTripPassword(t('trips.passwordCancelTitle'), (pw) => setDialog({ title: t('trips.actions.cancel'), label: t('trips.reasonLabel'), required: true, onConfirm: async (reason) => { await action('cancel', reason, pw); setDialog(null); } }));
   const announce = (audience) => run(`announce-${audience}`, async () => {
     const result = await call('sendTripAnnouncement', { id: trip.id, audience });
     setAnnounceResult(result);
@@ -366,7 +409,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-0 md:p-6">
       <div className="w-full max-w-6xl bg-white md:rounded-2xl shadow-2xl overflow-hidden flex flex-col h-full md:h-auto md:max-h-full">
-        <div className="px-5 md:px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-start justify-between gap-3">
+        <div className="shrink-0 px-5 md:px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-start justify-between gap-3">
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-bold text-slate-900">{trip.title}</h2>
@@ -382,9 +425,11 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-xl shrink-0"><X className="w-6 h-6" /></button>
         </div>
 
-        <div className="px-5 md:px-6 border-b border-slate-200 flex gap-1 overflow-x-auto">
+        {/* shrink-0: as a flex child with overflow the tab bar used to be
+            squeezed to nothing when the content was taller than the screen. */}
+        <div className="shrink-0 px-5 md:px-6 border-b border-slate-200 bg-white flex gap-1 overflow-x-auto">
           {tabs.map(([key, label]) => (
-            <button key={key} onClick={() => setTab(key)} className={`px-4 py-3 text-sm font-medium border-b-2 -mb-px whitespace-nowrap ${tab === key ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{label}</button>
+            <button key={key} onClick={() => setTab(key)} className={`px-5 py-3.5 text-base font-semibold border-b-[3px] -mb-px whitespace-nowrap ${tab === key ? 'border-primary text-primary' : 'border-transparent text-slate-500 hover:text-slate-800'}`}>{label}</button>
           ))}
         </div>
 
@@ -403,7 +448,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
 
               <div className="flex flex-wrap gap-2">
                 {perms.manage && ['DRAFT', 'PENDING_APPROVAL', 'OPEN', 'CLOSED'].includes(trip.status) && (
-                  <button onClick={() => onEdit(trip)} className={`${btn} border border-slate-300 bg-white text-slate-700`}><Pencil className="w-4 h-4" />{t('common.edit')}</button>
+                  <button onClick={startEdit} className={`${btn} border border-slate-300 bg-white text-slate-700`}><Pencil className="w-4 h-4" />{t('common.edit')}</button>
                 )}
                 {/* Trips are entered after their approval; older drafts just open. */}
                 {perms.manage && ['DRAFT', 'PENDING_APPROVAL'].includes(trip.status) && (
@@ -419,7 +464,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                   <button disabled={!!busy} onClick={() => action('complete')} className={`${btn} bg-indigo-600 text-white`}>{spin('complete', Flag)}{t('trips.actions.complete')}</button>
                 )}
                 {perms.manage && ['DRAFT', 'PENDING_APPROVAL', 'OPEN', 'CLOSED'].includes(trip.status) && (
-                  <button disabled={!!busy} onClick={() => withReason('cancel', t('trips.actions.cancel'))} className={`${btn} text-rose-600 hover:bg-rose-50`}><Ban className="w-4 h-4" />{t('trips.actions.cancel')}</button>
+                  <button disabled={!!busy} onClick={startCancel} className={`${btn} text-rose-600 hover:bg-rose-50`}><Ban className="w-4 h-4" />{t('trips.actions.cancel')}</button>
                 )}
               </div>
 
@@ -737,6 +782,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
         </div>
       </div>
 
+      {pwDialog && <TripPasswordDialog {...pwDialog} onCancel={() => setPwDialog(null)} />}
       {dialog && !dialog.manual && <NoteDialog {...dialog} busy={!!busy} onCancel={() => setDialog(null)} />}
       {dialog?.manual && (
         <ManualConsentDialog trip={trip} student={dialog.manual} current={dialog.manual.e} onCancel={() => setDialog(null)} onSaved={() => setDialog(null)} />

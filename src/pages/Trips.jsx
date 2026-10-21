@@ -36,6 +36,7 @@ export default function Trips() {
   const [deptFilter, setDeptFilter] = useState('ALL');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [formTrip, setFormTrip] = useState(null); // {} new, trip to edit
+  const [tripPassword, setTripPassword] = useState(); // entered before editing
   const openId = searchParams.get('openId');
 
   const load = useCallback(async () => {
@@ -212,6 +213,7 @@ export default function Trips() {
       {formTrip && (
         <TripForm
           trip={formTrip.id ? formTrip : null}
+          tripPassword={formTrip.id ? tripPassword : undefined}
           allTrips={trips}
           onClose={() => setFormTrip(null)}
           onSaved={async (id) => { setFormTrip(null); await load(); openTrip(id); }}
@@ -223,7 +225,7 @@ export default function Trips() {
           listed={selected}
           allTrips={trips}
           onClose={() => openTrip(null)}
-          onEdit={(trip) => setFormTrip(trip)}
+          onEdit={(trip, pw) => { setTripPassword(pw); setFormTrip(trip); }}
           onChanged={load}
         />
       )}

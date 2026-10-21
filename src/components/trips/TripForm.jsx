@@ -60,7 +60,7 @@ function Chips({ options, value, onChange, ltr }) {
 
 // Create / edit a trip (saveTrip). A new trip starts as a draft; it's sent
 // for the principal's approval from the trip details.
-function TripFormInner({ trip, allTrips, onClose, onSaved }) {
+function TripFormInner({ trip, tripPassword, allTrips, onClose, onSaved }) {
   const { t } = useTranslation();
   const { userData } = useAuthStore();
   const allBranches = useBranches();
@@ -91,7 +91,7 @@ function TripFormInner({ trip, allTrips, onClose, onSaved }) {
     }
     setSaving(true);
     try {
-      const { data } = await httpsCallable(functions, 'saveTrip')({ id: trip?.id || null, trip: form });
+      const { data } = await httpsCallable(functions, 'saveTrip')({ id: trip?.id || null, trip: form, tripPassword });
       const setMedia = httpsCallable(functions, 'setTripMedia');
       for (const [kind, f] of [['image', image], ['pledgeTemplate', pledgeFile]]) {
         if (!f) continue;
