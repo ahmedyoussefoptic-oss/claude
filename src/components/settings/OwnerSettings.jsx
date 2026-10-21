@@ -5,6 +5,7 @@ import { httpsCallable } from 'firebase/functions';
 import { Crown, ShieldCheck, KeyRound, Loader2, Check, Bus } from 'lucide-react';
 import { db, functions } from '../../config/firebase';
 import { ADMIN_CAPS, useAdminPermissions } from '../../config/adminPermissions';
+import ApiKeysSettings from './ApiKeysSettings';
 
 const inputCls = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
 
@@ -138,6 +139,8 @@ export default function OwnerSettings() {
         {tripMsg?.error && <p className="text-sm text-red-600 mt-2">{tripMsg.error}</p>}
         {tripMsg?.ok && <p className="text-sm text-emerald-700 mt-2 flex items-center gap-1"><Check className="w-4 h-4" />{tripMsg.ok}</p>}
       </section>
+
+      <ApiKeysSettings />
     </div>
   );
 }

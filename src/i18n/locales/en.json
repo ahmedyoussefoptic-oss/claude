@@ -2685,5 +2685,22 @@
     "toOther": "Another parent mobile",
     "otherReason": "Whose number (e.g. mother's mobile)",
     "otherWarning": "Make sure the number belongs to the student's parent — the number and reason are logged under your name."
+  },
+  "apiKeys": {
+    "title": "Connect Claude (MCP)",
+    "hint": "A key that lets Claude read the CRM only (feedback, tech tickets, trips, statistics) with no changes; parent phone numbers and IDs are never sent. Create one key per device or person and revoke it any time.",
+    "name": "Key name",
+    "create": "Create key",
+    "createdOnce": "Copy the key now — it will not be shown again.",
+    "keyLabel": "API key",
+    "urlLabel": "MCP server URL",
+    "claudeCode": "Claude Code / Claude Desktop — command:",
+    "claudeAi": "claude.ai (custom connector) — URL with the key:",
+    "createdAt": "Created {{date}}",
+    "lastUsed": "Last used {{date}} ({{calls}} calls)",
+    "neverUsed": "Never used",
+    "revoke": "Revoke",
+    "revoked": "Revoked",
+    "revokeConfirm": "Revoke «{{name}}»? Anything using it stops working at once."
   }
 }

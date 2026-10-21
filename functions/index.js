@@ -4536,3 +4536,261 @@ exports.leadVisitAutoReminders = onSchedule({ schedule: "0 17 * * *", timeZone: 
   const result = await remindLeadVisits(due, "reminder", "تذكير تلقائي", null, cfg, { autoRemindedFor: day });
   console.log("lead visit auto reminders", day, result.sent, result.failed);
 });
+
+// ===========================================================================
+// MCP server (Model Context Protocol) — lets Claude read the CRM.
+// Read-only tools over complaints, tech-support tickets, trips and summary
+// counts. Each request carries an API key the owner creates in Settings
+// (apiKeys/<id> keeps only its sha256), sent as "Authorization: Bearer <key>"
+// or as the last URL segment (/mcp/<key>) for clients without custom headers.
+// Parent phone numbers, emails and national IDs are never returned.
+// Stateless Streamable HTTP: one JSON-RPC message per POST, JSON response.
+// ===========================================================================
+const MCP_PROTOCOL = "2025-06-18";
+const sha256 = (v) => crypto.createHash("sha256").update(String(v)).digest("hex");
+
+exports.createApiKey = onCall(async (request) => {
+  const caller = await adminCaller(request);
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "مفاتيح الربط متاحة لمنشئ النظام فقط.");
+  const name = str(request.data?.name, 60) || "Claude";
+  const key = `mis_${crypto.randomBytes(24).toString("base64url")}`;
+  const ref = await db.collection("apiKeys").add({
+    name, hash: sha256(key), hint: `${key.slice(0, 8)}…${key.slice(-4)}`,
+    createdAt: Timestamp.now(), createdBy: caller.uid, createdByName: caller.name || "", revoked: false,
+  });
+  // The key itself is shown once and never stored.
+  return { id: ref.id, key };
+});
+
+exports.listApiKeys = onCall(async (request) => {
+  const caller = await adminCaller(request);
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "مفاتيح الربط متاحة لمنشئ النظام فقط.");
+  const snap = await db.collection("apiKeys").orderBy("createdAt", "desc").get();
+  return {
+    keys: snap.docs.map((d) => {
+      const k = d.data();
+      return { id: d.id, name: k.name, hint: k.hint, revoked: k.revoked === true, createdAt: k.createdAt?.toMillis() || null, lastUsedAt: k.lastUsedAt?.toMillis() || null, calls: k.calls || 0 };
+    }),
+  };
+});
+
+exports.revokeApiKey = onCall(async (request) => {
+  const caller = await adminCaller(request);
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "مفاتيح الربط متاحة لمنشئ النظام فقط.");
+  const id = String(request.data?.id || "");
+  if (!id) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  await db.collection("apiKeys").doc(id).update({ revoked: true, revokedAt: Timestamp.now() });
+  return { ok: true };
+});
+
+async function mcpKeyRef(req) {
+  const header = String(req.get("authorization") || "");
+  const fromHeader = /^Bearer\s+(\S+)$/i.exec(header)?.[1];
+  const fromPath = /\/(mis_[A-Za-z0-9_-]{20,})\/?$/.exec(req.path || "")?.[1];
+  const key = fromHeader || fromPath;
+  if (!key) return null;
+  const snap = await db.collection("apiKeys").where("hash", "==", sha256(key)).limit(1).get();
+  if (snap.empty || snap.docs[0].data().revoked === true) return null;
+  return snap.docs[0].ref;
+}
+
+const mcpDay = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : null);
+const mcpTs = (day, end) => Timestamp.fromDate(new Date(`${day}T${end ? "23:59:59" : "00:00:00"}+03:00`));
+const mcpIso = (t) => (t?.toDate ? t.toDate().toISOString() : null);
+const mcpLimit = (v, max = 100) => Math.min(max, Math.max(1, Math.floor(Number(v) || 25)));
+const COMPLAINT_DONE = ["SOLVED", "CLOSED", "REJECTED"];
+const TICKET_DONE = ["SOLVED", "WAITING_CONFIRMATION", "CLOSED"];
+
+async function mcpNames() {
+  const [branches, types] = await Promise.all([db.collection("branches").get(), db.collection("complaintTypes").get()]);
+  const b = Object.fromEntries(branches.docs.map((d) => [d.id, d.data().name || d.id]));
+  const ty = Object.fromEntries(types.docs.map((d) => [d.id, d.data().name || d.id]));
+  return { branch: (id) => b[id] || id || "", type: (id) => ty[id] || id || "", branchIds: b };
+}
+// Records created in [from, to] (default: the last 30 days), newest first.
+async function mcpRecent(collection, args, cap = 2000) {
+  const to = mcpDay(args.to) || riyadhDay();
+  const from = mcpDay(args.from) || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
+  const snap = await db.collection(collection).where("createdAt", ">=", mcpTs(from)).where("createdAt", "<=", mcpTs(to, true)).orderBy("createdAt", "desc").limit(cap).get();
+  return { from, to, docs: snap.docs.map((d) => ({ _id: d.id, ...d.data() })) };
+}
+const countBy = (list, fn) => list.reduce((m, x) => { const k = fn(x) || "—"; m[k] = (m[k] || 0) + 1; return m; }, {});
+const mcpBranchFilter = (names, branch) => {
+  if (!branch) return () => true;
+  const q = String(branch).trim();
+  const id = names.branchIds[q] ? q : Object.keys(names.branchIds).find((k) => names.branchIds[k] === q || names.branchIds[k].replace(/^فرع\s+/, "") === q);
+  return (r) => r.branch === (id || q);
+};
+
+function complaintOut(c, names, full) {
+  return {
+    number: c.complaintId, createdAt: mcpIso(c.createdAt), branch: names.branch(c.branch),
+    type: names.type(c.complaintType), subType: c.subType || "", status: c.status, priority: c.priority || "",
+    source: c.source || "", student: c.studentName || "", grade: c.grade || c.stage || "",
+    subject: c.subject || "", details: full ? c.details || "" : String(c.details || "").slice(0, 400),
+    assignees: c.assignedToNames || [], overdue: c.isOverdue === true && !COMPLAINT_DONE.includes(c.status),
+    escalated: Boolean(c.wasEscalated || c.isOverdue || c.status === "ESCALATED"),
+    solvedAt: mcpIso(c.solvedAt), dueDate: mcpIso(c.dueDate),
+    ...(full ? { solution: c.solutionDetails || "", satisfaction: typeof c.satisfactionRate === "number" ? c.satisfactionRate : null, parentFeedback: c.parentFeedback || "" } : {}),
+  };
+}
+function ticketOut(tk, names) {
+  return {
+    number: tk.ticketId, createdAt: mcpIso(tk.createdAt), branch: names.branch(tk.branch), status: tk.status,
+    problemType: tk.problemType || "", platform: tk.platform || "", student: tk.studentName || "",
+    description: String(tk.description || tk.details || "").slice(0, 400), assignees: tk.assignedToNames || [],
+    overdue: tk.isOverdue === true && !TICKET_DONE.includes(tk.status), source: tk.source || "",
+  };
+}
+
+const MCP_DATE_ARGS = {
+  from: { type: "string", description: "Start day YYYY-MM-DD (default: 30 days ago)" },
+  to: { type: "string", description: "End day YYYY-MM-DD (default: today, Riyadh)" },
+  branch: { type: "string", description: "Branch name (e.g. «السلامة 1») or id; omit for all" },
+};
+const MCP_TOOLS = [
+  {
+    name: "crm_summary",
+    description: "Counts for a period: parent feedback/complaints by status, branch and type (with overdue and escalated), tech-support tickets by status and branch, lost & found reports, average parent satisfaction.",
+    inputSchema: { type: "object", properties: { ...MCP_DATE_ARGS } },
+    run: async (args) => {
+      const names = await mcpNames();
+      const inBranch = mcpBranchFilter(names, args.branch);
+      const [c, t, lf] = await Promise.all([mcpRecent("complaints", args), mcpRecent("techSupportTickets", args), mcpRecent("lostFoundItems", args)]);
+      const complaints = c.docs.filter(inBranch);
+      const tickets = t.docs.filter(inBranch);
+      const rated = complaints.filter((x) => typeof x.satisfactionRate === "number");
+      return {
+        period: { from: c.from, to: c.to }, branch: args.branch || "all",
+        complaints: {
+          total: complaints.length,
+          byStatus: countBy(complaints, (x) => x.status),
+          byBranch: countBy(complaints, (x) => names.branch(x.branch)),
+          byType: countBy(complaints, (x) => names.type(x.complaintType)),
+          openOverdue: complaints.filter((x) => x.isOverdue === true && !COMPLAINT_DONE.includes(x.status)).length,
+          escalated: complaints.filter((x) => x.wasEscalated || x.isOverdue || x.status === "ESCALATED").length,
+          averageSatisfaction: rated.length ? Math.round((rated.reduce((s, x) => s + x.satisfactionRate, 0) / rated.length) * 100) / 100 : null,
+          ratedCount: rated.length,
+        },
+        techTickets: { total: tickets.length, byStatus: countBy(tickets, (x) => x.status), byBranch: countBy(tickets, (x) => names.branch(x.branch)), openOverdue: tickets.filter((x) => x.isOverdue === true && !TICKET_DONE.includes(x.status)).length },
+        lostAndFound: { total: lf.docs.filter(inBranch).length },
+      };
+    },
+  },
+  {
+    name: "list_complaints",
+    description: "Parent feedback / complaints (newest first) with number, branch, type, status, student, subject, a short description and assignees. Filters: period, branch, status, overdue/escalated.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...MCP_DATE_ARGS,
+        status: { type: "string", description: "RECEIVED, ASSIGNED, IN_PROGRESS, WAITING_PARENT_RESPONSE, ESCALATED, SOLVED, CLOSED, REJECTED" },
+        overdueOnly: { type: "boolean", description: "Only open complaints past their deadline" },
+        escalatedOnly: { type: "boolean" },
+        limit: { type: "number", description: "1-100, default 25" },
+      },
+    },
+    run: async (args) => {
+      const names = await mcpNames();
+      const inBranch = mcpBranchFilter(names, args.branch);
+      const { from, to, docs } = await mcpRecent("complaints", args);
+      const list = docs.filter(inBranch)
+        .filter((x) => !args.status || x.status === args.status)
+        .filter((x) => !args.overdueOnly || (x.isOverdue === true && !COMPLAINT_DONE.includes(x.status)))
+        .filter((x) => !args.escalatedOnly || x.wasEscalated || x.isOverdue || x.status === "ESCALATED");
+      return { period: { from, to }, matched: list.length, complaints: list.slice(0, mcpLimit(args.limit)).map((x) => complaintOut(x, names, false)) };
+    },
+  },
+  {
+    name: "get_complaint",
+    description: "One complaint by its number (e.g. COM-2026-10023): full description, solution, parent rating and feedback.",
+    inputSchema: { type: "object", properties: { number: { type: "string" } }, required: ["number"] },
+    run: async (args) => {
+      const names = await mcpNames();
+      const snap = await db.collection("complaints").where("complaintId", "==", String(args.number || "").trim()).limit(1).get();
+      if (snap.empty) return { error: "Not found" };
+      return complaintOut(snap.docs[0].data(), names, true);
+    },
+  },
+  {
+    name: "list_tech_tickets",
+    description: "Tech-support tickets (newest first): number, branch, status, problem type, platform, student, short description, assignees.",
+    inputSchema: { type: "object", properties: { ...MCP_DATE_ARGS, status: { type: "string" }, overdueOnly: { type: "boolean" }, limit: { type: "number" } } },
+    run: async (args) => {
+      const names = await mcpNames();
+      const inBranch = mcpBranchFilter(names, args.branch);
+      const { from, to, docs } = await mcpRecent("techSupportTickets", args);
+      const list = docs.filter(inBranch).filter((x) => !args.status || x.status === args.status)
+        .filter((x) => !args.overdueOnly || (x.isOverdue === true && !TICKET_DONE.includes(x.status)));
+      return { period: { from, to }, matched: list.length, tickets: list.slice(0, mcpLimit(args.limit)).map((x) => ticketOut(x, names)) };
+    },
+  },
+  {
+    name: "list_trips",
+    description: "School trips with date, branches, grades, fee, status and parent response counts (approved, declined, confirmed, receipts under review).",
+    inputSchema: { type: "object", properties: { status: { type: "string", description: "OPEN, CLOSED, COMPLETED, CANCELLED" }, fromDate: { type: "string", description: "Trips on or after YYYY-MM-DD" } } },
+    run: async (args) => {
+      const names = await mcpNames();
+      const snap = await db.collection("trips").get();
+      const list = snap.docs.map((d) => d.data())
+        .filter((x) => (args.status ? x.status === args.status : x.status !== "CANCELLED"))
+        .filter((x) => !mcpDay(args.fromDate) || x.date >= args.fromDate)
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)));
+      return {
+        trips: list.map((x) => ({
+          code: x.tripCode, title: x.title, destination: x.destination, date: x.date, departTime: x.departTime, returnTime: x.returnTime,
+          status: x.status, branches: (x.branches || []).map(names.branch), grades: x.stages || [], fee: x.fee || 0, capacity: x.capacity || null,
+          responses: x.stats || {},
+        })),
+      };
+    },
+  },
+];
+
+async function mcpHandle(msg) {
+  const { id, method, params } = msg || {};
+  if (method === "initialize") {
+    return {
+      protocolVersion: params?.protocolVersion || MCP_PROTOCOL,
+      capabilities: { tools: { listChanged: false } },
+      serverInfo: { name: "mis-crm", title: SCHOOL_NAME ? `CRM — ${SCHOOL_NAME}` : "CRM", version: "1.0.0" },
+      instructions: "Read-only access to the school's CRM (parent feedback/complaints, tech-support tickets, trips). Dates are in Riyadh time. Text is mostly Arabic.",
+    };
+  }
+  if (method === "ping") return {};
+  if (method === "tools/list") return { tools: MCP_TOOLS.map(({ run, ...tool }) => tool) };
+  if (method === "tools/call") {
+    const tool = MCP_TOOLS.find((x) => x.name === params?.name);
+    if (!tool) throw Object.assign(new Error(`Unknown tool: ${params?.name}`), { code: -32602 });
+    try {
+      const result = await tool.run(params?.arguments || {});
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 1) }] };
+    } catch (err) {
+      console.error("mcp tool", tool.name, err.message);
+      return { content: [{ type: "text", text: `Error: ${err.message}` }], isError: true };
+    }
+  }
+  if (id === undefined) return undefined; // other notifications
+  throw Object.assign(new Error(`Method not found: ${method}`), { code: -32601 });
+}
+
+exports.mcp = onRequest({ timeoutSeconds: 120, memory: "512MiB" }, async (req, res) => {
+  if (req.method !== "POST") { res.set("Allow", "POST").status(405).send("Method Not Allowed"); return; }
+  const keyRef = await mcpKeyRef(req);
+  if (!keyRef) { res.status(401).json({ jsonrpc: "2.0", id: null, error: { code: -32001, message: "Invalid or revoked API key" } }); return; }
+  const messages = Array.isArray(req.body) ? req.body : [req.body];
+  const replies = [];
+  for (const msg of messages) {
+    if (msg?.method === "tools/call") {
+      keyRef.update({ lastUsedAt: Timestamp.now(), calls: FieldValue.increment(1) }).catch(() => {});
+    }
+    try {
+      const result = await mcpHandle(msg);
+      if (msg?.id !== undefined && result !== undefined) replies.push({ jsonrpc: "2.0", id: msg.id, result });
+    } catch (err) {
+      if (msg?.id !== undefined) replies.push({ jsonrpc: "2.0", id: msg.id, error: { code: err.code || -32603, message: err.message } });
+    }
+  }
+  if (!replies.length) { res.status(202).end(); return; }
+  res.json(Array.isArray(req.body) ? replies : replies[0]);
+});
