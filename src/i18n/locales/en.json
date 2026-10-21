@@ -1893,7 +1893,9 @@
       "signature": "Signature",
       "allBranches": "All branches (one sheet each)",
       "supervisors": "Supervisors in charge"
-    }
+    },
+    "bankLetter": "IBAN letter — Saudi National Bank (PDF)",
+    "bankLetterAttached": "Attached for parents automatically: IBAN letter — SNB (PDF)"
   },
   "tripConsent": {
     "times": "{{from}} to {{to}}",

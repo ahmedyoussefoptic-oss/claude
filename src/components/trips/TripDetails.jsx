@@ -20,7 +20,7 @@ import { userBranches } from '../../utils/scope';
 import logo from '../../assets/logo.png';
 import {
   TRIP_STATUS_STYLES, ENROLLMENT_STATUSES, ENROLLMENT_STATUS_STYLES, TRIP_PAY_METHODS, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES,
-  enrollmentStatus, tripPermissions, tripConflicts, tripLink, dayToDate,
+  enrollmentStatus, tripPermissions, tripConflicts, tripLink, dayToDate, TRIP_BANK_LETTER_URL,
 } from '../../config/trips';
 
 const call = (name, data) => httpsCallable(functions, name)(data).then((r) => r.data);
@@ -509,6 +509,9 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                   <p><span className="text-slate-500">{t('trips.form.payDeadline')}: </span>{trip.payDeadline && format(dayToDate(trip.payDeadline), 'EEEE d MMMM', { locale: dateLocale })}</p>
                   {trip.fee > 0 && <p><span className="text-slate-500">{t('trips.form.payMethods')}: </span>{(trip.payMethods || []).map((m) => t(`trips.payMethod.${m}`)).join(sep)}</p>}
                   {trip.bankDetails && <p className="whitespace-pre-wrap"><span className="text-slate-500">{t('trips.form.bankDetails')}: </span>{trip.bankDetails}</p>}
+                  {trip.fee > 0 && (trip.payMethods || []).includes('BANK') && TRIP_BANK_LETTER_URL && (
+                    <a href={TRIP_BANK_LETTER_URL} target="_blank" rel="noreferrer" className="text-primary hover:underline inline-flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />{t('trips.bankLetter')}</a>
+                  )}
                   <p><span className="text-slate-500">{t('trips.pledgeLabel')}: </span>{t('trips.pledgeOptionalShort')}
                     {trip.pledgeTemplate?.fileUrl && <a href={trip.pledgeTemplate.fileUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline mr-2 inline-flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />{t('trips.pledgeTemplateLink')}</a>}
                   </p>

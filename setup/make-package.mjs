@@ -38,6 +38,8 @@ edit('src/config/firebase.js', (s) => s
 export const app = initializeApp(firebaseConfig);`));
 edit('src/utils/push.js', (s) => s.replace(/(VITE_FIREBASE_VAPID_KEY \|\| )'[^']*'/, "$1''"));
 edit('public/firebase-messaging-sw.js', (s) => s.replace(/(swParams\.get\('[a-zA-Z]+'\) \|\| )"[^"]*"/g, '$1""'));
+fs.rmSync(path.join(out, 'public/files'), { recursive: true, force: true });
+edit('src/config/trips.js', (s) => s.replace(/(TRIP_BANK_LETTER_URL = )'[^']*'/, "$1''"));
 edit('functions/index.js', (s) => s.replace('process.env.PUBLIC_APP_URL || "https://mis-complaints.web.app"', 'process.env.PUBLIC_APP_URL || ""'));
 fs.writeFileSync(path.join(out, '.firebaserc'), `${JSON.stringify({ projects: { default: 'YOUR_PROJECT_ID' } }, null, 2)}\n`);
 fs.writeFileSync(path.join(out, 'functions/.env'), '# Written by setup/configure.mjs\nENABLE_WA_API=false\nSYSTEM_OWNER_EMAIL=\nPUBLIC_APP_URL=\nSCHOOL_NAME=\n');

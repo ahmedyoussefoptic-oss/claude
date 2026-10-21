@@ -2,6 +2,11 @@ import { STAGES } from './complaintTypes';
 import { userBranches } from '../utils/scope';
 
 // School trips — mirrors the trips section at the end of functions/index.js.
+
+// The school's bank account letter (IBAN), offered with every trip paid by
+// bank transfer; empty = none.
+export const TRIP_BANK_LETTER_URL = '/files/almoktashef-snb-iban.pdf';
+
 export const TRIP_STAGES = [...STAGES, 'SEN'];
 export const TRIP_PAY_METHODS = ['BANK', 'RECEPTION'];
 export const TRIP_DECLINE_REASONS = ['COST', 'TIMING', 'FAMILY', 'HEALTH', 'OTHER'];

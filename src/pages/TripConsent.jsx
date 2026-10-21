@@ -2,13 +2,13 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
-import { Bus, MapPin, Clock, CalendarDays, Wallet, Loader2, CheckCircle2, ShieldCheck, Paperclip, AlertTriangle, Info, Star } from 'lucide-react';
+import { Bus, MapPin, Clock, CalendarDays, Wallet, Loader2, CheckCircle2, ShieldCheck, Paperclip, AlertTriangle, Info, Star, FileText } from 'lucide-react';
 import { functions } from '../config/firebase';
 import Watermark from '../components/common/Watermark';
 import LanguageSwitcher from '../components/common/LanguageSwitcher';
 import logo from '../assets/logo.png';
 import { fileToBase64, MAX_PUBLIC_FILE_BYTES } from '../utils/publicSubmission';
-import { ENROLLMENT_STATUS_STYLES, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES } from '../config/trips';
+import { ENROLLMENT_STATUS_STYLES, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES, TRIP_BANK_LETTER_URL } from '../config/trips';
 
 // Post-trip parent survey (submitTripSurvey): four 1–5 ratings, "would you
 // recommend it", and a free comment.
@@ -321,6 +321,9 @@ export default function TripConsent() {
                             {payMethod === 'BANK' && (
                               <div className="bg-sky-50 border border-sky-100 rounded-xl p-3 space-y-2">
                                 {trip.bankDetails && <p className="text-sm text-slate-700 whitespace-pre-wrap">{trip.bankDetails}</p>}
+                                {TRIP_BANK_LETTER_URL && (
+                                  <a href={TRIP_BANK_LETTER_URL} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1"><FileText className="w-4 h-4" />{t('trips.bankLetter')}</a>
+                                )}
                                 <label className="flex items-center gap-2 text-sm text-primary cursor-pointer">
                                   <Paperclip className="w-4 h-4" />
                                   {receipt ? receipt.name : student?.enrollment?.receiptName ? t('tripConsent.receiptReplace', { name: student.enrollment.receiptName }) : t('tripConsent.attachReceipt')}<span className="text-red-500">*</span>

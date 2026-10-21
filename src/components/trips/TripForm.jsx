@@ -9,7 +9,7 @@ import useAuthStore from '../../stores/useAuthStore';
 import { useBranches, useDepartments } from '../../hooks/useOrgData';
 import { useUsers } from '../../hooks/useUsers';
 import { userBranches } from '../../utils/scope';
-import { TRIP_STAGES, TRIP_PAY_METHODS, TRIP_GENDERS, tripConflicts } from '../../config/trips';
+import { TRIP_STAGES, TRIP_PAY_METHODS, TRIP_GENDERS, tripConflicts, TRIP_BANK_LETTER_URL } from '../../config/trips';
 
 const EMPTY = {
   title: '', destination: '', objective: '', date: '', departTime: '07:30', returnTime: '13:00', meetingPoint: '',
@@ -163,7 +163,9 @@ function TripFormInner({ trip, allTrips, onClose, onSaved }) {
               <>
                 <Field label={t('trips.form.payMethods')}><Chips options={TRIP_PAY_METHODS.map((m) => [m, t(`trips.payMethod.${m}`)])} value={form.payMethods} onChange={set('payMethods')} /></Field>
                 {form.payMethods.includes('BANK') && (
-                  <Field label={t('trips.form.bankDetails')} hint={t('trips.form.bankDetailsHint')}><textarea rows={2} value={form.bankDetails} onChange={set('bankDetails')} className={inputCls} /></Field>
+                  <Field label={t('trips.form.bankDetails')} hint={t('trips.form.bankDetailsHint')}><textarea rows={2} value={form.bankDetails} onChange={set('bankDetails')} className={inputCls} />
+                    {TRIP_BANK_LETTER_URL && <a href={TRIP_BANK_LETTER_URL} target="_blank" rel="noreferrer" className="mt-1 text-xs text-primary hover:underline inline-flex items-center gap-1"><FileText className="w-3.5 h-3.5" />{t('trips.bankLetterAttached')}</a>}
+                  </Field>
                 )}
                 <Field label={t('trips.form.refundPolicy')}><textarea rows={2} value={form.refundPolicy} onChange={set('refundPolicy')} className={inputCls} /></Field>
               </>
