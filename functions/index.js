@@ -2973,7 +2973,14 @@ function formatTripDay(day) {
   return new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric" })
     .format(new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12)));
 }
-const tripWhen = (trip) => `${formatTripDay(trip.date)}${trip.departTime ? `، ${trip.departTime}${trip.returnTime ? ` – ${trip.returnTime}` : ""}` : ""}`;
+// "13:00" → "1:00 م" — trip times are stored 24-hour, shown 12-hour.
+function time12(hhmm) {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || ""));
+  if (!m) return hhmm || "";
+  const h = Number(m[1]);
+  return `${h % 12 || 12}:${m[2]} ${h >= 12 ? "م" : "ص"}`;
+}
+const tripWhen = (trip) => `${formatTripDay(trip.date)}${trip.departTime ? `، ${time12(trip.departTime)}${trip.returnTime ? ` – ${time12(trip.returnTime)}` : ""}` : ""}`;
 const riyadhDay = (offsetDays = 0) => new Date(Date.now() + APPT_TZ_MS + offsetDays * APPT_DAY).toISOString().slice(0, 10);
 
 const str = (v, max = 500) => String(v == null ? "" : v).trim().slice(0, max);
@@ -3203,7 +3210,7 @@ const TRIP_LINES = {
   announce: (trip) => `ندعوكم للاطلاع على الرحلة والموافقة على مشاركة الطالب/ة. ${feeText(trip)}.`,
   remindPending: (trip) => `نذكّركم بالرد على دعوة الرحلة قبل ${formatTripDay(trip.payDeadline)}.`,
   remindPayment: (trip) => `نذكّركم بإكمال سداد رسوم الرحلة (${trip.fee} ريال) قبل ${formatTripDay(trip.payDeadline)}.`,
-  eve: (trip) => [`نذكّركم بموعد الرحلة غداً`, trip.meetingPoint ? `التجمع في ${trip.meetingPoint}${trip.departTime ? ` الساعة ${trip.departTime}` : ""}` : "", trip.requirements ? `المتطلبات: ${trip.requirements}` : ""].filter(Boolean).join(". ") + ".",
+  eve: (trip) => [`نذكّركم بموعد الرحلة غداً`, trip.meetingPoint ? `التجمع في ${trip.meetingPoint}${trip.departTime ? ` الساعة ${time12(trip.departTime)}` : ""}` : "", trip.requirements ? `المتطلبات: ${trip.requirements}` : ""].filter(Boolean).join(". ") + ".",
   paid: () => "تم قبول سند الدفع وتأكيد مشاركة الطالب/ة في الرحلة.",
   cash: () => "تم استلام رسوم الرحلة وتأكيد مشاركة الطالب/ة.",
   rejected: (trip, reason) => `لم يتم قبول سند الدفع: ${reason}. يرجى إعادة إرفاق السند من رابط الرحلة.`,

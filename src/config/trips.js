@@ -8,6 +8,16 @@ import { userBranches } from '../utils/scope';
 export const TRIP_BANK_LETTER_URL = '/files/almoktashef-snb-iban.pdf';
 
 export const TRIP_STAGES = [...STAGES, 'SEN'];
+
+// "13:00" → "1:00 م" (12-hour clock; trips store 24-hour HH:mm).
+export function tripTime(hhmm, lang = 'ar') {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(hhmm || ''));
+  if (!m) return hhmm || '';
+  const h = Number(m[1]);
+  const pm = h >= 12;
+  const suffix = lang === 'ar' ? (pm ? 'م' : 'ص') : (pm ? 'PM' : 'AM');
+  return `${h % 12 || 12}:${m[2]} ${suffix}`;
+}
 export const TRIP_PAY_METHODS = ['BANK', 'RECEPTION'];
 export const TRIP_DECLINE_REASONS = ['COST', 'TIMING', 'FAMILY', 'HEALTH', 'OTHER'];
 export const TRIP_RATINGS = ['organization', 'safety', 'benefit', 'cost'];

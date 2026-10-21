@@ -20,7 +20,7 @@ import { userBranches } from '../../utils/scope';
 import logo from '../../assets/logo.png';
 import {
   TRIP_STATUS_STYLES, ENROLLMENT_STATUSES, ENROLLMENT_STATUS_STYLES, TRIP_PAY_METHODS, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES,
-  enrollmentStatus, tripPermissions, tripConflicts, tripLink, dayToDate, TRIP_BANK_LETTER_URL,
+  enrollmentStatus, tripPermissions, tripConflicts, tripLink, dayToDate, TRIP_BANK_LETTER_URL, tripTime,
 } from '../../config/trips';
 
 const call = (name, data) => httpsCallable(functions, name)(data).then((r) => r.data);
@@ -334,7 +334,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
     ${info(t('trips.sheet.branch'), branchName(branch) || '—')}
     ${info(t('trips.sheet.stage'), `${stageText} — ${sectionText}`)}
     ${info(t('trips.sheet.date'), when)}
-    ${info(t('trips.sheet.departTime'), trip.departTime)}
+    ${info(t('trips.sheet.departTime'), tripTime(trip.departTime, i18n.language))}
     ${info(t('trips.sheet.meetingPoint'), trip.meetingPoint)}
     ${info(t('trips.sheet.count'), String(list.length))}
     ${info(t('trips.sheet.supervisors'), supervisorsOf(branch).join(sep) || '—')}
@@ -376,7 +376,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
             </div>
             <p className="text-sm text-slate-500 mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
               <span className="flex items-center gap-1"><MapPin className="w-4 h-4" />{trip.destination}</span>
-              <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{format(dayToDate(trip.date), 'EEEE d MMMM yyyy', { locale: dateLocale })}{trip.departTime && ` · ${trip.departTime}–${trip.returnTime || ''}`}</span>
+              <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{format(dayToDate(trip.date), 'EEEE d MMMM yyyy', { locale: dateLocale })}{trip.departTime && ` · ${tripTime(trip.departTime, i18n.language)} – ${tripTime(trip.returnTime, i18n.language)}`}</span>
             </p>
           </div>
           <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-xl shrink-0"><X className="w-6 h-6" /></button>

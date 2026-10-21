@@ -8,7 +8,7 @@ import Watermark from '../components/common/Watermark';
 import LanguageSwitcher from '../components/common/LanguageSwitcher';
 import logo from '../assets/logo.png';
 import { fileToBase64, MAX_PUBLIC_FILE_BYTES } from '../utils/publicSubmission';
-import { ENROLLMENT_STATUS_STYLES, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES, TRIP_BANK_LETTER_URL } from '../config/trips';
+import { ENROLLMENT_STATUS_STYLES, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES, TRIP_BANK_LETTER_URL, tripTime } from '../config/trips';
 
 // Post-trip parent survey (submitTripSurvey): four 1–5 ratings, "would you
 // recommend it", and a free comment.
@@ -76,7 +76,7 @@ const inputCls = 'w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl
 // and, for a paid trip, attaches the transfer receipt or picks paying at
 // the branch. All checks happen in the Cloud Functions.
 export default function TripConsent() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { code } = useParams();
   const [trip, setTrip] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -205,7 +205,7 @@ export default function TripConsent() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5 text-sm">
                 <p className="flex items-center gap-2 text-slate-700"><MapPin className="w-4 h-4 text-primary shrink-0" />{trip.destination}</p>
                 <p className="flex items-center gap-2 text-slate-700"><CalendarDays className="w-4 h-4 text-primary shrink-0" />{trip.dateLabel}</p>
-                {trip.departTime && <p className="flex items-center gap-2 text-slate-700"><Clock className="w-4 h-4 text-primary shrink-0" />{t('tripConsent.times', { from: trip.departTime, to: trip.returnTime || '—' })}</p>}
+                {trip.departTime && <p className="flex items-center gap-2 text-slate-700"><Clock className="w-4 h-4 text-primary shrink-0" />{t('tripConsent.times', { from: tripTime(trip.departTime, i18n.language), to: tripTime(trip.returnTime, i18n.language) || '—' })}</p>}
                 <p className="flex items-center gap-2 text-slate-700"><Wallet className="w-4 h-4 text-primary shrink-0" />{trip.fee > 0 ? t('trips.feeValue', { fee: trip.fee }) : t('trips.free')}</p>
               </div>
               {trip.objective && <p className="text-sm text-slate-600 mt-4">{trip.objective}</p>}
