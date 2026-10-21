@@ -167,7 +167,7 @@ function ManualConsentDialog({ trip, student, current, onCancel, onSaved }) {
   );
 }
 
-function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged }) {
+function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged, onDeleted }) {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
   const { user, userData } = useAuthStore();
@@ -284,6 +284,13 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
   // Editing / cancelling a trip needs the owner's trip password when it is on.
   const needTripPassword = tripLockOn && userData?.isOwner !== true;
   const withTripPassword = (title, next) => (needTripPassword ? setPwDialog({ title, onConfirm: (pw) => { setPwDialog(null); next(pw); } }) : next(undefined));
+  const deleteTrip = () => {
+    if (!window.confirm(t('trips.deleteTripConfirm', { title: trip.title }))) return;
+    run('delete', async () => {
+      await call('deleteTrip', { id: trip.id });
+      onDeleted?.();
+    });
+  };
   const startEdit = () => withTripPassword(t('trips.passwordEditTitle'), (pw) => onEdit(trip, pw));
   const startCancel = () => withTripPassword(t('trips.passwordCancelTitle'), (pw) => setDialog({ title: t('trips.actions.cancel'), label: t('trips.reasonLabel'), required: true, onConfirm: async (reason) => { await action('cancel', reason, pw); setDialog(null); } }));
   const announce = (audience) => run(`announce-${audience}`, async () => {
@@ -440,7 +447,13 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
             <>
               {trip.imageUrl && <img src={trip.imageUrl} alt="" className="w-full max-h-56 object-cover rounded-2xl border border-slate-100" />}
               {trip.status === 'CANCELLED' && (
-                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl p-3">{t('trips.cancelledNote', { name: trip.cancelledByName || '', reason: trip.cancelReason || '' })}</div>
+                <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
+                  <span>{t('trips.cancelledNote', { name: trip.cancelledByName || '', reason: trip.cancelReason || '' })}</span>
+                  {/* The owner may remove a cancelled trip for good (deleteTrip). */}
+                  {userData?.isOwner === true && (
+                    <button disabled={!!busy} onClick={deleteTrip} className={`${btn} bg-rose-600 text-white`}>{spin('delete', Trash2)}{t('trips.deleteTrip')}</button>
+                  )}
+                </div>
               )}
               {conflicts.length > 0 && (
                 <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl p-3 flex gap-2"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />{t('trips.conflictWarning', { list: conflicts.map((c) => `${c.title} (${(c.stages || []).join(', ') || t('trips.allGrades')})`).join(sep) })}</div>

@@ -56,7 +56,8 @@ export default function Trips() {
 
   const shown = useMemo(() => trips.filter((tr) => (branchFilter === 'ALL' || (tr.branches || []).includes(branchFilter))
     && (deptFilter === 'ALL' || !(tr.departments || []).length || tr.departments.includes(deptFilter))
-    && (statusFilter === 'ALL' || tr.status === statusFilter)), [trips, branchFilter, deptFilter, statusFilter]);
+    // Cancelled trips are left out of the log unless picked in the status filter.
+    && (statusFilter === 'ALL' ? tr.status !== 'CANCELLED' : tr.status === statusFilter)), [trips, branchFilter, deptFilter, statusFilter]);
 
   const today = ymd(new Date());
   const stats = useMemo(() => ({
@@ -226,6 +227,7 @@ export default function Trips() {
           allTrips={trips}
           onClose={() => openTrip(null)}
           onEdit={(trip, pw) => { setTripPassword(pw); setFormTrip(trip); }}
+          onDeleted={async () => { openTrip(null); await load(); }}
           onChanged={load}
         />
       )}

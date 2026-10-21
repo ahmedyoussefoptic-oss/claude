@@ -1901,7 +1901,9 @@
     "bankLetterAttached": "Attached for parents automatically: IBAN letter — SNB (PDF)",
     "passwordLabel": "Trip password",
     "passwordEditTitle": "Edit trip",
-    "passwordCancelTitle": "Cancel trip"
+    "passwordCancelTitle": "Cancel trip",
+    "deleteTrip": "Delete trip permanently",
+    "deleteTripConfirm": "Permanently delete «{{title}}» with the parents’ responses and attached receipts? This cannot be undone."
   },
   "tripConsent": {
     "times": "{{from}} to {{to}}",

@@ -3108,6 +3108,19 @@ const TRIP_TRANSITIONS = {
   cancel: { from: ["DRAFT", "PENDING_APPROVAL", "OPEN", "CLOSED"], to: "CANCELLED", perm: "manage", reason: true },
 };
 
+// The owner removes a cancelled trip for good: the trip, its enrollments,
+// surveys and activity log, and its uploaded files (receipts, pledges, image).
+exports.deleteTrip = onCall({ timeoutSeconds: 300 }, async (request) => {
+  const caller = await tripCaller(request);
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "حذف الرحلات متاح لمنشئ النظام فقط.");
+  const { ref, trip } = await loadTrip(request.data?.id, caller, "view");
+  if (trip.status !== "CANCELLED") throw new HttpsError("failed-precondition", "يمكن حذف الرحلات الملغاة فقط.");
+  await getStorage().bucket().deleteFiles({ prefix: `trips/${ref.id}/` }).catch((err) => console.error("deleteTrip files", ref.id, err.message));
+  await db.recursiveDelete(ref);
+  console.log("trip deleted", trip.tripCode, "by", caller.uid);
+  return { ok: true };
+});
+
 exports.tripAction = onCall({ secrets: WA_SECRETS, timeoutSeconds: 300 }, async (request) => {
   const caller = await tripCaller(request);
   const { id, action } = request.data || {};
