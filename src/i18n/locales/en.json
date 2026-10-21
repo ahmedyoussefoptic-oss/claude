@@ -1957,7 +1957,18 @@
     "receiptRequired": "Please attach the bank transfer receipt.",
     "receiptReplace": "Attached: {{name}} — tap to replace",
     "optional": "optional",
-    "lockedByOther": "A reply for this student was already made from another mobile number. To change it, please contact the branch."
+    "lockedByOther": "A reply for this student was already made from another mobile number. To change it, please contact the branch.",
+    "schoolName": "Al Moktashef International Schools",
+    "branchNames": {
+      "AL_MOHAMMADIA": "Al Mohammadiyah",
+      "AL_NAEEM": "Al Naeem",
+      "AL_SALAMA_BOYS": "Al Salama 2",
+      "AL_SALAMA_GIRLS": "Al Salama 1",
+      "AL_SHATI": "Al Shati",
+      "AL_ZAHRA": "Al Zahra",
+      "DOWN_TOWN_BOYS": "Downtown Boys",
+      "DOWN_TOWN_GIRLS": "Downtown Girls"
+    }
   },
   "ownerSettings": {
     "title": "System owner settings",

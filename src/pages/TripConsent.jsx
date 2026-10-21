@@ -3,7 +3,10 @@ import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
 import { Bus, MapPin, Clock, CalendarDays, Wallet, Loader2, CheckCircle2, ShieldCheck, Paperclip, AlertTriangle, Info, Star, FileText } from 'lucide-react';
+import { format } from 'date-fns';
+import { ar as arLocale, enUS } from 'date-fns/locale';
 import { functions } from '../config/firebase';
+import { tripErrorText } from '../utils/tripErrors';
 import Watermark from '../components/common/Watermark';
 import LanguageSwitcher from '../components/common/LanguageSwitcher';
 import logo from '../assets/logo.png';
@@ -13,7 +16,7 @@ import { ENROLLMENT_STATUS_STYLES, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GEND
 // Post-trip parent survey (submitTripSurvey): four 1–5 ratings, "would you
 // recommend it", and a free comment.
 function SurveyForm({ code, studentId, parentMobile, onDone }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [ratings, setRatings] = useState({});
   const [recommend, setRecommend] = useState(null);
   const [comment, setComment] = useState('');
@@ -28,7 +31,7 @@ function SurveyForm({ code, studentId, parentMobile, onDone }) {
       await call('submitTripSurvey', { tripCode: code, studentId, parentMobile, ratings, recommend, comment });
       onDone();
     } catch (err) {
-      setError(err.message);
+      setError(tripErrorText(err.message, i18n.language));
       setBusy(false);
     }
   };
@@ -77,6 +80,12 @@ const inputCls = 'w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl
 // the branch. All checks happen in the Cloud Functions.
 export default function TripConsent() {
   const { t, i18n } = useTranslation();
+  // Trip days come as yyyy-MM-dd; shown in the page's language.
+  const dayLabel = (day) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day || '');
+    const isAr = i18n.language === 'ar';
+    return m ? format(new Date(+m[1], +m[2] - 1, +m[3]), isAr ? 'EEEE، d MMMM yyyy' : 'EEEE, d MMMM yyyy', { locale: isAr ? arLocale : enUS }) : '';
+  };
   const { code } = useParams();
   const [trip, setTrip] = useState(null);
   const [loadError, setLoadError] = useState(null);
@@ -106,7 +115,7 @@ export default function TripConsent() {
   useEffect(() => {
     call('getPublicTrip', { tripCode: code })
       .then((data) => { setLoadError(null); setTrip(data); })
-      .catch((err) => { setTrip(null); setLoadError(err.message); });
+      .catch((err) => { setTrip(null); setLoadError(tripErrorText(err.message, i18n.language)); });
   }, [code]);
 
   const verify = async (e) => {
@@ -125,7 +134,7 @@ export default function TripConsent() {
         setEmergencyPhone(en.emergencyPhone || '');
       }
     } catch (err) {
-      setError(err.message);
+      setError(tripErrorText(err.message, i18n.language));
     } finally {
       setBusy(false);
     }
@@ -159,7 +168,7 @@ export default function TripConsent() {
       const data = await call('submitTripConsent', { tripCode: code, studentId, parentMobile, decision, declineReason, payMethod, healthNotes, emergencyPhone, agree, receipt: file, pledge: pledgeFile });
       setDone(data.enrollment);
     } catch (err) {
-      setError(err.message);
+      setError(tripErrorText(err.message, i18n.language));
     } finally {
       setBusy(false);
     }
@@ -175,8 +184,8 @@ export default function TripConsent() {
       <header className="relative z-10 bg-white border-b border-slate-200 py-4 px-6 sticky top-0 shadow-sm">
         <div className="max-w-2xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2 text-primary">
-            <img src={logo} alt={t('app.brand')} className="h-8 w-auto" />
-            <span className="font-bold text-lg">{t('app.brand')}</span>
+            <img src={logo} alt={t('tripConsent.schoolName')} className="h-8 w-auto" />
+            <span className="font-bold text-lg">{t('tripConsent.schoolName')}</span>
           </div>
           <LanguageSwitcher />
         </div>
@@ -199,19 +208,19 @@ export default function TripConsent() {
                     {trip.title}
                     {trip.gender && trip.gender !== 'ALL' && <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${TRIP_GENDER_STYLES[trip.gender]}`}>{t(`trips.gender.${trip.gender}`)}</span>}
                   </h2>
-                  <p className="text-sm text-slate-500 mt-0.5">{trip.branchNames.join('، ')}{trip.stages.length > 0 && <> · <span dir="ltr">{trip.stages.join(', ')}</span></>}</p>
+                  <p className="text-sm text-slate-500 mt-0.5">{trip.branchNames.map((name, i) => t(`tripConsent.branchNames.${(trip.branches || [])[i]}`, { defaultValue: name })).join(i18n.language === 'ar' ? '، ' : ', ')}{trip.stages.length > 0 && <> · <span dir="ltr">{trip.stages.join(', ')}</span></>}</p>
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5 text-sm">
                 <p className="flex items-center gap-2 text-slate-700"><MapPin className="w-4 h-4 text-primary shrink-0" />{trip.destination}</p>
-                <p className="flex items-center gap-2 text-slate-700"><CalendarDays className="w-4 h-4 text-primary shrink-0" />{trip.dateLabel}</p>
+                <p className="flex items-center gap-2 text-slate-700"><CalendarDays className="w-4 h-4 text-primary shrink-0" />{dayLabel(trip.date) || trip.dateLabel}</p>
                 {trip.departTime && <p className="flex items-center gap-2 text-slate-700"><Clock className="w-4 h-4 text-primary shrink-0" />{t('tripConsent.times', { from: tripTime(trip.departTime, i18n.language), to: tripTime(trip.returnTime, i18n.language) || '—' })}</p>}
                 <p className="flex items-center gap-2 text-slate-700"><Wallet className="w-4 h-4 text-primary shrink-0" />{trip.fee > 0 ? t('trips.feeValue', { fee: trip.fee }) : t('trips.free')}</p>
               </div>
               {trip.objective && <p className="text-sm text-slate-600 mt-4">{trip.objective}</p>}
               {trip.meetingPoint && <p className="text-sm text-slate-600 mt-2"><b>{t('trips.form.meetingPoint')}:</b> {trip.meetingPoint}</p>}
               {trip.requirements && <p className="text-sm text-slate-600 mt-2 whitespace-pre-wrap"><b>{t('trips.form.requirements')}:</b> {trip.requirements}</p>}
-              {!trip.surveyOpen && <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-3 mt-4 flex gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5" />{t('tripConsent.deadline', { date: trip.payDeadlineLabel })}</p>}
+              {!trip.surveyOpen && <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-3 mt-4 flex gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5" />{t('tripConsent.deadline', { date: dayLabel(trip.payDeadline) || trip.payDeadlineLabel })}</p>}
             </div>
 
             {surveyDone || (student && trip.surveyOpen && student.surveyDone) ? (

@@ -1840,7 +1840,7 @@ async function accountsCaller(request) {
 }
 async function loadStudentAccounts(caller, rawId) {
   const nationalId = normalizeDigits(rawId).replace(/\D/g, "");
-  if (!/^\d{6,15}$/.test(nationalId)) throw new HttpsError("invalid-argument", "أدخل رقم هوية الطالب.");
+  if (!/^\d{6,15}$/.test(nationalId)) throw new HttpsError("invalid-argument", "أدخل رقم هوية الطالب/ة.");
   const [accSnap, stuSnap] = await Promise.all([db.collection("studentAccounts").doc(nationalId).get(), db.collection("students").doc(nationalId).get()]);
   if (!accSnap.exists && !stuSnap.exists) throw new HttpsError("not-found", "لا يوجد طالب بهذا الرقم في السجل.");
   const acc = accSnap.exists ? accSnap.data() : {};
@@ -3263,6 +3263,7 @@ async function publicTripView(trip) {
     meetingPoint: trip.meetingPoint, stages: trip.stages || [], fee: trip.fee, payDeadline: trip.payDeadline,
     payDeadlineLabel: formatTripDay(trip.payDeadline), payMethods: trip.payMethods || [], bankDetails: trip.bankDetails,
     refundPolicy: trip.refundPolicy, requirements: trip.requirements, status: trip.status,
+    branches: trip.branches || [],
     branchNames: branchSnaps.map((s, i) => (s.exists ? s.data().name : trip.branches[i])),
     registrationOpen: trip.status === "OPEN" && riyadhDay() <= trip.payDeadline,
     surveyOpen: trip.status === "COMPLETED",
@@ -3285,7 +3286,7 @@ exports.getPublicTrip = onCall(async (request) => {
 async function verifyTripParent(tripRef, trip, studentIdRaw, parentMobileRaw) {
   const studentId = normalizeDigits(studentIdRaw);
   const intl = toIntlNumber(parentMobileRaw);
-  if (!/^\d{5,15}$/.test(studentId)) throw new HttpsError("invalid-argument", "أدخل رقم هوية الطالب.");
+  if (!/^\d{5,15}$/.test(studentId)) throw new HttpsError("invalid-argument", "أدخل رقم هوية الطالب/ة.");
   if (!/^9665\d{8}$/.test(intl)) throw new HttpsError("invalid-argument", "أدخل رقم جوال ولي الأمر (05xxxxxxxx).");
   const parentMobile = `0${intl.slice(3)}`;
   const guardRef = db.collection("tripVerify").doc(`${tripRef.id}_${studentId}`);
@@ -3297,11 +3298,11 @@ async function verifyTripParent(tripRef, trip, studentIdRaw, parentMobileRaw) {
   const studentSnap = await db.collection("students").doc(studentId).get();
   if (!studentSnap.exists || studentSnap.data().active === false) {
     await guardRef.set({ failures: (recent ? guard.failures || 0 : 0) + 1, lastAt: Timestamp.now() });
-    throw new HttpsError("not-found", "لم يتم العثور على الطالب. تأكد من رقم الهوية.");
+    throw new HttpsError("not-found", "لم يتم العثور على الطالب/ة. تأكد من رقم الهوية.");
   }
   const s = studentSnap.data();
   const branchOf = await branchResolver();
-  if (!tripTargets(trip, s, branchOf)) throw new HttpsError("failed-precondition", "هذه الرحلة غير مخصصة لصف الطالب أو فرعه.");
+  if (!tripTargets(trip, s, branchOf)) throw new HttpsError("failed-precondition", "هذه الرحلة غير مخصصة لصف الطالب/ة أو فرعه.");
   if (guard.failures) await guardRef.delete();
   const e = (await tripRef.collection("enrollments").doc(studentId).get()).data() || null;
   const same = (v) => toIntlNumber(v) === intl;
@@ -4233,7 +4234,7 @@ async function verifyStudentParent(scope, studentIdRaw, last4Raw) {
     throw new HttpsError("not-found", message);
   };
   const snap = await db.collection("students").doc(studentId).get();
-  if (!snap.exists) return fail("لم يتم العثور على الطالب. تأكد من رقم الهوية.");
+  if (!snap.exists) return fail("لم يتم العثور على الطالب/ة. تأكد من رقم الهوية.");
   const s = snap.data();
   const mobile = normalizeDigits(s.mobile).replace(/\D/g, "");
   if (!mobile || mobile.slice(-4) !== last4) return fail("البيانات غير مطابقة لسجل الطالب. تأكد من آخر 4 أرقام من جوال ولي الأمر المسجل في المدرسة.");
