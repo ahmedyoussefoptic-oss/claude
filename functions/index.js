@@ -2777,6 +2777,60 @@ exports.decideAppointment = onCall({ secrets: WA_SECRETS }, async (request) => {
   return { ok: true, when: formatRiyadh(appointment.start.toMillis()) };
 });
 
+// The person handling a record invites the parent to a school visit: a free
+// slot from Settings › مواعيد الزيارات, or any other time they choose
+// (customAt, which skips the slot capacity). The visit is confirmed at once,
+// any earlier booking of the record is cancelled, and the parent is
+// messaged (WhatsApp API, else the manual button in AppointmentPanel).
+exports.inviteParentVisit = onCall({ secrets: WA_SECRETS }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const { complaintDocId, slot, customAt } = request.data || {};
+  const note = str(request.data?.note, 300);
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  if (!callerDoc.exists || caller.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  const ref = db.collection("complaints").doc(String(complaintDocId || ""));
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "لم يتم العثور على الملاحظة.");
+  const record = snap.data();
+  const inScope = caller.role === "ADMIN" || caller.access === "all" || (caller.branches || []).includes(record.branch) || caller.branch === record.branch;
+  if (!canManageAppointment(caller, record, request.auth.uid) && !(inScope && caller.isQuality === true)) {
+    throw new HttpsError("permission-denied", "دعوة ولي الأمر للزيارة للمسؤول عن الملاحظة أو مدير المدرسة.");
+  }
+  if (["CLOSED", "REJECTED"].includes(record.status)) throw new HttpsError("failed-precondition", "الملاحظة مغلقة.");
+  const cancelId = record.appointment && ACTIVE_APPT.includes(record.appointment.status) ? record.appointment.id : undefined;
+  let reserved;
+  if (customAt) {
+    const ms = Number(customAt);
+    if (!Number.isFinite(ms) || ms < Date.now() + 15 * 60000 || ms > Date.now() + 90 * APPT_DAY) {
+      throw new HttpsError("invalid-argument", "اختر موعداً قادماً خلال 90 يوماً.");
+    }
+    const apptRef = db.collection("appointments").doc();
+    const start = Timestamp.fromMillis(ms);
+    await apptRef.set({ branch: record.branch, start, complaintDocId: ref.id, complaintId: record.complaintId, status: "CONFIRMED", custom: true, createdAt: Timestamp.now() });
+    if (cancelId) await db.collection("appointments").doc(cancelId).update({ status: "CANCELLED", cancelledAt: Timestamp.now() });
+    reserved = { id: apptRef.id, start, requestedStart: start };
+  } else {
+    reserved = await reserveAppointment({ branch: record.branch, startMs: Number(slot), complaintDocId: ref.id, complaintId: record.complaintId, cancelId });
+    await db.collection("appointments").doc(reserved.id).update({ status: "CONFIRMED" });
+  }
+  const now = Timestamp.now();
+  const actorName = caller.name || "مستخدم";
+  const when = formatRiyadh(reserved.start.toMillis());
+  const appointment = {
+    ...reserved, status: "CONFIRMED", invitedByStaff: true, ...(note ? { note } : {}),
+    decidedAt: now, decidedBy: request.auth.uid, decidedByName: actorName,
+  };
+  await ref.update({
+    appointment, updatedAt: now, appointmentMessageSentAt: FieldValue.delete(),
+    ...(record.status === "RECEIVED" || record.status === "ASSIGNED" ? { status: "IN_PROGRESS" } : {}),
+  });
+  await ref.collection("activityLog").add({ action: "APPOINTMENT_INVITED", actorId: request.auth.uid, actorName, metadata: { when, ...(note ? { note } : {}) }, createdAt: now });
+  await autoSendWa("complaint", ref, "appointmentConfirmed");
+  const after = (await ref.get()).data();
+  return { ok: true, when, sent: Boolean(after.appointmentMessageSentAt) };
+});
+
 // Parent arrives for a confirmed appointment and checks in from the branch
 // QR page with the feedback number + last 4 digits of their phone.
 exports.checkInAppointment = onCall(async (request) => {

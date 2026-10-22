@@ -598,7 +598,8 @@
       "VISIT_MET": "Meeting held",
       "APPOINTMENT_CONFIRMED": "Your visit is confirmed",
       "APPOINTMENT_RESCHEDULED": "An alternative visit time was set",
-      "CONVERTED_FROM_TICKET": "Your request was transferred to the relevant department as feedback"
+      "CONVERTED_FROM_TICKET": "Your request was transferred to the relevant department as feedback",
+      "APPOINTMENT_INVITED": "You are invited to visit the school"
     },
     "pageTitle": "Feedback & Reports Tracking Portal",
     "pageSubtitle": "Enter your feedback or report number to check its current status.",
@@ -1200,7 +1201,8 @@
       "APPOINTMENT_CONFIRMED": "Visit appointment confirmed",
       "APPOINTMENT_RESCHEDULED": "Alternative visit time set",
       "REMINDER_SENT": "Reminder sent",
-      "CONVERTED_FROM_TICKET": "Converted from a tech-support ticket"
+      "CONVERTED_FROM_TICKET": "Converted from a tech-support ticket",
+      "APPOINTMENT_INVITED": "Parent invited to visit"
     },
     "lostFound": {
       "ITEM_REGISTERED": "Item registered",
@@ -1585,7 +1587,20 @@
       "REQUESTED": "Awaiting the school's confirmation",
       "CONFIRMED": "Confirmed — scan the QR code on arrival",
       "CHECKED_IN": "You've checked in"
-    }
+    },
+    "inviteHint": "You can invite the parent to visit the school about this record.",
+    "inviteBtn": "Invite parent to visit",
+    "changeInvite": "Change time & send a new invitation",
+    "mode": {
+      "slot": "Available slots",
+      "custom": "Other time"
+    },
+    "noteLabel": "Note for the parent (optional)",
+    "notePlaceholder": "e.g. to discuss progress with the subject teacher",
+    "noteForParent": "Note",
+    "inviteSend": "Set time & send invitation",
+    "inviteSentAuto": "Visit set ({{when}}) and sent to the parent on WhatsApp.",
+    "inviteSaved": "Visit set ({{when}}). Send it to the parent with the WhatsApp button below."
   },
   "appointmentSettings": {
     "title": "School visit appointments",

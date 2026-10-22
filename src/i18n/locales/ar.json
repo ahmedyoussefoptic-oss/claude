@@ -602,7 +602,8 @@
       "VISIT_MET": "تمت مقابلتكم",
       "APPOINTMENT_CONFIRMED": "تم تأكيد موعد زيارتكم",
       "APPOINTMENT_RESCHEDULED": "تم تحديد موعد بديل لزيارتكم",
-      "CONVERTED_FROM_TICKET": "تم تحويل طلبكم إلى ملاحظة لمتابعته مع القسم المختص"
+      "CONVERTED_FROM_TICKET": "تم تحويل طلبكم إلى ملاحظة لمتابعته مع القسم المختص",
+      "APPOINTMENT_INVITED": "تمت دعوتكم لزيارة المدرسة"
     },
     "pageTitle": "بوابة متابعة الملاحظات والبلاغات",
     "pageSubtitle": "أدخل رقم الملاحظة أو البلاغ للاستعلام عن حالته الحالية.",
@@ -1204,7 +1205,8 @@
       "APPOINTMENT_CONFIRMED": "تم تأكيد موعد الزيارة",
       "APPOINTMENT_RESCHEDULED": "تم تحديد موعد زيارة بديل",
       "REMINDER_SENT": "إرسال تذكير",
-      "CONVERTED_FROM_TICKET": "تم التحويل من بلاغ تقني"
+      "CONVERTED_FROM_TICKET": "تم التحويل من بلاغ تقني",
+      "APPOINTMENT_INVITED": "دعوة ولي الأمر لزيارة المدرسة"
     },
     "lostFound": {
       "ITEM_REGISTERED": "تم تسجيل الغرض",
@@ -1609,7 +1611,20 @@
     "freeCount_zero": "{{count}} متاح",
     "freeCount_two": "{{count}} متاح",
     "freeCount_few": "{{count}} متاح",
-    "freeCount_many": "{{count}} متاح"
+    "freeCount_many": "{{count}} متاح",
+    "inviteHint": "يمكنك دعوة ولي الأمر لزيارة المدرسة بخصوص هذه الملاحظة.",
+    "inviteBtn": "دعوة ولي الأمر لزيارة",
+    "changeInvite": "تغيير الموعد وإرسال دعوة جديدة",
+    "mode": {
+      "slot": "من المواعيد المتاحة",
+      "custom": "وقت آخر"
+    },
+    "noteLabel": "ملاحظة لولي الأمر (اختياري)",
+    "notePlaceholder": "مثال: لمناقشة مستوى الطالب/ة مع معلم المادة",
+    "noteForParent": "ملاحظة",
+    "inviteSend": "تحديد الموعد وإرسال الدعوة",
+    "inviteSentAuto": "تم تحديد الموعد ({{when}}) وإرسال الدعوة لولي الأمر عبر واتساب.",
+    "inviteSaved": "تم تحديد الموعد ({{when}}). أرسل الدعوة لولي الأمر بزر واتساب أدناه."
   },
   "appointmentSettings": {
     "title": "مواعيد الزيارات المدرسية",
