@@ -3106,6 +3106,12 @@ function cleanTrip(input) {
     notes: str(d.notes, 1000),
     gender: ["BOYS", "GIRLS"].includes(d.gender) ? d.gender : "ALL",
     pledgeRequired: d.pledgeRequired === true,
+    // Optional English wording for the parents' page in English.
+    en: {
+      title: str(d.en?.title, 120), destination: str(d.en?.destination, 200), objective: str(d.en?.objective, 1000),
+      meetingPoint: str(d.en?.meetingPoint, 200), requirements: str(d.en?.requirements, 1000),
+      bankDetails: str(d.en?.bankDetails, 600), refundPolicy: str(d.en?.refundPolicy, 1000),
+    },
   };
   if (!trip.title || !trip.destination || !trip.date || !trip.branches.length) {
     throw new HttpsError("invalid-argument", "أكمل اسم الرحلة والوجهة والتاريخ والفروع.");
@@ -3372,6 +3378,7 @@ async function publicTripView(trip) {
     meetingPoint: trip.meetingPoint, stages: trip.stages || [], fee: trip.fee, payDeadline: trip.payDeadline,
     payDeadlineLabel: formatTripDay(trip.payDeadline), payMethods: trip.payMethods || [], bankDetails: trip.bankDetails,
     refundPolicy: trip.refundPolicy, requirements: trip.requirements, status: trip.status,
+    en: trip.en || {},
     branches: trip.branches || [],
     branchNames: branchSnaps.map((s, i) => (s.exists ? s.data().name : trip.branches[i])),
     registrationOpen: trip.status === "OPEN" && riyadhDay() <= trip.payDeadline,

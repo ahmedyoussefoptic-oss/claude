@@ -16,6 +16,7 @@ const EMPTY = {
   branches: [], departments: [], stages: [], capacity: '', fee: '', payDeadline: '', payMethods: ['BANK'],
   bankDetails: '', refundPolicy: '', requirements: '', supervisors: [], buses: '', notes: '',
   gender: 'ALL', pledgeRequired: false,
+  en: { title: '', destination: '', objective: '', meetingPoint: '', requirements: '', bankDetails: '', refundPolicy: '' },
 };
 
 const inputCls = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
@@ -69,7 +70,7 @@ function TripFormInner({ trip, tripPassword, allTrips, onClose, onSaved }) {
   const scoped = userData?.role === 'ADMIN' || userData?.access === 'all';
   const branches = scoped ? allBranches : allBranches.filter((b) => userBranches(userData).includes(b.id));
   const [form, setForm] = useState(() => (trip
-    ? { ...EMPTY, ...trip, capacity: trip.capacity || '', fee: trip.fee || '', buses: trip.buses || '' }
+    ? { ...EMPTY, ...trip, en: { ...EMPTY.en, ...(trip.en || {}) }, capacity: trip.capacity || '', fee: trip.fee || '', buses: trip.buses || '' }
     : { ...EMPTY, branches: branches.length === 1 ? [branches[0].id] : [] }));
   const [saving, setSaving] = useState(false);
   // Cover image and pledge sheet template: new file to upload, or 'remove'.
@@ -77,6 +78,11 @@ function TripFormInner({ trip, tripPassword, allTrips, onClose, onSaved }) {
   const [pledgeFile, setPledgeFile] = useState(null);
   const [error, setError] = useState(null);
   const set = (key) => (v) => setForm((f) => ({ ...f, [key]: v?.target ? v.target.value : v }));
+  // English wording under an Arabic field (shown on the parents' page in English).
+  const en = (key, rows) => {
+    const props = { dir: 'ltr', value: form.en[key], placeholder: t('trips.form.enPlaceholder'), onChange: (e) => setForm((f) => ({ ...f, en: { ...f.en, [key]: e.target.value } })), className: `${inputCls} mt-1.5 bg-slate-50 text-sm` };
+    return rows ? <textarea rows={rows} {...props} /> : <input {...props} />;
+  };
 
   const staff = useMemo(() => users
     .filter((u) => u.active !== false && u.role !== 'RECEPTIONIST' && (u.access === 'all' || u.role === 'ADMIN' || userBranches(u).some((b) => form.branches.includes(b))))
@@ -120,15 +126,15 @@ function TripFormInner({ trip, tripPassword, allTrips, onClose, onSaved }) {
         <div className="flex-1 min-h-0 overflow-y-auto p-6 space-y-4">
           <Section title={t('trips.form.basics')}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <Field label={t('trips.form.titleLabel')}><input value={form.title} onChange={set('title')} className={inputCls} placeholder={t('trips.form.titlePlaceholder')} /></Field>
-              <Field label={t('trips.form.destination')}><input value={form.destination} onChange={set('destination')} className={inputCls} /></Field>
-              <Field label={t('trips.form.objective')} className="md:col-span-2"><textarea rows={2} value={form.objective} onChange={set('objective')} className={inputCls} /></Field>
+              <Field label={t('trips.form.titleLabel')}><input value={form.title} onChange={set('title')} className={inputCls} placeholder={t('trips.form.titlePlaceholder')} />{en('title')}</Field>
+              <Field label={t('trips.form.destination')}><input value={form.destination} onChange={set('destination')} className={inputCls} />{en('destination')}</Field>
+              <Field label={t('trips.form.objective')} className="md:col-span-2"><textarea rows={2} value={form.objective} onChange={set('objective')} className={inputCls} />{en('objective', 2)}</Field>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <Field label={t('trips.form.date')}><input type="date" value={form.date} onChange={set('date')} className={inputCls} /></Field>
               <Field label={t('trips.form.departTime')}><input type="time" value={form.departTime} onChange={set('departTime')} className={inputCls} /></Field>
               <Field label={t('trips.form.returnTime')}><input type="time" value={form.returnTime} onChange={set('returnTime')} className={inputCls} /></Field>
-              <Field label={t('trips.form.meetingPoint')}><input value={form.meetingPoint} onChange={set('meetingPoint')} className={inputCls} /></Field>
+              <Field label={t('trips.form.meetingPoint')}><input value={form.meetingPoint} onChange={set('meetingPoint')} className={inputCls} />{en('meetingPoint')}</Field>
             </div>
           </Section>
 
@@ -163,11 +169,11 @@ function TripFormInner({ trip, tripPassword, allTrips, onClose, onSaved }) {
               <>
                 <Field label={t('trips.form.payMethods')}><Chips options={TRIP_PAY_METHODS.map((m) => [m, t(`trips.payMethod.${m}`)])} value={form.payMethods} onChange={set('payMethods')} /></Field>
                 {form.payMethods.includes('BANK') && (
-                  <Field label={t('trips.form.bankDetails')} hint={t('trips.form.bankDetailsHint')}><textarea rows={2} value={form.bankDetails} onChange={set('bankDetails')} className={inputCls} />
+                  <Field label={t('trips.form.bankDetails')} hint={t('trips.form.bankDetailsHint')}><textarea rows={2} value={form.bankDetails} onChange={set('bankDetails')} className={inputCls} />{en('bankDetails', 2)}
                     {TRIP_BANK_LETTER_URL && <a href={TRIP_BANK_LETTER_URL} target="_blank" rel="noreferrer" className="mt-1 text-xs text-primary hover:underline inline-flex items-center gap-1"><FileText className="w-3.5 h-3.5" />{t('trips.bankLetterAttached')}</a>}
                   </Field>
                 )}
-                <Field label={t('trips.form.refundPolicy')}><textarea rows={2} value={form.refundPolicy} onChange={set('refundPolicy')} className={inputCls} /></Field>
+                <Field label={t('trips.form.refundPolicy')}><textarea rows={2} value={form.refundPolicy} onChange={set('refundPolicy')} className={inputCls} />{en('refundPolicy', 2)}</Field>
               </>
             )}
           </Section>
@@ -208,7 +214,7 @@ function TripFormInner({ trip, tripPassword, allTrips, onClose, onSaved }) {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <Field label={t('trips.form.buses')}><input type="number" min="0" value={form.buses} onChange={set('buses')} className={inputCls} /></Field>
             </div>
-            <Field label={t('trips.form.requirements')} hint={t('trips.form.requirementsHint')}><textarea rows={2} value={form.requirements} onChange={set('requirements')} className={inputCls} /></Field>
+            <Field label={t('trips.form.requirements')} hint={t('trips.form.requirementsHint')}><textarea rows={2} value={form.requirements} onChange={set('requirements')} className={inputCls} />{en('requirements', 2)}</Field>
             <Field label={t('trips.form.supervisors')} hint={t('trips.form.supervisorsHint')}>
               {form.branches.length === 0
                 ? <p className="text-xs text-slate-400">{t('trips.form.pickBranchFirst')}</p>

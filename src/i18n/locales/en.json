@@ -1717,7 +1717,8 @@
       "pickPledge": "Choose file (PDF or image)",
       "pledgeRequired": "A signed pledge sheet is required to consent",
       "pledgeRequiredHint": "Parents attach a photo or PDF of the signed sheet from the trip link.",
-      "fileTooBig": "Max file size is 4 MB."
+      "fileTooBig": "Max file size is 4 MB.",
+      "enPlaceholder": "English (optional)"
     },
     "actions": {
       "submit": "Send for approval",

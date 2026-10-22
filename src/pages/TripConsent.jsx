@@ -80,6 +80,9 @@ const inputCls = 'w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl
 // the branch. All checks happen in the Cloud Functions.
 export default function TripConsent() {
   const { t, i18n } = useTranslation();
+  // Staff-written text in the page's language: the English wording when the
+  // page is in English and the trip has it, else the Arabic.
+  const tx = (key) => (i18n.language !== 'ar' && trip?.en?.[key]) || trip?.[key] || '';
   // Trip days come as yyyy-MM-dd; shown in the page's language.
   const dayLabel = (day) => {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(day || '');
@@ -108,7 +111,7 @@ export default function TripConsent() {
   // Page title for the shared link / browser tab.
   useEffect(() => {
     const prev = document.title;
-    document.title = trip ? `${t('tripConsent.brandTitle')} — ${trip.title}` : t('tripConsent.brandTitle');
+    document.title = trip ? `${t('tripConsent.brandTitle')} — ${tx('title')}` : t('tripConsent.brandTitle');
     return () => { document.title = prev; };
   }, [trip, t]);
 
@@ -205,21 +208,21 @@ export default function TripConsent() {
                 <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0"><Bus className="w-6 h-6" /></div>
                 <div>
                   <h2 className="text-xl font-bold text-slate-900 flex flex-wrap items-center gap-2">
-                    {trip.title}
+                    {tx('title')}
                     {trip.gender && trip.gender !== 'ALL' && <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${TRIP_GENDER_STYLES[trip.gender]}`}>{t(`trips.gender.${trip.gender}`)}</span>}
                   </h2>
                   <p className="text-sm text-slate-500 mt-0.5">{trip.branchNames.map((name, i) => t(`tripConsent.branchNames.${(trip.branches || [])[i]}`, { defaultValue: name })).join(i18n.language === 'ar' ? '، ' : ', ')}{trip.stages.length > 0 && <> · <span dir="ltr">{trip.stages.join(', ')}</span></>}</p>
                 </div>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5 text-sm">
-                <p className="flex items-center gap-2 text-slate-700"><MapPin className="w-4 h-4 text-primary shrink-0" />{trip.destination}</p>
+                <p className="flex items-center gap-2 text-slate-700"><MapPin className="w-4 h-4 text-primary shrink-0" />{tx('destination')}</p>
                 <p className="flex items-center gap-2 text-slate-700"><CalendarDays className="w-4 h-4 text-primary shrink-0" />{dayLabel(trip.date) || trip.dateLabel}</p>
                 {trip.departTime && <p className="flex items-center gap-2 text-slate-700"><Clock className="w-4 h-4 text-primary shrink-0" />{t('tripConsent.times', { from: tripTime(trip.departTime, i18n.language), to: tripTime(trip.returnTime, i18n.language) || '—' })}</p>}
                 <p className="flex items-center gap-2 text-slate-700"><Wallet className="w-4 h-4 text-primary shrink-0" />{trip.fee > 0 ? t('trips.feeValue', { fee: trip.fee }) : t('trips.free')}</p>
               </div>
-              {trip.objective && <p className="text-sm text-slate-600 mt-4">{trip.objective}</p>}
-              {trip.meetingPoint && <p className="text-sm text-slate-600 mt-2"><b>{t('trips.form.meetingPoint')}:</b> {trip.meetingPoint}</p>}
-              {trip.requirements && <p className="text-sm text-slate-600 mt-2 whitespace-pre-wrap"><b>{t('trips.form.requirements')}:</b> {trip.requirements}</p>}
+              {tx('objective') && <p className="text-sm text-slate-600 mt-4">{tx('objective')}</p>}
+              {tx('meetingPoint') && <p className="text-sm text-slate-600 mt-2"><b>{t('trips.form.meetingPoint')}:</b> {tx('meetingPoint')}</p>}
+              {tx('requirements') && <p className="text-sm text-slate-600 mt-2 whitespace-pre-wrap"><b>{t('trips.form.requirements')}:</b> {tx('requirements')}</p>}
               {!trip.surveyOpen && <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-3 mt-4 flex gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5" />{t('tripConsent.deadline', { date: dayLabel(trip.payDeadline) || trip.payDeadlineLabel })}</p>}
             </div>
 
@@ -329,7 +332,7 @@ export default function TripConsent() {
                             </div>
                             {payMethod === 'BANK' && (
                               <div className="bg-sky-50 border border-sky-100 rounded-xl p-3 space-y-2">
-                                {trip.bankDetails && <p className="text-sm text-slate-700 whitespace-pre-wrap">{trip.bankDetails}</p>}
+                                {tx('bankDetails') && <p className="text-sm text-slate-700 whitespace-pre-wrap">{tx('bankDetails')}</p>}
                                 {TRIP_BANK_LETTER_URL && (
                                   <a href={TRIP_BANK_LETTER_URL} target="_blank" rel="noreferrer" className="text-sm text-primary hover:underline flex items-center gap-1"><FileText className="w-4 h-4" />{t('trips.bankLetter')}</a>
                                 )}
@@ -357,7 +360,7 @@ export default function TripConsent() {
                           </label>
                           <p className="text-xs text-slate-500">{t('tripConsent.pledgeHint')}</p>
                         </div>
-                        {trip.refundPolicy && <p className="text-xs text-slate-500 whitespace-pre-wrap"><b>{t('trips.form.refundPolicy')}:</b> {trip.refundPolicy}</p>}
+                        {tx('refundPolicy') && <p className="text-xs text-slate-500 whitespace-pre-wrap"><b>{t('trips.form.refundPolicy')}:</b> {tx('refundPolicy')}</p>}
                         <label className="flex items-start gap-2 text-sm text-slate-700">
                           <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-1" />
                           {t('tripConsent.agree')}
