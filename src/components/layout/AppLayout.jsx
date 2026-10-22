@@ -2,6 +2,7 @@ import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
 import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall } from 'lucide-react';
+import AssistantPanel from '../assistant/AssistantPanel';
 import { useEffect, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
@@ -196,6 +197,7 @@ export default function AppLayout() {
           {homePath === '/no-access' ? (
             <div className="max-w-lg mx-auto mt-16 bg-white border border-slate-200 rounded-2xl p-8 text-center text-slate-600">{t('nav.noAccess')}</div>
           ) : <Outlet />}
+          <AssistantPanel />
         </div>
         <SystemCredit />
       </main>

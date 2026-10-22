@@ -4615,6 +4615,23 @@ async function mcpRecent(collection, args, cap = 2000) {
   return { from, to, docs: snap.docs.map((d) => ({ _id: d.id, ...d.data() })) };
 }
 const countBy = (list, fn) => list.reduce((m, x) => { const k = fn(x) || "—"; m[k] = (m[k] || 0) + 1; return m; }, {});
+// What a staff member may read (the in-app assistant); null = everything
+// (the owner's MCP keys). Mirrors the Users-page sections and branches.
+function mcpScopeOf(u) {
+  if (!u || u.role === "ADMIN") return null;
+  const mod = (key, dflt) => (typeof u.modules?.[key] === "boolean" ? u.modules[key] : dflt);
+  return {
+    branches: u.access === "all" ? null : (Array.isArray(u.branches) && u.branches.length ? u.branches : u.branch ? [u.branch] : []),
+    assignedUid: u.recordScope === "assigned" ? u.uid : null,
+    can: {
+      complaints: u.tripsAccess !== "tripsOnly" && u.role !== "RECEPTIONIST" && mod("complaints", true),
+      techSupport: u.tripsAccess !== "tripsOnly" && mod("techSupport", u.role === "CUSTOMER_SERVICE" || u.department === "IT" || u.isPrincipal === true || u.isQuality === true),
+      trips: u.tripsAccess !== "none" && u.role !== "RECEPTIONIST",
+    },
+  };
+}
+const inScope = (scope) => (r) => !scope || ((!scope.branches || scope.branches.includes(r.branch)) && (!scope.assignedUid || (r.assignedTo || []).includes(scope.assignedUid)));
+const NO_ACCESS = { error: "ليس لديك صلاحية الاطلاع على هذا القسم." };
 const mcpBranchFilter = (names, branch) => {
   if (!branch) return () => true;
   const q = String(branch).trim();
@@ -4653,12 +4670,13 @@ const MCP_TOOLS = [
     name: "crm_summary",
     description: "Counts for a period: parent feedback/complaints by status, branch and type (with overdue and escalated), tech-support tickets by status and branch, lost & found reports, average parent satisfaction.",
     inputSchema: { type: "object", properties: { ...MCP_DATE_ARGS } },
-    run: async (args) => {
+    run: async (args, scope) => {
       const names = await mcpNames();
       const inBranch = mcpBranchFilter(names, args.branch);
+      const ok = (r) => inBranch(r) && inScope(scope)(r);
       const [c, t, lf] = await Promise.all([mcpRecent("complaints", args), mcpRecent("techSupportTickets", args), mcpRecent("lostFoundItems", args)]);
-      const complaints = c.docs.filter(inBranch);
-      const tickets = t.docs.filter(inBranch);
+      const complaints = !scope || scope.can.complaints ? c.docs.filter(ok) : [];
+      const tickets = !scope || scope.can.techSupport ? t.docs.filter(ok) : [];
       const rated = complaints.filter((x) => typeof x.satisfactionRate === "number");
       return {
         period: { from: c.from, to: c.to }, branch: args.branch || "all",
@@ -4673,7 +4691,8 @@ const MCP_TOOLS = [
           ratedCount: rated.length,
         },
         techTickets: { total: tickets.length, byStatus: countBy(tickets, (x) => x.status), byBranch: countBy(tickets, (x) => names.branch(x.branch)), openOverdue: tickets.filter((x) => x.isOverdue === true && !TICKET_DONE.includes(x.status)).length },
-        lostAndFound: { total: lf.docs.filter(inBranch).length },
+        lostAndFound: { total: lf.docs.filter(ok).length },
+        ...(scope ? { visibleTo: "this user's branches and sections only" } : {}),
       };
     },
   },
@@ -4690,11 +4709,12 @@ const MCP_TOOLS = [
         limit: { type: "number", description: "1-100, default 25" },
       },
     },
-    run: async (args) => {
+    run: async (args, scope) => {
+      if (scope && !scope.can.complaints) return NO_ACCESS;
       const names = await mcpNames();
       const inBranch = mcpBranchFilter(names, args.branch);
       const { from, to, docs } = await mcpRecent("complaints", args);
-      const list = docs.filter(inBranch)
+      const list = docs.filter(inBranch).filter(inScope(scope))
         .filter((x) => !args.status || x.status === args.status)
         .filter((x) => !args.overdueOnly || (x.isOverdue === true && !COMPLAINT_DONE.includes(x.status)))
         .filter((x) => !args.escalatedOnly || x.wasEscalated || x.isOverdue || x.status === "ESCALATED");
@@ -4705,10 +4725,11 @@ const MCP_TOOLS = [
     name: "get_complaint",
     description: "One complaint by its number (e.g. COM-2026-10023): full description, solution, parent rating and feedback.",
     inputSchema: { type: "object", properties: { number: { type: "string" } }, required: ["number"] },
-    run: async (args) => {
+    run: async (args, scope) => {
+      if (scope && !scope.can.complaints) return NO_ACCESS;
       const names = await mcpNames();
       const snap = await db.collection("complaints").where("complaintId", "==", String(args.number || "").trim()).limit(1).get();
-      if (snap.empty) return { error: "Not found" };
+      if (snap.empty || !inScope(scope)(snap.docs[0].data())) return { error: "Not found" };
       return complaintOut(snap.docs[0].data(), names, true);
     },
   },
@@ -4716,11 +4737,12 @@ const MCP_TOOLS = [
     name: "list_tech_tickets",
     description: "Tech-support tickets (newest first): number, branch, status, problem type, platform, student, short description, assignees.",
     inputSchema: { type: "object", properties: { ...MCP_DATE_ARGS, status: { type: "string" }, overdueOnly: { type: "boolean" }, limit: { type: "number" } } },
-    run: async (args) => {
+    run: async (args, scope) => {
+      if (scope && !scope.can.techSupport) return NO_ACCESS;
       const names = await mcpNames();
       const inBranch = mcpBranchFilter(names, args.branch);
       const { from, to, docs } = await mcpRecent("techSupportTickets", args);
-      const list = docs.filter(inBranch).filter((x) => !args.status || x.status === args.status)
+      const list = docs.filter(inBranch).filter(inScope(scope)).filter((x) => !args.status || x.status === args.status)
         .filter((x) => !args.overdueOnly || (x.isOverdue === true && !TICKET_DONE.includes(x.status)));
       return { period: { from, to }, matched: list.length, tickets: list.slice(0, mcpLimit(args.limit)).map((x) => ticketOut(x, names)) };
     },
@@ -4729,10 +4751,12 @@ const MCP_TOOLS = [
     name: "list_trips",
     description: "School trips with date, branches, grades, fee, status and parent response counts (approved, declined, confirmed, receipts under review).",
     inputSchema: { type: "object", properties: { status: { type: "string", description: "OPEN, CLOSED, COMPLETED, CANCELLED" }, fromDate: { type: "string", description: "Trips on or after YYYY-MM-DD" } } },
-    run: async (args) => {
+    run: async (args, scope) => {
+      if (scope && !scope.can.trips) return NO_ACCESS;
       const names = await mcpNames();
       const snap = await db.collection("trips").get();
       const list = snap.docs.map((d) => d.data())
+        .filter((x) => !scope?.branches || (x.branches || []).some((b) => scope.branches.includes(b)))
         .filter((x) => (args.status ? x.status === args.status : x.status !== "CANCELLED"))
         .filter((x) => !mcpDay(args.fromDate) || x.date >= args.fromDate)
         .sort((a, b) => String(a.date).localeCompare(String(b.date)));
@@ -4943,4 +4967,191 @@ exports.bevatelSyncNow = onCall({ timeoutSeconds: 540, memory: "512MiB" }, async
   } catch (err) {
     throw new HttpsError("internal", err.message);
   }
+});
+
+// ===========================================================================
+// In-app AI assistant («المساعد الذكي») — Claude answers staff questions,
+// searches the CRM and writes reports, through the same read-only tools as
+// the MCP server, limited to the signed-in employee's branches and sections
+// (mcpScopeOf). The owner saves the Anthropic API key (secureConfig/
+// anthropic) and switches the assistant on (settings/assistant.enabled);
+// each employee can be switched off on the Users page (modules.assistant).
+// Conversations are stored append-only in assistantChats/<id> (their
+// thinking blocks must be sent back unchanged), and each user gets
+// ASSISTANT_DAILY_LIMIT messages a day.
+// ===========================================================================
+const Anthropic = require("@anthropic-ai/sdk");
+const ASSISTANT_MODEL = "claude-opus-5-5";
+const ASSISTANT_DAILY_LIMIT = 40;
+const ASSISTANT_MAX_STEPS = 8;
+const ASSISTANT_SYSTEM = `أنت «المساعد الذكي» داخل نظام علاقات العملاء (CRM) في ${SCHOOL_NAME || "المدرسة"}. يستخدمك موظفو المدرسة.
+
+ما تفعله:
+- تجيب عن أسئلة الموظف عن بيانات النظام: الملاحظات والشكاوى، المشكلات التقنية، المفقودات، الرحلات.
+- تبحث في البيانات وتعدّ التقارير والملخصات والمقارنات بين الفروع والفترات.
+- تشرح طريقة استخدام النظام.
+
+قواعد البيانات:
+- استخدم الأدوات للحصول على أي رقم أو سجل؛ لا تخمّن ولا تخترع أرقاماً أو أسماء. إذا لم تُرجع الأداة بيانات فقل ذلك.
+- الأدوات تعيد فقط ما يحق لهذا الموظف رؤيته (فروعه وأقسامه). إذا أعادت أداة «ليس لديك صلاحية» فأخبره بلطف أن هذا خارج صلاحيته.
+- أنت للقراءة فقط: لا تستطيع إنشاء أو تعديل أو حذف أي شيء. إذا طُلب منك ذلك فاشرح للموظف أين يفعله في النظام.
+- الفترة الافتراضية للأدوات آخر 30 يوماً؛ حدّد from/to عندما يذكر الموظف فترة (التواريخ بتوقيت الرياض، بصيغة YYYY-MM-DD).
+- الحالات: RECEIVED مستلمة، ASSIGNED مُسندة، IN_PROGRESS قيد المعالجة، WAITING_PARENT_RESPONSE بانتظار رد ولي الأمر، ESCALATED مصعّدة، SOLVED تم الحل، CLOSED مغلقة، REJECTED مرفوضة. اعرضها بالعربية.
+
+طريقة الرد:
+- اكتب بالعربية الفصحى المبسّطة (أو بالإنجليزية إذا كتب الموظف بالإنجليزية)، بإيجاز ووضوح.
+- للتقارير: عنوان، ثم ملخص من سطرين، ثم جداول Markdown للأرقام، ثم «ملاحظات وتوصيات» عملية. اذكر الفترة والفروع التي يغطيها التقرير.
+- عند ذكر سجل اذكر رقمه (مثل COM-2026-10023) ليبحث عنه الموظف.
+
+دليل مختصر للنظام:
+- «الملاحظات»: تسجيل ملاحظة/شكوى وإسنادها ومتابعتها حتى الحل؛ لكل ملاحظة مهلة حل وتُصعّد تلقائياً عند التأخر.
+- «حل المشكلات التقنية»: بلاغات المنصات والحسابات، ومنها «حسابات الطلاب» لإرسال بيانات دخول كلاسيرا وبوابة الطالب.
+- «المفقودات»، «زيارات الفروع» (رموز QR في الاستقبال)، «الرحلات المدرسية» (موافقات أولياء الأمور، الدفع، كشف صعود الحافلة).
+- «التقارير»: تقارير الملاحظات والبلاغات مع زمن الحل والتأخير لكل فرع. «البحث المتقدم» و«سجل الطلاب» للبحث.
+- «تحليل الاتصالات»: مكالمات بيفاتيل والمكالمات الفائتة.`;
+
+const assistantTools = MCP_TOOLS.map(({ name, description, inputSchema }) => ({ name, description, input_schema: inputSchema }));
+
+async function assistantClient() {
+  const snap = await db.collection("secureConfig").doc("anthropic").get();
+  const apiKey = snap.exists ? snap.data().apiKey : null;
+  return apiKey ? new Anthropic({ apiKey, timeout: 120000, maxRetries: 2 }) : null;
+}
+
+exports.setAssistantKey = onCall({ timeoutSeconds: 60 }, async (request) => {
+  const caller = await adminCaller(request);
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "إعداد المساعد الذكي متاح لمنشئ النظام فقط.");
+  const apiKey = String(request.data?.apiKey || "").trim();
+  const cfgRef = db.collection("settings").doc("assistant");
+  if (!apiKey) {
+    await db.collection("secureConfig").doc("anthropic").delete();
+    await cfgRef.set({ configured: false, enabled: false, updatedAt: Timestamp.now() }, { merge: true });
+    return { configured: false };
+  }
+  try {
+    await new Anthropic({ apiKey }).models.retrieve(ASSISTANT_MODEL);
+  } catch (err) {
+    throw new HttpsError("invalid-argument", `تعذر التحقق من المفتاح لدى Anthropic (${err.status || ""} ${err.message}).`);
+  }
+  await db.collection("secureConfig").doc("anthropic").set({ apiKey, savedAt: Timestamp.now(), savedBy: caller.uid });
+  await cfgRef.set({ configured: true, enabled: true, model: ASSISTANT_MODEL, dailyLimit: ASSISTANT_DAILY_LIMIT, updatedAt: Timestamp.now() }, { merge: true });
+  return { configured: true };
+});
+
+exports.setAssistantEnabled = onCall(async (request) => {
+  const caller = await adminCaller(request);
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "إعداد المساعد الذكي متاح لمنشئ النظام فقط.");
+  await db.collection("settings").doc("assistant").set({ enabled: request.data?.enabled === true, updatedAt: Timestamp.now() }, { merge: true });
+  return { ok: true };
+});
+
+const assistantText = (content) => (content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
+
+exports.assistantChat = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const uid = request.auth.uid;
+  const userSnap = await db.collection("users").doc(uid).get();
+  const u = { uid, ...(userSnap.data() || {}) };
+  if (!userSnap.exists || u.active === false || u.role === "RECEPTIONIST" || u.modules?.assistant === false) {
+    throw new HttpsError("permission-denied", "المساعد الذكي غير متاح لحسابك.");
+  }
+  const cfg = (await db.collection("settings").doc("assistant").get()).data() || {};
+  const client = cfg.enabled === true ? await assistantClient() : null;
+  if (!client) throw new HttpsError("failed-precondition", "المساعد الذكي غير مفعّل حالياً.");
+  const text = str(request.data?.message, 4000);
+  if (!text) throw new HttpsError("invalid-argument", "اكتب سؤالك.");
+
+  // Daily allowance per user (owner unlimited).
+  const day = riyadhDay();
+  const usageRef = db.collection("assistantUsage").doc(`${uid}_${day}`);
+  if (u.isOwner !== true) {
+    await db.runTransaction(async (tx) => {
+      const used = (await tx.get(usageRef)).data()?.messages || 0;
+      if (used >= (cfg.dailyLimit || ASSISTANT_DAILY_LIMIT)) throw new HttpsError("resource-exhausted", "وصلت للحد اليومي لأسئلة المساعد الذكي، يتجدد غداً.");
+      tx.set(usageRef, { uid, day, messages: used + 1 }, { merge: true });
+    });
+  }
+
+  // The conversation (append-only; a new chat when none or not this user's).
+  let chatRef = request.data?.chatId ? db.collection("assistantChats").doc(String(request.data.chatId)) : null;
+  let chat = chatRef ? (await chatRef.get()).data() : null;
+  if (!chat || chat.uid !== uid) { chatRef = db.collection("assistantChats").doc(); chat = null; }
+  const messages = chat ? JSON.parse(chat.messages || "[]") : [];
+  const transcript = chat?.transcript || [];
+  const scope = mcpScopeOf(u);
+  const branchNames = (await mcpNames()).branch;
+  const intro = messages.length ? "" : `[الموظف: ${u.name || ""} — الدور: ${u.role || ""}${scope?.branches ? ` — الفروع: ${scope.branches.map(branchNames).join("، ") || "—"}` : " — كل الفروع"}${scope?.assignedUid ? " — يرى ما أُسند إليه فقط" : ""}]\n`;
+  messages.push({ role: "user", content: [{ type: "text", text: `${intro}[اليوم ${day}]\n${text}` }] });
+
+  const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
+  let reply = "";
+  for (let step = 0; step < ASSISTANT_MAX_STEPS; step++) {
+    let response;
+    try {
+      response = await client.beta.messages.create({
+        model: ASSISTANT_MODEL,
+        max_tokens: 16000,
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        output_config: { effort: "medium" },
+        cache_control: { type: "ephemeral" },
+        system: [{ type: "text", text: ASSISTANT_SYSTEM, cache_control: { type: "ephemeral" } }],
+        tools: assistantTools,
+        messages,
+      });
+    } catch (err) {
+      console.error("assistant", err.status, err.message);
+      if (err instanceof Anthropic.RateLimitError) throw new HttpsError("resource-exhausted", "المساعد مشغول حالياً، حاول بعد دقيقة.");
+      if (err instanceof Anthropic.AuthenticationError) throw new HttpsError("failed-precondition", "مفتاح المساعد الذكي غير صالح — يراجعه منشئ النظام.");
+      throw new HttpsError("unavailable", "تعذر الوصول إلى المساعد الذكي، حاول مرة أخرى.");
+    }
+    const ru = response.usage || {};
+    usage.input += ru.input_tokens || 0;
+    usage.output += ru.output_tokens || 0;
+    usage.cacheRead += ru.cache_read_input_tokens || 0;
+    usage.cacheWrite += ru.cache_creation_input_tokens || 0;
+    messages.push({ role: "assistant", content: response.content });
+
+    if (response.stop_reason === "refusal") { reply = "عذراً، لا أستطيع المساعدة في هذا الطلب."; break; }
+    if (response.stop_reason === "pause_turn") continue;
+    const calls = response.content.filter((b) => b.type === "tool_use");
+    if (response.stop_reason !== "tool_use" || !calls.length) { reply = assistantText(response.content); break; }
+    const results = await Promise.all(calls.map(async (call) => {
+      const tool = MCP_TOOLS.find((x) => x.name === call.name);
+      try {
+        const out = tool ? await tool.run(call.input || {}, scope) : { error: `Unknown tool ${call.name}` };
+        return { type: "tool_result", tool_use_id: call.id, content: JSON.stringify(out).slice(0, 60000) };
+      } catch (err) {
+        return { type: "tool_result", tool_use_id: call.id, content: `Error: ${err.message}`, is_error: true };
+      }
+    }));
+    messages.push({ role: "user", content: results });
+  }
+  if (!reply) reply = "لم أتمكن من إكمال الإجابة، جرّب سؤالاً أكثر تحديداً.";
+
+  const now = Timestamp.now();
+  transcript.push({ role: "user", text, at: now }, { role: "assistant", text: reply, at: now });
+  const json = JSON.stringify(messages);
+  await chatRef.set({
+    uid, title: chat?.title || text.slice(0, 80), updatedAt: now, ...(chat ? {} : { createdAt: now }),
+    // Very long chats are not stored further; the client starts a new one.
+    messages: json.length < 900000 ? json : chat?.messages || "[]", full: json.length >= 900000, transcript,
+  });
+  await db.collection("assistantUsage").doc(`total_${day.slice(0, 7)}`).set({
+    month: day.slice(0, 7), messages: FieldValue.increment(1), inputTokens: FieldValue.increment(usage.input), outputTokens: FieldValue.increment(usage.output),
+    cacheReadTokens: FieldValue.increment(usage.cacheRead), cacheWriteTokens: FieldValue.increment(usage.cacheWrite),
+  }, { merge: true });
+  if (u.isOwner !== true) await usageRef.set({ inputTokens: FieldValue.increment(usage.input), outputTokens: FieldValue.increment(usage.output) }, { merge: true });
+  return { chatId: chatRef.id, reply, full: json.length >= 900000 };
+});
+
+// The owner's view of this month's assistant use (tokens → estimated cost).
+exports.assistantUsageSummary = onCall(async (request) => {
+  const caller = await adminCaller(request);
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "متاح لمنشئ النظام فقط.");
+  const month = riyadhDay().slice(0, 7);
+  const t = (await db.collection("assistantUsage").doc(`total_${month}`).get()).data() || {};
+  // Claude Opus 5.5: $4 / $20 per million input / output tokens; cache reads $0.20, cache writes ~1.25× input.
+  const usd = ((t.inputTokens || 0) * 4 + (t.outputTokens || 0) * 20 + (t.cacheReadTokens || 0) * 0.2 + (t.cacheWriteTokens || 0) * 5) / 1e6;
+  return { month, messages: t.messages || 0, inputTokens: t.inputTokens || 0, outputTokens: t.outputTokens || 0, estimatedUsd: Math.round(usd * 100) / 100 };
 });

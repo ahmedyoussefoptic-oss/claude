@@ -883,7 +883,8 @@
         "search": "Advanced search",
         "flowMap": "Flow map",
         "reports": "Reports",
-        "calls": "Call analytics"
+        "calls": "Call analytics",
+        "assistant": "AI assistant"
       },
       "noneWarning": "No section selected — the employee will see nothing after signing in.",
       "scopeTitle": "Record scope",
@@ -2769,5 +2770,33 @@
       "5": "Fri",
       "6": "Sat"
     }
+  },
+  "assistant": {
+    "title": "AI assistant",
+    "subtitle": "Ask about the CRM or request a report",
+    "hello": "Hi {{name}}, I can search the CRM within your permissions, write reports and explain how to use the system. Try:",
+    "s1": "Summary of feedback in the last 7 days by branch and status",
+    "s2": "Which feedback records are overdue or escalated now?",
+    "s3": "Monthly tech-support report with recommendations",
+    "s4": "How do I log new feedback and assign it?",
+    "scopeNote": "The assistant only reads data, never changes it, and sees only what your permissions allow.",
+    "placeholder": "Ask a question…",
+    "thinking": "Searching and analysing…",
+    "newChat": "New chat",
+    "copy": "Copy",
+    "print": "Print",
+    "settingsTitle": "AI assistant (Claude)",
+    "settingsHint": "An in-app assistant that answers staff, searches and writes reports within each employee’s permissions, read-only. Needs an API key from console.anthropic.com (pay per use).",
+    "key": "Anthropic API key",
+    "newKey": "New key (replaces the current one)",
+    "saveKey": "Save & verify",
+    "keySaved": "Key verified; assistant on.",
+    "turnOn": "Turn on",
+    "turnOff": "Turn off",
+    "turnedOn": "Assistant on.",
+    "turnedOff": "Assistant off.",
+    "statusOn": "On for all staff ({{limit}} questions a day each). To switch it off for someone: Users → sections.",
+    "statusOff": "Off.",
+    "usage": "Usage {{month}}: {{messages}} questions — estimated ${{usd}}"
   }
 }

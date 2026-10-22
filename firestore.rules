@@ -473,6 +473,15 @@ service cloud.firestore {
       allow read: if isAdmin() || (myDoc() != null && myDoc().get('modules', {}).get('calls', false) == true && inMyScope(resource.data.branch));
       allow write: if false;
     }
+    // In-app AI assistant (assistantChat): each user reads their own chats;
+    // usage counters are read by the owner through a function.
+    match /assistantChats/{id} {
+      allow read: if isAuthenticated() && resource.data.uid == request.auth.uid;
+      allow write: if false;
+    }
+    match /assistantUsage/{id} {
+      allow read, write: if false;
+    }
     // MCP / API keys (Claude): only their hashes, handled by Cloud Functions.
     match /apiKeys/{id} {
       allow read, write: if false;
@@ -498,7 +507,7 @@ service cloud.firestore {
         'itemCategories', 'settings', 'settingsUnlocks', 'secureConfig', 'complaints', 'trips', 'tripVerify',
         'appointments', 'deletedComplaints', 'deletedLostFoundItems', 'deletedTechSupportTickets', 'lostFoundItems',
         'techSupportTickets', 'students', 'notifications',
-        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls'
+        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage'
       ]);
     }
   }
