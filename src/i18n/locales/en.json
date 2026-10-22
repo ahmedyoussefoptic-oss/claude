@@ -2021,14 +2021,14 @@
     "lockedByOther": "A reply for this student was already made from another mobile number. To change it, please contact the branch.",
     "schoolName": "Al Moktashef International Schools",
     "branchNames": {
-      "AL_MOHAMMADIA": "Al Mohammadiyah",
+      "AL_MOHAMMADIA": "Al Muhammadiyah",
       "AL_NAEEM": "Al Naeem",
       "AL_SALAMA_BOYS": "Al Salama 2",
-      "AL_SALAMA_GIRLS": "Al Salama 1",
-      "AL_SHATI": "Al Shati",
-      "AL_ZAHRA": "Al Zahra",
-      "DOWN_TOWN_BOYS": "Downtown Boys",
-      "DOWN_TOWN_GIRLS": "Downtown Girls"
+      "AL_SALAMA_GIRLS": "Al Salamah 1",
+      "AL_SHATI": "Al Shatee",
+      "AL_ZAHRA": "Al Zahraa",
+      "DOWN_TOWN_BOYS": "Downtown - Boys",
+      "DOWN_TOWN_GIRLS": "Downtown - Girls"
     }
   },
   "ownerSettings": {
