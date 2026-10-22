@@ -1373,7 +1373,18 @@
     "posterTitle": "Welcome — please check in",
     "posterStep1": "Scan the code with your phone camera.",
     "posterStep2": "Enter the student's details and reason for visit.",
-    "posterStep3": "Please wait — a staff member will meet you."
+    "posterStep3": "Please wait — a staff member will meet you.",
+    "kinds": {
+      "checkin": "Reception check-in",
+      "request": "School visit request"
+    },
+    "request": {
+      "subtitle": "A code per branch that opens the school visit request — for current families or new registrations. Print it for flyers or share it.",
+      "posterTitle": "Book a school visit",
+      "posterStep1": "Scan the code with your phone camera.",
+      "posterStep2": "Choose: my children study here, or a visit for a new registration.",
+      "posterStep3": "Enter your details and pick a time; you will get a confirmation message."
+    }
   },
   "waApi": {
     "title": "WhatsApp API integration (Taqnyat)",
@@ -2901,6 +2912,7 @@
     "savedManual": "Confirmed ({{when}}). Send it to the parent:",
     "doneComplaint": "Done ({{when}}) — the parent is notified from the record as usual.",
     "sendWa": "Send on WhatsApp",
-    "parentMessage": "Hello {{parent}},\nYour visit to Al Moktashef International Schools — {{branch}} is confirmed: {{when}}\nWe look forward to welcoming you."
+    "parentMessage": "Hello {{parent}},\nYour visit to Al Moktashef International Schools — {{branch}} is confirmed: {{when}}\nWe look forward to welcoming you.",
+    "qr": "Printable QR"
   }
 }

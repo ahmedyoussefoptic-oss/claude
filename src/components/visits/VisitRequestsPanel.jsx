@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { collection, onSnapshot, query, where, Timestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { CalendarClock, CalendarCheck, Copy, Check, Link2, Loader2, MessageCircle, UserPlus, Users as UsersIcon, X } from 'lucide-react';
+import { CalendarClock, CalendarCheck, Copy, Check, Link2, Loader2, MessageCircle, UserPlus, Users as UsersIcon, X, QrCode } from 'lucide-react';
 import { db, functions } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches } from '../../hooks/useOrgData';
@@ -81,6 +81,7 @@ export default function VisitRequestsPanel() {
           <code dir="ltr" className="flex-1 min-w-0 truncate text-xs bg-white border border-slate-200 rounded-lg px-3 py-2">{link}</code>
           <button onClick={copy} className="px-3 py-2 rounded-xl text-sm border border-slate-300 bg-white flex items-center gap-1.5">{copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}{t('visitRequests.copy')}</button>
           <a href={`https://wa.me/?text=${encodeURIComponent(shareText)}`} target="_blank" rel="noreferrer" className="px-3 py-2 rounded-xl text-sm bg-[#25D366] text-white flex items-center gap-1.5"><MessageCircle className="w-4 h-4" />{t('visitRequests.share')}</a>
+          <Link to="/branch-qr?kind=request" className="px-3 py-2 rounded-xl text-sm border border-slate-300 bg-white flex items-center gap-1.5"><QrCode className="w-4 h-4" />{t('visitRequests.qr')}</Link>
         </div>
       </div>
 
