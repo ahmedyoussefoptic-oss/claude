@@ -19,6 +19,8 @@ export function tripTime(hhmm, lang = 'ar') {
   return `${h % 12 || 12}:${m[2]} ${suffix}`;
 }
 export const TRIP_PAY_METHODS = ['BANK', 'RECEPTION'];
+// How finance collected a fee (reviewTripPayment collect) — mirrors functions/index.js.
+export const TRIP_COLLECT_METHODS = ['CASH', 'MADA', 'VISA', 'MASTERCARD', 'TRANSFER', 'STUDENT_BALANCE'];
 export const TRIP_DECLINE_REASONS = ['COST', 'TIMING', 'FAMILY', 'HEALTH', 'OTHER'];
 export const TRIP_RATINGS = ['organization', 'safety', 'benefit', 'cost'];
 export const TRIP_GENDERS = ['ALL', 'BOYS', 'GIRLS'];

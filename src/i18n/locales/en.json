@@ -1778,7 +1778,8 @@
       "TRIP_SURVEY_SENT": "sent the survey",
       "TRIP_IMAGE_SET": "set the trip image",
       "TRIP_PLEDGE_SET": "set the pledge template",
-      "TRIP_OPEN": "Opened registration"
+      "TRIP_OPEN": "Opened registration",
+      "TRIP_PAYMENT_COLLECT": "Recorded a fee payment"
     },
     "allStudents": "All",
     "searchStudents": "Search by name, ID or class",
@@ -1885,7 +1886,14 @@
       "surveys": "Ratings",
       "targeted": "Targeted",
       "trip": "Trip",
-      "trips": "Trips"
+      "trips": "Trips",
+      "byMethod": "Collected by method",
+      "byCollector": "Collected by collector",
+      "payments": "Payments",
+      "amount": "Amount (SAR)",
+      "paymentsLog": "Payments log",
+      "sheetPayments": "Payments",
+      "confirmedAt": "Confirmed at"
     },
     "gender": {
       "ALL": "Boys & girls",
@@ -1926,7 +1934,28 @@
     "passwordEditTitle": "Edit trip",
     "passwordCancelTitle": "Cancel trip",
     "deleteTrip": "Delete trip permanently",
-    "deleteTripConfirm": "Permanently delete «{{title}}» with the parents’ responses and attached receipts? This cannot be undone."
+    "deleteTripConfirm": "Permanently delete «{{title}}» with the parents’ responses and attached receipts? This cannot be undone.",
+    "collectMethod": {
+      "CASH": "Cash",
+      "MADA": "mada",
+      "VISA": "Visa",
+      "MASTERCARD": "Mastercard",
+      "TRANSFER": "Bank transfer",
+      "STUDENT_BALANCE": "Student balance",
+      "OTHER": "Other"
+    },
+    "collect": {
+      "button": "Record payment",
+      "title": "Record trip fee — {{name}}",
+      "method": "Payment method",
+      "collector": "Collector (who received the money)",
+      "ref": "Receipt / reference no. (optional)",
+      "confirmerHint": "You are recorded as the person who confirmed the payment.",
+      "save": "Confirm payment"
+    },
+    "paidVia": "Paid — {{method}}",
+    "collectorLabel": "Collector",
+    "confirmerLabel": "Confirmed by"
   },
   "tripConsent": {
     "times": "{{from}} to {{to}}",

@@ -20,7 +20,7 @@ import { userBranches } from '../../utils/scope';
 import logo from '../../assets/logo.png';
 import {
   TRIP_STATUS_STYLES, ENROLLMENT_STATUSES, ENROLLMENT_STATUS_STYLES, TRIP_PAY_METHODS, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES,
-  enrollmentStatus, tripPermissions, tripConflicts, tripLink, dayToDate, TRIP_BANK_LETTER_URL, tripTime,
+  enrollmentStatus, tripPermissions, tripConflicts, tripLink, dayToDate, TRIP_BANK_LETTER_URL, tripTime, TRIP_COLLECT_METHODS,
 } from '../../config/trips';
 
 const call = (name, data) => httpsCallable(functions, name)(data).then((r) => r.data);
@@ -70,6 +70,39 @@ function TripPasswordDialog({ title, onCancel, onConfirm }) {
           </button>
         </div>
       </form>
+    </div>
+  );
+}
+
+// Finance records a collected fee: how it was paid, who collected it (the
+// person who received the money) and a receipt / reference number.
+function CollectDialog({ student, defaultCollector, onCancel, onConfirm }) {
+  const { t } = useTranslation();
+  const [method, setMethod] = useState('');
+  const [collectorName, setCollectorName] = useState(defaultCollector || '');
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+  const confirm = async () => { setBusy(true); try { await onConfirm({ method, collectorName: collectorName.trim(), note: note.trim() }); } finally { setBusy(false); } };
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 z-[130] flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5 space-y-3">
+        <h3 className="font-bold text-slate-900">{t('trips.collect.title', { name: student.name })}</h3>
+        <p className="text-xs text-slate-600">{t('trips.collect.method')}</p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+          {TRIP_COLLECT_METHODS.map((m) => (
+            <button key={m} type="button" onClick={() => setMethod(m)} className={`py-2 rounded-xl text-sm border ${method === m ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200'}`}>{t(`trips.collectMethod.${m}`)}</button>
+          ))}
+        </div>
+        <div><label className="block text-xs text-slate-600 mb-1">{t('trips.collect.collector')}</label><input value={collectorName} onChange={(e) => setCollectorName(e.target.value)} className={inputCls} /></div>
+        <div><label className="block text-xs text-slate-600 mb-1">{t('trips.collect.ref')}</label><input value={note} onChange={(e) => setNote(e.target.value)} className={inputCls} /></div>
+        <p className="text-[11px] text-slate-500">{t('trips.collect.confirmerHint')}</p>
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} className="px-4 py-2 text-sm rounded-xl border border-slate-300 bg-white">{t('common.cancel')}</button>
+          <button disabled={busy || !method || !collectorName.trim()} onClick={confirm} className="px-5 py-2 text-sm rounded-xl bg-emerald-600 text-white font-medium flex items-center gap-2 disabled:opacity-50">
+            {busy && <Loader2 className="w-4 h-4 animate-spin" />}{t('trips.collect.save')}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -191,6 +224,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
   const [actionError, setActionError] = useState(null);
   const [dialog, setDialog] = useState(null);
   const [pwDialog, setPwDialog] = useState(null);
+  const [collecting, setCollecting] = useState(null); // student whose fee is being recorded
   const [tripLockOn, setTripLockOn] = useState(false);
   useEffect(() => onSnapshot(doc(db, 'settings', 'security'), (snap) => setTripLockOn(snap.exists() && snap.data().tripLockEnabled === true), () => {}), []);
   const [copied, setCopied] = useState(false);
@@ -298,7 +332,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
     setAnnounceResult(result);
     return result;
   });
-  const review = (studentId, act, note) => run(`pay-${studentId}`, () => call('reviewTripPayment', { id: trip.id, studentId, action: act, note }));
+  const review = (studentId, act, note, extra = {}) => run(`pay-${studentId}`, () => call('reviewTripPayment', { id: trip.id, studentId, action: act, note, ...extra }));
   const announceArrival = () => run('arrival', async () => {
     const result = await call('announceTripArrival', { id: trip.id });
     setArrivalResult(result);
@@ -354,6 +388,10 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
       [t('trips.col.status')]: t(`trips.enrollment.${r.status}`),
       [t('trips.col.payMethod')]: r.e?.payMethod ? t(`trips.payMethod.${r.e.payMethod}`) : '',
       [t('trips.col.paid')]: r.e?.payStatus === 'PAID' ? (r.e.paidAmount ?? trip.fee) : '',
+      [t('trips.collect.method')]: r.e?.payStatus === 'PAID' ? t(`trips.collectMethod.${r.e.collectMethod || (r.e.payMethod === 'BANK' ? 'TRANSFER' : 'CASH')}`) : '',
+      [t('trips.collectorLabel')]: r.e?.payStatus === 'PAID' ? r.e.collectorName || '' : '',
+      [t('trips.confirmerLabel')]: r.e?.payStatus === 'PAID' ? r.e.reviewedByName || '' : '',
+      [t('trips.collect.ref')]: r.e?.cashReceiptNo || '',
       [t('trips.healthNotes')]: r.e?.healthNotes || '',
       [t('trips.emergencyPhone')]: r.e?.emergencyPhone || '',
       [t('trips.pledgeLabel')]: r.e?.pledge ? '✓' : '',
@@ -660,7 +698,13 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                           {r.e?.payMethod && <p>{t(`trips.payMethod.${r.e.payMethod}`)}</p>}
                           {r.e?.pledge?.fileUrl && <a href={r.e.pledge.fileUrl} target="_blank" rel="noreferrer" className="text-indigo-700 hover:underline flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />{t('trips.viewPledge')}</a>}
                                                     {r.e?.receipt?.fileUrl && <a href={r.e.receipt.fileUrl} target="_blank" rel="noreferrer" className="text-primary hover:underline flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />{t('trips.viewReceipt')}</a>}
-                          {r.e?.payStatus === 'PAID' && <p className="text-emerald-700">{t('trips.paidBy', { name: r.e.reviewedByName || '' })}{r.e.cashReceiptNo && ` · ${r.e.cashReceiptNo}`}</p>}
+                          {r.e?.payStatus === 'PAID' && (
+                            <div className="text-emerald-800 bg-emerald-50 rounded-md px-1.5 py-1 mt-0.5 space-y-0.5">
+                              <p className="font-medium">{t('trips.paidVia', { method: t(`trips.collectMethod.${r.e.collectMethod || (r.e.payMethod === 'BANK' ? 'TRANSFER' : 'CASH')}`) })}{r.e.cashReceiptNo && <span className="text-emerald-700"> · {r.e.cashReceiptNo}</span>}</p>
+                              {r.e.collectorName && <p>{t('trips.collectorLabel')}: {r.e.collectorName}</p>}
+                              <p>{t('trips.confirmerLabel')}: {r.e.reviewedByName || '—'}</p>
+                            </div>
+                          )}
                         </td>
                         <td className="px-3 py-2.5">
                           <div className="flex flex-wrap gap-1">
@@ -672,7 +716,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                                 {r.e.receipt && r.e.payStatus === 'REVIEW' && (
                                   <button disabled={!!busy} onClick={() => setDialog({ title: t('trips.rejectReceipt'), label: t('trips.rejectReasonLabel'), required: true, onConfirm: async (note) => { await review(r.id, 'reject', note); setDialog(null); } })} className="px-2 py-1 rounded-lg text-xs bg-rose-50 text-rose-700 border border-rose-200">{t('trips.rejectReceipt')}</button>
                                 )}
-                                <button disabled={!!busy} onClick={() => setDialog({ title: t('trips.cashPaid'), label: t('trips.cashReceiptLabel'), required: false, onConfirm: async (note) => { await review(r.id, 'cash', note); setDialog(null); } })} className="px-2 py-1 rounded-lg text-xs border border-slate-300 bg-white text-slate-700">{t('trips.cashPaid')}</button>
+                                <button disabled={!!busy} onClick={() => setCollecting(r)} className="px-2 py-1 rounded-lg text-xs border border-emerald-300 bg-white text-emerald-700">{t('trips.collect.button')}</button>
                               </>
                             )}
                             {(perms.manage || perms.finance) && ['OPEN', 'CLOSED'].includes(trip.status) && !r.offRoster && (
@@ -796,6 +840,10 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
       </div>
 
       {pwDialog && <TripPasswordDialog {...pwDialog} onCancel={() => setPwDialog(null)} />}
+      {collecting && (
+        <CollectDialog student={collecting} defaultCollector={userData?.name || ''} onCancel={() => setCollecting(null)}
+          onConfirm={async ({ method, collectorName, note }) => { await review(collecting.id, 'collect', note, { method, collectorName }); setCollecting(null); }} />
+      )}
       {dialog && !dialog.manual && <NoteDialog {...dialog} busy={!!busy} onCancel={() => setDialog(null)} />}
       {dialog?.manual && (
         <ManualConsentDialog trip={trip} student={dialog.manual} current={dialog.manual.e} onCancel={() => setDialog(null)} onSaved={() => setDialog(null)} />

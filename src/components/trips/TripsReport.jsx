@@ -52,6 +52,10 @@ export default function TripsReport({ onOpenTrip }) {
   };
   const branchRows = Object.entries(data?.byBranch || {}).sort((a, b) => b[1].confirmed - a[1].confirmed);
   const gradeRows = TRIP_STAGES.filter((g) => data?.byGrade?.[g]?.targeted).map((g) => [g, data.byGrade[g]]);
+  const methodRows = Object.entries(data?.byMethod || {}).sort((a, b) => b[1].amount - a[1].amount);
+  const collectorRows = Object.entries(data?.byCollector || {}).sort((a, b) => b[1].amount - a[1].amount);
+  const payments = data?.payments || [];
+  const methodName = (m) => t(`trips.collectMethod.${m}`, { defaultValue: m });
   const reasons = Object.entries(data?.declineReasons || {}).sort((a, b) => b[1] - a[1]);
   const reasonTotal = reasons.reduce((a, [, n]) => a + n, 0);
 
@@ -71,6 +75,12 @@ export default function TripsReport({ onOpenTrip }) {
       [t('common.branch')]: branchName(b), [t('trips.report.trips')]: v.trips, [t('trips.report.targeted')]: v.targeted, [t('trips.statConfirmedShort')]: v.confirmed,
       [t('trips.report.participation')]: fmtPct(pct(v.confirmed, v.targeted)), [t('trips.report.collected')]: v.collected, [t('trips.overallRating')]: fmtAvg(v.ratingSum, v.surveys),
     }))), t('trips.report.sheetBranches'));
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(payments.map((p) => ({
+      [t('trips.report.trip')]: p.tripTitle, [t('common.date')]: p.tripDate, [t('trips.col.student')]: p.studentName, [t('trips.col.nationalId')]: p.studentId,
+      [t('common.branch')]: branchName(p.branch), [t('trips.col.grade')]: p.grade, [t('trips.report.amount')]: p.amount, [t('trips.collect.method')]: methodName(p.method),
+      [t('trips.collectorLabel')]: p.collector, [t('trips.confirmerLabel')]: p.confirmedBy, [t('trips.collect.ref')]: p.ref,
+      [t('trips.report.confirmedAt')]: p.at ? new Date(p.at).toLocaleString('en-GB', { timeZone: 'Asia/Riyadh' }) : '',
+    }))), t('trips.report.sheetPayments'));
     XLSX.writeFile(wb, `trips-report-${range.from}-${range.to}.xlsx`);
   };
 
@@ -150,6 +160,50 @@ export default function TripsReport({ onOpenTrip }) {
               </div>
             )}
           </section>
+
+          {(methodRows.length > 0 || collectorRows.length > 0) && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              <section>
+                <h3 className="font-bold text-slate-800 mb-2 flex items-center gap-1"><Wallet className="w-4 h-4" />{t('trips.report.byMethod')}</h3>
+                <table className="w-full text-sm border border-slate-100 rounded-2xl overflow-hidden">
+                  <thead className="bg-slate-50 text-slate-500 text-xs"><tr><th className={th}>{t('trips.collect.method')}</th><th className={th}>{t('trips.report.payments')}</th><th className={th}>{t('trips.report.amount')}</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {methodRows.map(([m, v]) => <tr key={m}><td className={`${td} font-medium`}>{methodName(m)}</td><td className={td}>{v.count}</td><td className={td}>{v.amount.toLocaleString('en')}</td></tr>)}
+                  </tbody>
+                </table>
+              </section>
+              <section>
+                <h3 className="font-bold text-slate-800 mb-2">{t('trips.report.byCollector')}</h3>
+                <table className="w-full text-sm border border-slate-100 rounded-2xl overflow-hidden">
+                  <thead className="bg-slate-50 text-slate-500 text-xs"><tr><th className={th}>{t('trips.collectorLabel')}</th><th className={th}>{t('trips.report.payments')}</th><th className={th}>{t('trips.report.amount')}</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {collectorRows.map(([n, v]) => <tr key={n}><td className={`${td} font-medium`}>{n}</td><td className={td}>{v.count}</td><td className={td}>{v.amount.toLocaleString('en')}</td></tr>)}
+                    {collectorRows.length === 0 && <tr><td className={td} colSpan={3}>—</td></tr>}
+                  </tbody>
+                </table>
+              </section>
+            </div>
+          )}
+
+          {payments.length > 0 && (
+            <section>
+              <h3 className="font-bold text-slate-800 mb-2">{t('trips.report.paymentsLog')}</h3>
+              <div className="overflow-x-auto border border-slate-100 rounded-2xl max-h-96">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 text-slate-500 text-xs sticky top-0"><tr>
+                    <th className={th}>{t('trips.report.trip')}</th><th className={th}>{t('trips.col.student')}</th><th className={th}>{t('common.branch')}</th><th className={th}>{t('trips.report.amount')}</th>
+                    <th className={th}>{t('trips.collect.method')}</th><th className={th}>{t('trips.collectorLabel')}</th><th className={th}>{t('trips.confirmerLabel')}</th><th className={th}>{t('trips.collect.ref')}</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {payments.map((p, i) => (
+                      <tr key={i}><td className={td}>{p.tripTitle}</td><td className={td}>{p.studentName}</td><td className={td}>{branchName(p.branch)}</td><td className={td}>{p.amount}</td>
+                        <td className={td}>{methodName(p.method)}</td><td className={td}>{p.collector || '—'}</td><td className={td}>{p.confirmedBy || '—'}</td><td className={td} dir="ltr">{p.ref}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
             <section>

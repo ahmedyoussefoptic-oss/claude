@@ -3525,12 +3525,20 @@ exports.submitTripConsent = onCall(async (request) => {
 });
 
 // --- Staff: payment review, manual consent, boarding ----------------------
+// How finance collected a trip fee (collect action), shown next to the
+// student with the collector and the person who confirmed it in the system.
+const TRIP_COLLECT_METHODS = ["CASH", "MADA", "VISA", "MASTERCARD", "TRANSFER", "STUDENT_BALANCE"];
 exports.reviewTripPayment = onCall({ secrets: WA_SECRETS }, async (request) => {
   const caller = await tripCaller(request);
-  const { id, studentId, action } = request.data || {};
+  const { id, studentId } = request.data || {};
+  // "cash" is the older form of collect + CASH.
+  const action = request.data?.action === "cash" ? "collect" : request.data?.action;
+  const method = request.data?.action === "cash" ? "CASH" : request.data?.method;
   const note = str(request.data?.note, 300);
   const { ref, trip } = await loadTrip(id, caller, "finance");
-  if (!["accept", "reject", "cash"].includes(action) || typeof studentId !== "string") throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  if (!["accept", "reject", "collect"].includes(action) || typeof studentId !== "string") throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  if (action === "collect" && !TRIP_COLLECT_METHODS.includes(method)) throw new HttpsError("invalid-argument", "اختر طريقة الدفع.");
+  const collectorName = action === "collect" ? str(request.data?.collectorName, 80) || caller.name || "" : "";
   if (action === "reject" && !note) throw new HttpsError("invalid-argument", "اكتب سبب رفض السند.");
   const enrollRef = ref.collection("enrollments").doc(studentId);
   const snap = await enrollRef.get();
@@ -3541,18 +3549,19 @@ exports.reviewTripPayment = onCall({ secrets: WA_SECRETS }, async (request) => {
   const now = Timestamp.now();
   await enrollRef.update({
     payStatus: action === "reject" ? "REJECTED" : "PAID",
-    ...(action === "cash" ? { payMethod: "RECEPTION", cashReceiptNo: note } : {}),
+    ...(action === "collect" ? { payMethod: "RECEPTION", collectMethod: method, collectorName, cashReceiptNo: note } : {}),
+    ...(action === "accept" ? { collectMethod: "TRANSFER", collectorName: "" } : {}),
     payRejectReason: action === "reject" ? note : "",
     paidAmount: action === "reject" ? 0 : trip.fee,
     reviewedBy: caller.uid, reviewedByName: caller.name || "", reviewedAt: now, updatedAt: now,
   });
-  await tripLog(ref, `TRIP_PAYMENT_${action.toUpperCase()}`, caller, { studentId, studentName: e.studentName, note });
+  await tripLog(ref, `TRIP_PAYMENT_${action.toUpperCase()}`, caller, { studentId, studentName: e.studentName, note, ...(action === "collect" ? { method, collectorName } : {}) });
 
   let messageSent = false;
   const settings = await waTripSettings();
   if (settings && settings.autoSend !== false && e.parentPhone) {
     try {
-      const line = action === "reject" ? TRIP_LINES.rejected(trip, note) : action === "cash" ? TRIP_LINES.cash() : TRIP_LINES.paid();
+      const line = action === "reject" ? TRIP_LINES.rejected(trip, note) : action === "collect" ? TRIP_LINES.cash() : TRIP_LINES.paid();
       await sendTripNotice({ settings, trip, phone: e.parentPhone, studentName: e.studentName, branch: e.branch, section: e.section, line });
       messageSent = true;
     } catch (err) {
@@ -3861,6 +3870,9 @@ exports.getTripsReport = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async
   const byBranch = {};
   const byGrade = {};
   const declineReasons = {};
+  const byMethod = {};
+  const byCollector = {};
+  const payments = [];
   const rows = [];
   for (const tr of trips) {
     const inBranch = (b) => !branchFilter || b === branchFilter;
@@ -3898,7 +3910,23 @@ exports.getTripsReport = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async
       }
       if (st === "CONFIRMED") inc("confirmed");
       if (e.boarded === true) inc("boarded");
-      if (e.payStatus === "PAID") inc("collected", Number(e.paidAmount ?? tr.fee) || 0);
+      if (e.payStatus === "PAID") {
+        const amount = Number(e.paidAmount ?? tr.fee) || 0;
+        inc("collected", amount);
+        const method = e.collectMethod || (e.payMethod === "BANK" ? "TRANSFER" : e.payMethod === "RECEPTION" ? "CASH" : "OTHER");
+        const collector = e.collectorName || (method === "TRANSFER" ? "" : e.reviewedByName || "");
+        byMethod[method] = byMethod[method] || { count: 0, amount: 0 };
+        byMethod[method].count++; byMethod[method].amount += amount;
+        if (collector) {
+          byCollector[collector] = byCollector[collector] || { count: 0, amount: 0 };
+          byCollector[collector].count++; byCollector[collector].amount += amount;
+        }
+        payments.push({
+          tripCode: tr.tripCode, tripTitle: tr.title, tripDate: tr.date, studentId: e.studentId || "", studentName: e.studentName || "", branch: e.branch || "",
+          grade: e.grade || "", amount, method, collector, confirmedBy: e.reviewedByName || "", ref: e.cashReceiptNo || "",
+          at: e.reviewedAt?.toMillis?.() || null,
+        });
+      }
       touched.add(e.branch);
     });
     surveys.forEach((x) => {
@@ -3913,7 +3941,8 @@ exports.getTripsReport = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async
     rows.push(row);
   }
   const strip = ({ ref, ...rest }) => rest;
-  return { trips: rows.map(strip), byBranch, byGrade, declineReasons };
+  payments.sort((a, b) => (b.at || 0) - (a.at || 0));
+  return { trips: rows.map(strip), byBranch, byGrade, declineReasons, byMethod, byCollector, payments };
 });
 
 // --- Student record ----------------------------------------------------------
