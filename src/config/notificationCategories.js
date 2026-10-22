@@ -12,7 +12,7 @@ export const NOTIFICATION_CATEGORIES = [
   { id: 'reopened', types: ['REOPENED', 'IT_REOPENED'] },
   { id: 'visit', types: ['VISIT_ARRIVED'] },
   { id: 'viewed', types: ['VIEWED', 'IT_VIEWED'] },
-  { id: 'appointment', types: ['APPOINTMENT_REQUESTED', 'APPOINTMENT_REMINDER'] },
+  { id: 'appointment', types: ['APPOINTMENT_REQUESTED', 'APPOINTMENT_REMINDER', 'VISIT_REQUESTED'] },
   { id: 'trips', types: ['TRIP_APPROVAL_REQUESTED', 'TRIP_DECIDED', 'TRIP_RECEIPT'] },
   { id: 'reminder', types: ['REMINDER', 'IT_REMINDER', 'LF_REMINDER'] },
   { id: 'platform', types: ['LEAVE_REQUESTED', 'LEAD_NEW'] },

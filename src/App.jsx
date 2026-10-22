@@ -33,6 +33,7 @@ import CurrentStudents from './pages/platform/CurrentStudents';
 import PlatformSettings from './pages/platform/PlatformSettings';
 import LeaveRequest from './pages/LeaveRequest';
 import JoinInquiry from './pages/JoinInquiry';
+import SchoolVisitRequest from './pages/SchoolVisitRequest';
 
 // منصة المكتشف pages: the owner and the users the owner shared them with;
 // its settings, the owner only (firestore.rules enforce both).
@@ -66,6 +67,7 @@ function App() {
         <Route path="/trip/:code" element={<TripConsent />} />
         <Route path="/leave" element={<LeaveRequest />} />
         <Route path="/join" element={<JoinInquiry />} />
+        <Route path="/school-visit" element={<SchoolVisitRequest />} />
         <Route path="/login" element={<Login />} />
         
         {/* Protected Routes */}

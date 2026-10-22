@@ -2559,7 +2559,8 @@
         "CONFIRMED": "Parent confirmed",
         "ATTENDED": "Attended",
         "NO_SHOW": "No-show",
-        "CANCELLED": "Cancelled"
+        "CANCELLED": "Cancelled",
+        "REQUESTED": "Awaiting branch confirmation"
       },
       "actions": {
         "confirmed": "Parent confirmed",
@@ -2848,5 +2849,58 @@
     "statusOn": "On for all staff ({{limit}} questions a day each). To switch it off for someone: Users → sections.",
     "statusOff": "Off.",
     "usage": "Usage {{month}}: {{messages}} questions — estimated ${{usd}}"
+  },
+  "schoolVisit": {
+    "pageTitle": "School visit request",
+    "title": "Request a school visit",
+    "subtitle": "Choose the type of visit:",
+    "current": "My children study here",
+    "currentHint": "A visit about one of your current children",
+    "newReg": "Visit for a new registration",
+    "newRegHint": "Enter the new student’s details and pick a visit time",
+    "newStudents": "New student details",
+    "gradeWanted": "Grade applying for",
+    "visit": "Visit time",
+    "type": {
+      "VISIT_TOUR": "Visit & school tour",
+      "VISIT": "Visit & meeting"
+    },
+    "notes": "Notes (optional)",
+    "pickSlot": "Please pick a visit time.",
+    "submit": "Send visit request",
+    "confirmNote": "The branch will review the request and message you to confirm.",
+    "doneTitle": "Visit request received",
+    "doneBody": "Requested time: {{when}}. The branch will contact you to confirm it. Your file number:",
+    "doneCurrent": "The branch will review your request and message you to confirm. Keep your request number:"
+  },
+  "visitRequests": {
+    "linkTitle": "School visit request link",
+    "linkHint": "Send it to parents (current families or new registrations). Requests arrive here for the branch principal to confirm.",
+    "anyBranch": "All branches (parent picks)",
+    "copy": "Copy",
+    "share": "Share on WhatsApp",
+    "shareText": "Welcome to Al Moktashef International Schools.\nBook a school visit (current families or new registrations):\n{{link}}",
+    "title": "Upcoming visit requests & appointments",
+    "hint": "Pending requests first, then confirmed visits. The branch principal (or staff with edit permission) confirms.",
+    "empty": "No upcoming visit requests or appointments.",
+    "newFamily": "New registration",
+    "currentParent": "Current parent",
+    "confirmedBy": "confirmed by {{name}}",
+    "status": {
+      "REQUESTED": "Awaiting confirmation",
+      "CONFIRMED": "Confirmed"
+    },
+    "confirm": "Confirm",
+    "otherSlot": "Other time",
+    "saveSlot": "Save & notify parent",
+    "cancel": "Cancel",
+    "cancelReason": "Reason (optional):",
+    "attended": "Family attended",
+    "noShow": "No show",
+    "sentAuto": "Confirmed ({{when}}) and sent to the parent on WhatsApp.",
+    "savedManual": "Confirmed ({{when}}). Send it to the parent:",
+    "doneComplaint": "Done ({{when}}) — the parent is notified from the record as usual.",
+    "sendWa": "Send on WhatsApp",
+    "parentMessage": "Hello {{parent}},\nYour visit to Al Moktashef International Schools — {{branch}} is confirmed: {{when}}\nWe look forward to welcoming you."
   }
 }

@@ -331,7 +331,7 @@ const NOTIFICATION_CATEGORIES = {
   reopened: ["REOPENED", "IT_REOPENED"],
   visit: ["VISIT_ARRIVED"],
   viewed: ["VIEWED", "IT_VIEWED"],
-  appointment: ["APPOINTMENT_REQUESTED", "APPOINTMENT_REMINDER"],
+  appointment: ["APPOINTMENT_REQUESTED", "APPOINTMENT_REMINDER", "VISIT_REQUESTED"],
   trips: ["TRIP_APPROVAL_REQUESTED", "TRIP_DECIDED", "TRIP_RECEIPT"],
   reminder: ["REMINDER", "IT_REMINDER", "LF_REMINDER"],
   platform: ["LEAVE_REQUESTED", "LEAD_NEW"],
@@ -2654,7 +2654,7 @@ function formatRiyadh(ms) {
 
 // Reserves one slot (transaction: re-counts bookings so two parents can't
 // take the last place at once). Returns the complaint's `appointment` map.
-async function reserveAppointment({ branch, startMs, complaintDocId, complaintId, cancelId }) {
+async function reserveAppointment({ branch, startMs, complaintDocId, complaintId, cancelId, extra = {} }) {
   if (typeof branch !== "string" || !branch) throw new HttpsError("invalid-argument", "يرجى اختيار الفرع أولاً.");
   const cfg = await loadAppointmentSettings();
   if (!appointmentSlots(cfg).includes(startMs)) {
@@ -2668,7 +2668,7 @@ async function reserveAppointment({ branch, startMs, complaintDocId, complaintId
     if (active >= cfg.capacity) {
       throw new HttpsError("failed-precondition", "تم حجز هذا الموعد للتو، يرجى اختيار موعد آخر.");
     }
-    tx.set(apptRef, { branch, start, complaintDocId, complaintId, status: "REQUESTED", createdAt: Timestamp.now() });
+    tx.set(apptRef, { branch, start, complaintDocId: complaintDocId || null, complaintId: complaintId || null, status: "REQUESTED", createdAt: Timestamp.now(), ...extra });
     if (cancelId) tx.update(db.collection("appointments").doc(cancelId), { status: "CANCELLED", cancelledAt: Timestamp.now() });
   });
   return { id: apptRef.id, start, requestedStart: start, status: "REQUESTED" };
@@ -4500,8 +4500,8 @@ const normalizePhone = (p) => toIntlNumber(p);
 
 // Public inquiry form (/join): website, campaigns, branch QR, referral link.
 // One file per parent phone — a repeat inquiry is added to the existing file.
-exports.submitLeadInquiry = onCall(async (request) => {
-  const d = request.data || {};
+// Opens (or finds, by phone) a new-customer file from a public form.
+async function upsertLeadFromPublic(d, label) {
   const parentName = str(d.parentName, 80);
   const phone = normalizePhone(d.phone);
   if (!parentName || !/^9665\d{8}$/.test(phone)) throw new HttpsError("invalid-argument", "أدخل الاسم ورقم جوال سعودي صحيحاً.");
@@ -4515,9 +4515,9 @@ exports.submitLeadInquiry = onCall(async (request) => {
   const existing = await db.collection("leads").where("phone", "==", phone).limit(1).get();
   if (!existing.empty) {
     const ref = existing.docs[0].ref;
-    await ref.collection("activity").add({ type: "INQUIRY_AGAIN", text: `استفسار جديد من النموذج الإلكتروني (${students.map((s) => s.name || s.grade).join("، ")})`, byName: "ولي الأمر (نموذج إلكتروني)", at: now });
+    await ref.collection("activity").add({ type: "INQUIRY_AGAIN", text: `${label} (${students.map((s) => s.name || s.grade).join("، ")})`, byName: "ولي الأمر (نموذج إلكتروني)", at: now });
     await ref.update({ updatedAt: now, lastInboundAt: now });
-    return { code: existing.docs[0].data().code, existing: true };
+    return { ref, code: existing.docs[0].data().code, existing: true, lead: existing.docs[0].data(), students, parentName, phone };
   }
   const code = await newCode("leads", "code", "LD");
   const ref = await db.collection("leads").add({
@@ -4527,9 +4527,130 @@ exports.submitLeadInquiry = onCall(async (request) => {
     nextFollowUp: Timestamp.fromMillis(Date.now() + 24 * 3600e3), stageEnteredAt: now, noAnswerCount: 0,
     createdAt: now, updatedAt: now, lastInboundAt: now, firstResponseAt: null,
   });
-  await ref.collection("activity").add({ type: "CREATED", text: "فتح الملف من النموذج الإلكتروني", byName: "ولي الأمر (نموذج إلكتروني)", at: now });
+  await ref.collection("activity").add({ type: "CREATED", text: `فتح الملف — ${label}`, byName: "ولي الأمر (نموذج إلكتروني)", at: now });
   await notifyUsers(await platformOwners(), { title: "عميل محتمل جديد", body: `${parentName} — ${students.map((s) => s.grade).filter(Boolean).join("، ")}`, complaintId: ref.id, type: "LEAD_NEW" });
-  return { code };
+  return { ref, code, existing: false, lead: { stage: "INQUIRY" }, students, parentName, phone };
+}
+
+exports.submitLeadInquiry = onCall(async (request) => {
+  const { code, existing } = await upsertLeadFromPublic(request.data || {}, "استفسار من النموذج الإلكتروني");
+  return existing ? { code, existing: true } : { code };
+});
+
+// --- School visit request link (/school-visit) -------------------------------
+// A prospective family asks to visit for a new registration: the new-customer
+// file is opened (or found by phone), a visit slot is reserved in the same
+// pool as the parents' visit appointments, and a pending leadVisits entry is
+// created. The branch principal confirms it or moves it from «زيارات
+// الفروع» (decideVisitRequest), which messages the parent.
+const studentsSummary = (students) => students.map((s) => [s.name, s.grade].filter(Boolean).join(" ")).join("، ");
+exports.submitNewStudentVisit = onCall({ secrets: WA_SECRETS }, async (request) => {
+  const d = request.data || {};
+  const branch = str(d.branch, 40);
+  const branchSnap = branch ? await db.collection("branches").doc(branch).get() : null;
+  if (!branchSnap?.exists) throw new HttpsError("invalid-argument", "يرجى اختيار الفرع.");
+  const visitType = ["VISIT", "VISIT_TOUR"].includes(d.visitType) ? d.visitType : "VISIT_TOUR";
+  const lead = await upsertLeadFromPublic({ ...d, branch, source: d.source || "WEBSITE", preferredContact: "VISIT" }, "طلب زيارة مدرسية من الرابط");
+  const pending = await db.collection("leadVisits").where("leadId", "==", lead.ref.id).get();
+  const active = pending.docs.map((x) => x.data()).find((v) => ["REQUESTED", "SCHEDULED", "CONFIRMED"].includes(v.status) && v.at?.toMillis() > Date.now());
+  if (active) throw new HttpsError("already-exists", `لديكم طلب زيارة قائم: ${formatRiyadh(active.at.toMillis())}. للتعديل تواصلوا مع الفرع.`);
+  const students = studentsSummary(lead.students);
+  const reserved = await reserveAppointment({
+    branch, startMs: Number(d.slot), complaintDocId: null, complaintId: null,
+    extra: { kind: "NEW_STUDENT", leadId: lead.ref.id, leadCode: lead.code, parentName: lead.parentName, phone: lead.phone, students, visitType },
+  });
+  const now = Timestamp.now();
+  const visitRef = await db.collection("leadVisits").add({
+    type: visitType, at: reserved.start, dayKey: new Date(reserved.start.toMillis() + APPT_TZ_MS).toISOString().slice(0, 10), branch, host: "",
+    notes: str(d.notes, 300), leadId: lead.ref.id, leadCode: lead.code, parentName: lead.parentName, phone: lead.phone, students,
+    assignedToName: "", status: "REQUESTED", appointmentId: reserved.id, source: "PUBLIC_LINK", reminderCount: 0,
+    createdAt: now, createdByName: "ولي الأمر (رابط طلب الزيارة)", updatedAt: now,
+  });
+  await db.collection("appointments").doc(reserved.id).update({ leadVisitId: visitRef.id });
+  const when = formatRiyadh(reserved.start.toMillis());
+  await lead.ref.update({
+    visitAt: reserved.start, nextVisitId: visitRef.id, updatedAt: now,
+    ...(["INQUIRY", "QUALIFIED"].includes(lead.lead?.stage) ? { stage: "VISIT_BOOKED", stageEnteredAt: now } : {}),
+  });
+  await lead.ref.collection("activity").add({ type: "VISIT", text: `طلب زيارة مدرسية من الرابط: ${when} (بانتظار تأكيد الفرع)`, byName: "ولي الأمر (رابط طلب الزيارة)", at: now });
+  const users = await loadActiveUsers();
+  const principals = users.filter((u) => u.isPrincipal === true && (u.access === "all" || (u.branches || []).includes(branch) || u.branch === branch)).map((u) => u.id);
+  await notifyUsers([...new Set([...principals, ...(await platformOwners())])], {
+    title: "طلب زيارة لتسجيل طالب جديد",
+    body: `${lead.parentName} — ${students} — ${when}. يرجى التأكيد من «زيارات الفروع».`,
+    complaintId: visitRef.id, type: "VISIT_REQUESTED",
+  });
+  return { code: lead.code, when };
+});
+
+// The principal (or staff with edit permission in the branch) confirms a new
+// registration visit, moves it to another free slot, cancels it, or records
+// whether the family came.
+exports.decideVisitRequest = onCall({ secrets: WA_SECRETS }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const { appointmentId, action, slot } = request.data || {};
+  const reason = str(request.data?.reason, 300);
+  if (!["confirm", "reschedule", "cancel", "attended", "noShow"].includes(action)) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  const caller = (await db.collection("users").doc(request.auth.uid).get()).data();
+  if (!caller || caller.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  const apptRef = db.collection("appointments").doc(String(appointmentId || ""));
+  const appt = (await apptRef.get()).data();
+  if (!appt || appt.kind !== "NEW_STUDENT") throw new HttpsError("not-found", "لم يتم العثور على طلب الزيارة.");
+  const inBranch = caller.role === "ADMIN" || caller.access === "all" || (caller.branches || []).includes(appt.branch) || caller.branch === appt.branch;
+  const marking = action === "attended" || action === "noShow";
+  if (!canManageAppointment(caller, { branch: appt.branch, assignedTo: [] }, request.auth.uid) && !(marking && inBranch && (caller.role === "RECEPTIONIST" || caller.isQuality === true))) {
+    throw new HttpsError("permission-denied", "تأكيد الزيارات لمدير الفرع أو من لديه صلاحية التعديل.");
+  }
+  const visitRef = db.collection("leadVisits").doc(appt.leadVisitId || "_");
+  const visit = (await visitRef.get()).data();
+  if (!visit) throw new HttpsError("not-found", "لم يتم العثور على الزيارة.");
+  const leadRef = db.collection("leads").doc(appt.leadId);
+  const now = Timestamp.now();
+  const actorName = caller.name || "مستخدم";
+  const log = (text) => leadRef.collection("activity").add({ type: "VISIT", text, byName: actorName, byId: request.auth.uid, at: now });
+
+  if (action === "cancel") {
+    await apptRef.update({ status: "CANCELLED", cancelledAt: now });
+    await visitRef.update({ status: "CANCELLED", cancelReason: reason, updatedAt: now });
+    await log(`أُلغي طلب الزيارة${reason ? `: ${reason}` : ""}`);
+    return { ok: true };
+  }
+  if (action === "attended" || action === "noShow") {
+    await apptRef.update({ status: action === "attended" ? "CHECKED_IN" : "NO_SHOW" });
+    await visitRef.update({ status: action === "attended" ? "ATTENDED" : "NO_SHOW", updatedAt: now });
+    if (action === "attended") await leadRef.update({ stage: "VISITED", stageEnteredAt: now, updatedAt: now }).catch(() => {});
+    await log(action === "attended" ? "حضرت الأسرة الزيارة" : "لم تحضر الأسرة الزيارة");
+    return { ok: true };
+  }
+  let start = appt.start;
+  let id = apptRef.id;
+  if (action === "reschedule") {
+    const { leadVisitId, kind, leadId, leadCode, parentName, phone, students, visitType } = appt;
+    const reserved = await reserveAppointment({ branch: appt.branch, startMs: Number(slot), complaintDocId: null, complaintId: null, cancelId: apptRef.id, extra: { leadVisitId, kind, leadId, leadCode, parentName, phone, students, visitType } });
+    start = reserved.start;
+    id = reserved.id;
+  }
+  await db.collection("appointments").doc(id).update({ status: "CONFIRMED", decidedBy: request.auth.uid, decidedByName: actorName, decidedAt: now });
+  await visitRef.update({
+    status: "CONFIRMED", at: start, dayKey: new Date(start.toMillis() + APPT_TZ_MS).toISOString().slice(0, 10), appointmentId: id,
+    confirmedByName: actorName, updatedAt: now, ...(action === "reschedule" ? { previousAt: visit.at, rescheduledCount: FieldValue.increment(1) } : {}),
+  });
+  await leadRef.update({ visitAt: start, updatedAt: now }).catch(() => {});
+  const when = formatRiyadh(start.toMillis());
+  await log(`${action === "reschedule" ? "حُدد موعد بديل للزيارة" : "تم تأكيد موعد الزيارة"}: ${when}`);
+  let sent = false;
+  const cfg = await leadVisitWa();
+  if (cfg) {
+    try {
+      const branchName = (await db.collection("branches").doc(appt.branch).get()).data()?.name || "المدرسة";
+      await sendLeadVisitMessage(cfg, { ...visit, at: start, id: visitRef.id }, "confirm", branchName);
+      await visitRef.update({ confirmationSentAt: Timestamp.now() });
+      sent = true;
+    } catch (err) {
+      console.error("visit request confirm", err.message);
+    }
+  }
+  return { ok: true, when, sent, phone: appt.phone || "" };
 });
 
 // --- Platform data for the owner's student record ----------------------------

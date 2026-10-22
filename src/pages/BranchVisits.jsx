@@ -16,6 +16,7 @@ import { normalizeAssignees } from '../utils/assignees';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import AppointmentPicker from '../components/appointments/AppointmentPicker';
 import VisitDeclineDialog from '../components/visits/VisitDeclineDialog';
+import VisitRequestsPanel from '../components/visits/VisitRequestsPanel';
 
 const isToday = (ts) => {
   if (!ts?.toDate) return false;
@@ -214,6 +215,8 @@ export default function BranchVisits() {
         </h1>
         <p className="text-slate-500 mt-1">{t('branchVisits.subtitle')}</p>
       </div>
+
+      <VisitRequestsPanel />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title={t('branchVisits.waitingNow')} value={String(stats.waiting)} icon={Armchair} gradient="from-rose-500 to-red-600" />

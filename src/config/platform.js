@@ -41,9 +41,10 @@ export const SIDE_STYLES = {
 // platform settings); past it the file is flagged overdue.
 // Visit / school-tour appointments for a lead (leadVisits collection).
 export const VISIT_TYPES = ['VISIT_TOUR', 'VISIT', 'TOUR'];
-export const VISIT_STATUSES = ['SCHEDULED', 'CONFIRMED', 'ATTENDED', 'NO_SHOW', 'CANCELLED'];
+export const VISIT_STATUSES = ['REQUESTED', 'SCHEDULED', 'CONFIRMED', 'ATTENDED', 'NO_SHOW', 'CANCELLED'];
 export const VISIT_ACTIVE = ['SCHEDULED', 'CONFIRMED'];
 export const VISIT_STATUS_STYLES = {
+  REQUESTED: 'bg-amber-100 text-amber-700 border-amber-200',
   SCHEDULED: 'bg-sky-100 text-sky-700 border-sky-200',
   CONFIRMED: 'bg-indigo-100 text-indigo-700 border-indigo-200',
   ATTENDED: 'bg-emerald-100 text-emerald-700 border-emerald-200',
