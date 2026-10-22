@@ -1,7 +1,7 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
-import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2 } from 'lucide-react';
+import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
@@ -58,6 +58,7 @@ export default function AppLayout() {
     ['reports', '/reports', FileBarChart, 'nav.reports'],
     ['visits', '/visits', Armchair, 'nav.branchVisits'],
     ['trips', '/trips', Bus, 'nav.trips'],
+    ['calls', '/calls', PhoneCall, 'nav.calls'],
   ];
   const navItems = moduleNav.filter(([key]) => canSeeModule(userData, key)).map(([, path, icon, label]) => ({ name: t(label), path, icon }));
   // A section the employee may not see redirects to their first allowed one.

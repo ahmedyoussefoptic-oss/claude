@@ -6,6 +6,7 @@ import { Crown, ShieldCheck, KeyRound, Loader2, Check, Bus } from 'lucide-react'
 import { db, functions } from '../../config/firebase';
 import { ADMIN_CAPS, useAdminPermissions } from '../../config/adminPermissions';
 import ApiKeysSettings from './ApiKeysSettings';
+import BevatelSettings from './BevatelSettings';
 
 const inputCls = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
 
@@ -141,6 +142,8 @@ export default function OwnerSettings() {
       </section>
 
       <ApiKeysSettings />
+
+      <BevatelSettings />
     </div>
   );
 }

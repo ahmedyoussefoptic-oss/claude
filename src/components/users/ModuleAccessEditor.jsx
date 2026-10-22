@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, FileText, Wrench, PackageSearch, Armchair, Bus, GraduationCap, Search, Map, FileBarChart, Eye, UserCheck, Building2, RotateCcw } from 'lucide-react';
+import { LayoutDashboard, FileText, Wrench, PackageSearch, Armchair, Bus, GraduationCap, Search, Map, FileBarChart, Eye, UserCheck, Building2, RotateCcw, PhoneCall } from 'lucide-react';
 import { MODULE_KEYS, moduleDefault } from '../../utils/scope';
 
-const ICONS = { dashboard: LayoutDashboard, complaints: FileText, techSupport: Wrench, lostFound: PackageSearch, visits: Armchair, trips: Bus, students: GraduationCap, search: Search, flowMap: Map, reports: FileBarChart };
+const ICONS = { dashboard: LayoutDashboard, complaints: FileText, techSupport: Wrench, lostFound: PackageSearch, visits: Armchair, trips: Bus, students: GraduationCap, search: Search, flowMap: Map, reports: FileBarChart, calls: PhoneCall };
 const PRESETS = {
   default: null,
   complaintsOnly: ['dashboard', 'complaints'],

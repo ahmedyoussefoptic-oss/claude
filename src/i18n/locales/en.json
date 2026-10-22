@@ -62,7 +62,8 @@
     "branchQr": "Branch visit QR",
     "branchVisits": "Branch visits",
     "trips": "School Trips",
-    "noAccess": "No sections are enabled for your account yet. Ask the system admin to choose the sections you can see."
+    "noAccess": "No sections are enabled for your account yet. Ask the system admin to choose the sections you can see.",
+    "calls": "Call analytics"
   },
   "app": {
     "brand": "Al Moktashef International",
@@ -881,7 +882,8 @@
         "students": "Student records",
         "search": "Advanced search",
         "flowMap": "Flow map",
-        "reports": "Reports"
+        "reports": "Reports",
+        "calls": "Call analytics"
       },
       "noneWarning": "No section selected — the employee will see nothing after signing in.",
       "scopeTitle": "Record scope",
@@ -2702,5 +2704,70 @@
     "revoke": "Revoke",
     "revoked": "Revoked",
     "revokeConfirm": "Revoke «{{name}}»? Anything using it stops working at once."
+  },
+  "bevatel": {
+    "title": "Bevatel (calls)",
+    "offHint": "Enter the API key from the Bevatel Client Console. Calls are pulled every 15 minutes into «Call analytics».",
+    "onHint": "Connected: calls are pulled every 15 minutes. The key stays on the server.",
+    "key": "API key",
+    "newKey": "New key (replaces the current one)",
+    "connect": "Connect & verify",
+    "disconnect": "Disconnect",
+    "connectedOk": "Connected.",
+    "removed": "Disconnected.",
+    "queuesTitle": "Queue → branch",
+    "noQueues": "Bevatel returned no queues.",
+    "pickBranch": "— branch —",
+    "saveMap": "Save mapping",
+    "mapSaved": "Saved. Sync to apply it to earlier calls.",
+    "syncDays": "Sync last {{days}} days",
+    "synced": "Synced: {{inbound}} inbound, {{outbound}} outbound.",
+    "lastSync": "Last sync {{time}} ({{count}} calls)"
+  },
+  "calls": {
+    "title": "Call analytics",
+    "subtitle": "Bevatel calls: answered, missed and outbound per branch and agent, busy hours, and missed calls nobody returned.",
+    "lastSync": "Last updated: {{time}}",
+    "from": "From",
+    "to": "To",
+    "notConnected": "Bevatel is not connected yet — the owner connects it in Settings.",
+    "syncError": "Last sync failed: {{error}}",
+    "inbound": "Inbound",
+    "answerRate": "Answer rate",
+    "missed": "Missed",
+    "notReturned": "Not returned",
+    "outbound": "Outbound",
+    "avgWait": "Avg wait",
+    "avgTalk": "Avg talk",
+    "repeatCallers": "Repeat callers",
+    "notReturnedTitle": "Missed calls not returned",
+    "notReturnedHint": "Numbers that called, were not answered, and were neither called back nor got through later. Newest first.",
+    "allReturned": "No pending missed calls in this period.",
+    "byBranch": "By branch",
+    "byAgent": "By agent",
+    "heatTitle": "Busy hours (inbound)",
+    "heatHint": "Calls per weekday and hour — darker is busier.",
+    "repeatTitle": "Repeat callers (3+ calls)",
+    "repeatHint": "Often an unresolved issue — consider opening a feedback record.",
+    "repeatCount": "{{count}} calls ({{missed}} missed)",
+    "noBranch": "Unmapped",
+    "col": {
+      "time": "Time",
+      "number": "Number",
+      "parentOf": "Parent of",
+      "branch": "Branch",
+      "attempts": "Attempts",
+      "agent": "Agent",
+      "answered": "Answered"
+    },
+    "days": {
+      "0": "Sun",
+      "1": "Mon",
+      "2": "Tue",
+      "3": "Wed",
+      "4": "Thu",
+      "5": "Fri",
+      "6": "Sat"
+    }
   }
 }

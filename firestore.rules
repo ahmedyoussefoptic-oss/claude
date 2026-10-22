@@ -467,6 +467,12 @@ service cloud.firestore {
       allow read: if false;
       allow write: if canWriteSettings();
     }
+    // Bevatel calls (bevatelSync): admins, and staff given the «calls»
+    // section on the Users page (off by default), within their branches.
+    match /calls/{id} {
+      allow read: if isAdmin() || (myDoc() != null && myDoc().get('modules', {}).get('calls', false) == true && inMyScope(resource.data.branch));
+      allow write: if false;
+    }
     // MCP / API keys (Claude): only their hashes, handled by Cloud Functions.
     match /apiKeys/{id} {
       allow read, write: if false;
@@ -492,7 +498,7 @@ service cloud.firestore {
         'itemCategories', 'settings', 'settingsUnlocks', 'secureConfig', 'complaints', 'trips', 'tripVerify',
         'appointments', 'deletedComplaints', 'deletedLostFoundItems', 'deletedTechSupportTickets', 'lostFoundItems',
         'techSupportTickets', 'students', 'notifications',
-        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys'
+        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls'
       ]);
     }
   }

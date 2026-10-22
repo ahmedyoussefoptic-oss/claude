@@ -4794,3 +4794,153 @@ exports.mcp = onRequest({ timeoutSeconds: 120, memory: "512MiB" }, async (req, r
   if (!replies.length) { res.status(202).end(); return; }
   res.json(Array.isArray(req.body) ? replies : replies[0]);
 });
+
+// ===========================================================================
+// Bevatel call center — calls are pulled from Bevatel's reports API every
+// 15 minutes into calls/<dir>_<id> (Bevatel sends no call webhooks). The
+// owner saves the API key (secureConfig/bevatel, never readable by clients)
+// and maps each Bevatel queue to a branch (settings/bevatel.queueBranch).
+// Each run re-reads the whole current day (and the previous one just after
+// midnight) and upserts, so a missed run or a late update heals itself.
+// ===========================================================================
+const BEVATEL_API = "https://api.bevatel.com";
+
+async function bevatelKey() {
+  const snap = await db.collection("secureConfig").doc("bevatel").get();
+  return snap.exists ? snap.data().apiKey || null : null;
+}
+async function bevatelGet(key, path, params = {}) {
+  const url = new URL(path, BEVATEL_API);
+  Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v)); });
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${key}`, Accept: "application/json", "Content-Type": "application/json" } });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`Bevatel ${res.status}: ${body.message || res.statusText}`);
+  return body;
+}
+// Every page of a report for one day range (Riyadh time).
+async function bevatelReport(key, path, fromDay, toDay) {
+  const dmy = (day) => day.split("-").reverse().join("-");
+  const rows = [];
+  for (let page = 1; page <= 60; page++) {
+    const body = await bevatelGet(key, path, { from_date: dmy(fromDay), to_date: dmy(toDay), time_zone: "+03:00", page, per_page: 100 });
+    rows.push(...(body.data || []));
+    if (!body.meta || page >= (body.meta.last_page || 1)) break;
+  }
+  return rows;
+}
+const hmsSec = (v) => {
+  const m = /^(\d+):(\d{2}):(\d{2})$/.exec(String(v || ""));
+  return m ? Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]) : 0;
+};
+// Caller numbers as the roster stores parent mobiles (05xxxxxxxx).
+function callPhone(v) {
+  let d = normalizeDigits(v).replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (/^9665\d{8}$/.test(d)) return `0${d.slice(3)}`;
+  if (/^5\d{8}$/.test(d)) return `0${d}`;
+  return d;
+}
+
+function callRecord(dir, row, queueBranch, queueNames) {
+  const at = new Date(`${String(row.date || "").replace(" ", "T")}+03:00`);
+  if (!row.id || Number.isNaN(at.getTime())) return null;
+  const queue = String(row.queue_number || row.queue || "");
+  const queueKey = queueBranch[queue] ? queue : Object.keys(queueNames).find((n) => queueNames[n] === queue) || queue;
+  const talkSec = hmsSec(row.talk_time || row.duration);
+  const event = String(row.event || "");
+  const local = new Date(at.getTime() + 3 * 3600000); // Riyadh wall clock
+  return {
+    dir, callId: String(row.id), at: Timestamp.fromDate(at), day: String(row.date).slice(0, 10), hour: local.getUTCHours(), weekday: local.getUTCDay(),
+    phone: callPhone(row.number), number: String(row.number || ""), queue: queueKey, queueName: row.queue_name || queueNames[queueKey] || (dir === "out" ? row.queue || "" : ""),
+    branch: queueBranch[queueKey] || "", agent: row.agent || "", agentNumber: row.agent_number || "", event,
+    answered: talkSec > 0 || /^COMPLETE|TRANSFER/i.test(event), ringSec: hmsSec(row.ring_time), waitSec: hmsSec(row.wait_time), talkSec,
+    did: row.did || "", tags: row.tags && typeof row.tags === "object" ? row.tags : {},
+  };
+}
+
+async function syncBevatelDays(fromDay, toDay) {
+  const key = await bevatelKey();
+  if (!key) return { skipped: "no key" };
+  const cfgRef = db.collection("settings").doc("bevatel");
+  const cfg = (await cfgRef.get()).data() || {};
+  const queueBranch = cfg.queueBranch || {};
+  const queueNames = Object.fromEntries((cfg.queues || []).map((q) => [q.number, q.name]));
+  const [inbound, outbound] = await Promise.all([
+    bevatelReport(key, "/v1/reports/calls", fromDay, toDay),
+    bevatelReport(key, "/v1/reports/outbound/detailed-calls", fromDay, toDay),
+  ]);
+  const now = Timestamp.now();
+  const records = [
+    ...inbound.map((r) => callRecord("in", r, queueBranch, queueNames)),
+    ...outbound.map((r) => callRecord("out", r, queueBranch, queueNames)),
+  ].filter(Boolean);
+  for (let i = 0; i < records.length; i += 400) {
+    const batch = db.batch();
+    records.slice(i, i + 400).forEach((r) => batch.set(db.collection("calls").doc(`${r.dir}_${r.callId.replace(/[^A-Za-z0-9._-]/g, "_")}`), { ...r, syncedAt: now }, { merge: true }));
+    await batch.commit();
+  }
+  await cfgRef.set({ lastSyncAt: now, lastSyncCount: records.length, lastSyncError: FieldValue.delete() }, { merge: true });
+  return { inbound: inbound.length, outbound: outbound.length };
+}
+
+exports.bevatelSync = onSchedule({ schedule: "every 15 minutes", timeZone: "Asia/Riyadh", timeoutSeconds: 300 }, async () => {
+  const today = riyadhDay();
+  const minutes = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Riyadh", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date()).replace(":", ""));
+  try {
+    const result = await syncBevatelDays(minutes < 100 ? riyadhDay(-1) : today, today);
+    console.log("bevatel sync", JSON.stringify(result));
+  } catch (err) {
+    console.error("bevatel sync", err.message);
+    await db.collection("settings").doc("bevatel").set({ lastSyncError: err.message, lastSyncErrorAt: Timestamp.now() }, { merge: true });
+  }
+});
+
+async function bevatelOwner(request) {
+  const caller = await adminCaller(request);
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "ربط بيفاتيل متاح لمنشئ النظام فقط.");
+  return caller;
+}
+
+// Saves (or removes) the API key after checking it against Bevatel, and
+// stores the workspace queues for the queue → branch mapping.
+exports.setBevatelKey = onCall({ timeoutSeconds: 60 }, async (request) => {
+  const caller = await bevatelOwner(request);
+  const apiKey = String(request.data?.apiKey || "").trim();
+  const cfgRef = db.collection("settings").doc("bevatel");
+  if (!apiKey) {
+    await db.collection("secureConfig").doc("bevatel").delete();
+    await cfgRef.set({ connected: false, updatedAt: Timestamp.now() }, { merge: true });
+    return { connected: false };
+  }
+  let queues;
+  try {
+    queues = (await bevatelGet(apiKey, "/v1/settings/queues")).data || [];
+  } catch (err) {
+    throw new HttpsError("invalid-argument", `تعذر الاتصال ببيفاتيل بهذا المفتاح (${err.message}).`);
+  }
+  await db.collection("secureConfig").doc("bevatel").set({ apiKey, savedAt: Timestamp.now(), savedBy: caller.uid });
+  const list = queues.map((q) => ({ number: String(q.number || ""), name: String(q.name || ""), type: q.type || "" }));
+  await cfgRef.set({ connected: true, queues: list, updatedAt: Timestamp.now() }, { merge: true });
+  return { connected: true, queues: list };
+});
+
+exports.saveBevatelQueues = onCall(async (request) => {
+  await bevatelOwner(request);
+  const map = request.data?.queueBranch || {};
+  const clean = Object.fromEntries(Object.entries(map).filter(([q, b]) => q && typeof b === "string" && b).map(([q, b]) => [String(q).slice(0, 40), b.slice(0, 60)]));
+  await db.collection("settings").doc("bevatel").set({ queueBranch: clean, updatedAt: Timestamp.now() }, { merge: true });
+  return { ok: true };
+});
+
+// Pulls the last N days now (first connection, or after changing the
+// queue → branch mapping so older calls get their branch).
+exports.bevatelSyncNow = onCall({ timeoutSeconds: 540, memory: "512MiB" }, async (request) => {
+  await bevatelOwner(request);
+  const days = Math.min(60, Math.max(1, Math.floor(Number(request.data?.days) || 7)));
+  const today = riyadhDay();
+  try {
+    return await syncBevatelDays(riyadhDay(-(days - 1)), today);
+  } catch (err) {
+    throw new HttpsError("internal", err.message);
+  }
+});
