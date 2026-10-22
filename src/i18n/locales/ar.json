@@ -603,7 +603,8 @@
       "APPOINTMENT_CONFIRMED": "تم تأكيد موعد زيارتكم",
       "APPOINTMENT_RESCHEDULED": "تم تحديد موعد بديل لزيارتكم",
       "CONVERTED_FROM_TICKET": "تم تحويل طلبكم إلى ملاحظة لمتابعته مع القسم المختص",
-      "APPOINTMENT_INVITED": "تمت دعوتكم لزيارة المدرسة"
+      "APPOINTMENT_INVITED": "تمت دعوتكم لزيارة المدرسة",
+      "APPOINTMENT_REMINDER": "تذكير بموعد زيارتكم"
     },
     "pageTitle": "بوابة متابعة الملاحظات والبلاغات",
     "pageSubtitle": "أدخل رقم الملاحظة أو البلاغ للاستعلام عن حالته الحالية.",
@@ -1206,7 +1207,8 @@
       "APPOINTMENT_RESCHEDULED": "تم تحديد موعد زيارة بديل",
       "REMINDER_SENT": "إرسال تذكير",
       "CONVERTED_FROM_TICKET": "تم التحويل من بلاغ تقني",
-      "APPOINTMENT_INVITED": "دعوة ولي الأمر لزيارة المدرسة"
+      "APPOINTMENT_INVITED": "دعوة ولي الأمر لزيارة المدرسة",
+      "APPOINTMENT_REMINDER": "إرسال تذكير موعد الزيارة لولي الأمر"
     },
     "lostFound": {
       "ITEM_REGISTERED": "تم تسجيل الغرض",
@@ -1396,7 +1398,8 @@
       "appointmentConfirmed": "تأكيد موعد زيارة",
       "appointmentRescheduled": "تغيير موعد زيارة",
       "tripNotice": "إشعار رحلة مدرسية",
-      "tripAnnouncementImage": "إعلان رحلة بصورة"
+      "tripAnnouncementImage": "إعلان رحلة بصورة",
+      "appointmentReminder": "تذكير بموعد زيارة"
     },
     "guideTitle": "نصوص القوالب المقترحة لتقديمها للاعتماد",
     "guideIntro": "أنشئ هذه القوالب الأربعة من بوابة تقنيات (Message Templates) بنفس الأسماء أعلاه، وانتظر اعتمادها من واتساب قبل التفعيل.",
@@ -1624,7 +1627,9 @@
     "noteForParent": "ملاحظة",
     "inviteSend": "تحديد الموعد وإرسال الدعوة",
     "inviteSentAuto": "تم تحديد الموعد ({{when}}) وإرسال الدعوة لولي الأمر عبر واتساب.",
-    "inviteSaved": "تم تحديد الموعد ({{when}}). أرسل الدعوة لولي الأمر بزر واتساب أدناه."
+    "inviteSaved": "تم تحديد الموعد ({{when}}). أرسل الدعوة لولي الأمر بزر واتساب أدناه.",
+    "reminderAuto": "يصل لولي الأمر تذكير تلقائي مساء اليوم السابق للموعد (أو صباح يوم الموعد إذا حُجز متأخراً).",
+    "reminderSent": "أُرسل التذكير ({{day}})."
   },
   "appointmentSettings": {
     "title": "مواعيد الزيارات المدرسية",

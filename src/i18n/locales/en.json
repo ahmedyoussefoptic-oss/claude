@@ -599,7 +599,8 @@
       "APPOINTMENT_CONFIRMED": "Your visit is confirmed",
       "APPOINTMENT_RESCHEDULED": "An alternative visit time was set",
       "CONVERTED_FROM_TICKET": "Your request was transferred to the relevant department as feedback",
-      "APPOINTMENT_INVITED": "You are invited to visit the school"
+      "APPOINTMENT_INVITED": "You are invited to visit the school",
+      "APPOINTMENT_REMINDER": "Visit reminder"
     },
     "pageTitle": "Feedback & Reports Tracking Portal",
     "pageSubtitle": "Enter your feedback or report number to check its current status.",
@@ -1202,7 +1203,8 @@
       "APPOINTMENT_RESCHEDULED": "Alternative visit time set",
       "REMINDER_SENT": "Reminder sent",
       "CONVERTED_FROM_TICKET": "Converted from a tech-support ticket",
-      "APPOINTMENT_INVITED": "Parent invited to visit"
+      "APPOINTMENT_INVITED": "Parent invited to visit",
+      "APPOINTMENT_REMINDER": "Visit reminder sent to parent"
     },
     "lostFound": {
       "ITEM_REGISTERED": "Item registered",
@@ -1392,7 +1394,8 @@
       "appointmentConfirmed": "Visit appointment confirmed",
       "appointmentRescheduled": "Visit appointment changed",
       "tripNotice": "School trip notice",
-      "tripAnnouncementImage": "Trip announcement with image"
+      "tripAnnouncementImage": "Trip announcement with image",
+      "appointmentReminder": "Visit reminder"
     },
     "guideTitle": "Suggested template texts to submit for approval",
     "guideIntro": "Create these four templates in the Taqnyat portal (Message Templates) with the names above, and wait for WhatsApp approval before enabling.",
@@ -1600,7 +1603,9 @@
     "noteForParent": "Note",
     "inviteSend": "Set time & send invitation",
     "inviteSentAuto": "Visit set ({{when}}) and sent to the parent on WhatsApp.",
-    "inviteSaved": "Visit set ({{when}}). Send it to the parent with the WhatsApp button below."
+    "inviteSaved": "Visit set ({{when}}). Send it to the parent with the WhatsApp button below.",
+    "reminderAuto": "The parent gets an automatic reminder the evening before (or that morning if booked late).",
+    "reminderSent": "Reminder sent ({{day}})."
   },
   "appointmentSettings": {
     "title": "School visit appointments",

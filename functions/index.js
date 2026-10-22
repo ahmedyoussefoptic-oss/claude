@@ -331,7 +331,7 @@ const NOTIFICATION_CATEGORIES = {
   reopened: ["REOPENED", "IT_REOPENED"],
   visit: ["VISIT_ARRIVED"],
   viewed: ["VIEWED", "IT_VIEWED"],
-  appointment: ["APPOINTMENT_REQUESTED"],
+  appointment: ["APPOINTMENT_REQUESTED", "APPOINTMENT_REMINDER"],
   trips: ["TRIP_APPROVAL_REQUESTED", "TRIP_DECIDED", "TRIP_RECEIPT"],
   reminder: ["REMINDER", "IT_REMINDER", "LF_REMINDER"],
   platform: ["LEAVE_REQUESTED", "LEAD_NEW"],
@@ -2157,7 +2157,7 @@ const TAQNYAT_MESSAGES_URL = "https://api.taqnyat.sa/wa/v2/messages/";
 // Another school's copy sets PUBLIC_APP_URL / SCHOOL_NAME in functions/.env.
 const PUBLIC_APP_URL = (process.env.PUBLIC_APP_URL || "https://mis-complaints.web.app").replace(/\/+$/, "");
 const WA_TEMPLATE_KEYS = {
-  complaint: { receipt: "complaintReceipt", resolution: "complaintResolution", visitMet: "visitMet", appointmentConfirmed: "appointmentConfirmed", appointmentRescheduled: "appointmentRescheduled" },
+  complaint: { receipt: "complaintReceipt", resolution: "complaintResolution", visitMet: "visitMet", appointmentConfirmed: "appointmentConfirmed", appointmentRescheduled: "appointmentRescheduled", appointmentReminder: "appointmentReminder" },
   techSupport: { receipt: "techReceipt", resolution: "techResolution" },
   lostFound: { receipt: "lostFoundReceipt", returned: "lostFoundReturned" },
 };
@@ -2325,7 +2325,10 @@ exports.testWhatsAppTemplate = onCall({ secrets: WA_SECRETS }, async (request) =
 // Throws HttpsError with an Arabic message the UI / activity log can show.
 async function sendWaTemplate({ kind, ref, record, event, actorId, actorName, settings }) {
   const kindConfig = WA_KINDS[kind];
-  const templateName = (settings.templates || {})[WA_TEMPLATE_KEYS[kind][event]];
+  // A visit reminder falls back to the confirmation template until its own
+  // template is approved and named in Settings.
+  const templates = settings.templates || {};
+  const templateName = templates[WA_TEMPLATE_KEYS[kind][event]] || (event === "appointmentReminder" ? templates.appointmentConfirmed : "");
   if (!templateName) {
     throw new HttpsError("failed-precondition", "لم يُحدَّد اسم القالب لهذه الرسالة في الإعدادات.");
   }
@@ -2345,7 +2348,7 @@ async function sendWaTemplate({ kind, ref, record, event, actorId, actorName, se
   let fourth;
   if (event === "receipt") {
     fourth = branch.name || record.branch;
-  } else if (event === "appointmentConfirmed" || event === "appointmentRescheduled") {
+  } else if (event === "appointmentConfirmed" || event === "appointmentRescheduled" || event === "appointmentReminder") {
     if (!record.appointment || !record.appointment.start) {
       throw new HttpsError("failed-precondition", "لا يوجد موعد زيارة لهذه الملاحظة.");
     }
@@ -2414,7 +2417,7 @@ async function sendWaTemplate({ kind, ref, record, event, actorId, actorName, se
   // so a sender without edit permission (an assignee) still records it.
   // A tech-support resolution's fields (and closing the ticket) are left to
   // the client's existing handleResolutionSent flow.
-  const sentPrefix = { receipt: "receipt", resolution: "resolution", returned: "resolution", visitMet: "visit", appointmentConfirmed: "appointment", appointmentRescheduled: "appointment" }[event];
+  const sentPrefix = { receipt: "receipt", resolution: "resolution", returned: "resolution", visitMet: "visit", appointmentConfirmed: "appointment", appointmentRescheduled: "appointment", appointmentReminder: "appointmentReminder" }[event];
   if (!(kind === "techSupport" && event === "resolution")) {
     const sentNow = Timestamp.now();
     await ref.update({
@@ -2829,6 +2832,41 @@ exports.inviteParentVisit = onCall({ secrets: WA_SECRETS }, async (request) => {
   await autoSendWa("complaint", ref, "appointmentConfirmed");
   const after = (await ref.get()).data();
   return { ok: true, when, sent: Boolean(after.appointmentMessageSentAt) };
+});
+
+// Visit reminders: at 17:00 for tomorrow's confirmed visits, and at 07:00
+// for today's visits that got no reminder (booked after yesterday's run).
+// The parent gets the reminder on WhatsApp (when the API and auto-send are
+// on) and the staff handling the record get an in-app reminder.
+async function sendAppointmentReminders(day) {
+  const from = Timestamp.fromMillis(Date.parse(`${day}T00:00:00+03:00`));
+  const to = Timestamp.fromMillis(Date.parse(`${day}T23:59:59+03:00`));
+  const snap = await db.collection("appointments").where("start", ">=", from).where("start", "<=", to).get();
+  let reminded = 0;
+  for (const a of snap.docs) {
+    const appt = a.data();
+    if (appt.status !== "CONFIRMED" || !appt.complaintDocId) continue;
+    const ref = db.collection("complaints").doc(appt.complaintDocId);
+    const c = (await ref.get()).data();
+    if (!c || c.appointment?.id !== a.id || c.appointment?.status !== "CONFIRMED" || c.appointment?.reminderSentFor === day) continue;
+    if (["CLOSED", "REJECTED"].includes(c.status)) continue;
+    await ref.update({ "appointment.reminderSentFor": day, "appointment.reminderAt": Timestamp.now() });
+    await autoSendWa("complaint", ref, "appointmentReminder");
+    const when = formatRiyadh(appt.start.toMillis());
+    await ref.collection("activityLog").add({ action: "APPOINTMENT_REMINDER", actorId: null, actorName: AUTO_ACTOR, metadata: { when }, createdAt: Timestamp.now() });
+    const staff = [...new Set([...(c.assignedTo || []), c.appointment?.decidedBy].filter(Boolean))];
+    if (staff.length) {
+      await notifyUsers(staff, { title: "تذكير بموعد زيارة ولي أمر", body: `${c.parentName || "ولي الأمر"} — الطالب/ة ${c.studentName || ""} — ${when} (الملاحظة ${c.complaintId})`, complaintId: ref.id, type: "APPOINTMENT_REMINDER" });
+    }
+    reminded++;
+  }
+  return reminded;
+}
+exports.appointmentRemindersEvening = onSchedule({ schedule: "0 17 * * *", timeZone: "Asia/Riyadh", secrets: WA_SECRETS, timeoutSeconds: 300 }, async () => {
+  console.log("appointment reminders (tomorrow)", await sendAppointmentReminders(riyadhDay(1)));
+});
+exports.appointmentRemindersMorning = onSchedule({ schedule: "0 7 * * *", timeZone: "Asia/Riyadh", secrets: WA_SECRETS, timeoutSeconds: 300 }, async () => {
+  console.log("appointment reminders (today)", await sendAppointmentReminders(riyadhDay()));
 });
 
 // Parent arrives for a confirmed appointment and checks in from the branch

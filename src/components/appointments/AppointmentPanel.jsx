@@ -166,6 +166,7 @@ export default function AppointmentPanel({ complaint, branchName }) {
         </div>
       )}
       {status === 'CONFIRMED' && <p className="text-xs text-slate-500">{t('appointments.checkInHint')}</p>}
+      {status === 'CONFIRMED' && <p className="text-xs text-sky-700">{appt.reminderSentFor ? t('appointments.reminderSent', { day: appt.reminderSentFor }) : t('appointments.reminderAuto')}</p>}
     </div>
   );
 }

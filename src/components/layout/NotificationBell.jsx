@@ -29,6 +29,7 @@ const NOTIFICATION_TARGET_PATH = {
   INTERNAL_COMMENT_ADDED: '/complaints',
   VISIT_ARRIVED: '/complaints',
   APPOINTMENT_REQUESTED: '/complaints',
+  APPOINTMENT_REMINDER: '/complaints',
   VIEWED: '/complaints',
   IT_VIEWED: '/tech-support',
   PARTIAL_SOLUTION_ADDED: '/complaints',

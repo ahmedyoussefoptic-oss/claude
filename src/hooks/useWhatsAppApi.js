@@ -16,6 +16,7 @@ export const DEFAULT_WA_API = {
     lostFoundReturned: 'lostfound_returned',
     appointmentConfirmed: 'appointment_confirmed',
     appointmentRescheduled: 'appointment_rescheduled',
+    appointmentReminder: '', // empty: reminders use the confirmation template
     tripNotice: 'trip_notice',
   },
 };
