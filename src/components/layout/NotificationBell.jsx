@@ -31,6 +31,7 @@ const NOTIFICATION_TARGET_PATH = {
   APPOINTMENT_REQUESTED: '/complaints',
   APPOINTMENT_REMINDER: '/complaints',
   VISIT_REQUESTED: '/visits',
+  WA_REPORT_MISSING: '/wa-reports',
   VIEWED: '/complaints',
   IT_VIEWED: '/tech-support',
   PARTIAL_SOLUTION_ADDED: '/complaints',

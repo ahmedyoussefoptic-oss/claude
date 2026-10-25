@@ -5404,3 +5404,32 @@ exports.assistantUsageSummary = onCall(async (request) => {
   const usd = ((t.inputTokens || 0) * 4 + (t.outputTokens || 0) * 20 + (t.cacheReadTokens || 0) * 0.2 + (t.cacheWriteTokens || 0) * 5) / 1e6;
   return { month, messages: t.messages || 0, inputTokens: t.inputTokens || 0, outputTokens: t.outputTokens || 0, estimatedUsd: Math.round(usd * 100) / 100 };
 });
+
+// --- Branch WhatsApp daily reports (until the numbers are on the API) --------
+// At 13:00 on working days, staff with the «waReports» section are reminded
+// of their branches' missing report for the previous working day.
+exports.waReportReminders = onSchedule({ schedule: "0 13 * * 0-4", timeZone: "Asia/Riyadh", timeoutSeconds: 120 }, async () => {
+  // Previous working day (Sunday looks back to Thursday).
+  const today = riyadhDay();
+  const dow = new Date(`${today}T12:00:00Z`).getUTCDay();
+  const day = riyadhDay(dow === 0 ? -3 : -1);
+  const [branchSnap, reportSnap, users] = await Promise.all([
+    db.collection("branches").get(),
+    db.collection("waDailyReports").where("day", "==", day).get(),
+    loadActiveUsers(),
+  ]);
+  const done = new Set(reportSnap.docs.map((d) => d.data().branch));
+  const missing = branchSnap.docs.filter((b) => b.data().active !== false && !done.has(b.id)).map((b) => ({ id: b.id, name: b.data().name || b.id }));
+  if (!missing.length) return;
+  const staff = users.filter((u) => u.modules?.waReports === true);
+  for (const u of staff) {
+    const own = u.access === "all" ? missing : missing.filter((b) => (u.branches || []).includes(b.id) || u.branch === b.id);
+    if (!own.length) continue;
+    await notifyUsers([u.id], {
+      title: "تقرير واتساب الفرع لم يُدخل",
+      body: `لم يُدخل تقرير واتساب ليوم ${day}: ${own.map((b) => b.name).join("، ")}`,
+      complaintId: "", type: "WA_REPORT_MISSING",
+    });
+  }
+  console.log("wa report reminders", day, missing.length);
+});

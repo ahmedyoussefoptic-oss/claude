@@ -63,7 +63,8 @@
     "branchVisits": "Branch visits",
     "trips": "School Trips",
     "noAccess": "No sections are enabled for your account yet. Ask the system admin to choose the sections you can see.",
-    "calls": "Call analytics"
+    "calls": "Call analytics",
+    "waReports": "Branch WhatsApp"
   },
   "app": {
     "brand": "Al Moktashef International",
@@ -886,7 +887,8 @@
         "flowMap": "Flow map",
         "reports": "Reports",
         "calls": "Call analytics",
-        "assistant": "AI assistant"
+        "assistant": "AI assistant",
+        "waReports": "Branch WhatsApp"
       },
       "noneWarning": "No section selected — the employee will see nothing after signing in.",
       "scopeTitle": "Record scope",
@@ -2914,5 +2916,48 @@
     "sendWa": "Send on WhatsApp",
     "parentMessage": "Hello {{parent}},\nYour visit to Al Moktashef International Schools — {{branch}} is confirmed: {{when}}\nWe look forward to welcoming you.",
     "qr": "Printable QR"
+  },
+  "waReports": {
+    "title": "Branch WhatsApp analytics",
+    "subtitle": "A short daily report per branch from WhatsApp Business, until the numbers are connected to the API.",
+    "tabs": {
+      "entry": "Daily report",
+      "analysis": "Analysis"
+    },
+    "howTo": "In WhatsApp Business: Settings → Business tools → Statistics (messages sent / received). New and unanswered chats from the chat list. Topics are approximate chat counts.",
+    "day": "Day",
+    "savedBy": "Entered by {{name}} — you can edit it.",
+    "notYet": "Not entered yet.",
+    "f": {
+      "newChats": "New chats",
+      "received": "Messages received",
+      "sent": "Messages sent",
+      "unanswered": "Unanswered (end of day)",
+      "responseMinutes": "Avg first reply (min)",
+      "converted": "Turned into feedback records"
+    },
+    "topicsTitle": "Chat topics",
+    "topics": {
+      "REGISTRATION": "Registration",
+      "FEES": "Fees",
+      "TRANSPORT": "Transport",
+      "ACADEMIC": "Academic",
+      "PLATFORMS": "Platforms & accounts",
+      "ABSENCE": "Absence & leave",
+      "COMPLAINT": "Complaint",
+      "TRIPS": "Trips",
+      "GENERAL": "General",
+      "OTHER": "Other"
+    },
+    "notes": "Notes",
+    "notesPlaceholder": "e.g. busy due to exam results, a recurring issue",
+    "save": "Save report",
+    "saved": "Saved",
+    "minutes": "{{n}} min",
+    "trend": "New chats per day",
+    "byBranch": "By branch",
+    "compliance": "Days reported / workdays",
+    "grid": "Reporting by branch",
+    "gridHint": "Green = reported, red = workday without a report, grey = weekend. Staff are reminded at 1 pm about the previous workday."
   }
 }

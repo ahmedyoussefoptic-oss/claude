@@ -26,6 +26,7 @@ import DeletedComplaints from './pages/DeletedComplaints';
 import { ROLES } from './config/roles';
 import { isOwner, canSeePlatform } from './config/adminPermissions';
 import Calls from './pages/Calls';
+import WaReports from './pages/WaReports';
 import PlatformHome from './pages/platform/PlatformHome';
 import Leaves from './pages/platform/Leaves';
 import Leads from './pages/platform/Leads';
@@ -89,6 +90,7 @@ function App() {
           <Route path="visits" element={<BranchVisits />} />
           <Route path="trips" element={<Trips />} />
           <Route path="calls" element={<Calls />} />
+          <Route path="wa-reports" element={<WaReports />} />
           <Route path="platform" element={<Navigate to="/platform/home" replace />} />
           <Route path="platform/home" element={<PlatformOnly><PlatformHome /></PlatformOnly>} />
           <Route path="platform/leaves" element={<PlatformOnly><Leaves /></PlatformOnly>} />

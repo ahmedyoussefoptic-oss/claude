@@ -469,6 +469,16 @@ service cloud.firestore {
     }
     // Bevatel calls (bevatelSync): admins, and staff given the «calls»
     // section on the Users page (off by default), within their branches.
+    // Daily WhatsApp report of each branch (until the numbers are connected
+    // to the API): staff given the «waReports» section, in their branches.
+    match /waDailyReports/{id} {
+      allow read: if isAdmin() || (myDoc() != null && myDoc().get('modules', {}).get('waReports', false) == true && inMyScope(resource.data.branch));
+      allow create, update: if (isAdmin() || (myDoc() != null && myDoc().get('modules', {}).get('waReports', false) == true && inMyScope(request.resource.data.branch)))
+        && request.resource.data.day is string && request.resource.data.day.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        && id == request.resource.data.branch + '_' + request.resource.data.day
+        && request.resource.data.submittedBy == request.auth.uid;
+      allow delete: if isAdmin();
+    }
     match /calls/{id} {
       allow read: if isAdmin() || (myDoc() != null && myDoc().get('modules', {}).get('calls', false) == true && inMyScope(resource.data.branch));
       allow write: if false;
@@ -507,7 +517,7 @@ service cloud.firestore {
         'itemCategories', 'settings', 'settingsUnlocks', 'secureConfig', 'complaints', 'trips', 'tripVerify',
         'appointments', 'deletedComplaints', 'deletedLostFoundItems', 'deletedTechSupportTickets', 'lostFoundItems',
         'techSupportTickets', 'students', 'notifications',
-        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage'
+        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage', 'waDailyReports'
       ]);
     }
   }

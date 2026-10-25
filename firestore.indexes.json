@@ -209,6 +209,20 @@
           "order": "ASCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "waDailyReports",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "branch",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "day",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": [
