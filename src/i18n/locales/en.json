@@ -1030,7 +1030,8 @@
       "COMPLAINTS": "Complaints report",
       "TECH_SUPPORT": "Tech support report",
       "SURVEY": "Parent satisfaction survey report",
-      "VISITS": "Branch visits"
+      "VISITS": "Branch visits",
+      "LOST_FOUND": "Lost & found"
     },
     "criteriaTitle": "Report criteria",
     "complaintTypeLabel": "Complaint type",
@@ -2981,5 +2982,33 @@
     "compliance": "Days reported / workdays",
     "grid": "Reporting by branch",
     "gridHint": "Green = reported, red = workday without a report, grey = weekend. Staff are reminded at 1 pm about the previous workday."
+  },
+  "lfReport": {
+    "total": "Total reports",
+    "lostFound": "Lost / found",
+    "returned": "Returned",
+    "returnRate": "Return rate",
+    "open": "Open",
+    "notAcknowledged": "Not acknowledged in 24h",
+    "closed": "Closed without return",
+    "avgAck": "Avg time to acknowledge",
+    "avgFound": "Avg time to find",
+    "avgReturn": "Avg time to return",
+    "stepTimes": "Step times (from the report)",
+    "byStatus": "By status",
+    "category": "Category",
+    "byStaff": "By staff (who did each step)",
+    "staff": "Staff",
+    "acknowledged": "Acknowledged",
+    "foundCol": "Found",
+    "openList": "Open reports (oldest first)",
+    "code": "Report no.",
+    "item": "Item",
+    "status": "Status",
+    "age": "Age",
+    "assignees": "Assignees",
+    "type": "Type",
+    "student": "Student",
+    "createdAt": "Reported at"
   }
 }

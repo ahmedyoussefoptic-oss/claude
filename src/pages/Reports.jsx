@@ -2,7 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
-import { useBranches, useComplaintTypes, useSubTypes, useProblemTypes } from '../hooks/useOrgData';
+import { useBranches, useComplaintTypes, useSubTypes, useProblemTypes, useItemCategories } from '../hooks/useOrgData';
+import LostFoundReport from '../components/reports/LostFoundReport';
+import LostFoundDetails from '../components/lostFound/LostFoundDetails';
+import { lostFoundMetrics } from '../utils/lostFoundMetrics';
 import useAuthStore from '../stores/useAuthStore';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import TechSupportDetails from '../components/techSupport/TechSupportDetails';
@@ -18,7 +21,7 @@ import VisitsReport from '../components/reports/VisitsReport';
 import ComplaintsReport from '../components/reports/ComplaintsReport';
 import { complaintMetrics, ticketMetrics, timingRows, timingByBranch } from '../utils/reportMetrics';
 import { useSlaSettings, elapsedMs, businessMs } from '../utils/businessTime';
-import { canAccessTechSupport } from '../utils/scope';
+import { canAccessTechSupport, canSeeModule } from '../utils/scope';
 import { complaintStatusLabel, complaintHasType, complaintTypesLabel } from '../config/complaintTypes';
 
 // Excel sheet names are capped at 31 chars and can't contain \ / ? * [ ] : —
@@ -27,7 +30,7 @@ function sheetName(label) {
   return label.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31);
 }
 
-const REPORT_TYPE_IDS = ['COMPLAINTS', 'TECH_SUPPORT', 'VISITS', 'SURVEY'];
+const REPORT_TYPE_IDS = ['COMPLAINTS', 'TECH_SUPPORT', 'VISITS', 'SURVEY', 'LOST_FOUND'];
 const RATING_KEYS = ['resolutionSpeed', 'solutionQuality', 'staffProfessionalism'];
 
 function average(list, getValue) {
@@ -63,6 +66,10 @@ export default function Reports() {
   const [reportType, setReportType] = useState('COMPLAINTS');
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(null);
+  const [lostItems, setLostItems] = useState([]);
+  const [selectedLost, setSelectedLost] = useState(null);
+  const itemCategories = useItemCategories();
+  const canSeeLost = canSeeModule(userData, 'lostFound');
   // Complaints-report options: merging tech tickets in, and the full
   // per-record listing at the end, are both opt-in (the default report is
   // numbers only).
@@ -120,6 +127,20 @@ export default function Reports() {
   }, [userData?.access, userData?.branch, userData?.branches?.join(','), userData?.recordScope]);
 
   useEffect(() => {
+    if (!userData || !canSeeLost) return undefined;
+    const q = query(collection(db, 'lostFoundItems'), ...scopeConstraints(userData), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+      setLostItems(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })));
+    }, () => setLostItems([]));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canSeeLost, userData?.access, userData?.branch, userData?.branches?.join(','), userData?.recordScope]);
+  useEffect(() => {
+    if (!selectedLost) return;
+    setSelectedLost(lostItems.find((i) => i.id === selectedLost.id) || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lostItems]);
+
+  useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
       setSpecialists(
         snapshot.docs
@@ -156,6 +177,21 @@ export default function Reports() {
       return true;
     });
   }, [complaints, filters]);
+
+  // Lost & found report: date range, branch and assignee from the filters.
+  const lostResults = useMemo(() => lostItems.filter((i) => {
+    if (filters.branch && i.branch !== filters.branch) return false;
+    if (filters.assignedTo && !(i.assignedTo || []).includes(filters.assignedTo)) return false;
+    const createdAt = i.createdAt?.toDate?.();
+    if (filters.from && (!createdAt || createdAt < new Date(filters.from))) return false;
+    if (filters.to) {
+      const to = new Date(filters.to);
+      to.setHours(23, 59, 59, 999);
+      if (!createdAt || createdAt > to) return false;
+    }
+    return true;
+  }), [lostItems, filters]);
+  const lostMetrics = useMemo(() => lostFoundMetrics(lostResults), [lostResults]);
 
   // Sub-type counts, including the sub-types of a complaint's extra categories.
   const bySubType = useMemo(() => {
@@ -543,6 +579,38 @@ export default function Reports() {
       }
     }
 
+    if (reportType === 'LOST_FOUND') {
+      const m = lostMetrics;
+      const catName = (id) => itemCategories.find((c) => c.id === id)?.name || id || '';
+      const dur = (v) => (v == null ? '' : formatDuration(v, t));
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
+        [t('lfReport.total'), m.total], [t('lfReport.lostFound'), `${m.lost} / ${m.found}`], [t('lfReport.returned'), m.returned], [t('lfReport.returnRate'), `${m.returnRate}%`],
+        [t('lfReport.open'), m.open], [t('lfReport.notAcknowledged'), m.notAcknowledged], [t('lfReport.closed'), m.closed],
+        [t('lfReport.avgAck'), dur(m.avgAck)], [t('lfReport.avgFound'), dur(m.avgFound)], [t('lfReport.avgReturn'), dur(m.avgReturn)],
+      ]), sheetName(t('reports.generalSummary')));
+      const groupSheet = (rows, nameOf, label) => XLSX.utils.json_to_sheet(rows.map((r) => ({
+        [label]: nameOf(r.key), [t('lfReport.total')]: r.total, [t('lfReport.returned')]: r.returned, [t('lfReport.open')]: r.open,
+        [t('lfReport.returnRate')]: `${r.returnRate}%`, [t('lfReport.avgReturn')]: dur(r.avgReturn),
+      })));
+      XLSX.utils.book_append_sheet(wb, groupSheet(m.byBranch, branchName, t('common.branch')), sheetName(t('common.branch')));
+      XLSX.utils.book_append_sheet(wb, groupSheet(m.byCategory, catName, t('lfReport.category')), sheetName(t('lfReport.category')));
+      if (m.byStaff.length) {
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(m.byStaff.map((s) => ({
+          [t('lfReport.staff')]: s.name, [t('lfReport.acknowledged')]: s.acknowledged, [t('lfReport.foundCol')]: s.found, [t('lfReport.returned')]: s.returned,
+        }))), sheetName(t('lfReport.byStaff')));
+      }
+      const when = (ts) => (ts?.toDate ? format(ts.toDate(), 'yyyy-MM-dd HH:mm') : '');
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lostResults.map((i) => ({
+        [t('lfReport.code')]: i.itemCode, [t('lfReport.item')]: i.itemName || '', [t('lfReport.category')]: catName(i.category),
+        [t('lfReport.type')]: t(`lostFoundCommon.reportTypes.${i.reportType}`, i.reportType || ''), [t('common.branch')]: branchName(i.branch),
+        [t('lfReport.student')]: i.studentName || '', [t('lfReport.status')]: t(`statuses.lostFound.${i.status}`, i.status),
+        [t('lfReport.createdAt')]: when(i.createdAt), [t('lfReport.acknowledged')]: [i.acknowledgedByName, when(i.acknowledgedAt)].filter(Boolean).join(' — '),
+        [t('lfReport.foundCol')]: [i.foundByName, when(i.foundAt), i.foundPlace].filter(Boolean).join(' — '),
+        [t('lfReport.returned')]: [i.returnedTo, i.returnedToRelation, when(i.returnedAt)].filter(Boolean).join(' — '),
+        [t('lfReport.assignees')]: (i.assignedToNames || []).join(listSep),
+      }))), sheetName(t('reports.detailsLabel')));
+    }
+
     const fileName = `${t('reports.types.' + reportType)} - ${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
     XLSX.writeFile(wb, fileName);
   };
@@ -574,7 +642,7 @@ export default function Reports() {
 
       {/* Report type */}
       <div className="flex flex-wrap gap-2 no-print">
-        {REPORT_TYPE_IDS.map((id) => (
+        {REPORT_TYPE_IDS.filter((id) => id !== 'LOST_FOUND' || canSeeLost).map((id) => (
           <button
             key={id}
             onClick={() => setReportType(id)}
@@ -607,7 +675,7 @@ export default function Reports() {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.toDate')}</label>
             <input type="date" name="to" value={filters.to} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
           </div>
-          {!['TECH_SUPPORT', 'VISITS'].includes(reportType) && (
+          {!['TECH_SUPPORT', 'VISITS', 'LOST_FOUND'].includes(reportType) && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('reports.complaintTypeLabel')}</label>
               <select name="complaintType" value={filters.complaintType} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
@@ -616,7 +684,7 @@ export default function Reports() {
               </select>
             </div>
           )}
-          {!['TECH_SUPPORT', 'VISITS'].includes(reportType) && (
+          {!['TECH_SUPPORT', 'VISITS', 'LOST_FOUND'].includes(reportType) && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.subTypeLabel')}</label>
               <select name="subType" value={filters.subType} onChange={handleChange} disabled={!filters.complaintType} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white disabled:text-slate-400 disabled:bg-slate-50">
@@ -713,6 +781,10 @@ export default function Reports() {
             onOpenComplaint={setSelectedComplaint}
             merged={reportType === 'COMPLAINTS'}
           />
+        )}
+
+        {reportType === 'LOST_FOUND' && (
+          <LostFoundReport m={lostMetrics} branches={branches} categories={itemCategories} onOpen={setSelectedLost} />
         )}
 
         {reportType === 'TECH_SUPPORT' && (
@@ -1027,6 +1099,7 @@ export default function Reports() {
       {selectedComplaint && (
         <ComplaintDetails complaint={selectedComplaint} onClose={() => setSelectedComplaint(null)} />
       )}
+      {selectedLost && <LostFoundDetails item={selectedLost} onClose={() => setSelectedLost(null)} />}
       {selectedTicket && (
         <TechSupportDetails ticket={selectedTicket} onClose={() => setSelectedTicket(null)} />
       )}
