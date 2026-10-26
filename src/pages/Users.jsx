@@ -964,7 +964,7 @@ function ExportLoginsDialog({ users, canReset, filtersActive, describe, onClose 
         return {
           [t('common.name')]: u.name || '', [t('users.jobTitleLabel')]: u.jobTitle || '', [t('users.exportLogins.department')]: d.department,
           [t('users.roleLabel')]: d.role, [t('common.branch')]: d.branches, [t('users.exportLogins.username')]: u.email || '',
-          [t('users.passwordLabel')]: passwords[u.id] || (reset && !resettable(u) ? t('users.exportLogins.notReset') : t('users.exportLogins.unchanged')),
+          [t('users.passwordLabel')]: passwords[u.id] || (reset && !resettable(u) ? t('users.exportLogins.notReset') : ''),
           [t('users.exportLogins.link')]: loginUrl,
         };
       });
