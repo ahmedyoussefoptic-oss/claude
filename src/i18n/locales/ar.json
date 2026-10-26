@@ -2045,7 +2045,28 @@
     },
     "paidVia": "مدفوع — {{method}}",
     "collectorLabel": "المحصل",
-    "confirmerLabel": "المؤكد"
+    "confirmerLabel": "المؤكد",
+    "list": {
+      "targeted": "مستهدفون",
+      "responses": "ردود",
+      "approved": "موافقات",
+      "declined": "اعتذارات",
+      "confirmed": "مؤكدون",
+      "awaiting": "بانتظار الدفع",
+      "review": "سندات للمراجعة",
+      "collected": "المحصّل",
+      "supervisors": "{{count}} مشرف",
+      "deadlinePassed": "انتهى موعد الرد",
+      "deadlineToday": "آخر يوم للرد اليوم",
+      "deadlineIn": "باقي {{count}} يوم للرد",
+      "participation": "{{pct}}% مشاركة",
+      "seg": {
+        "confirmed": "مؤكدون",
+        "awaiting": "وافقوا ولم يدفعوا",
+        "declined": "اعتذروا",
+        "noAnswer": "لم يردّوا"
+      }
+    }
   },
   "tripConsent": {
     "times": "من {{from}} إلى {{to}}",

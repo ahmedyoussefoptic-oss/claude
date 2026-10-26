@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { httpsCallable } from 'firebase/functions';
-import { Bus, Plus, CalendarDays, List, ChevronRight, ChevronLeft, Loader2, Hourglass, CheckCircle2, Wallet, AlertTriangle, MapPin, Users as UsersIcon, FileBarChart, Star } from 'lucide-react';
+import { Bus, Plus, CalendarDays, List, ChevronRight, ChevronLeft, Loader2, Hourglass, CheckCircle2, Wallet, AlertTriangle, MapPin, Users as UsersIcon, FileBarChart, Star, Clock, Flag, UserCheck } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, addDays, addMonths, isSameMonth } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { functions } from '../config/firebase';
@@ -13,7 +13,7 @@ import TripForm from '../components/trips/TripForm';
 import TripDetails from '../components/trips/TripDetails';
 import TripsReport from '../components/trips/TripsReport';
 import { canSeeTrips } from '../utils/scope';
-import { TRIP_STATUSES, TRIP_STATUS_STYLES, TRIP_DOT, TRIP_GENDER_STYLES, canCreateTrips, tripConflicts, dayToDate } from '../config/trips';
+import { TRIP_STATUSES, TRIP_STATUS_STYLES, TRIP_DOT, TRIP_GENDER_STYLES, canCreateTrips, tripConflicts, dayToDate, tripTime } from '../config/trips';
 
 const ymd = (d) => format(d, 'yyyy-MM-dd');
 
@@ -184,14 +184,19 @@ export default function Trips() {
                       <p className="text-[11px] mt-1">{format(dayToDate(tr.date), 'LLL', { locale: dateLocale })}</p>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-bold text-slate-900 flex items-center gap-2">
+                      <p className="font-bold text-slate-900 flex flex-wrap items-center gap-2">
                         {tr.title}
                         {tr.gender && tr.gender !== 'ALL' && <span className={`px-1.5 py-0.5 rounded text-[11px] font-medium ${TRIP_GENDER_STYLES[tr.gender]}`}>{t(`trips.gender.${tr.gender}`)}</span>}
                         <span className="text-xs font-mono font-normal text-slate-400" dir="ltr">{tr.tripCode}</span>
                         {conflict && <span className="text-xs text-rose-600 flex items-center gap-1"><AlertTriangle className="w-3.5 h-3.5" />{t('trips.conflictShort')}</span>}
                       </p>
-                      <p className="text-sm text-slate-600 mt-0.5 flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" />{tr.destination}</p>
-                      <p className="text-xs text-slate-500 mt-1">{(tr.branches || []).map(branchName).join('، ')} · <span dir="ltr">{stageText(tr)}</span></p>
+                      <p className="text-sm text-slate-600 mt-0.5 flex flex-wrap items-center gap-x-4 gap-y-0.5">
+                        <span className="flex items-center gap-1"><MapPin className="w-3.5 h-3.5 text-slate-400" />{tr.destination}</span>
+                        <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5 text-slate-400" />{format(dayToDate(tr.date), 'EEEE', { locale: dateLocale })}{tr.departTime && ` · ${tripTime(tr.departTime, i18n.language)} – ${tripTime(tr.returnTime, i18n.language)}`}</span>
+                        {tr.meetingPoint && <span className="flex items-center gap-1"><Flag className="w-3.5 h-3.5 text-slate-400" />{tr.meetingPoint}</span>}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">{(tr.branches || []).map(branchName).join('، ')} · <span dir="ltr">{stageText(tr)}</span>{(tr.departments || []).length > 0 && ` · ${tr.departments.map((d) => departments.find((x) => x.id === d)?.name || d).join('، ')}`}</p>
+                      {['OPEN', 'CLOSED', 'COMPLETED'].includes(tr.status) && <TripListStats tr={tr} t={t} today={today} />}
                     </div>
                     <div className="flex items-center gap-4 shrink-0 text-sm">
                       {['OPEN', 'CLOSED', 'COMPLETED'].includes(tr.status) && (
@@ -230,6 +235,67 @@ export default function Trips() {
           onDeleted={async () => { openTrip(null); await load(); }}
           onChanged={load}
         />
+      )}
+    </div>
+  );
+}
+
+// Response numbers under each trip in the list (trip.stats, kept by the
+// functions; targetedCount is stored when the trip's roster is first opened).
+function TripListStats({ tr, t, today }) {
+  const s = tr.stats || {};
+  const targeted = tr.targetedCount || 0;
+  const confirmed = s.confirmed || 0;
+  const responses = s.responses || 0;
+  const daysLeft = tr.payDeadline ? Math.round((new Date(`${tr.payDeadline}T00:00:00`) - new Date(`${today}T00:00:00`)) / 86400000) : null;
+  const chip = (label, value, cls = 'bg-slate-50 text-slate-700 border-slate-200') => (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] ${cls}`}>{label}<b className="tabular-nums">{value}</b></span>
+  );
+  const pct = targeted ? Math.min(100, Math.round((confirmed / targeted) * 100)) : null;
+  return (
+    <div className="mt-2 space-y-1.5">
+      <div className="flex flex-wrap gap-1.5">
+        {targeted > 0 && chip(t('trips.list.targeted'), targeted)}
+        {chip(t('trips.list.responses'), responses)}
+        {chip(t('trips.list.approved'), s.approved || 0, 'bg-emerald-50 text-emerald-700 border-emerald-200')}
+        {(s.declined || 0) > 0 && chip(t('trips.list.declined'), s.declined, 'bg-rose-50 text-rose-700 border-rose-200')}
+        {chip(t('trips.list.confirmed'), tr.capacity > 0 ? `${confirmed}/${tr.capacity}` : confirmed, 'bg-sky-50 text-sky-700 border-sky-200')}
+        {tr.fee > 0 && (s.awaiting || 0) > 0 && chip(t('trips.list.awaiting'), s.awaiting, 'bg-amber-50 text-amber-700 border-amber-200')}
+        {tr.fee > 0 && (s.review || 0) > 0 && chip(t('trips.list.review'), s.review, 'bg-violet-50 text-violet-700 border-violet-200')}
+        {tr.fee > 0 && chip(t('trips.list.collected'), `${(s.collected || 0).toLocaleString('en')} / ${((s.approved || 0) * tr.fee).toLocaleString('en')}`)}
+        {(tr.supervisors || []).length > 0 && <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-[11px] bg-slate-50 text-slate-700 border-slate-200"><UserCheck className="w-3 h-3" />{t('trips.list.supervisors', { count: tr.supervisors.length })}</span>}
+        {tr.status === 'OPEN' && daysLeft != null && (
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-md border text-[11px] ${daysLeft < 0 ? 'bg-slate-100 text-slate-500 border-slate-200' : daysLeft <= 2 ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-slate-50 text-slate-700 border-slate-200'}`}>
+            {daysLeft < 0 ? t('trips.list.deadlinePassed') : daysLeft === 0 ? t('trips.list.deadlineToday') : t('trips.list.deadlineIn', { count: daysLeft })}
+          </span>
+        )}
+      </div>
+      {targeted > 0 && (() => {
+        // Where the targeted students stand: confirmed / approved but not paid
+        // yet / declined / no answer.
+        const awaitingPay = Math.max(0, (s.approved || 0) - confirmed);
+        const declined = s.declined || 0;
+        const none = Math.max(0, targeted - confirmed - awaitingPay - declined);
+        const seg = [[confirmed, 'bg-emerald-500', 'confirmed'], [awaitingPay, 'bg-amber-400', 'awaiting'], [declined, 'bg-rose-400', 'declined'], [none, 'bg-slate-200', 'noAnswer']];
+        const w = (n) => `${(n / targeted) * 100}%`;
+        return (
+          <div className="max-w-xl space-y-1">
+            <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-100" title={seg.map(([n, , k]) => `${t(`trips.list.seg.${k}`)}: ${n}`).join(' · ')}>
+              {seg.filter(([n]) => n > 0).map(([n, cls, k]) => <div key={k} className={cls} style={{ width: w(n) }} />)}
+            </div>
+            <div className="flex flex-wrap gap-x-3 text-[11px] text-slate-500">
+              {seg.map(([n, cls, k]) => <span key={k} className="inline-flex items-center gap-1"><i className={`w-2 h-2 rounded-full ${cls}`} />{t(`trips.list.seg.${k}`)} <b className="tabular-nums text-slate-700">{n}</b></span>)}
+              <span className="font-medium text-emerald-700">{t('trips.list.participation', { pct })}</span>
+            </div>
+          </div>
+        );
+      })()}
+      {tr.fee > 0 && (s.approved || 0) > 0 && (
+        <div className="flex items-center gap-2 max-w-xl">
+          <span className="text-[11px] text-slate-500 w-16 shrink-0">{t('trips.list.collected')}</span>
+          <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-violet-500" style={{ width: `${Math.min(100, Math.round(((s.collected || 0) / ((s.approved || 0) * tr.fee)) * 100))}%` }} /></div>
+          <span className="text-[11px] text-slate-500 tabular-nums">{Math.min(100, Math.round(((s.collected || 0) / ((s.approved || 0) * tr.fee)) * 100))}%</span>
+        </div>
       )}
     </div>
   );

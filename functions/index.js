@@ -3179,14 +3179,27 @@ exports.listTrips = onCall(async (request) => {
   const trips = snap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
     .filter((t) => callerAll(caller) || (t.branches || []).some((b) => callerHasBranch(caller, b)) || (t.supervisors || []).includes(caller.uid))
-    .map((t) => ({
+    .map((t) => ({ ...t }));
+  // Targeted-student counts for trips that don't have one yet (one roster
+  // read for all of them; kept on the trip afterwards).
+  const missing = trips.filter((t) => t.targetedCount == null && TRIP_PUBLIC.includes(t.status));
+  if (missing.length) {
+    const [branchOf, studentsSnap] = await Promise.all([branchResolver(), db.collection("students").get()]);
+    const students = studentsSnap.docs.map((d) => d.data()).filter((s) => s.nationalId && s.active !== false);
+    for (const t of missing) {
+      t.targetedCount = students.filter((s) => tripTargets(t, s, branchOf)).length;
+      await db.collection("trips").doc(t.id).update({ targetedCount: t.targetedCount }).catch(() => {});
+    }
+  }
+  return {
+    trips: trips.map((t) => ({
       ...t,
       createdAt: t.createdAt?.toMillis?.() || null,
       updatedAt: t.updatedAt?.toMillis?.() || null,
       approvedAt: t.approvedAt?.toMillis?.() || null,
       announcedAt: t.announcedAt?.toMillis?.() || null,
-    }));
-  return { trips };
+    })),
+  };
 });
 
 exports.saveTrip = onCall(async (request) => {
@@ -3296,6 +3309,8 @@ exports.getTripRoster = onCall(async (request) => {
   const caller = await tripCaller(request);
   const { trip } = await loadTrip(request.data?.id, caller, "view");
   const roster = await tripRoster(trip);
+  // Kept on the trip so the trips list can show "x of y targeted".
+  if (trip.targetedCount !== roster.length) await db.collection("trips").doc(request.data.id).update({ targetedCount: roster.length }).catch(() => {});
   // Phones stay server-side; staff see who has one.
   return { students: roster.map(({ mobile, ...s }) => ({ ...s, hasMobile: !!toIntlNumber(mobile) })) };
 });

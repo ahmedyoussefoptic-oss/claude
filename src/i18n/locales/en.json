@@ -2021,7 +2021,28 @@
     },
     "paidVia": "Paid — {{method}}",
     "collectorLabel": "Collector",
-    "confirmerLabel": "Confirmed by"
+    "confirmerLabel": "Confirmed by",
+    "list": {
+      "targeted": "Targeted",
+      "responses": "Responses",
+      "approved": "Approved",
+      "declined": "Declined",
+      "confirmed": "Confirmed",
+      "awaiting": "Awaiting payment",
+      "review": "Receipts to review",
+      "collected": "Collected",
+      "supervisors": "{{count}} supervisors",
+      "deadlinePassed": "Response deadline passed",
+      "deadlineToday": "Last day to respond: today",
+      "deadlineIn": "{{count}} days left to respond",
+      "participation": "{{pct}}% participating",
+      "seg": {
+        "confirmed": "Confirmed",
+        "awaiting": "Approved, unpaid",
+        "declined": "Declined",
+        "noAnswer": "No answer"
+      }
+    }
   },
   "tripConsent": {
     "times": "{{from}} to {{to}}",
