@@ -157,6 +157,11 @@ export default function Users() {
       const modules = restricted ? {} : moduleOverrides({ ...form, department });
       const recordScope = restricted ? 'branch' : (form.recordScope === 'assigned' ? 'assigned' : 'branch');
       if (editingId) {
+        // A corrected login email changes the sign-in too (updateStaffEmail).
+        const before = users.find((u) => u.id === editingId)?.email || '';
+        if (form.email.trim().toLowerCase() !== before.toLowerCase()) {
+          await httpsCallable(functions, 'updateStaffEmail')({ uid: editingId, email: form.email.trim() });
+        }
         await updateDoc(doc(db, 'users', editingId), {
           // منصة المكتشف is shared by the owner only (firestore.rules).
           ...(isOwner(me) ? { platformAccess: form.platformAccess } : {}),
@@ -366,7 +371,6 @@ export default function Users() {
                   inputMode="email"
                   value={form.email}
                   onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
-                  disabled={!!editingId}
                   className="w-full pl-3 pr-10 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400"
                   required
                 />

@@ -272,6 +272,36 @@ const moduleOff = (u, key) => !!u.modules && u.modules[key] === false;
 
 // Sets a new password for an existing staff account via the Admin SDK.
 // Only callers who are ADMIN or hold the "users" permission may call this.
+// Corrects a staff member's login email (Firebase Auth + users doc), with the
+// same permission rules as resetStaffPassword.
+exports.updateStaffEmail = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  const caps = await loadAdminCaps();
+  if (!callerDoc.exists || !canManageUsers(caller, caps)) throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
+  const uid = String(request.data?.uid || "");
+  const email = String(request.data?.email || "").trim().toLowerCase();
+  if (!uid || !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email)) throw new HttpsError("invalid-argument", "أدخل بريداً إلكترونياً صحيحاً.");
+  const targetRef = db.collection("users").doc(uid);
+  const target = (await targetRef.get()).data();
+  if (!target) throw new HttpsError("not-found", "لم يتم العثور على الموظف.");
+  if (target.isOwner === true && uid !== request.auth.uid) throw new HttpsError("permission-denied", "لا يمكن تغيير بريد منشئ النظام.");
+  const isAdminCaller = caller.role === "ADMIN" && callerCan(caller, "users", caps);
+  if (target.role === "ADMIN" && uid !== request.auth.uid && !(isAdminCaller && callerCan(caller, "manageAdmins", caps))) {
+    throw new HttpsError("permission-denied", "لا يمكن تغيير بريد مدير النظام.");
+  }
+  try {
+    await auth.updateUser(uid, { email });
+  } catch (err) {
+    if (err.code === "auth/email-already-exists") throw new HttpsError("already-exists", "هذا البريد مستخدم لحساب آخر.");
+    throw new HttpsError("internal", err.message);
+  }
+  await targetRef.update({ email, updatedAt: Timestamp.now() });
+  console.log("staff email changed", uid, "by", request.auth.uid);
+  return { ok: true, email };
+});
+
 exports.resetStaffPassword = onCall(async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "يجب تسجيل الدخول أولاً.");
