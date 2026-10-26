@@ -280,6 +280,25 @@ function LostFoundDetailsInner({ item, onClose }) {
                 {t('lostFoundDetails.closeWithoutReturn')}
               </button>
             )}
+            {item.status === 'MATCHED' && item.reporterPhone && (
+              <a
+                href={waLink(item.reporterPhone, t('lostFoundDetails.foundMessage', { name: item.reporterName || '', code: item.itemCode, item: item.itemName || '', place: item.foundPlace ? ` (${item.foundPlace})` : '', branch: branchName }))}
+                target="_blank"
+                rel="noreferrer"
+                onClick={() => updateDoc(doc(db, 'lostFoundItems', item.id), messageSentFields('found', user, userData)).catch(() => {})}
+                className="px-4 py-2 bg-[#25D366] text-white rounded-lg text-sm font-medium hover:brightness-95 transition-all flex items-center gap-2"
+              >
+                <MessageCircle className="w-4 h-4" />
+                {t('lostFoundDetails.sendFoundWa')}
+              </a>
+            )}
+            {waApi.enabled && waApi.templates?.lostFoundFound && item.status === 'MATCHED' && item.reporterPhone && (
+              <button disabled={!!waSending} onClick={() => sendViaApi('found')} className="px-4 py-2 bg-emerald-700 text-white rounded-lg text-sm font-medium hover:bg-emerald-800 transition-all flex items-center gap-2 disabled:opacity-60">
+                {waSending === 'found' ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+                {t('lostFoundDetails.sendFoundApi')}
+              </button>
+            )}
+            {item.foundMessageSentAt && item.status === 'MATCHED' && <span className="text-xs text-emerald-700 self-center">{t('lostFoundDetails.foundSentAuto')}</span>}
             {item.status === 'RETURNED' && item.reporterPhone && (
               <a
                 href={waLink(item.reporterPhone, buildLostFoundResolutionMessage(item, templates.lostFoundResolution))}

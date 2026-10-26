@@ -2159,7 +2159,7 @@ const PUBLIC_APP_URL = (process.env.PUBLIC_APP_URL || "https://mis-complaints.we
 const WA_TEMPLATE_KEYS = {
   complaint: { receipt: "complaintReceipt", resolution: "complaintResolution", visitMet: "visitMet", appointmentConfirmed: "appointmentConfirmed", appointmentRescheduled: "appointmentRescheduled", appointmentReminder: "appointmentReminder" },
   techSupport: { receipt: "techReceipt", resolution: "techResolution" },
-  lostFound: { receipt: "lostFoundReceipt", returned: "lostFoundReturned" },
+  lostFound: { receipt: "lostFoundReceipt", returned: "lostFoundReturned", found: "lostFoundFound" },
 };
 // Where each record type keeps its number / recipient / 3rd variable.
 // Lost & found messages go to the reporter, and {{3}} is the item name.
@@ -2359,6 +2359,9 @@ async function sendWaTemplate({ kind, ref, record, event, actorId, actorName, se
       throw new HttpsError("failed-precondition", "لم يتم تأكيد المقابلة بعد.");
     }
     fourth = branch.name || record.branch;
+  } else if (kind === "lostFound" && event === "found") {
+    if (record.status !== "MATCHED") throw new HttpsError("failed-precondition", "لم يُسجَّل العثور على الغرض بعد.");
+    fourth = `تم العثور على الغرض${record.foundPlace ? ` (${record.foundPlace})` : ""}، ويمكن استلامه من ${branch.name || record.branch}`;
   } else if (kind === "lostFound") {
     if (record.status !== "RETURNED") {
       throw new HttpsError("failed-precondition", "لم يتم تسليم الغرض بعد.");
@@ -2417,7 +2420,7 @@ async function sendWaTemplate({ kind, ref, record, event, actorId, actorName, se
   // so a sender without edit permission (an assignee) still records it.
   // A tech-support resolution's fields (and closing the ticket) are left to
   // the client's existing handleResolutionSent flow.
-  const sentPrefix = { receipt: "receipt", resolution: "resolution", returned: "resolution", visitMet: "visit", appointmentConfirmed: "appointment", appointmentRescheduled: "appointment", appointmentReminder: "appointmentReminder" }[event];
+  const sentPrefix = { receipt: "receipt", resolution: "resolution", returned: "resolution", visitMet: "visit", appointmentConfirmed: "appointment", appointmentRescheduled: "appointment", appointmentReminder: "appointmentReminder", found: "found" }[event];
   if (!(kind === "techSupport" && event === "resolution")) {
     const sentNow = Timestamp.now();
     await ref.update({
@@ -5479,5 +5482,15 @@ exports.lostFoundAction = onCall(async (request) => {
     metadata: { ...(returnedTo ? { returnedTo } : {}), ...(relation ? { relation } : {}), ...(place ? { place } : {}), ...(note ? { note } : {}) },
     createdAt: now,
   });
-  return { ok: true, status: step.to };
+  // Item found: tell the reporter (WhatsApp API, when its template is set;
+  // otherwise staff use the WhatsApp button in the record).
+  let messageSent = false;
+  if (action === "found" && WA_API_ENABLED) {
+    const wa = (await db.collection("settings").doc("whatsappApi").get()).data() || {};
+    if (wa.enabled && wa.autoSend !== false && (wa.templates || {}).lostFoundFound && item.reporterPhone) {
+      await autoSendWa("lostFound", ref, "found");
+      messageSent = Boolean((await ref.get()).data()?.foundMessageSentAt);
+    }
+  }
+  return { ok: true, status: step.to, messageSent };
 });

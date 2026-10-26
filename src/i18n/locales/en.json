@@ -393,7 +393,11 @@
       "searching": "Searching",
       "found": "Found",
       "returned": "Returned"
-    }
+    },
+    "sendFoundWa": "Tell the parent it was found (WhatsApp)",
+    "sendFoundApi": "Send via WhatsApp API",
+    "foundMessage": "Hello {{name}},\nAbout your report {{code}} ({{item}}): the item has been found{{place}} and can be collected from {{branch}}.\nAl Moktashef International Schools",
+    "foundSentAuto": "The parent was told on WhatsApp."
   },
   "lostFoundForm": {
     "successTitle": "Record saved successfully",
@@ -1424,7 +1428,8 @@
       "appointmentRescheduled": "Visit appointment changed",
       "tripNotice": "School trip notice",
       "tripAnnouncementImage": "Trip announcement with image",
-      "appointmentReminder": "Visit reminder"
+      "appointmentReminder": "Visit reminder",
+      "lostFoundFound": "Lost item found"
     },
     "guideTitle": "Suggested template texts to submit for approval",
     "guideIntro": "Create these four templates in the Taqnyat portal (Message Templates) with the names above, and wait for WhatsApp approval before enabling.",
@@ -1453,7 +1458,8 @@
     "visitAutoNote": "The parent will automatically get a WhatsApp thank-you after confirming.",
     "appointmentVars": "{{3}} student name — {{4}} time and branch. Sent when the principal confirms or sets another time.",
     "tripVars": "{{1}} student — {{2}} trip name — {{3}} date and time — {{4}} message (announcement, reminder, receipt accepted/rejected) — {{5}} trip page link. Same “contact the branch” button /contact/{{1}}.",
-    "tripImageVars": "Template with an image header (Header: Image) — same variables as the trip notice: {{1}} student, {{2}} trip, {{3}} date, {{4}} fee and deadline, {{5}} trip link, plus the contact button. Used to announce trips that have an image; leave empty to send text."
+    "tripImageVars": "Template with an image header (Header: Image) — same variables as the trip notice: {{1}} student, {{2}} trip, {{3}} date, {{4}} fee and deadline, {{5}} trip link, plus the contact button. Used to announce trips that have an image; leave empty to send text.",
+    "lostFoundVars": "{{1}} reporter — {{3}} item — {{4}} «found (place), collect it from the branch»"
   },
   "contactBranch": {
     "loading": "Opening the branch chat...",

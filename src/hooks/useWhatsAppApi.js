@@ -14,6 +14,7 @@ export const DEFAULT_WA_API = {
     visitMet: 'visit_thanks',
     lostFoundReceipt: 'lostfound_receipt',
     lostFoundReturned: 'lostfound_returned',
+    lostFoundFound: '', // empty until the template is approved: the record's WhatsApp button is used
     appointmentConfirmed: 'appointment_confirmed',
     appointmentRescheduled: 'appointment_rescheduled',
     appointmentReminder: '', // empty: reminders use the confirmation template
