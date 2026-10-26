@@ -3009,6 +3009,10 @@
     "assignees": "Assignees",
     "type": "Type",
     "student": "Student",
-    "createdAt": "Reported at"
+    "createdAt": "Reported at",
+    "remindBranches": "Remind branches of unacknowledged reports",
+    "remindHint": "Each person gets one notification (and email) listing their unacknowledged reports.",
+    "remindConfirm": "Send a reminder to everyone with unacknowledged reports?",
+    "reminded": "Reminder sent: {{reports}} reports to {{people}} staff."
   }
 }

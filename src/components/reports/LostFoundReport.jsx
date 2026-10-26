@@ -1,10 +1,28 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { httpsCallable } from 'firebase/functions';
+import { BellRing, Loader2 } from 'lucide-react';
+import { functions } from '../../config/firebase';
 import { formatDuration } from '../../utils/duration';
 import { ITEM_STATUS_BADGE } from '../../config/lostFound';
 
 // Reports › المفقودات (numbers from lostFoundMetrics).
-export default function LostFoundReport({ m, branches, categories, onOpen }) {
+export default function LostFoundReport({ m, branches, categories, onOpen, canRemind }) {
   const { t } = useTranslation();
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(null);
+  const remind = async () => {
+    if (!window.confirm(t('lfReport.remindConfirm'))) return;
+    setBusy(true);
+    try {
+      const { data } = await httpsCallable(functions, 'remindLostFoundBranches')({});
+      setSent(t('lfReport.reminded', { reports: data.reports, people: data.people }));
+    } catch (err) {
+      setSent(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id || '—';
   const categoryName = (id) => categories.find((c) => c.id === id)?.name || id || '—';
   const dur = (v) => (v == null ? '—' : formatDuration(v, t));
@@ -34,6 +52,14 @@ export default function LostFoundReport({ m, branches, categories, onOpen }) {
 
   return (
     <div className="space-y-8">
+      {canRemind && m.byStatus.find((s) => s.status === 'UNCLAIMED')?.count > 0 && (
+        <div className="no-print flex flex-wrap items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
+          <button disabled={busy} onClick={remind} className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium flex items-center gap-2 disabled:opacity-60">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <BellRing className="w-4 h-4" />}{t('lfReport.remindBranches')}
+          </button>
+          <span className="text-xs text-amber-900">{sent || t('lfReport.remindHint')}</span>
+        </div>
+      )}
       <div>
         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.generalSummary')}</h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

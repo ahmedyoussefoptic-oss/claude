@@ -784,7 +784,7 @@ export default function Reports() {
         )}
 
         {reportType === 'LOST_FOUND' && (
-          <LostFoundReport m={lostMetrics} branches={branches} categories={itemCategories} onOpen={setSelectedLost} />
+          <LostFoundReport m={lostMetrics} branches={branches} categories={itemCategories} onOpen={setSelectedLost} canRemind={userData?.role === 'ADMIN' || userData?.isPrincipal === true || userData?.perms?.edit === true || userData?.isQuality === true} />
         )}
 
         {reportType === 'TECH_SUPPORT' && (

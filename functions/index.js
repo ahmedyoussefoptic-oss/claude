@@ -5494,3 +5494,49 @@ exports.lostFoundAction = onCall(async (request) => {
   }
   return { ok: true, status: step.to, messageSent };
 });
+
+// Reminds the assignees of every lost & found report still awaiting receipt
+// (older than an hour) in the caller's branches: one notification per person
+// listing their reports; reports with no assignee go to the branch's lost &
+// found officers. Each report is stamped and logged like a single reminder.
+exports.remindLostFoundBranches = onCall({ timeoutSeconds: 120 }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const caller = (await db.collection("users").doc(request.auth.uid).get()).data();
+  if (!caller || caller.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية إرسال التذكير.");
+  const all = caller.role === "ADMIN" || caller.access === "all";
+  if (!(caller.role === "ADMIN" || caller.isPrincipal === true || caller.perms?.edit === true || caller.isQuality === true)) {
+    throw new HttpsError("permission-denied", "تذكير الفروع لمدير الفرع أو من لديه صلاحية التعديل.");
+  }
+  const mine = all ? null : (caller.branches || []).concat(caller.branch ? [caller.branch] : []);
+  const snap = await db.collection("lostFoundItems").where("status", "==", "UNCLAIMED").get();
+  const due = snap.docs.filter((d) => {
+    const x = d.data();
+    return (!mine || mine.includes(x.branch)) && x.createdAt && Date.now() - x.createdAt.toMillis() > 3600e3;
+  });
+  if (!due.length) return { reports: 0, people: 0 };
+  const users = await loadActiveUsers();
+  const perPerson = new Map();
+  for (const d of due) {
+    const x = d.data();
+    const to = (x.assignedTo || []).length ? x.assignedTo : lostFoundOfficers(users, x.branch);
+    to.forEach((uid) => { if (!perPerson.has(uid)) perPerson.set(uid, []); perPerson.get(uid).push(x); });
+  }
+  const sender = caller.name || "الإدارة";
+  for (const [uid, list] of perPerson) {
+    await notifyUsers([uid], {
+      title: `تذكير: ${list.length} بلاغ مفقودات بانتظار تأكيد الاستلام`,
+      body: `${sender} يذكّرك بتأكيد استلام البلاغات وبدء البحث: ${list.slice(0, 8).map((x) => `${x.itemCode} (${x.itemName || ""})`).join("، ")}${list.length > 8 ? "…" : ""}`,
+      complaintId: "", type: "LF_REMINDER",
+    });
+  }
+  const now = Timestamp.now();
+  for (let i = 0; i < due.length; i += 200) {
+    const batch = db.batch();
+    due.slice(i, i + 200).forEach((d) => {
+      batch.update(d.ref, { lastReminderAt: now, lastReminderBy: request.auth.uid, lastReminderByName: sender, reminderCount: FieldValue.increment(1) });
+      batch.set(d.ref.collection("activityLog").doc(), { action: "REMINDER_SENT", actorId: request.auth.uid, actorName: sender, metadata: { bulk: true }, createdAt: now });
+    });
+    await batch.commit();
+  }
+  return { reports: due.length, people: perPerson.size };
+});
