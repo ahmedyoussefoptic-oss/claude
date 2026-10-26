@@ -20,6 +20,8 @@ export function useAdminPermissions() {
 
 export const isOwner = (userData) => userData?.isOwner === true;
 // منصة المكتشف: the owner and the users the owner shared it with.
+// «نشاط المستخدمين»: the owner and the users the owner shared it with.
+export const canSeeActivity = (userData) => isOwner(userData) || (userData?.activityAccess === true && userData?.active !== false);
 export const canSeePlatform = (userData) => isOwner(userData) || (userData?.platformAccess === true && userData?.active !== false);
 
 export function adminCan(userData, caps, cap) {

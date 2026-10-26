@@ -47,6 +47,7 @@ const emptyForm = {
   isQuality: false,
   isCounselor: false,
   platformAccess: false,
+  activityAccess: false,
   tripsAccess: 'all',
   modules: {},
   recordScope: 'branch',
@@ -122,6 +123,7 @@ export default function Users() {
       isQuality: u.isQuality === true,
       isCounselor: u.isCounselor === true,
       platformAccess: u.platformAccess === true,
+      activityAccess: u.activityAccess === true,
       tripsAccess: ['tripsOnly', 'none'].includes(u.tripsAccess) ? u.tripsAccess : 'all',
       modules: u.modules && typeof u.modules === 'object' ? u.modules : {},
       recordScope: u.recordScope === 'assigned' ? 'assigned' : 'branch',
@@ -164,7 +166,7 @@ export default function Users() {
         }
         await updateDoc(doc(db, 'users', editingId), {
           // منصة المكتشف is shared by the owner only (firestore.rules).
-          ...(isOwner(me) ? { platformAccess: form.platformAccess } : {}),
+          ...(isOwner(me) ? { platformAccess: form.platformAccess, activityAccess: form.activityAccess } : {}),
           name: form.name,
           phone: form.phone || null,
           jobTitle: form.jobTitle || null,
@@ -208,6 +210,7 @@ export default function Users() {
           modules,
           recordScope,
           platformAccess: isOwner(me) && form.platformAccess,
+          activityAccess: isOwner(me) && form.activityAccess,
           notificationPrefs: form.notificationPrefs,
           notificationChannels: form.notificationChannels,
           stages: form.stages,
@@ -654,6 +657,15 @@ export default function Users() {
                   👑 {t('users.platformAccessLabel')}
                 </label>
                 <p className="text-xs text-slate-600 mt-2">{t('users.platformAccessHint')}</p>
+              </div>
+            )}
+            {isOwner(me) && (
+              <div className="md:col-span-2 bg-sky-50 border border-sky-200 rounded-xl p-4">
+                <label className="flex items-center gap-2 text-sm font-bold text-slate-800">
+                  <input type="checkbox" checked={form.activityAccess} onChange={(e) => setForm((p) => ({ ...p, activityAccess: e.target.checked }))} />
+                  📈 {t('users.activityAccessLabel')}
+                </label>
+                <p className="text-xs text-slate-600 mt-2">{t('users.activityAccessHint')}</p>
               </div>
             )}
 

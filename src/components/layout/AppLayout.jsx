@@ -1,12 +1,13 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
-import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText } from 'lucide-react';
+import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText, Activity } from 'lucide-react';
 import AssistantPanel from '../assistant/AssistantPanel';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
-import { useAdminPermissions, adminCan, isOwner, canSeePlatform } from '../../config/adminPermissions';
+import { useAdminPermissions, adminCan, isOwner, canSeePlatform, canSeeActivity } from '../../config/adminPermissions';
+import { startPresence } from '../../utils/presence';
 import NotificationBell from './NotificationBell';
 import Watermark from '../common/Watermark';
 import SystemCredit from '../common/SystemCredit';
@@ -34,6 +35,16 @@ export default function AppLayout() {
   }, [user, userData, refreshUserData]);
   const navigate = useNavigate();
   const location = useLocation();
+  // Heartbeat for «نشاط المستخدمين» (who is online now, and on which page).
+  const presenceRef = useRef(null);
+  const pathRef = useRef(location.pathname);
+  pathRef.current = location.pathname;
+  useEffect(() => {
+    if (!user || !userData) return undefined;
+    presenceRef.current = startPresence(user.uid, userData.name, () => pathRef.current);
+    return () => { presenceRef.current?.stop(); presenceRef.current = null; };
+  }, [user?.uid, !!userData]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { presenceRef.current?.pageChanged(); }, [location.pathname]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const handleLogout = async () => {
@@ -79,6 +90,9 @@ export default function AppLayout() {
   }
   if (adminCan(userData, caps, 'archive')) {
     navItems.push({ name: t('nav.archive'), path: '/deleted-complaints', icon: Archive });
+  }
+  if (canSeeActivity(userData)) {
+    navItems.push({ name: t('activity.title'), path: '/activity', icon: Activity });
   }
   // منصة المكتشف — the owner and the users the owner shared it with; its
   // settings, the owner only (also enforced in firestore.rules).

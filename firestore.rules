@@ -176,8 +176,9 @@ service cloud.firestore {
       // isOwner is never written by a client, and the owner's account can
       // only be changed by the owner. Admin accounts are managed by the owner
       // or admins allowed to (adminPermissions.manageAdmins).
-      // platformAccess (منصة المكتشف) is granted by the owner only.
-      allow create: if request.resource.data.get('isOwner', false) != true && (request.resource.data.get('platformAccess', false) != true || isOwner()) && (
+      // platformAccess (منصة المكتشف) and activityAccess (نشاط المستخدمين)
+      // are granted by the owner only.
+      allow create: if request.resource.data.get('isOwner', false) != true && ((request.resource.data.get('platformAccess', false) != true && request.resource.data.get('activityAccess', false) != true) || isOwner()) && (
         (adminPerm('users') && (request.resource.data.role != 'ADMIN' || adminPerm('manageAdmins'))) ||
         (!isAdmin() && myPerm('users') && !grantsAdminPower(request.resource.data))
       );
@@ -185,7 +186,7 @@ service cloud.firestore {
         (adminPerm('users') && (resource.data.role != 'ADMIN' || adminPerm('manageAdmins'))) ||
         (!isAdmin() && myPerm('users') && resource.data.role != 'ADMIN')
       );
-      allow update: if request.resource.data.get('isOwner', false) == resource.data.get('isOwner', false) && (request.resource.data.get('platformAccess', false) == resource.data.get('platformAccess', false) || isOwner()) && ((
+      allow update: if request.resource.data.get('isOwner', false) == resource.data.get('isOwner', false) && ((request.resource.data.get('platformAccess', false) == resource.data.get('platformAccess', false) && request.resource.data.get('activityAccess', false) == resource.data.get('activityAccess', false)) || isOwner()) && ((
         (resource.data.get('isOwner', false) != true || request.auth.uid == userId) &&
         adminPerm('users') &&
         ((resource.data.role != 'ADMIN' && request.resource.data.role != 'ADMIN') || adminPerm('manageAdmins') || request.auth.uid == userId)
@@ -471,6 +472,15 @@ service cloud.firestore {
     // section on the Users page (off by default), within their branches.
     // Daily WhatsApp report of each branch (until the numbers are connected
     // to the API): staff given the «waReports» section, in their branches.
+    // Who is using the system now (src/utils/presence.js): each user writes
+    // only their own heartbeat; the owner and those the owner shares the
+    // «نشاط المستخدمين» page with read them.
+    match /presence/{uid} {
+      allow read: if isOwner() || (myDoc() != null && myDoc().get('activityAccess', false) == true && myDoc().get('active', true) != false);
+      allow create, update: if isAuthenticated() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['name', 'lastSeenAt', 'sessionStartAt', 'page', 'device', 'online']);
+      allow delete: if false;
+    }
     match /waDailyReports/{id} {
       allow read: if isAdmin() || (myDoc() != null && myDoc().get('modules', {}).get('waReports', false) == true && inMyScope(resource.data.branch));
       allow create, update: if (isAdmin() || (myDoc() != null && myDoc().get('modules', {}).get('waReports', false) == true && inMyScope(request.resource.data.branch)))
@@ -517,7 +527,7 @@ service cloud.firestore {
         'itemCategories', 'settings', 'settingsUnlocks', 'secureConfig', 'complaints', 'trips', 'tripVerify',
         'appointments', 'deletedComplaints', 'deletedLostFoundItems', 'deletedTechSupportTickets', 'lostFoundItems',
         'techSupportTickets', 'students', 'notifications',
-        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage', 'waDailyReports'
+        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage', 'waDailyReports', 'presence'
       ]);
     }
   }

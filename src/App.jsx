@@ -24,7 +24,8 @@ import TripConsent from './pages/TripConsent';
 import Settings from './pages/Settings';
 import DeletedComplaints from './pages/DeletedComplaints';
 import { ROLES } from './config/roles';
-import { isOwner, canSeePlatform } from './config/adminPermissions';
+import { isOwner, canSeePlatform, canSeeActivity } from './config/adminPermissions';
+import UserActivity from './pages/UserActivity';
 import Calls from './pages/Calls';
 import WaReports from './pages/WaReports';
 import PlatformHome from './pages/platform/PlatformHome';
@@ -42,6 +43,11 @@ function OwnerOnly({ children }) {
   const { userData } = useAuthStore();
   if (!userData) return null;
   return isOwner(userData) ? children : <Navigate to="/dashboard" replace />;
+}
+function ActivityOnly({ children }) {
+  const { userData } = useAuthStore();
+  if (!userData) return null;
+  return canSeeActivity(userData) ? children : <Navigate to="/dashboard" replace />;
 }
 function PlatformOnly({ children }) {
   const { userData } = useAuthStore();
@@ -91,6 +97,7 @@ function App() {
           <Route path="trips" element={<Trips />} />
           <Route path="calls" element={<Calls />} />
           <Route path="wa-reports" element={<WaReports />} />
+          <Route path="activity" element={<ActivityOnly><UserActivity /></ActivityOnly>} />
           <Route path="platform" element={<Navigate to="/platform/home" replace />} />
           <Route path="platform/home" element={<PlatformOnly><PlatformHome /></PlatformOnly>} />
           <Route path="platform/leaves" element={<PlatformOnly><Leaves /></PlatformOnly>} />

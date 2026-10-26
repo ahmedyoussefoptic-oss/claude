@@ -950,7 +950,9 @@
       "unchanged": "Current password (cannot be shown)",
       "notReset": "System admin — unchanged",
       "fileName": "System logins"
-    }
+    },
+    "activityAccessLabel": "Can see «User activity»",
+    "activityAccessHint": "Sees who is online and each user’s last sign-in. Cannot share it further."
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",
@@ -3041,5 +3043,34 @@
     "remindHint": "Each person gets one notification (and email) listing their unacknowledged reports.",
     "remindConfirm": "Send a reminder to everyone with unacknowledged reports?",
     "reminded": "Reminder sent: {{reports}} reports to {{people}} staff."
+  },
+  "activity": {
+    "title": "User activity",
+    "subtitle": "Who is using the system now, and each user’s last sign-in and activity.",
+    "onlineNow": "Online now",
+    "lastHour": "Active in the last hour",
+    "today": "Used it today",
+    "idle": "Away 7+ days",
+    "search": "Search name or email",
+    "online": "Online",
+    "never": "Never",
+    "inactive": "Disabled",
+    "empty": "No users for this filter.",
+    "note": "«Online» = the app was open on their device in the last 3 minutes. «Last sign-in» = last time they entered their password. «Last active» = last time the app was open.",
+    "filters": {
+      "ALL": "All",
+      "ONLINE": "Online",
+      "TODAY": "Today",
+      "IDLE": "Away"
+    },
+    "col": {
+      "user": "User",
+      "status": "Status",
+      "page": "Current page",
+      "lastSignIn": "Last sign-in",
+      "lastActive": "Last active",
+      "branches": "Branches",
+      "device": "Device"
+    }
   }
 }

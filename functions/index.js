@@ -192,7 +192,7 @@ exports.createStaffUser = onCall(async (request) => {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
-  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, isCounselor, stages, curricula, notificationPrefs, notificationChannels, tripsAccess, modules, recordScope, platformAccess } = request.data || {};
+  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, isCounselor, stages, curricula, notificationPrefs, notificationChannels, tripsAccess, modules, recordScope, platformAccess, activityAccess } = request.data || {};
   if (!name || !email || !password || !role) {
     throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
   }
@@ -245,6 +245,7 @@ exports.createStaffUser = onCall(async (request) => {
     tripsAccess: ["tripsOnly", "none"].includes(tripsAccess) && role !== "ADMIN" ? tripsAccess : "all",
     // Only the owner shares منصة المكتشف.
     platformAccess: caller.isOwner === true && platformAccess === true,
+    activityAccess: caller.isOwner === true && activityAccess === true,
     ...(role !== "ADMIN" ? cleanUserModules(modules, recordScope) : {}),
     active: active !== false,
     createdAt: Timestamp.now(),
@@ -5578,4 +5579,37 @@ exports.remindLostFoundBranches = onCall({ timeoutSeconds: 120 }, async (request
     await batch.commit();
   }
   return { reports: due.length, people: perPerson.size };
+});
+
+// --- «نشاط المستخدمين»: last sign-in per user -----------------------------------
+// The owner (or users the owner shared the page with, users.activityAccess)
+// gets every staff account with its Firebase Auth times: last sign-in, last
+// token refresh (≈ last time the app was open) and creation.
+exports.getUserActivity = onCall({ timeoutSeconds: 60 }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const caller = (await db.collection("users").doc(request.auth.uid).get()).data();
+  if (!caller || !(caller.isOwner === true || (caller.activityAccess === true && caller.active !== false))) {
+    throw new HttpsError("permission-denied", "هذه الصفحة لمنشئ النظام ومن يشاركها معهم.");
+  }
+  const times = {};
+  let pageToken;
+  do {
+    const res = await auth.listUsers(1000, pageToken);
+    res.users.forEach((u) => { times[u.uid] = { lastSignIn: u.metadata.lastSignInTime || null, lastRefresh: u.metadata.lastRefreshTime || null, created: u.metadata.creationTime || null, disabled: u.disabled }; });
+    pageToken = res.pageToken;
+  } while (pageToken);
+  const snap = await db.collection("users").get();
+  const ms = (v) => (v ? Date.parse(v) || null : null);
+  return {
+    users: snap.docs.map((d) => {
+      const u = d.data();
+      const tm = times[d.id] || {};
+      return {
+        id: d.id, name: u.name || "", email: u.email || "", role: u.role || "", jobTitle: u.jobTitle || "", department: u.department || "",
+        branches: u.access === "all" ? ["*"] : (Array.isArray(u.branches) && u.branches.length ? u.branches : u.branch ? [u.branch] : []),
+        active: u.active !== false, isOwner: u.isOwner === true,
+        lastSignIn: ms(tm.lastSignIn), lastRefresh: ms(tm.lastRefresh), created: ms(tm.created), disabled: tm.disabled === true,
+      };
+    }),
+  };
 });
