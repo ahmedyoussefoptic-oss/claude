@@ -5,6 +5,10 @@ import './i18n'
 import App from './App.jsx'
 import ErrorBoundary from './components/common/ErrorBoundary.jsx'
 import { MESSAGING_SW_URL } from './config/firebase';
+import { applyTheme, readTheme } from './components/common/ThemeToggle';
+
+// The saved light/dark choice is applied before the first paint.
+applyTheme(readTheme());
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

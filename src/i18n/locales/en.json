@@ -44,7 +44,9 @@
     "user": "User",
     "allDepartments": "All sections",
     "noDepartment": "No section",
-    "back": "Back"
+    "back": "Back",
+    "darkMode": "Dark mode",
+    "lightMode": "Light mode"
   },
   "nav": {
     "dashboard": "Dashboard",

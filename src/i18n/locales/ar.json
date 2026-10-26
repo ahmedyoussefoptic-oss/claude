@@ -44,7 +44,9 @@
     "user": "مستخدم",
     "allDepartments": "كل الأقسام",
     "noDepartment": "بدون قسم",
-    "back": "رجوع"
+    "back": "رجوع",
+    "darkMode": "الوضع الليلي",
+    "lightMode": "الوضع النهاري"
   },
   "nav": {
     "dashboard": "الرئيسية",

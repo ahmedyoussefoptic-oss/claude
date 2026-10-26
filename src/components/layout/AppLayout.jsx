@@ -11,6 +11,7 @@ import NotificationBell from './NotificationBell';
 import Watermark from '../common/Watermark';
 import SystemCredit from '../common/SystemCredit';
 import LanguageSwitcher from '../common/LanguageSwitcher';
+import ThemeToggle from '../common/ThemeToggle';
 import logo from '../../assets/logo.png';
 import { canSeeModule, tripsAccessOf } from '../../utils/scope';
 
@@ -180,6 +181,7 @@ export default function AppLayout() {
             <h2 className="text-lg font-bold text-slate-900">{t('app.brandShort')}</h2>
           </div>
           <div className="flex items-center gap-1">
+            <ThemeToggle />
             <LanguageSwitcher />
             <NotificationBell />
             <button
@@ -191,7 +193,8 @@ export default function AppLayout() {
           </div>
         </header>
         <div className="hidden md:flex items-center justify-between px-8 py-3 border-b border-slate-200 bg-white sticky top-0 z-30">
-          <LanguageSwitcher />
+          <ThemeToggle />
+            <LanguageSwitcher />
           <NotificationBell />
         </div>
         <div className="p-4 md:p-8 flex-1 overflow-x-hidden">

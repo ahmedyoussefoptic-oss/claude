@@ -64,3 +64,71 @@
   size: A4;
   margin: 12mm;
 }
+
+/* Optional dark mode (the moon button in the top bar; html.dark, saved per
+   browser). The light design stays the reference: in dark mode the palette
+   variables Tailwind's utilities read are remapped (slate inverted, pale
+   tints darkened, deep text shades lightened), plus the few utilities whose
+   colour can't follow a variable. Screen only — printing stays light. */
+@media screen {
+html.dark {
+  color-scheme: dark;
+  --color-slate-50: #101822; --color-slate-100: #1a2431; --color-slate-200: #263241; --color-slate-300: #354356;
+  --color-slate-400: #66768a; --color-slate-500: #93a1b3; --color-slate-600: #aab6c5; --color-slate-700: #c7d1dd;
+  --color-slate-800: #e1e7ee; --color-slate-900: #f1f5f9; --color-slate-950: #f8fafc;
+  --color-gray-50: #101822; --color-gray-100: #1a2431; --color-gray-200: #263241; --color-gray-300: #354356;
+  --color-gray-400: #66768a; --color-gray-500: #93a1b3; --color-gray-600: #aab6c5; --color-gray-700: #c7d1dd; --color-gray-800: #e1e7ee; --color-gray-900: #f1f5f9;
+  --color-background: #0c121a; --color-surface: #141c26; --color-text-main: #e8eef5; --color-text-muted: #93a1b3; --color-border: #263241;
+  --color-red-50: color-mix(in oklab, #ef4444 13%, #141c26); --color-red-100: color-mix(in oklab, #ef4444 20%, #141c26); --color-red-200: color-mix(in oklab, #ef4444 34%, #141c26);
+  --color-rose-50: color-mix(in oklab, #f43f5e 13%, #141c26); --color-rose-100: color-mix(in oklab, #f43f5e 20%, #141c26); --color-rose-200: color-mix(in oklab, #f43f5e 34%, #141c26);
+  --color-orange-50: color-mix(in oklab, #f97316 13%, #141c26); --color-orange-100: color-mix(in oklab, #f97316 20%, #141c26); --color-orange-200: color-mix(in oklab, #f97316 34%, #141c26);
+  --color-amber-50: color-mix(in oklab, #f59e0b 13%, #141c26); --color-amber-100: color-mix(in oklab, #f59e0b 20%, #141c26); --color-amber-200: color-mix(in oklab, #f59e0b 34%, #141c26);
+  --color-yellow-50: color-mix(in oklab, #eab308 13%, #141c26); --color-yellow-100: color-mix(in oklab, #eab308 20%, #141c26); --color-yellow-200: color-mix(in oklab, #eab308 34%, #141c26);
+  --color-lime-50: color-mix(in oklab, #84cc16 13%, #141c26); --color-lime-100: color-mix(in oklab, #84cc16 20%, #141c26); --color-lime-200: color-mix(in oklab, #84cc16 34%, #141c26);
+  --color-green-50: color-mix(in oklab, #22c55e 13%, #141c26); --color-green-100: color-mix(in oklab, #22c55e 20%, #141c26); --color-green-200: color-mix(in oklab, #22c55e 34%, #141c26);
+  --color-emerald-50: color-mix(in oklab, #10b981 13%, #141c26); --color-emerald-100: color-mix(in oklab, #10b981 20%, #141c26); --color-emerald-200: color-mix(in oklab, #10b981 34%, #141c26);
+  --color-teal-50: color-mix(in oklab, #14b8a6 13%, #141c26); --color-teal-100: color-mix(in oklab, #14b8a6 20%, #141c26); --color-teal-200: color-mix(in oklab, #14b8a6 34%, #141c26);
+  --color-cyan-50: color-mix(in oklab, #06b6d4 13%, #141c26); --color-cyan-100: color-mix(in oklab, #06b6d4 20%, #141c26); --color-cyan-200: color-mix(in oklab, #06b6d4 34%, #141c26);
+  --color-sky-50: color-mix(in oklab, #0ea5e9 13%, #141c26); --color-sky-100: color-mix(in oklab, #0ea5e9 20%, #141c26); --color-sky-200: color-mix(in oklab, #0ea5e9 34%, #141c26);
+  --color-blue-50: color-mix(in oklab, #3b82f6 13%, #141c26); --color-blue-100: color-mix(in oklab, #3b82f6 20%, #141c26); --color-blue-200: color-mix(in oklab, #3b82f6 34%, #141c26);
+  --color-indigo-50: color-mix(in oklab, #6366f1 13%, #141c26); --color-indigo-100: color-mix(in oklab, #6366f1 20%, #141c26); --color-indigo-200: color-mix(in oklab, #6366f1 34%, #141c26);
+  --color-violet-50: color-mix(in oklab, #8b5cf6 13%, #141c26); --color-violet-100: color-mix(in oklab, #8b5cf6 20%, #141c26); --color-violet-200: color-mix(in oklab, #8b5cf6 34%, #141c26);
+  --color-purple-50: color-mix(in oklab, #a855f7 13%, #141c26); --color-purple-100: color-mix(in oklab, #a855f7 20%, #141c26); --color-purple-200: color-mix(in oklab, #a855f7 34%, #141c26);
+  --color-fuchsia-50: color-mix(in oklab, #d946ef 13%, #141c26); --color-fuchsia-100: color-mix(in oklab, #d946ef 20%, #141c26); --color-fuchsia-200: color-mix(in oklab, #d946ef 34%, #141c26);
+  --color-pink-50: color-mix(in oklab, #ec4899 13%, #141c26); --color-pink-100: color-mix(in oklab, #ec4899 20%, #141c26); --color-pink-200: color-mix(in oklab, #ec4899 34%, #141c26);
+}
+html.dark body { background-color: var(--color-background); color: var(--color-text-main) }
+html.dark .bg-white { background-color: #141c26 }
+html.dark .bg-white\/80, html.dark .bg-white\/90, html.dark .bg-white\/70, html.dark .bg-white\/60 { background-color: color-mix(in oklab, #141c26 85%, transparent) }
+html.dark .hover\:bg-white:hover { background-color: #1a2431 }
+/* Dark buttons and badges keep a dark fill with white text. */
+html.dark .bg-slate-500 { background-color: #475569 } html.dark .bg-slate-600 { background-color: #3d4a5c }
+html.dark .bg-slate-700, html.dark .bg-slate-800 { background-color: #334155 } html.dark .bg-slate-900 { background-color: #273244 }
+html.dark .hover\:bg-slate-700:hover, html.dark .hover\:bg-slate-800:hover, html.dark .hover\:bg-slate-900:hover { background-color: #3d4a5c }
+html.dark .text-black { color: #f1f5f9 }
+html.dark .shadow-sm, html.dark .shadow, html.dark .shadow-md, html.dark .shadow-lg, html.dark .shadow-xl, html.dark .shadow-2xl { --tw-shadow-color: rgba(0,0,0,.45) }
+html.dark input, html.dark select, html.dark textarea { color: var(--color-text-main) }
+html.dark input::placeholder, html.dark textarea::placeholder { color: #66768a }
+html.dark .bg-background { background-color: var(--color-background) }
+/* The navy logo gets a light plate so it stays visible on dark surfaces. */
+html.dark img[alt="Al Moktashef International Schools"] { background: #ffffff; border-radius: 8px; padding: 2px 4px }
+html.dark .recharts-cartesian-grid line { stroke: #263241 }
+html.dark .recharts-text { fill: #93a1b3 }
+  html.dark .text-red-700, html.dark .text-red-800, html.dark .text-red-900 { color: color-mix(in oklab, #f87171 80%, white) }
+  html.dark .text-rose-700, html.dark .text-rose-800, html.dark .text-rose-900 { color: color-mix(in oklab, #fb7185 80%, white) }
+  html.dark .text-orange-700, html.dark .text-orange-800, html.dark .text-orange-900 { color: color-mix(in oklab, #fb923c 80%, white) }
+  html.dark .text-amber-700, html.dark .text-amber-800, html.dark .text-amber-900 { color: color-mix(in oklab, #fbbf24 80%, white) }
+  html.dark .text-yellow-700, html.dark .text-yellow-800, html.dark .text-yellow-900 { color: color-mix(in oklab, #facc15 80%, white) }
+  html.dark .text-lime-700, html.dark .text-lime-800, html.dark .text-lime-900 { color: color-mix(in oklab, #a3e635 80%, white) }
+  html.dark .text-green-700, html.dark .text-green-800, html.dark .text-green-900 { color: color-mix(in oklab, #4ade80 80%, white) }
+  html.dark .text-emerald-700, html.dark .text-emerald-800, html.dark .text-emerald-900 { color: color-mix(in oklab, #34d399 80%, white) }
+  html.dark .text-teal-700, html.dark .text-teal-800, html.dark .text-teal-900 { color: color-mix(in oklab, #2dd4bf 80%, white) }
+  html.dark .text-cyan-700, html.dark .text-cyan-800, html.dark .text-cyan-900 { color: color-mix(in oklab, #22d3ee 80%, white) }
+  html.dark .text-sky-700, html.dark .text-sky-800, html.dark .text-sky-900 { color: color-mix(in oklab, #38bdf8 80%, white) }
+  html.dark .text-blue-700, html.dark .text-blue-800, html.dark .text-blue-900 { color: color-mix(in oklab, #60a5fa 80%, white) }
+  html.dark .text-indigo-700, html.dark .text-indigo-800, html.dark .text-indigo-900 { color: color-mix(in oklab, #818cf8 80%, white) }
+  html.dark .text-violet-700, html.dark .text-violet-800, html.dark .text-violet-900 { color: color-mix(in oklab, #a78bfa 80%, white) }
+  html.dark .text-purple-700, html.dark .text-purple-800, html.dark .text-purple-900 { color: color-mix(in oklab, #c084fc 80%, white) }
+  html.dark .text-fuchsia-700, html.dark .text-fuchsia-800, html.dark .text-fuchsia-900 { color: color-mix(in oklab, #e879f9 80%, white) }
+  html.dark .text-pink-700, html.dark .text-pink-800, html.dark .text-pink-900 { color: color-mix(in oklab, #f472b6 80%, white) }
+}
