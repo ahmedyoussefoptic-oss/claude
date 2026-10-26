@@ -5628,3 +5628,35 @@ exports.getUserActivity = onCall({ timeoutSeconds: 60 }, async (request) => {
     }),
   };
 });
+
+// --- Trips page indicators: the students behind a number --------------------
+// The parent responses of the coming trips (OPEN / CLOSED, today onward) in
+// one status — approved, confirmed, awaiting payment, receipt under review,
+// declined — across the trips the caller can supervise. No phone numbers.
+exports.tripEnrollmentsByStatus = onCall({ timeoutSeconds: 60 }, async (request) => {
+  const caller = await tripCaller(request);
+  const filter = String(request.data?.status || "");
+  const allowed = ["APPROVED", "CONFIRMED", "AWAITING_PAYMENT", "RECEIPT_REVIEW", "RECEIPT_REJECTED", "DECLINED"];
+  if (!allowed.includes(filter)) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  const today = riyadhDay();
+  const snap = await db.collection("trips").where("date", ">=", today).get();
+  const trips = snap.docs.map((d) => ({ id: d.id, ref: d.ref, ...d.data() }))
+    .filter((t) => ["OPEN", "CLOSED"].includes(t.status) && tripPerm.supervise(caller, t.branches || [], t));
+  const rows = [];
+  await Promise.all(trips.map(async (t) => {
+    const enr = await t.ref.collection("enrollments").get();
+    enr.docs.forEach((d) => {
+      const e = d.data();
+      const st = enrollmentStatus(e, t.fee);
+      const match = filter === "APPROVED" ? e.decision === "APPROVED" : st === filter;
+      if (!match) return;
+      rows.push({
+        tripId: t.id, tripTitle: t.title, tripDate: t.date, tripCode: t.tripCode, studentId: d.id, studentName: e.studentName || "",
+        branch: e.branch || "", grade: e.grade || "", className: e.className || "", status: st, payMethod: e.payMethod || null,
+        collectMethod: e.collectMethod || null, source: e.source || "parent", at: (e.updatedAt || e.submittedAt)?.toMillis?.() || null,
+      });
+    });
+  }));
+  rows.sort((a, b) => a.tripDate.localeCompare(b.tripDate) || (b.at || 0) - (a.at || 0));
+  return { rows };
+});

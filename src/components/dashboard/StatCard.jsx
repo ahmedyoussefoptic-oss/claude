@@ -1,13 +1,14 @@
 import { useNavigate } from 'react-router-dom';
 
-export default function StatCard({ title, value, icon: Icon, trend, trendLabel, sub, gradient = 'from-sky-500 to-blue-600', to }) {
+export default function StatCard({ title, value, icon: Icon, trend, trendLabel, sub, gradient = 'from-sky-500 to-blue-600', to, onClick }) {
   const navigate = useNavigate();
-  const clickable = !!to;
+  const clickable = !!to || !!onClick;
+  const go = () => (onClick ? onClick() : navigate(to));
 
   return (
     <div
-      onClick={clickable ? () => navigate(to) : undefined}
-      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); navigate(to); } } : undefined}
+      onClick={clickable ? go : undefined}
+      onKeyDown={clickable ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } } : undefined}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : undefined}
       className={`relative overflow-hidden bg-white rounded-2xl p-6 border border-slate-100 shadow-sm transition-all duration-200 ${

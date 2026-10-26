@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { httpsCallable } from 'firebase/functions';
-import { Bus, Plus, CalendarDays, List, ChevronRight, ChevronLeft, Loader2, Hourglass, CheckCircle2, Wallet, AlertTriangle, MapPin, Users as UsersIcon, FileBarChart, Star, Clock, Flag, UserCheck } from 'lucide-react';
+import { Bus, Plus, CalendarDays, List, ChevronRight, ChevronLeft, Loader2, Hourglass, CheckCircle2, Wallet, AlertTriangle, MapPin, Users as UsersIcon, FileBarChart, Star, Clock, Flag, UserCheck, ThumbsUp, ThumbsDown, HelpCircle, X, Search, FileDown } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, addDays, addMonths, isSameMonth } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { functions } from '../config/firebase';
@@ -13,7 +13,7 @@ import TripForm from '../components/trips/TripForm';
 import TripDetails from '../components/trips/TripDetails';
 import TripsReport from '../components/trips/TripsReport';
 import { canSeeTrips } from '../utils/scope';
-import { TRIP_STATUSES, TRIP_STATUS_STYLES, TRIP_DOT, TRIP_GENDER_STYLES, canCreateTrips, tripConflicts, dayToDate, tripTime } from '../config/trips';
+import { TRIP_STATUSES, TRIP_STATUS_STYLES, TRIP_DOT, TRIP_GENDER_STYLES, ENROLLMENT_STATUS_STYLES, canCreateTrips, tripConflicts, dayToDate, tripTime } from '../config/trips';
 
 const ymd = (d) => format(d, 'yyyy-MM-dd');
 
@@ -60,12 +60,18 @@ export default function Trips() {
     && (statusFilter === 'ALL' ? tr.status !== 'CANCELLED' : tr.status === statusFilter)), [trips, branchFilter, deptFilter, statusFilter]);
 
   const today = ymd(new Date());
-  const stats = useMemo(() => ({
-    upcoming: trips.filter((tr) => ['OPEN', 'CLOSED'].includes(tr.status) && tr.date >= today).length,
-    open: trips.filter((tr) => tr.status === 'OPEN').length,
-    confirmed: trips.filter((tr) => tr.date >= today && tr.status !== 'CANCELLED').reduce((s, tr) => s + (tr.stats?.confirmed || 0), 0),
-    review: trips.filter((tr) => tr.status !== 'CANCELLED').reduce((s, tr) => s + (tr.stats?.review || 0), 0),
-  }), [trips, today]);
+  const stats = useMemo(() => {
+    const coming = trips.filter((tr) => ['OPEN', 'CLOSED'].includes(tr.status) && tr.date >= today);
+    const sum = (k) => coming.reduce((s, tr) => s + (tr.stats?.[k] || 0), 0);
+    return {
+      upcoming: coming.length,
+      open: trips.filter((tr) => tr.status === 'OPEN').length,
+      approved: sum('approved'), confirmed: sum('confirmed'), awaiting: sum('awaiting'), review: sum('review'), declined: sum('declined'),
+      noAnswer: coming.reduce((s, tr) => s + Math.max(0, (tr.targetedCount || 0) - (tr.stats?.responses || 0)), 0),
+    };
+  }, [trips, today]);
+  const [drill, setDrill] = useState(null); // enrollment status shown in the students list
+  const showTrips = (status) => { setStatusFilter(status); setView('list'); };
 
   const days = useMemo(() => {
     const start = startOfWeek(month, { weekStartsOn: 0 });
@@ -107,11 +113,16 @@ export default function Trips() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard title={t('trips.statUpcoming')} value={String(stats.upcoming)} icon={CalendarDays} gradient="from-sky-500 to-blue-600" />
-        <StatCard title={t('trips.statOpen')} value={String(stats.open)} icon={Hourglass} gradient="from-amber-400 to-orange-500" />
-        <StatCard title={t('trips.statConfirmed')} value={String(stats.confirmed)} icon={CheckCircle2} gradient="from-emerald-500 to-teal-600" />
-        <StatCard title={t('trips.statReview')} value={String(stats.review)} icon={Wallet} gradient="from-violet-500 to-purple-600" />
+        <StatCard title={t('trips.statUpcoming')} value={String(stats.upcoming)} icon={CalendarDays} gradient="from-sky-500 to-blue-600" onClick={() => showTrips('ALL')} />
+        <StatCard title={t('trips.statOpen')} value={String(stats.open)} icon={Hourglass} gradient="from-amber-400 to-orange-500" onClick={() => showTrips('OPEN')} />
+        <StatCard title={t('trips.drill.APPROVED')} value={String(stats.approved)} icon={ThumbsUp} gradient="from-teal-500 to-emerald-600" sub={t('trips.statComing')} onClick={() => setDrill('APPROVED')} />
+        <StatCard title={t('trips.statConfirmed')} value={String(stats.confirmed)} icon={CheckCircle2} gradient="from-emerald-500 to-green-600" onClick={() => setDrill('CONFIRMED')} />
+        <StatCard title={t('trips.drill.AWAITING_PAYMENT')} value={String(stats.awaiting)} icon={Hourglass} gradient="from-amber-500 to-yellow-500" onClick={() => setDrill('AWAITING_PAYMENT')} />
+        <StatCard title={t('trips.statReview')} value={String(stats.review)} icon={Wallet} gradient="from-violet-500 to-purple-600" onClick={() => setDrill('RECEIPT_REVIEW')} />
+        <StatCard title={t('trips.drill.DECLINED')} value={String(stats.declined)} icon={ThumbsDown} gradient="from-rose-500 to-pink-600" onClick={() => setDrill('DECLINED')} />
+        <StatCard title={t('trips.statNoAnswer')} value={String(stats.noAnswer)} icon={HelpCircle} gradient="from-slate-500 to-slate-700" sub={t('trips.statNoAnswerHint')} onClick={() => showTrips('OPEN')} />
       </div>
+      {drill && <EnrollmentDrill status={drill} branchName={branchName} onClose={() => setDrill(null)} onOpenTrip={(id) => { setDrill(null); openTrip(id); }} />}
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
         <div className="p-4 border-b border-slate-100 flex flex-wrap items-center gap-2">
@@ -297,6 +308,66 @@ function TripListStats({ tr, t, today }) {
           <span className="text-[11px] text-slate-500 tabular-nums">{Math.min(100, Math.round(((s.collected || 0) / ((s.approved || 0) * tr.fee)) * 100))}%</span>
         </div>
       )}
+    </div>
+  );
+}
+
+// The students behind a trips-page indicator (tripEnrollmentsByStatus):
+// coming trips only; a row opens its trip.
+function EnrollmentDrill({ status, branchName, onClose, onOpenTrip }) {
+  const { t } = useTranslation();
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState(null);
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    httpsCallable(functions, 'tripEnrollmentsByStatus')({ status }).then(({ data }) => setRows(data.rows)).catch((err) => setError(err.message));
+  }, [status]);
+  const shown = (rows || []).filter((r) => !q.trim() || `${r.studentName} ${r.studentId} ${r.tripTitle} ${r.className}`.includes(q.trim()));
+  const exportXlsx = async () => {
+    const XLSX = await import('xlsx');
+    const ws = XLSX.utils.json_to_sheet(shown.map((r) => ({
+      [t('trips.report.trip')]: r.tripTitle, [t('common.date')]: r.tripDate, [t('trips.col.student')]: r.studentName, [t('trips.col.nationalId')]: r.studentId,
+      [t('trips.col.branch')]: branchName(r.branch), [t('trips.col.grade')]: `${r.grade} ${r.className}`.trim(), [t('trips.col.status')]: t(`trips.enrollment.${r.status}`),
+      [t('trips.col.payMethod')]: r.payMethod ? t(`trips.payMethod.${r.payMethod}`) : '',
+    })));
+    const wb = XLSX.utils.book_new();
+    wb.Workbook = { Views: [{ RTL: true }] };
+    XLSX.utils.book_append_sheet(wb, ws, 'Students');
+    XLSX.writeFile(wb, `${t(`trips.drill.${status}`)}.xlsx`);
+  };
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 z-[100] flex items-center justify-center p-0 md:p-6">
+      <div className="w-full max-w-5xl bg-white md:rounded-2xl shadow-2xl flex flex-col h-full md:h-auto md:max-h-full overflow-hidden">
+        <div className="shrink-0 px-5 py-4 border-b border-slate-200 flex flex-wrap items-center gap-3">
+          <h2 className="text-lg font-bold text-slate-900 flex-1">{t(`trips.drill.${status}`)} <span className="text-sm font-normal text-slate-500">— {t('trips.statComing')}{rows ? ` (${rows.length})` : ''}</span></h2>
+          <div className="relative"><Search className="w-4 h-4 absolute top-2.5 right-3 text-slate-400" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('trips.drill.search')} className="pr-9 pl-3 py-2 border border-slate-200 rounded-xl text-sm" /></div>
+          <button onClick={exportXlsx} disabled={!shown.length} className="px-3 py-2 rounded-xl text-sm border border-emerald-300 text-emerald-700 bg-white flex items-center gap-1.5 disabled:opacity-50"><FileDown className="w-4 h-4" />Excel</button>
+          <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          {error ? <p className="p-6 text-sm text-rose-600">{error}</p> : !rows ? <div className="py-16 flex justify-center"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>
+            : shown.length === 0 ? <p className="py-16 text-center text-sm text-slate-400">{t('trips.drill.empty')}</p> : (
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-slate-50"><tr className="text-slate-500 text-xs">
+                  <th className="text-start px-4 py-2">{t('trips.col.student')}</th><th className="text-start">{t('trips.col.branch')}</th><th className="text-start">{t('trips.col.grade')}</th>
+                  <th className="text-start">{t('trips.report.trip')}</th><th className="text-start">{t('trips.col.status')}</th><th className="text-start">{t('trips.col.payMethod')}</th>
+                </tr></thead>
+                <tbody>
+                  {shown.map((r) => (
+                    <tr key={`${r.tripId}-${r.studentId}`} onClick={() => onOpenTrip(r.tripId)} className="border-b border-slate-50 cursor-pointer hover:bg-slate-50">
+                      <td className="px-4 py-2.5"><p className="font-medium text-slate-900">{r.studentName}</p><p className="text-xs text-slate-400" dir="ltr">{r.studentId}</p></td>
+                      <td className="text-slate-600">{branchName(r.branch)}</td>
+                      <td className="text-slate-600" dir="ltr">{r.grade} {r.className}</td>
+                      <td><p className="text-slate-800">{r.tripTitle}</p><p className="text-xs text-slate-400" dir="ltr">{r.tripDate}</p></td>
+                      <td><span className={`inline-block px-2 py-0.5 rounded-md text-xs font-medium border ${ENROLLMENT_STATUS_STYLES[r.status] || ''}`}>{t(`trips.enrollment.${r.status}`)}</span></td>
+                      <td className="text-xs text-slate-600">{r.collectMethod ? t(`trips.collectMethod.${r.collectMethod}`) : r.payMethod ? t(`trips.payMethod.${r.payMethod}`) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+        </div>
+      </div>
     </div>
   );
 }

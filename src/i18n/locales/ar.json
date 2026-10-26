@@ -2066,6 +2066,19 @@
         "declined": "اعتذروا",
         "noAnswer": "لم يردّوا"
       }
+    },
+    "statComing": "الرحلات القادمة",
+    "statNoAnswer": "لم يردّوا بعد",
+    "statNoAnswerHint": "طلاب مستهدفون في الرحلات القادمة",
+    "drill": {
+      "APPROVED": "موافقات أولياء الأمور",
+      "CONFIRMED": "طلاب مؤكدون",
+      "AWAITING_PAYMENT": "وافقوا وبانتظار الدفع",
+      "RECEIPT_REVIEW": "سندات بانتظار المراجعة",
+      "RECEIPT_REJECTED": "سندات مرفوضة",
+      "DECLINED": "اعتذارات",
+      "search": "بحث بالاسم أو الهوية أو الرحلة",
+      "empty": "لا يوجد طلاب في هذا المؤشر."
     }
   },
   "tripConsent": {

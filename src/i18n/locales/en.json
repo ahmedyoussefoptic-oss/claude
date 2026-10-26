@@ -2042,6 +2042,19 @@
         "declined": "Declined",
         "noAnswer": "No answer"
       }
+    },
+    "statComing": "Coming trips",
+    "statNoAnswer": "No answer yet",
+    "statNoAnswerHint": "Targeted students, coming trips",
+    "drill": {
+      "APPROVED": "Parent approvals",
+      "CONFIRMED": "Confirmed students",
+      "AWAITING_PAYMENT": "Approved, awaiting payment",
+      "RECEIPT_REVIEW": "Receipts to review",
+      "RECEIPT_REJECTED": "Rejected receipts",
+      "DECLINED": "Declined",
+      "search": "Search name, ID or trip",
+      "empty": "No students for this indicator."
     }
   },
   "tripConsent": {
