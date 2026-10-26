@@ -931,7 +931,8 @@
     "platformAccessLabel": "Access to the Al Moktashef platform",
     "platformAccessHint": "Shows the platform section (leaves, new customers, current students) and its notifications. Platform settings stay yours only.",
     "platformTag": "Platform",
-    "typingHint": "English fields first (email, password, phone), then Arabic (name, job title) — switch keyboard language only once."
+    "typingHint": "Arabic fields first (name, job title), then English (email, phone, password) — switch keyboard language only once.",
+    "generatePassword": "Generate"
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",

@@ -305,56 +305,6 @@ export default function Users() {
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {!editingId && <p className="md:col-span-2 text-xs text-slate-500 -mb-1">{t('users.typingHint')}</p>}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.emailLabel')}</label>
-              <div className="relative">
-                <Mail className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
-                <input
-                  type="email"
-                  dir="ltr"
-                  lang="en"
-                  autoComplete="off"
-                  inputMode="email"
-                  value={form.email}
-                  onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
-                  disabled={!!editingId}
-                  className="w-full pl-3 pr-10 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400"
-                  required
-                />
-              </div>
-            </div>
-            {!editingId && (
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('users.passwordLabel')}</label>
-                <div className="relative">
-                  <Lock className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
-                  <input
-                    type="password"
-                    dir="ltr"
-                    lang="en"
-                    autoComplete="new-password"
-                    value={form.password}
-                    onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
-                    className="w-full pl-3 pr-10 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary"
-                    required
-                  />
-                </div>
-              </div>
-            )}
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('users.staffPhoneLabel')}</label>
-              <div className="relative">
-                <Phone className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
-                <input
-                  type="tel"
-                  dir="ltr"
-                  value={form.phone}
-                  onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
-                  placeholder="05xxxxxxxx"
-                  className="w-full pl-3 pr-10 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary"
-                />
-              </div>
-            </div>
-            <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.name')}</label>
               <div className="relative">
                 <UserIcon className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
@@ -384,6 +334,69 @@ export default function Users() {
                   className="w-full pl-3 pr-10 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary"
                 />
               </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.emailLabel')}</label>
+              <div className="relative">
+                <Mail className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
+                <input
+                  type="email"
+                  dir="ltr"
+                  lang="en"
+                  autoComplete="off"
+                  inputMode="email"
+                  value={form.email}
+                  onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
+                  disabled={!!editingId}
+                  className="w-full pl-3 pr-10 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary disabled:bg-slate-50 disabled:text-slate-400"
+                  required
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('users.staffPhoneLabel')}</label>
+              <div className="relative">
+                <Phone className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
+                <input
+                  type="tel"
+                  dir="ltr"
+                  value={form.phone}
+                  onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+                  placeholder="05xxxxxxxx"
+                  className="w-full pl-3 pr-10 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary"
+                />
+              </div>
+            {!editingId && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('users.passwordLabel')}</label>
+                {/* A plain text field on purpose: a password field makes macOS lock
+                    the keyboard to English, which then sticks in Chrome. */}
+                <div className="relative flex gap-2">
+                  <div className="relative flex-1">
+                    <Lock className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
+                    <input
+                      type="text"
+                      dir="ltr"
+                      lang="en"
+                      autoComplete="off"
+                      spellCheck={false}
+                      value={form.password}
+                      onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
+                      className="w-full pl-3 pr-10 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary font-mono"
+                      required
+                      minLength={6}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setForm((p) => ({ ...p, password: `Mis${Math.random().toString(36).slice(2, 7)}${Math.floor(10 + Math.random() * 89)}` }))}
+                    className="px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl text-slate-600 hover:bg-slate-50 whitespace-nowrap"
+                  >
+                    {t('users.generatePassword')}
+                  </button>
+                </div>
+              </div>
+            )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('users.roleLabel')}</label>
