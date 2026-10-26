@@ -40,18 +40,17 @@ export default function TripsReport({ onOpenTrip }) {
   const reload = (patch) => { setLoading(true); setRange((r) => ({ ...r, ...patch })); };
   const inputCls = 'px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm';
 
+  // Cancelled trips are left out of the report by the server.
   const trips = data?.trips || [];
-  const active = trips.filter((r) => r.status !== 'CANCELLED');
-  const sum = (field) => active.reduce((a, r) => a + (r[field] || 0), 0);
+  const sum = (field) => trips.reduce((a, r) => a + (r[field] || 0), 0);
   const totals = {
-    trips: active.length,
+    trips: trips.length,
     completed: trips.filter((r) => r.status === 'COMPLETED').length,
-    cancelled: trips.length - active.length,
     targeted: sum('targeted'), confirmed: sum('confirmed'), approved: sum('approved'), declined: sum('declined'), responses: sum('responses'),
     collected: sum('collected'), expected: sum('expected'), surveys: sum('surveys'), ratingSum: sum('ratingSum'), recommend: sum('recommend'),
   };
   const branchRows = Object.entries(data?.byBranch || {}).sort((a, b) => b[1].confirmed - a[1].confirmed);
-  const gradeRows = TRIP_STAGES.filter((g) => data?.byGrade?.[g]?.targeted).map((g) => [g, data.byGrade[g]]);
+  const gradeRows = TRIP_STAGES.filter((g) => data?.byGrade?.[g]?.students).map((g) => [g, data.byGrade[g]]);
   const methodRows = Object.entries(data?.byMethod || {}).sort((a, b) => b[1].amount - a[1].amount);
   const collectorRows = Object.entries(data?.byCollector || {}).sort((a, b) => b[1].amount - a[1].amount);
   const payments = data?.payments || [];
@@ -72,8 +71,8 @@ export default function TripsReport({ onOpenTrip }) {
       [t('trips.overallRating')]: fmtAvg(r.ratingSum, r.surveys), [t('trips.recommendRate')]: fmtPct(pct(r.recommend, r.surveys)), [t('trips.report.surveys')]: r.surveys,
     }))), t('trips.report.sheetTrips'));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(branchRows.map(([b, v]) => ({
-      [t('common.branch')]: branchName(b), [t('trips.report.trips')]: v.trips, [t('trips.report.targeted')]: v.targeted, [t('trips.statConfirmedShort')]: v.confirmed,
-      [t('trips.report.participation')]: fmtPct(pct(v.confirmed, v.targeted)), [t('trips.report.collected')]: v.collected, [t('trips.overallRating')]: fmtAvg(v.ratingSum, v.surveys),
+      [t('common.branch')]: branchName(b), [t('trips.report.trips')]: v.trips, [t('trips.report.branchStudents')]: v.rosterTotal ?? '', [t('trips.report.targetedStudents')]: v.students,
+      [t('trips.report.confirmedStudents')]: v.studentsConfirmed, [t('trips.report.participation')]: fmtPct(pct(v.studentsConfirmed, v.students)), [t('trips.report.collected')]: v.collected, [t('trips.overallRating')]: fmtAvg(v.ratingSum, v.surveys),
     }))), t('trips.report.sheetBranches'));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(payments.map((p) => ({
       [t('trips.report.trip')]: p.tripTitle, [t('common.date')]: p.tripDate, [t('trips.col.student')]: p.studentName, [t('trips.col.nationalId')]: p.studentId,
@@ -115,7 +114,7 @@ export default function TripsReport({ onOpenTrip }) {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
-            {card(t('trips.report.trips'), totals.trips, t('trips.report.cancelledCount', { count: totals.cancelled }), Bus, 'text-slate-800')}
+            {card(t('trips.report.trips'), totals.trips, null, Bus, 'text-slate-800')}
             {card(t('trips.report.completed'), totals.completed, null, Flag, 'text-indigo-700')}
             {card(t('trips.report.participation'), fmtPct(pct(totals.confirmed, totals.targeted)), t('trips.report.ofTargeted', { confirmed: totals.confirmed, targeted: totals.targeted }), UsersIcon, 'text-emerald-700')}
             {card(t('trips.report.declineRate'), fmtPct(pct(totals.declined, totals.responses)), t('trips.report.declinedCount', { count: totals.declined }), UsersIcon, 'text-rose-700')}
@@ -211,19 +210,20 @@ export default function TripsReport({ onOpenTrip }) {
               <div className="overflow-x-auto border border-slate-100 rounded-2xl">
                 <table className="w-full text-sm">
                   <thead className="bg-slate-50 text-slate-500 text-xs">
-                    <tr><th className={th}>{t('common.branch')}</th><th className={th}>{t('trips.report.trips')}</th><th className={th}>{t('trips.report.targeted')}</th><th className={th}>{t('trips.statConfirmedShort')}</th><th className={th}>{t('trips.report.participation')}</th><th className={th}>{t('trips.report.collected')}</th><th className={th}>{t('trips.overallRating')}</th></tr>
+                    <tr><th className={th}>{t('common.branch')}</th><th className={th}>{t('trips.report.trips')}</th><th className={th}>{t('trips.report.branchStudents')}</th><th className={th}>{t('trips.report.targetedStudents')}</th><th className={th}>{t('trips.report.confirmedStudents')}</th><th className={th}>{t('trips.report.participation')}</th><th className={th}>{t('trips.report.collected')}</th><th className={th}>{t('trips.overallRating')}</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {branchRows.map(([b, v]) => (
                       <tr key={b}>
-                        <td className={`${td} font-medium`}>{branchName(b)}</td><td className={td}>{v.trips}</td><td className={td}>{v.targeted}</td>
-                        <td className={td}>{v.confirmed}</td><td className={td}>{fmtPct(pct(v.confirmed, v.targeted))}</td>
+                        <td className={`${td} font-medium`}>{branchName(b)}</td><td className={td}>{v.trips}</td><td className={td}>{v.rosterTotal ?? '—'}</td><td className={td}>{v.students}</td>
+                        <td className={td}>{v.studentsConfirmed}</td><td className={td}>{fmtPct(pct(v.studentsConfirmed, v.students))}</td>
                         <td className={td}>{v.collected.toLocaleString('en')}</td><td className={td}>{fmtAvg(v.ratingSum, v.surveys)}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
+              <p className="text-xs text-slate-400 mt-1.5">{t('trips.report.byBranchHint')}</p>
             </section>
 
             <section className="space-y-5">
@@ -231,12 +231,12 @@ export default function TripsReport({ onOpenTrip }) {
                 <h3 className="font-bold text-slate-800 mb-2">{t('trips.report.byGrade')}</h3>
                 <div className="space-y-1.5">
                   {gradeRows.map(([g, v]) => {
-                    const p = pct(v.confirmed, v.targeted) || 0;
+                    const p = pct(v.studentsConfirmed, v.students) || 0;
                     return (
                       <div key={g} className="flex items-center gap-2 text-xs">
                         <span className="w-10 font-mono text-slate-600" dir="ltr">{g}</span>
                         <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${p}%` }} /></div>
-                        <span className="w-24 text-slate-600">{p}% <span className="text-slate-400">({v.confirmed}/{v.targeted})</span></span>
+                        <span className="w-24 text-slate-600">{p}% <span className="text-slate-400">({v.studentsConfirmed}/{v.students})</span></span>
                       </div>
                     );
                   })}

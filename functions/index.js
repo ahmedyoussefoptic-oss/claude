@@ -3948,12 +3948,14 @@ exports.getTripsReport = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async
   const branchFilter = typeof request.data?.branch === "string" ? request.data.branch : "";
   const snap = await db.collection("trips").where("date", ">=", from).where("date", "<=", to).get();
   const trips = snap.docs.map((d) => ({ ref: d.ref, id: d.id, ...d.data() }))
-    .filter((tr) => tr.status !== "DRAFT" && tr.status !== "PENDING_APPROVAL")
+    .filter((tr) => !["DRAFT", "PENDING_APPROVAL", "CANCELLED"].includes(tr.status))
     .filter((tr) => (branchFilter ? (tr.branches || []).includes(branchFilter) : true))
     .filter((tr) => tripPerm.view(caller, tr.branches || [], tr) || tripPerm.approve(caller, tr.branches || []));
 
   const branchOf = await branchResolver();
-  const students = (await db.collection("students").get()).docs.map((d) => d.data()).filter((s) => s.nationalId);
+  // Same roster as the trip itself: students marked inactive (no longer in
+  // the imported file) are not targeted.
+  const students = (await db.collection("students").get()).docs.map((d) => d.data()).filter((s) => s.nationalId && s.active !== false);
   const blank = () => ({ trips: 0, targeted: 0, responses: 0, approved: 0, declined: 0, confirmed: 0, boarded: 0, expected: 0, collected: 0, surveys: 0, ratingSum: 0, recommend: 0 });
   const byBranch = {};
   const byGrade = {};
@@ -3962,6 +3964,14 @@ exports.getTripsReport = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async
   const byCollector = {};
   const payments = [];
   const rows = [];
+  // Branch / grade comparisons count each student once, however many trips
+  // they were invited to (the branch total is its students in the roster).
+  const distinct = { byBranch: {}, byGrade: {} };
+  const mark = (kind, key, field, id) => {
+    if (!key || !id) return;
+    const d = (distinct[kind][key] = distinct[kind][key] || { students: new Set(), studentsConfirmed: new Set() });
+    d[field].add(String(id));
+  };
   for (const tr of trips) {
     const inBranch = (b) => !branchFilter || b === branchFilter;
     const roster = students.filter((s) => tripTargets(tr, s, branchOf) && inBranch(branchOf(s)));
@@ -3979,13 +3989,10 @@ exports.getTripsReport = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async
       row.targeted++;
       add(byBranch, branchOf(s), "targeted");
       add(byGrade, studentGrade(s), "targeted");
+      mark("byBranch", branchOf(s), "students", s.nationalId);
+      mark("byGrade", studentGrade(s), "students", s.nationalId);
       touched.add(branchOf(s));
     });
-    if (tr.status === "CANCELLED") {
-      // Cancelled trips count as trips only.
-      rows.push(row);
-      continue;
-    }
     enrollments.forEach((e) => {
       const st = enrollmentStatus(e, tr.fee);
       const inc = (field, n = 1) => { row[field] += n; add(byBranch, e.branch, field, n); add(byGrade, e.grade, field, n); };
@@ -3996,7 +4003,11 @@ exports.getTripsReport = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async
         const reason = e.declineReason || "UNSPECIFIED";
         declineReasons[reason] = (declineReasons[reason] || 0) + 1;
       }
-      if (st === "CONFIRMED") inc("confirmed");
+      if (st === "CONFIRMED") {
+        inc("confirmed");
+        mark("byBranch", e.branch, "studentsConfirmed", e.studentId);
+        mark("byGrade", e.grade, "studentsConfirmed", e.studentId);
+      }
       if (e.boarded === true) inc("boarded");
       if (e.payStatus === "PAID") {
         const amount = Number(e.paidAmount ?? tr.fee) || 0;
@@ -4028,6 +4039,17 @@ exports.getTripsReport = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async
     touched.forEach((b) => add(byBranch, b, "trips"));
     rows.push(row);
   }
+  for (const [kind, map] of [["byBranch", byBranch], ["byGrade", byGrade]]) {
+    Object.entries(distinct[kind]).forEach(([key, d]) => {
+      map[key] = map[key] || blank();
+      map[key].students = d.students.size;
+      map[key].studentsConfirmed = d.studentsConfirmed.size;
+    });
+  }
+  students.forEach((s) => {
+    const b = branchOf(s);
+    if (byBranch[b]) byBranch[b].rosterTotal = (byBranch[b].rosterTotal || 0) + 1;
+  });
   const strip = ({ ref, ...rest }) => rest;
   payments.sort((a, b) => (b.at || 0) - (a.at || 0));
   return { trips: rows.map(strip), byBranch, byGrade, declineReasons, byMethod, byCollector, payments };
