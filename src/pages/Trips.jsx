@@ -12,6 +12,7 @@ import StatCard from '../components/dashboard/StatCard';
 import TripForm from '../components/trips/TripForm';
 import TripDetails from '../components/trips/TripDetails';
 import TripsReport from '../components/trips/TripsReport';
+import TripStudentSearch from '../components/trips/TripStudentSearch';
 import { canSeeTrips } from '../utils/scope';
 import { TRIP_STATUSES, TRIP_STATUS_STYLES, TRIP_DOT, TRIP_GENDER_STYLES, ENROLLMENT_STATUS_STYLES, canCreateTrips, tripConflicts, dayToDate, tripTime } from '../config/trips';
 
@@ -122,6 +123,7 @@ export default function Trips() {
         <StatCard title={t('trips.drill.DECLINED')} value={String(stats.declined)} icon={ThumbsDown} gradient="from-rose-500 to-pink-600" onClick={() => setDrill('DECLINED')} />
         <StatCard title={t('trips.statNoAnswer')} value={String(stats.noAnswer)} icon={HelpCircle} gradient="from-slate-500 to-slate-700" sub={t('trips.statNoAnswerHint')} onClick={() => showTrips('OPEN')} />
       </div>
+      <TripStudentSearch branchName={branchName} onOpenTrip={openTrip} />
       {drill && <EnrollmentDrill status={drill} branchName={branchName} onClose={() => setDrill(null)} onOpenTrip={(id) => { setDrill(null); openTrip(id); }} />}
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">

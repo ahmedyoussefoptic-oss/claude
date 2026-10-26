@@ -71,7 +71,17 @@ export function tripPermissions(u, trip, uid) {
   const approve = isAdmin || (u?.isPrincipal === true && branches.length > 0 && branches.every((b) => hasBranch(u, b)));
   const finance = isAdmin || (u?.perms?.tripFinance === true && branches.some((b) => hasBranch(u, b)));
   const supervise = manage || finance || (trip?.supervisors || []).includes(uid);
-  return { manage, approve, finance, supervise, seeStudents: supervise || approve || (u?.isPrincipal === true && branches.some((b) => hasBranch(u, b))) };
+  // Owner-set per-user trip permissions (Users page); unset = role default.
+  const can = (key, legacy) => isAdmin || (typeof u?.perms?.[key] === 'boolean' ? u.perms[key] : legacy);
+  const inScope = isAdmin || branches.some((b) => hasBranch(u, b));
+  return {
+    manage, approve, finance, supervise, seeStudents: supervise || approve || (u?.isPrincipal === true && branches.some((b) => hasBranch(u, b))),
+    editTrip: manage && can('tripEdit', true),
+    deleteTrip: manage && can('tripDelete', true),
+    deleteCancelled: u?.isOwner === true || (manage && u?.perms?.tripDelete === true),
+    editStudents: (manage || finance) && can('tripStudents', true),
+    editPayments: inScope && can('tripPayments', finance),
+  };
 }
 
 export const canCreateTrips = (u) => u?.role === 'ADMIN' || !!u?.perms?.trips || u?.isPrincipal === true;

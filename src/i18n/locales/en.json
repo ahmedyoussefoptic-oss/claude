@@ -952,7 +952,18 @@
       "fileName": "System logins"
     },
     "activityAccessLabel": "Can see «User activity»",
-    "activityAccessHint": "Sees who is online and each user’s last sign-in. Cannot share it further."
+    "activityAccessHint": "Sees who is online and each user’s last sign-in. Cannot share it further.",
+    "tripPerms": {
+      "title": "Trip edit & delete permissions",
+      "tripEdit": "Edit trip details",
+      "tripEditHint": "Name, date, branches, fee, payment options…",
+      "tripDelete": "Cancel and delete trips",
+      "tripDeleteHint": "Cancel a trip; permanently delete cancelled trips",
+      "tripStudents": "Edit / remove students’ trip records",
+      "tripStudentsHint": "Record, change or remove a consent for a parent",
+      "tripPayments": "Change payment method / cancel a payment",
+      "tripPaymentsHint": "Correct the method or collector, or cancel a recorded payment"
+    }
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",
@@ -2055,6 +2066,42 @@
       "DECLINED": "Declined",
       "search": "Search name, ID or trip",
       "empty": "No students for this indicator."
+    },
+    "payEdit": {
+      "change": "Edit payment",
+      "undo": "Cancel payment",
+      "title": "Edit payment — {{name}}",
+      "undoTitle": "Cancel payment of {{name}}",
+      "undoReason": "Reason"
+    },
+    "invoice": {
+      "issue": "Issue invoice",
+      "reprint": "Invoice",
+      "title": "Trip fee invoice",
+      "number": "Invoice no.",
+      "issued": "Issued",
+      "student": "Student",
+      "trip": "Trip",
+      "payment": "Payment",
+      "parentPhone": "Parent mobile",
+      "tripName": "Trip",
+      "tripCode": "Trip code",
+      "destination": "Destination",
+      "date": "Date",
+      "time": "Time",
+      "fee": "Trip fee",
+      "confirmedAt": "Payment confirmed",
+      "amount": "Amount paid",
+      "paid": "PAID",
+      "footer": "Issued by the school CRM",
+      "signature": "Stamp & signature"
+    },
+    "search": {
+      "placeholder": "Find a student by national ID or any part of the name…",
+      "noTrips": "No trips for this student.",
+      "fee": "Fee",
+      "repliedAt": "Replied",
+      "openTrip": "Open trip"
     }
   },
   "tripConsent": {

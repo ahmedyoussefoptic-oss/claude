@@ -7,7 +7,7 @@ import QRCode from 'qrcode';
 import {
   X, Loader2, Pencil, CheckCircle2, Lock, Unlock, Flag, Ban, Link2, Copy, Check, QrCode, MessageCircle,
   AlertTriangle, MapPin, Clock, Users as UsersIcon, Wallet, Bus, FileDown, Printer, Paperclip, Search, UserPlus, Trash2, HeartPulse,
-  Home, NotebookPen, Star, ThumbsUp, ClipboardList,
+  Home, NotebookPen, Star, ThumbsUp, ClipboardList, FileText,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
@@ -18,6 +18,7 @@ import { useUsers } from '../../hooks/useUsers';
 import { useWhatsAppApi } from '../../hooks/useWhatsAppApi';
 import { userBranches } from '../../utils/scope';
 import logo from '../../assets/logo.png';
+import { printTripInvoice } from '../../utils/tripInvoice';
 import {
   TRIP_STATUS_STYLES, ENROLLMENT_STATUSES, ENROLLMENT_STATUS_STYLES, TRIP_PAY_METHODS, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES,
   enrollmentStatus, tripPermissions, tripConflicts, tripLink, dayToDate, TRIP_BANK_LETTER_URL, tripTime, TRIP_COLLECT_METHODS,
@@ -78,7 +79,7 @@ function TripPasswordDialog({ title, onCancel, onConfirm }) {
 // person who received the money) and a receipt / reference number.
 function CollectDialog({ student, defaultCollector, onCancel, onConfirm }) {
   const { t } = useTranslation();
-  const [method, setMethod] = useState('');
+  const [method, setMethod] = useState(student.editMethod ? student.e?.collectMethod || '' : '');
   const [collectorName, setCollectorName] = useState(defaultCollector || '');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
@@ -86,7 +87,7 @@ function CollectDialog({ student, defaultCollector, onCancel, onConfirm }) {
   return (
     <div className="fixed inset-0 bg-slate-900/50 z-[130] flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5 space-y-3">
-        <h3 className="font-bold text-slate-900">{t('trips.collect.title', { name: student.name })}</h3>
+        <h3 className="font-bold text-slate-900">{t(student.editMethod ? 'trips.payEdit.title' : 'trips.collect.title', { name: student.name })}</h3>
         <p className="text-xs text-slate-600">{t('trips.collect.method')}</p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
           {TRIP_COLLECT_METHODS.map((m) => (
@@ -325,6 +326,10 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
       onDeleted?.();
     });
   };
+  const invoice = (studentId) => run(`inv-${studentId}`, async () => {
+    const data = await call('issueTripInvoice', { tripId: trip.id, studentId });
+    printTripInvoice(data, t);
+  });
   const startEdit = () => withTripPassword(t('trips.passwordEditTitle'), (pw) => onEdit(trip, pw));
   const startCancel = () => withTripPassword(t('trips.passwordCancelTitle'), (pw) => setDialog({ title: t('trips.actions.cancel'), label: t('trips.reasonLabel'), required: true, onConfirm: async (reason) => { await action('cancel', reason, pw); setDialog(null); } }));
   const announce = (audience) => run(`announce-${audience}`, async () => {
@@ -488,7 +493,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                 <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
                   <span>{t('trips.cancelledNote', { name: trip.cancelledByName || '', reason: trip.cancelReason || '' })}</span>
                   {/* The owner may remove a cancelled trip for good (deleteTrip). */}
-                  {userData?.isOwner === true && (
+                  {perms.deleteCancelled && (
                     <button disabled={!!busy} onClick={deleteTrip} className={`${btn} bg-rose-600 text-white`}>{spin('delete', Trash2)}{t('trips.deleteTrip')}</button>
                   )}
                 </div>
@@ -498,7 +503,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
               )}
 
               <div className="flex flex-wrap gap-2">
-                {perms.manage && ['DRAFT', 'PENDING_APPROVAL', 'OPEN', 'CLOSED'].includes(trip.status) && (
+                {perms.editTrip && ['DRAFT', 'PENDING_APPROVAL', 'OPEN', 'CLOSED'].includes(trip.status) && (
                   <button onClick={startEdit} className={`${btn} border border-slate-300 bg-white text-slate-700`}><Pencil className="w-4 h-4" />{t('common.edit')}</button>
                 )}
                 {/* Trips are entered after their approval; older drafts just open. */}
@@ -514,7 +519,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                 {perms.manage && ['OPEN', 'CLOSED'].includes(trip.status) && trip.date <= format(new Date(), 'yyyy-MM-dd') && (
                   <button disabled={!!busy} onClick={() => action('complete')} className={`${btn} bg-indigo-600 text-white`}>{spin('complete', Flag)}{t('trips.actions.complete')}</button>
                 )}
-                {perms.manage && ['DRAFT', 'PENDING_APPROVAL', 'OPEN', 'CLOSED'].includes(trip.status) && (
+                {perms.deleteTrip && ['DRAFT', 'PENDING_APPROVAL', 'OPEN', 'CLOSED'].includes(trip.status) && (
                   <button disabled={!!busy} onClick={startCancel} className={`${btn} text-rose-600 hover:bg-rose-50`}><Ban className="w-4 h-4" />{t('trips.actions.cancel')}</button>
                 )}
               </div>
@@ -719,7 +724,16 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                                 <button disabled={!!busy} onClick={() => setCollecting(r)} className="px-2 py-1 rounded-lg text-xs border border-emerald-300 bg-white text-emerald-700">{t('trips.collect.button')}</button>
                               </>
                             )}
-                            {(perms.manage || perms.finance) && ['OPEN', 'CLOSED'].includes(trip.status) && !r.offRoster && (
+                            {r.e?.payStatus === 'PAID' && (
+                              <button disabled={!!busy} onClick={() => invoice(r.id)} className="px-2 py-1 rounded-lg text-xs border border-sky-300 bg-white text-sky-700 flex items-center gap-1"><FileText className="w-3.5 h-3.5" />{r.e.invoiceNo ? t('trips.invoice.reprint') : t('trips.invoice.issue')}</button>
+                            )}
+                            {perms.editPayments && r.e?.payStatus === 'PAID' && (
+                              <>
+                                <button disabled={!!busy} onClick={() => setCollecting({ ...r, editMethod: true })} className="px-2 py-1 rounded-lg text-xs border border-slate-300 bg-white text-slate-700">{t('trips.payEdit.change')}</button>
+                                <button disabled={!!busy} onClick={() => setDialog({ title: t('trips.payEdit.undoTitle', { name: r.name }), label: t('trips.payEdit.undoReason'), required: true, onConfirm: async (note) => { await review(r.id, 'undo', note); setDialog(null); } })} className="px-2 py-1 rounded-lg text-xs text-rose-600 hover:bg-rose-50">{t('trips.payEdit.undo')}</button>
+                              </>
+                            )}
+                            {perms.editStudents && ['OPEN', 'CLOSED'].includes(trip.status) && !r.offRoster && (
                               <button onClick={() => setDialog({ manual: r })} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 flex items-center gap-1" title={t('trips.manual.title')}><UserPlus className="w-3.5 h-3.5" />{r.e ? t('trips.manual.edit') : t('trips.manual.add')}</button>
                             )}
                           </div>
@@ -841,8 +855,8 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
 
       {pwDialog && <TripPasswordDialog {...pwDialog} onCancel={() => setPwDialog(null)} />}
       {collecting && (
-        <CollectDialog student={collecting} defaultCollector={userData?.name || ''} onCancel={() => setCollecting(null)}
-          onConfirm={async ({ method, collectorName, note }) => { await review(collecting.id, 'collect', note, { method, collectorName }); setCollecting(null); }} />
+        <CollectDialog student={collecting} defaultCollector={(collecting.editMethod && collecting.e?.collectorName) || userData?.name || ''} onCancel={() => setCollecting(null)}
+          onConfirm={async ({ method, collectorName, note }) => { await review(collecting.id, collecting.editMethod ? 'changeMethod' : 'collect', note, { method, collectorName }); setCollecting(null); }} />
       )}
       {dialog && !dialog.manual && <NoteDialog {...dialog} busy={!!busy} onCancel={() => setDialog(null)} />}
       {dialog?.manual && (

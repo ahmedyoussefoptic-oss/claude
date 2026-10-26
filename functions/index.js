@@ -231,6 +231,8 @@ exports.createStaffUser = onCall(async (request) => {
       users: !!perms?.users,
       trips: !!perms?.trips,
       tripFinance: !!perms?.tripFinance,
+      // Trip edit / delete / students / payments (unset = role-based default).
+      ...Object.fromEntries(["tripEdit", "tripDelete", "tripStudents", "tripPayments"].filter((k) => typeof perms?.[k] === "boolean").map((k) => [k, perms[k]])),
     },
     phone: phone || null,
     jobTitle: jobTitle || null,
@@ -3075,6 +3077,9 @@ const tripPerm = {
   approve: (u, branches) => u.role === "ADMIN" || (u.isPrincipal === true && branches.every((b) => callerHasBranch(u, b))),
   finance: (u, branches) => u.role === "ADMIN" || (u.perms?.tripFinance === true && branches.some((b) => callerHasBranch(u, b))),
 };
+// Per-user trip permissions set by the owner on the Users page; a key that
+// was never set keeps the older role-based behaviour (`legacy`).
+const tripCan = (u, key, legacy) => u.role === "ADMIN" || (typeof u.perms?.[key] === "boolean" ? u.perms[key] : legacy);
 tripPerm.supervise = (u, branches, trip) => tripPerm.manage(u, branches) || tripPerm.finance(u, branches) || (trip.supervisors || []).includes(u.uid);
 tripPerm.view = (u, branches, trip) => tripPerm.supervise(u, branches, trip) || tripPerm.approve(u, branches) || (u.isPrincipal === true && branches.some((b) => callerHasBranch(u, b)));
 
@@ -3224,6 +3229,7 @@ exports.saveTrip = onCall(async (request) => {
     return { id: ref.id, tripCode };
   }
   const { ref, trip: current } = await loadTrip(id, caller, "manage");
+  if (!tripCan(caller, "tripEdit", true)) throw new HttpsError("permission-denied", "تعديل بيانات الرحلات غير متاح لحسابك.");
   await checkTripPassword(caller, request.data?.tripPassword);
   if (!TRIP_EDITABLE.includes(current.status)) {
     throw new HttpsError("failed-precondition", "لا يمكن تعديل رحلة منتهية أو ملغاة.");
@@ -3257,8 +3263,8 @@ const TRIP_TRANSITIONS = {
 // surveys and activity log, and its uploaded files (receipts, pledges, image).
 exports.deleteTrip = onCall({ timeoutSeconds: 300 }, async (request) => {
   const caller = await tripCaller(request);
-  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "حذف الرحلات متاح لمنشئ النظام فقط.");
-  const { ref, trip } = await loadTrip(request.data?.id, caller, "view");
+  if (caller.isOwner !== true && caller.perms?.tripDelete !== true) throw new HttpsError("permission-denied", "حذف الرحلات متاح لمنشئ النظام ومن يملك صلاحية حذف الرحلات.");
+  const { ref, trip } = await loadTrip(request.data?.id, caller, caller.isOwner === true ? "view" : "manage");
   if (trip.status !== "CANCELLED") throw new HttpsError("failed-precondition", "يمكن حذف الرحلات الملغاة فقط.");
   await getStorage().bucket().deleteFiles({ prefix: `trips/${ref.id}/` }).catch((err) => console.error("deleteTrip files", ref.id, err.message));
   await db.recursiveDelete(ref);
@@ -3275,7 +3281,10 @@ exports.tripAction = onCall({ secrets: WA_SECRETS, timeoutSeconds: 300 }, async 
   const { ref, trip } = await loadTrip(id, caller, rule.perm);
   if (!rule.from.includes(trip.status)) throw new HttpsError("failed-precondition", "لا يمكن تنفيذ هذا الإجراء في حالة الرحلة الحالية.");
   if (rule.reason && !reason) throw new HttpsError("invalid-argument", "اكتب السبب.");
-  if (action === "cancel") await checkTripPassword(caller, request.data?.tripPassword);
+  if (action === "cancel") {
+    if (!tripCan(caller, "tripDelete", true)) throw new HttpsError("permission-denied", "إلغاء الرحلات غير متاح لحسابك.");
+    await checkTripPassword(caller, request.data?.tripPassword);
+  }
 
   const now = Timestamp.now();
   const update = { status: rule.to, updatedAt: now };
@@ -3591,8 +3600,30 @@ exports.reviewTripPayment = onCall({ secrets: WA_SECRETS }, async (request) => {
   const action = request.data?.action === "cash" ? "collect" : request.data?.action;
   const method = request.data?.action === "cash" ? "CASH" : request.data?.method;
   const note = str(request.data?.note, 300);
-  const { ref, trip } = await loadTrip(id, caller, "finance");
-  if (!["accept", "reject", "collect"].includes(action) || typeof studentId !== "string") throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  const { ref, trip } = await loadTrip(id, caller, "view");
+  if (!["undo", "changeMethod"].includes(action) && !tripPerm.finance(caller, trip.branches || [])) throw new HttpsError("permission-denied", "مراجعة المدفوعات للمالية.");
+  if (!["accept", "reject", "collect", "undo", "changeMethod"].includes(action) || typeof studentId !== "string") throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  // Correcting a recorded payment (its method, or cancelling it).
+  if (action === "undo" || action === "changeMethod") {
+    if (!tripCan(caller, "tripPayments", tripPerm.finance(caller, trip.branches || []))) throw new HttpsError("permission-denied", "تعديل وإلغاء المدفوعات غير متاح لحسابك.");
+    const enrollRef = ref.collection("enrollments").doc(studentId);
+    const e = (await enrollRef.get()).data();
+    if (!e || e.payStatus !== "PAID") throw new HttpsError("failed-precondition", "لا يوجد دفع مسجّل لهذا الطالب.");
+    const now = Timestamp.now();
+    if (action === "changeMethod") {
+      const newMethod = request.data?.method;
+      if (!TRIP_COLLECT_METHODS.includes(newMethod)) throw new HttpsError("invalid-argument", "اختر طريقة الدفع.");
+      await enrollRef.update({ collectMethod: newMethod, ...(request.data?.collectorName ? { collectorName: str(request.data.collectorName, 80) } : {}), paymentEditedByName: caller.name || "", paymentEditedAt: now, updatedAt: now });
+    } else {
+      await enrollRef.update({
+        payStatus: e.receipt && e.payMethod === "BANK" ? "REVIEW" : "AWAITING", paidAmount: 0,
+        collectMethod: FieldValue.delete(), collectorName: FieldValue.delete(), invoiceNo: FieldValue.delete(),
+        paymentCancelledByName: caller.name || "", paymentCancelledAt: now, paymentCancelReason: note, updatedAt: now,
+      });
+    }
+    await tripLog(ref, action === "undo" ? "TRIP_PAYMENT_UNDO" : "TRIP_PAYMENT_METHOD", caller, { studentId, studentName: e.studentName, note, method: request.data?.method || null });
+    return { ok: true };
+  }
   if (action === "collect" && !TRIP_COLLECT_METHODS.includes(method)) throw new HttpsError("invalid-argument", "اختر طريقة الدفع.");
   const collectorName = action === "collect" ? str(request.data?.collectorName, 80) || caller.name || "" : "";
   if (action === "reject" && !note) throw new HttpsError("invalid-argument", "اكتب سبب رفض السند.");
@@ -3635,6 +3666,7 @@ exports.staffSetTripEnrollment = onCall(async (request) => {
   if (!(tripPerm.manage(caller, trip.branches || []) || tripPerm.finance(caller, trip.branches || []))) {
     throw new HttpsError("permission-denied", "لا تملك صلاحية تسجيل الموافقات.");
   }
+  if (!tripCan(caller, "tripStudents", true)) throw new HttpsError("permission-denied", "تعديل وحذف بيانات الطلاب في الرحلات غير متاح لحسابك.");
   if (!["OPEN", "CLOSED"].includes(trip.status)) throw new HttpsError("failed-precondition", "التسجيل متاح للرحلات المعتمدة فقط.");
   const studentId = normalizeDigits(d.studentId);
   const roster = await tripRoster(trip);
@@ -4022,7 +4054,31 @@ exports.getStudentTrips = onCall(async (request) => {
       healthNotes: e.healthNotes || "",
       incidents: (e.incidents || []).map((x) => ({ note: x.note, byName: x.byName, at: x.at?.toMillis?.() || null })),
       surveyAverage: survey.exists ? survey.data().average : null,
+      ...(request.data?.full ? {
+        fee: trip.fee || 0, departTime: trip.departTime || "", returnTime: trip.returnTime || "", meetingPoint: trip.meetingPoint || "", payDeadline: trip.payDeadline || "",
+        decision: e.decision || null, source: e.source || "parent", recordedByName: e.recordedByName || "", submittedAt: (e.submittedAt || e.updatedAt)?.toMillis?.() || null,
+        payMethod: e.payMethod || null, payStatus: e.payStatus || null, paidAmount: e.paidAmount ?? null, collectMethod: e.collectMethod || null,
+        collectorName: e.collectorName || "", confirmedBy: e.reviewedByName || "", confirmedAt: e.reviewedAt?.toMillis?.() || null, ref: e.cashReceiptNo || "",
+        receiptUrl: e.receipt?.fileUrl || "", payRejectReason: e.payRejectReason || "", invoiceNo: e.invoiceNo || "",
+        parentPhone: e.parentPhone || "", emergencyPhone: e.emergencyPhone || "", pledgeUrl: e.pledge?.fileUrl || "",
+      } : {}),
     });
+  }
+  // Coming trips aimed at the student that have no reply yet.
+  if (request.data?.full) {
+    const st = (await db.collection("students").doc(studentId).get()).data();
+    if (st) {
+      const branchOf = await branchResolver();
+      const upcoming = await db.collection("trips").where("date", ">=", riyadhDay()).get();
+      upcoming.docs.forEach((t) => {
+        const trip = t.data();
+        if (!["OPEN", "CLOSED"].includes(trip.status) || out.some((o) => o.tripId === t.id)) return;
+        if (!(callerAll(caller) || (trip.branches || []).some((b) => callerHasBranch(caller, b)))) return;
+        if (!tripTargets(trip, st, branchOf)) return;
+        out.push({ tripId: t.id, tripCode: trip.tripCode, title: trip.title, destination: trip.destination, date: trip.date, tripStatus: trip.status, status: "NO_RESPONSE",
+          fee: trip.fee || 0, departTime: trip.departTime || "", returnTime: trip.returnTime || "", meetingPoint: trip.meetingPoint || "", payDeadline: trip.payDeadline || "", incidents: [] });
+      });
+    }
   }
   out.sort((a, b) => (a.date < b.date ? 1 : -1));
   return { trips: out };
@@ -5659,4 +5715,33 @@ exports.tripEnrollmentsByStatus = onCall({ timeoutSeconds: 60 }, async (request)
   }));
   rows.sort((a, b) => a.tripDate.localeCompare(b.tripDate) || (b.at || 0) - (a.at || 0));
   return { rows };
+});
+
+// Invoice for a confirmed trip payment: numbered once (INV-yyyy-nnnnn) and
+// re-printable; the page prints it from the data returned here.
+exports.issueTripInvoice = onCall(async (request) => {
+  const caller = await tripCaller(request);
+  const { tripId, studentId } = request.data || {};
+  const { ref, trip } = await loadTrip(tripId, caller, "supervise");
+  const enrollRef = ref.collection("enrollments").doc(String(studentId || ""));
+  const e = (await enrollRef.get()).data();
+  if (!e || e.payStatus !== "PAID") throw new HttpsError("failed-precondition", "تصدر الفاتورة بعد تأكيد الدفع فقط.");
+  let invoiceNo = e.invoiceNo;
+  let issuedAt = e.invoiceIssuedAt;
+  if (!invoiceNo) {
+    invoiceNo = await nextRecordNumber("INV");
+    issuedAt = Timestamp.now();
+    await enrollRef.update({ invoiceNo, invoiceIssuedAt: issuedAt, invoiceIssuedByName: caller.name || "" });
+  }
+  const branch = (await db.collection("branches").doc(e.branch || "_").get()).data();
+  const student = (await db.collection("students").doc(String(studentId)).get()).data() || {};
+  return {
+    invoiceNo, issuedAt: issuedAt?.toMillis?.() || Date.now(), schoolName: SCHOOL_NAME,
+    trip: { title: trip.title, code: trip.tripCode, destination: trip.destination, date: trip.date, dateLabel: formatTripDay(trip.date), departTime: trip.departTime || "", returnTime: trip.returnTime || "", fee: trip.fee || 0 },
+    student: { name: e.studentName || student.nameAr || student.name || "", id: String(studentId), branch: branch?.name || e.branch || "", grade: e.grade || "", className: e.className || "", parentPhone: e.parentPhone || "" },
+    payment: {
+      amount: Number(e.paidAmount ?? trip.fee) || 0, method: e.collectMethod || (e.payMethod === "BANK" ? "TRANSFER" : "CASH"),
+      collector: e.collectorName || "", confirmedBy: e.reviewedByName || "", confirmedAt: e.reviewedAt?.toMillis?.() || null, ref: e.cashReceiptNo || "",
+    },
+  };
 });
