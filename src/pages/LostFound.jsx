@@ -15,7 +15,7 @@ import { scopeConstraints } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
-const FILTER_IDS = ['ALL', 'UNCLAIMED', 'MATCHED', 'RETURNED'];
+const FILTER_IDS = ['ALL', 'UNCLAIMED', 'SEARCHING', 'MATCHED', 'RETURNED'];
 
 export default function LostFound() {
   const { t, i18n } = useTranslation();

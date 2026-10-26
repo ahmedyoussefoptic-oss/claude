@@ -154,10 +154,11 @@
       "ESCALATED_RESOLVED": "Escalated & resolved"
     },
     "lostFound": {
-      "UNCLAIMED": "Awaiting Claim",
-      "MATCHED": "Matched",
-      "RETURNED": "Returned",
-      "CLOSED": "Closed"
+      "UNCLAIMED": "Awaiting receipt",
+      "MATCHED": "Item found",
+      "RETURNED": "Returned to owner",
+      "CLOSED": "Closed",
+      "SEARCHING": "Searching"
     },
     "techSupport": {
       "NEW": "New",
@@ -353,9 +354,10 @@
     "searchPlaceholder": "Search by record #, item name, student name...",
     "filters": {
       "ALL": "All",
-      "UNCLAIMED": "Awaiting Claim",
-      "MATCHED": "Matched",
-      "RETURNED": "Returned"
+      "UNCLAIMED": "Awaiting receipt",
+      "MATCHED": "Item found",
+      "RETURNED": "Returned to owner",
+      "SEARCHING": "Searching"
     },
     "recordNumber": "Record #",
     "reportType": "Type",
@@ -380,7 +382,18 @@
     "followUpLog": "Activity Log",
     "deleteFinal": "Delete Report Permanently",
     "deleteReasonPrompt": "Write the reason for permanently deleting this report (required):",
-    "studentLabel": "Student"
+    "studentLabel": "Student",
+    "acknowledge": "Confirm receipt & start searching",
+    "markFound": "Item found",
+    "foundPlacePlaceholder": "Where it was found (optional)",
+    "relationPlaceholder": "Relation (parent, student…)",
+    "closedNote": "Closed without return {{name}}",
+    "steps": {
+      "received": "Received",
+      "searching": "Searching",
+      "found": "Found",
+      "returned": "Returned"
+    }
   },
   "lostFoundForm": {
     "successTitle": "Record saved successfully",
@@ -553,10 +566,11 @@
         "ESCALATED": "Under Management Review"
       },
       "lostFound": {
-        "UNCLAIMED": "Being Searched For",
-        "MATCHED": "Item Matched",
-        "RETURNED": "Returned",
-        "CLOSED": "Closed"
+        "UNCLAIMED": "Report received",
+        "MATCHED": "Item found",
+        "RETURNED": "Handed over",
+        "CLOSED": "Closed",
+        "SEARCHING": "Searching for the item"
       },
       "techSupport": {
         "NEW": "Received",
@@ -579,7 +593,7 @@
       "COMPLAINT_ESCALATED": "Under senior management review",
       "COMPLAINT_REOPENED": "Feedback reopened at your request",
       "ITEM_REGISTERED": "Report registered",
-      "ITEM_MATCHED": "Item matched to its owner",
+      "ITEM_MATCHED": "Item found",
       "ITEM_RETURNED": "Item returned",
       "ITEM_CLOSED": "Record closed",
       "TICKET_CREATED": "Ticket registered",
@@ -601,7 +615,8 @@
       "APPOINTMENT_RESCHEDULED": "An alternative visit time was set",
       "CONVERTED_FROM_TICKET": "Your request was transferred to the relevant department as feedback",
       "APPOINTMENT_INVITED": "You are invited to visit the school",
-      "APPOINTMENT_REMINDER": "Visit reminder"
+      "APPOINTMENT_REMINDER": "Visit reminder",
+      "ITEM_ACKNOWLEDGED": "Your report was received; search started"
     },
     "pageTitle": "Feedback & Reports Tracking Portal",
     "pageSubtitle": "Enter your feedback or report number to check its current status.",
@@ -1212,7 +1227,7 @@
       "ITEM_REGISTERED": "Item registered",
       "ITEM_ASSIGNED": "Report assigned",
       "ITEM_TRANSFERRED": "Report assignment transferred",
-      "ITEM_MATCHED": "Item matched to owner",
+      "ITEM_MATCHED": "Item found",
       "ITEM_RETURNED": "Item returned",
       "ITEM_CLOSED": "Record closed",
       "NOTE_ADDED": "Note",
@@ -1220,7 +1235,8 @@
       "WHATSAPP_API_FAILED": "Automatic WhatsApp API send failed",
       "WHATSAPP_API_SENT": "Sent to parent via WhatsApp API",
       "REMINDER_SENT": "Reminder sent",
-      "ITEM_EDITED": "Report details edited"
+      "ITEM_EDITED": "Report details edited",
+      "ITEM_ACKNOWLEDGED": "Receipt confirmed; search started"
     },
     "techSupport": {
       "TICKET_CREATED": "Ticket registered",

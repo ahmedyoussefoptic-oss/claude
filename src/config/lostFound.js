@@ -14,14 +14,16 @@ export const REPORT_TYPES = [
 ];
 
 export const ITEM_STATUS_LABELS = {
-  UNCLAIMED: 'بانتظار المطالبة',
-  MATCHED: 'تمت المطابقة',
-  RETURNED: 'تم التسليم',
+  UNCLAIMED: 'بانتظار تأكيد الاستلام',
+  SEARCHING: 'جاري البحث عن الغرض',
+  MATCHED: 'تم العثور على الغرض',
+  RETURNED: 'تم تسليم الغرض لصاحبه',
   CLOSED: 'مغلقة',
 };
 
 export const ITEM_STATUS_BADGE = {
   UNCLAIMED: 'bg-blue-100 text-blue-800 border-blue-200',
+  SEARCHING: 'bg-sky-100 text-sky-800 border-sky-200',
   MATCHED: 'bg-amber-100 text-amber-800 border-amber-200',
   RETURNED: 'bg-emerald-100 text-emerald-800 border-emerald-200',
   CLOSED: 'bg-slate-100 text-slate-800 border-slate-200',

@@ -73,7 +73,7 @@ async function sendEmail(to, subject, text) {
 
 const OPEN_STATUSES = ["RECEIVED", "IN_PROGRESS", "WAITING_PARENT_RESPONSE", "ESCALATED"];
 const OPEN_TICKET_STATUSES = ["NEW", "ASSIGNED", "IN_PROGRESS", "SOLVED", "REOPENED"];
-const OPEN_LOST_FOUND_STATUSES = ["UNCLAIMED", "MATCHED"];
+const OPEN_LOST_FOUND_STATUSES = ["UNCLAIMED", "SEARCHING", "MATCHED"];
 
 // ---------------------------------------------------------------------------
 // System owner ("منشئ النظام") and system-admin capabilities.
@@ -5432,4 +5432,52 @@ exports.waReportReminders = onSchedule({ schedule: "0 13 * * 0-4", timeZone: "As
     });
   }
   console.log("wa report reminders", day, missing.length);
+});
+
+// --- Lost & found steps --------------------------------------------------------
+// The assignees (or staff with edit permission in the branch) move a report
+// through: UNCLAIMED (awaiting receipt) → SEARCHING (receipt confirmed) →
+// MATCHED (item found) → RETURNED (handed to its owner); or CLOSED. Each step
+// is stamped on the report and logged, so it shows in the record, the
+// student's file and the parent's tracking page. The WhatsApp «returned»
+// message is still sent by handleLostFoundAssignment.
+const LF_STEPS = {
+  acknowledge: { from: ["UNCLAIMED"], to: "SEARCHING", log: "ITEM_ACKNOWLEDGED", stamp: "acknowledged" },
+  found: { from: ["UNCLAIMED", "SEARCHING"], to: "MATCHED", log: "ITEM_MATCHED", stamp: "found" },
+  returned: { from: ["MATCHED"], to: "RETURNED", log: "ITEM_RETURNED", stamp: "returned" },
+  close: { from: ["UNCLAIMED", "SEARCHING", "MATCHED"], to: "CLOSED", log: "ITEM_CLOSED", stamp: "closed" },
+};
+exports.lostFoundAction = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const { id, action } = request.data || {};
+  const step = LF_STEPS[action];
+  if (!step) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  const caller = (await db.collection("users").doc(request.auth.uid).get()).data();
+  if (!caller || caller.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  const ref = db.collection("lostFoundItems").doc(String(id || ""));
+  const item = (await ref.get()).data();
+  if (!item) throw new HttpsError("not-found", "لم يتم العثور على البلاغ.");
+  const inScope = caller.role === "ADMIN" || caller.access === "all" || (caller.branches || []).includes(item.branch) || caller.branch === item.branch;
+  const allowed = caller.role === "ADMIN" || (item.assignedTo || []).includes(request.auth.uid) || (inScope && caller.perms?.edit === true);
+  if (!allowed) throw new HttpsError("permission-denied", "هذا الإجراء للمسند إليهم البلاغ أو من لديه صلاحية التعديل.");
+  if (!step.from.includes(item.status)) throw new HttpsError("failed-precondition", "لا يمكن تنفيذ هذا الإجراء في حالة البلاغ الحالية.");
+  const returnedTo = str(request.data?.returnedTo, 80);
+  const relation = str(request.data?.relation, 40);
+  const place = str(request.data?.place, 120);
+  const note = str(request.data?.note, 300);
+  if (action === "returned" && !returnedTo) throw new HttpsError("invalid-argument", "اكتب اسم من استلم الغرض.");
+  const now = Timestamp.now();
+  const actorName = caller.name || "مستخدم";
+  await ref.update({
+    status: step.to, updatedAt: now,
+    [`${step.stamp}At`]: now, [`${step.stamp}By`]: request.auth.uid, [`${step.stamp}ByName`]: actorName,
+    ...(action === "found" && place ? { foundPlace: place } : {}),
+    ...(action === "returned" ? { returnedTo, ...(relation ? { returnedToRelation: relation } : {}) } : {}),
+  });
+  await ref.collection("activityLog").add({
+    action: step.log, actorId: request.auth.uid, actorName,
+    metadata: { ...(returnedTo ? { returnedTo } : {}), ...(relation ? { relation } : {}), ...(place ? { place } : {}), ...(note ? { note } : {}) },
+    createdAt: now,
+  });
+  return { ok: true, status: step.to };
 });

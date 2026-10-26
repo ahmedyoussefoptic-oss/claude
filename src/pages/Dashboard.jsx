@@ -71,7 +71,7 @@ export default function Dashboard() {
     unassigned: techTickets.filter((t) => OPEN_TICKET_STATUSES.includes(t.status) && !(t.assignedTo || []).length).length,
   }), [techTickets]);
   const lostFoundStats = useMemo(() => ({
-    unclaimed: lostFoundItems.filter((i) => i.status === 'UNCLAIMED').length,
+    unclaimed: lostFoundItems.filter((i) => i.status === 'UNCLAIMED' || i.status === 'SEARCHING').length,
     returned: lostFoundItems.filter((i) => i.status === 'RETURNED').length,
   }), [lostFoundItems]);
   const [showNewForm, setShowNewForm] = useState(false);

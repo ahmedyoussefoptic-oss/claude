@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAdminPermissions, adminCan } from '../../config/adminPermissions';
-import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle, Link2, UserPlus, Trash2, GraduationCap, Pencil } from 'lucide-react';
+import { X, Clock, CheckCircle2, Phone, MapPin, Package, Loader2, MessageCircle, Link2, UserPlus, Trash2, GraduationCap, Pencil, Search, Inbox, HandHelping } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db, functions } from '../../config/firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -58,6 +58,8 @@ function LostFoundDetailsInner({ item, onClose }) {
   const [logs, setLogs] = useState([]);
   const [note, setNote] = useState('');
   const [returnedTo, setReturnedTo] = useState('');
+  const [relation, setRelation] = useState('');
+  const [foundPlace, setFoundPlace] = useState('');
   const [loading, setLoading] = useState(false);
   const [showEdit, setShowEdit] = useState(false);
   const [selectedAssignees, setSelectedAssignees] = useState(item.assignedTo || []);
@@ -75,6 +77,8 @@ function LostFoundDetailsInner({ item, onClose }) {
   const inScope = isAdmin || userData?.access === 'all' || userBranches(userData).includes(item.branch);
   const canEdit = isAdmin || (inScope && userData?.perms?.edit === true);
   const canDelete = isAdmin ? adminCan(userData, adminCaps, 'delete') : (inScope && userData?.perms?.delete === true);
+  // The steps (lostFoundAction): the assignees or staff with edit permission.
+  const canAct = canEdit || (item.assignedTo || []).includes(user?.uid);
 
   useEffect(() => {
     const q = query(
@@ -105,20 +109,39 @@ function LostFoundDetailsInner({ item, onClose }) {
     }
   };
 
+  const step = async (action, extra = {}) => {
+    setLoading(true);
+    try {
+      await httpsCallable(functions, 'lostFoundAction')({ id: item.id, action, ...extra });
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleAction = async (actionType) => {
     setLoading(true);
     try {
       if (actionType === 'MATCH') {
-        await addLog('ITEM_MATCHED', {}, { status: 'MATCHED' });
+        setLoading(false);
+        await step('found', { place: foundPlace.trim() });
+        setFoundPlace('');
+        return;
       } else if (actionType === 'RETURN') {
         if (!returnedTo.trim()) {
           alert(t('lostFoundDetails.returnedToNameRequiredAlert'));
           return;
         }
-        await addLog('ITEM_RETURNED', { returnedTo }, { status: 'RETURNED', returnedTo });
+        setLoading(false);
+        await step('returned', { returnedTo: returnedTo.trim(), relation: relation.trim() });
         setReturnedTo('');
+        setRelation('');
+        return;
       } else if (actionType === 'CLOSE') {
-        await addLog('ITEM_CLOSED', {}, { status: 'CLOSED' });
+        setLoading(false);
+        await step('close');
+        return;
       } else if (actionType === 'NOTE') {
         if (!note.trim()) return;
         await addLog('NOTE_ADDED', { note });
@@ -211,6 +234,21 @@ function LostFoundDetailsInner({ item, onClose }) {
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <LostFoundSteps item={item} t={t} dateLocale={dateLocale} />
+
+          {canAct && item.status === 'UNCLAIMED' && (
+            <button disabled={loading} onClick={() => step('acknowledge')} className="w-full px-4 py-3 bg-primary text-white rounded-xl text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60">
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Inbox className="w-4 h-4" />}{t('lostFoundDetails.acknowledge')}
+            </button>
+          )}
+          {canAct && item.status === 'SEARCHING' && (
+            <div className="bg-white p-4 rounded-xl border border-sky-200 shadow-sm flex flex-wrap gap-2 items-center">
+              <input value={foundPlace} onChange={(e) => setFoundPlace(e.target.value)} placeholder={t('lostFoundDetails.foundPlacePlaceholder')} className="flex-1 min-w-40 border border-slate-200 rounded-xl px-4 py-2.5 text-sm" />
+              <button disabled={loading} onClick={() => handleAction('MATCH')} className="px-4 py-2.5 bg-amber-600 text-white rounded-xl text-sm font-medium flex items-center gap-2 disabled:opacity-60">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}{t('lostFoundDetails.markFound')}
+              </button>
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             {!item.receiptMessageSentAt && item.reporterPhone && (
@@ -237,12 +275,7 @@ function LostFoundDetailsInner({ item, onClose }) {
                 {t('lostFoundEdit.editBtn')}
               </button>
             )}
-            {canEdit && item.status === 'UNCLAIMED' && (
-              <button disabled={loading} onClick={() => handleAction('MATCH')} className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-700 transition-colors">
-                {t('lostFoundDetails.confirmMatched')}
-              </button>
-            )}
-            {canEdit && (item.status === 'UNCLAIMED' || item.status === 'MATCHED') && (
+            {canEdit && ['UNCLAIMED', 'SEARCHING', 'MATCHED'].includes(item.status) && (
               <button disabled={loading} onClick={() => handleAction('CLOSE')} className="px-4 py-2 bg-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 transition-colors">
                 {t('lostFoundDetails.closeWithoutReturn')}
               </button>
@@ -362,16 +395,23 @@ function LostFoundDetailsInner({ item, onClose }) {
             )}
           </div>
 
-          {item.status === 'MATCHED' && (
+          {canAct && item.status === 'MATCHED' && (
             <div className="bg-white p-5 rounded-xl border border-amber-200 shadow-sm">
               <h3 className="font-bold text-slate-900 mb-3">{t('lostFoundDetails.returnItem')}</h3>
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 <input
                   type="text"
                   value={returnedTo}
                   onChange={(e) => setReturnedTo(e.target.value)}
                   placeholder={t('lostFoundDetails.returnedToPlaceholder')}
-                  className="flex-1 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                  className="flex-1 min-w-40 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                />
+                <input
+                  type="text"
+                  value={relation}
+                  onChange={(e) => setRelation(e.target.value)}
+                  placeholder={t('lostFoundDetails.relationPlaceholder')}
+                  className="w-40 border border-slate-200 rounded-xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
                 />
                 <button disabled={loading} onClick={() => handleAction('RETURN')} className="px-5 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 transition-colors">
                   {t('lostFoundDetails.confirmReturn')}
@@ -451,6 +491,33 @@ function LostFoundDetailsInner({ item, onClose }) {
 
         {showEdit && <LostFoundEditForm item={item} onClose={() => setShowEdit(false)} />}
       </div>
+    </div>
+  );
+}
+
+// Where the report is: received → searching → found → handed over, with who
+// moved it and when.
+function LostFoundSteps({ item, t, dateLocale }) {
+  const order = ['UNCLAIMED', 'SEARCHING', 'MATCHED', 'RETURNED'];
+  const at = order.indexOf(item.status);
+  const steps = [
+    { key: 'received', icon: Inbox, done: true, by: null, time: item.createdAt },
+    { key: 'searching', icon: Search, done: at >= 1, by: item.acknowledgedByName, time: item.acknowledgedAt },
+    { key: 'found', icon: CheckCircle2, done: at >= 2, by: item.foundByName, time: item.foundAt, extra: item.foundPlace },
+    { key: 'returned', icon: HandHelping, done: at >= 3, by: item.returnedByName, time: item.returnedAt, extra: item.returnedTo ? `${item.returnedTo}${item.returnedToRelation ? ` (${item.returnedToRelation})` : ''}` : '' },
+  ];
+  if (item.status === 'CLOSED') return <p className="text-sm text-slate-600 bg-slate-100 rounded-xl px-4 py-2">{t('lostFoundDetails.closedNote', { name: item.closedByName || '' })}</p>;
+  return (
+    <div className="bg-white p-4 rounded-xl border border-slate-100 shadow-sm grid grid-cols-4 gap-2">
+      {steps.map(({ key, icon: Icon, done, by, time, extra }) => (
+        <div key={key} className="text-center">
+          <div className={`w-9 h-9 mx-auto rounded-full flex items-center justify-center ${done ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'}`}><Icon className="w-4 h-4" /></div>
+          <p className={`text-xs font-bold mt-1 ${done ? 'text-slate-800' : 'text-slate-400'}`}>{t(`lostFoundDetails.steps.${key}`)}</p>
+          {done && time?.toDate && <p className="text-[10px] text-slate-500">{format(time.toDate(), 'd MMM p', { locale: dateLocale })}</p>}
+          {done && by && <p className="text-[10px] text-slate-500 truncate">{by}</p>}
+          {done && extra && <p className="text-[10px] text-slate-600 truncate">{extra}</p>}
+        </div>
+      ))}
     </div>
   );
 }

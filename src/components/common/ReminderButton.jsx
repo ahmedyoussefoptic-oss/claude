@@ -12,7 +12,7 @@ import useAuthStore from '../../stores/useAuthStore';
 const OPEN = {
   complaint: ['RECEIVED', 'IN_PROGRESS', 'WAITING_PARENT_RESPONSE', 'ESCALATED'],
   techSupport: ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'SOLVED', 'REOPENED'],
-  lostFound: ['UNCLAIMED', 'MATCHED'],
+  lostFound: ['UNCLAIMED', 'SEARCHING', 'MATCHED'],
 };
 
 // "Remind" button beside an unresolved record: notifies its assignees,

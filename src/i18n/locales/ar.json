@@ -154,10 +154,11 @@
       "ESCALATED_RESOLVED": "مصعدة وتم حلها"
     },
     "lostFound": {
-      "UNCLAIMED": "بانتظار المطالبة",
-      "MATCHED": "تمت المطابقة",
-      "RETURNED": "تم التسليم",
-      "CLOSED": "مغلقة"
+      "UNCLAIMED": "بانتظار تأكيد الاستلام",
+      "MATCHED": "تم العثور على الغرض",
+      "RETURNED": "تم تسليم الغرض لصاحبه",
+      "CLOSED": "مغلقة",
+      "SEARCHING": "جاري البحث عن الغرض"
     },
     "techSupport": {
       "NEW": "جديد",
@@ -357,9 +358,10 @@
     "searchPlaceholder": "ابحث برقم السجل، اسم الغرض، اسم الطالب...",
     "filters": {
       "ALL": "الكل",
-      "UNCLAIMED": "بانتظار المطالبة",
-      "MATCHED": "تمت المطابقة",
-      "RETURNED": "تم التسليم"
+      "UNCLAIMED": "بانتظار تأكيد الاستلام",
+      "MATCHED": "تم العثور على الغرض",
+      "RETURNED": "تم تسليم الغرض لصاحبه",
+      "SEARCHING": "جاري البحث عن الغرض"
     },
     "recordNumber": "رقم السجل",
     "reportType": "النوع",
@@ -384,7 +386,18 @@
     "followUpLog": "سجل المتابعة",
     "deleteFinal": "حذف البلاغ نهائياً",
     "deleteReasonPrompt": "اكتب سبب حذف البلاغ نهائياً (إلزامي):",
-    "studentLabel": "الطالب"
+    "studentLabel": "الطالب",
+    "acknowledge": "تأكيد استلام البلاغ وبدء البحث",
+    "markFound": "تم العثور على الغرض",
+    "foundPlacePlaceholder": "مكان العثور (اختياري)",
+    "relationPlaceholder": "الصفة (ولي الأمر، الطالب…)",
+    "closedNote": "أُغلق البلاغ دون تسليم {{name}}",
+    "steps": {
+      "received": "استلام البلاغ",
+      "searching": "جاري البحث",
+      "found": "تم العثور",
+      "returned": "تم التسليم"
+    }
   },
   "lostFoundForm": {
     "successTitle": "تم حفظ السجل بنجاح",
@@ -557,10 +570,11 @@
         "ESCALATED": "تحت متابعة الإدارة"
       },
       "lostFound": {
-        "UNCLAIMED": "قيد البحث",
-        "MATCHED": "تمت مطابقة الغرض",
+        "UNCLAIMED": "تم استلام بلاغكم",
+        "MATCHED": "تم العثور على الغرض",
         "RETURNED": "تم التسليم",
-        "CLOSED": "مغلقة"
+        "CLOSED": "مغلقة",
+        "SEARCHING": "جاري البحث عن الغرض"
       },
       "techSupport": {
         "NEW": "مستلم",
@@ -583,7 +597,7 @@
       "COMPLAINT_ESCALATED": "تحت متابعة الإدارة العليا",
       "COMPLAINT_REOPENED": "تم إعادة فتح الملاحظة بناءً على طلبكم",
       "ITEM_REGISTERED": "تم تسجيل البلاغ",
-      "ITEM_MATCHED": "تمت مطابقة الغرض بصاحبه",
+      "ITEM_MATCHED": "تم العثور على الغرض",
       "ITEM_RETURNED": "تم تسليم الغرض",
       "ITEM_CLOSED": "تم إغلاق السجل",
       "TICKET_CREATED": "تم تسجيل البلاغ",
@@ -605,7 +619,8 @@
       "APPOINTMENT_RESCHEDULED": "تم تحديد موعد بديل لزيارتكم",
       "CONVERTED_FROM_TICKET": "تم تحويل طلبكم إلى ملاحظة لمتابعته مع القسم المختص",
       "APPOINTMENT_INVITED": "تمت دعوتكم لزيارة المدرسة",
-      "APPOINTMENT_REMINDER": "تذكير بموعد زيارتكم"
+      "APPOINTMENT_REMINDER": "تذكير بموعد زيارتكم",
+      "ITEM_ACKNOWLEDGED": "تم استلام بلاغكم وبدأ البحث عن الغرض"
     },
     "pageTitle": "بوابة متابعة الملاحظات والبلاغات",
     "pageSubtitle": "أدخل رقم الملاحظة أو البلاغ للاستعلام عن حالته الحالية.",
@@ -1216,7 +1231,7 @@
       "ITEM_REGISTERED": "تم تسجيل الغرض",
       "ITEM_ASSIGNED": "تم إسناد البلاغ",
       "ITEM_TRANSFERRED": "تم تحويل إسناد البلاغ",
-      "ITEM_MATCHED": "تمت مطابقة الغرض بصاحبه",
+      "ITEM_MATCHED": "تم العثور على الغرض",
       "ITEM_RETURNED": "تم تسليم الغرض",
       "ITEM_CLOSED": "تم إغلاق السجل",
       "NOTE_ADDED": "ملاحظة",
@@ -1224,7 +1239,8 @@
       "WHATSAPP_API_FAILED": "تعذّر الإرسال التلقائي عبر واتساب API",
       "WHATSAPP_API_SENT": "تم الإرسال لولي الأمر عبر واتساب API",
       "REMINDER_SENT": "إرسال تذكير",
-      "ITEM_EDITED": "تعديل بيانات البلاغ"
+      "ITEM_EDITED": "تعديل بيانات البلاغ",
+      "ITEM_ACKNOWLEDGED": "تأكيد استلام البلاغ وبدء البحث"
     },
     "techSupport": {
       "TICKET_CREATED": "تم تسجيل البلاغ",
