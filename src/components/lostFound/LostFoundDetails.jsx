@@ -275,6 +275,15 @@ function LostFoundDetailsInner({ item, onClose }) {
                 {t('lostFoundEdit.editBtn')}
               </button>
             )}
+            {canAct && ['UNCLAIMED', 'SEARCHING', 'MATCHED'].includes(item.status) && (
+              <button
+                disabled={loading}
+                onClick={() => { if (window.confirm(t('lostFoundDetails.convertConfirm', { to: t(`lostFoundCommon.reportTypes.${item.reportType === 'FOUND' ? 'LOST' : 'FOUND'}`) }))) step('convert'); }}
+                className="px-4 py-2 bg-white border border-indigo-300 text-indigo-700 rounded-lg text-sm font-medium hover:bg-indigo-50 transition-colors"
+              >
+                {item.reportType === 'FOUND' ? t('lostFoundDetails.convertToLost') : t('lostFoundDetails.convertToFound')}
+              </button>
+            )}
             {canEdit && ['UNCLAIMED', 'SEARCHING', 'MATCHED'].includes(item.status) && (
               <button disabled={loading} onClick={() => handleAction('CLOSE')} className="px-4 py-2 bg-slate-600 text-white rounded-lg text-sm font-medium hover:bg-slate-700 transition-colors">
                 {t('lostFoundDetails.closeWithoutReturn')}

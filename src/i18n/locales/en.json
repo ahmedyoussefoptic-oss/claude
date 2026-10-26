@@ -397,7 +397,10 @@
     "sendFoundWa": "Tell the parent it was found (WhatsApp)",
     "sendFoundApi": "Send via WhatsApp API",
     "foundMessage": "Hello {{name}},\nAbout your report {{code}} ({{item}}): the item has been found{{place}} and can be collected from {{branch}}.\nAl Moktashef International Schools",
-    "foundSentAuto": "The parent was told on WhatsApp."
+    "foundSentAuto": "The parent was told on WhatsApp.",
+    "convertToFound": "Change to a found report",
+    "convertToLost": "Change to a lost report",
+    "convertConfirm": "Change the report type to «{{to}}»? It is logged on the report."
   },
   "lostFoundForm": {
     "successTitle": "Record saved successfully",
@@ -620,7 +623,8 @@
       "CONVERTED_FROM_TICKET": "Your request was transferred to the relevant department as feedback",
       "APPOINTMENT_INVITED": "You are invited to visit the school",
       "APPOINTMENT_REMINDER": "Visit reminder",
-      "ITEM_ACKNOWLEDGED": "Your report was received; search started"
+      "ITEM_ACKNOWLEDGED": "Your report was received; search started",
+      "ITEM_TYPE_CHANGED": "Report type changed"
     },
     "pageTitle": "Feedback & Reports Tracking Portal",
     "pageSubtitle": "Enter your feedback or report number to check its current status.",
@@ -1241,7 +1245,8 @@
       "WHATSAPP_API_SENT": "Sent to parent via WhatsApp API",
       "REMINDER_SENT": "Reminder sent",
       "ITEM_EDITED": "Report details edited",
-      "ITEM_ACKNOWLEDGED": "Receipt confirmed; search started"
+      "ITEM_ACKNOWLEDGED": "Receipt confirmed; search started",
+      "ITEM_TYPE_CHANGED": "Report type changed"
     },
     "techSupport": {
       "TICKET_CREATED": "Ticket registered",

@@ -5454,7 +5454,7 @@ exports.lostFoundAction = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   const { id, action } = request.data || {};
   const step = LF_STEPS[action];
-  if (!step) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  if (!step && action !== "convert") throw new HttpsError("invalid-argument", "طلب غير صالح.");
   const caller = (await db.collection("users").doc(request.auth.uid).get()).data();
   if (!caller || caller.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
   const ref = db.collection("lostFoundItems").doc(String(id || ""));
@@ -5463,6 +5463,15 @@ exports.lostFoundAction = onCall(async (request) => {
   const inScope = caller.role === "ADMIN" || caller.access === "all" || (caller.branches || []).includes(item.branch) || caller.branch === item.branch;
   const allowed = caller.role === "ADMIN" || (item.assignedTo || []).includes(request.auth.uid) || (inScope && caller.perms?.edit === true);
   if (!allowed) throw new HttpsError("permission-denied", "هذا الإجراء للمسند إليهم البلاغ أو من لديه صلاحية التعديل.");
+  // Lost report ↔ found report (the item was logged under the wrong type).
+  if (action === "convert") {
+    if (!["UNCLAIMED", "SEARCHING", "MATCHED"].includes(item.status)) throw new HttpsError("failed-precondition", "لا يمكن تحويل بلاغ مُسلَّم أو مغلق.");
+    const to = item.reportType === "FOUND" ? "LOST" : "FOUND";
+    const now = Timestamp.now();
+    await ref.update({ reportType: to, updatedAt: now, typeChangedAt: now, typeChangedByName: caller.name || "" });
+    await ref.collection("activityLog").add({ action: "ITEM_TYPE_CHANGED", actorId: request.auth.uid, actorName: caller.name || "مستخدم", metadata: { from: item.reportType || "", to, note: str(request.data?.note, 300) }, createdAt: now });
+    return { ok: true, reportType: to };
+  }
   if (!step.from.includes(item.status)) throw new HttpsError("failed-precondition", "لا يمكن تنفيذ هذا الإجراء في حالة البلاغ الحالية.");
   const returnedTo = str(request.data?.returnedTo, 80);
   const relation = str(request.data?.relation, 40);
