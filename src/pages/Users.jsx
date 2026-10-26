@@ -11,7 +11,7 @@ import { userBranches, MODULE_KEYS, canSeeModule } from '../utils/scope';
 import ModuleAccessEditor, { moduleOverrides } from '../components/users/ModuleAccessEditor';
 import { STAGES } from '../config/complaintTypes';
 import NotificationPrefsEditor from '../components/common/NotificationPrefsEditor';
-import { Users as UsersIcon, Plus, Loader2, Mail, Lock, Phone, Briefcase, User as UserIcon, Pencil, Trash2, KeyRound, X, SlidersHorizontal, RotateCcw } from 'lucide-react';
+import { Users as UsersIcon, Plus, Loader2, Mail, Lock, Phone, Briefcase, User as UserIcon, Pencil, Trash2, KeyRound, X, SlidersHorizontal, RotateCcw, FileDown } from 'lucide-react';
 
 // Specialist departments — the same ids as complaint categories (auto-
 // assignment matches them); FINANCE pairs with a category coded FINANCE.
@@ -259,6 +259,7 @@ export default function Users() {
   };
 
   const isAdminRole = form.role === ROLES.ADMIN;
+  const [showExport, setShowExport] = useState(false);
 
   const filteredUsers = users.filter((u) => {
     if (branchFilter && u.access !== 'all' && !userBranches(u).includes(branchFilter)) return false;
@@ -281,14 +282,32 @@ export default function Users() {
           </h1>
           <p className="text-slate-500 mt-1">{t('users.pageSubtitle')}</p>
         </div>
-        <button
-          onClick={openAddForm}
-          className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl hover:bg-primary-dark transition-colors"
-        >
-          <Plus className="w-5 h-5" />
-          {t('users.addUser')}
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setShowExport(true)}
+            className="flex items-center gap-2 bg-white border border-slate-300 text-slate-700 px-4 py-2 rounded-xl hover:bg-slate-50 transition-colors"
+          >
+            <FileDown className="w-5 h-5" />
+            {t('users.exportLogins.button')}
+          </button>
+          <button
+            onClick={openAddForm}
+            className="flex items-center gap-2 bg-primary text-white px-4 py-2 rounded-xl hover:bg-primary-dark transition-colors"
+          >
+            <Plus className="w-5 h-5" />
+            {t('users.addUser')}
+          </button>
+        </div>
       </div>
+      {showExport && (
+        <ExportLoginsDialog
+          users={filteredUsers}
+          canReset={me?.role === ROLES.ADMIN}
+          filtersActive={!!filtersActive}
+          describe={(u) => ({ department: u.department ? departmentName(u.department) : '', role: roleName(u.role), branches: u.access === 'all' ? t('common.allBranches') : userBranches(u).map((id) => branches.find((b) => b.id === id)?.name || id).join('، ') })}
+          onClose={() => setShowExport(false)}
+        />
+      )}
 
       {/* Add / edit form as a modal, so editing a user far down the list
           doesn't jump the page back to the top. */}
@@ -905,6 +924,86 @@ export default function Users() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// Login sheet for the users shown by the current filters (e.g. a department):
+// name, username (email) and the system link. Passwords are stored hashed
+// and can never be read back, so the sheet can only carry NEW passwords —
+// issued here, when the admin chooses to, through resetStaffPassword (system
+// admins are skipped; their passwords are never reset from here).
+function ExportLoginsDialog({ users, canReset, filtersActive, describe, onClose }) {
+  const { t } = useTranslation();
+  const [reset, setReset] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [error, setError] = useState(null);
+  const loginUrl = `${window.location.origin}/login`;
+  const resettable = (u) => u.role !== ROLES.ADMIN && !isOwner(u) && u.active !== false;
+  const newPassword = () => `Mis${Math.random().toString(36).slice(2, 7)}${Math.floor(10 + Math.random() * 89)}`;
+
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const passwords = {};
+      if (reset) {
+        const resetStaffPassword = httpsCallable(functions, 'resetStaffPassword');
+        const targets = users.filter(resettable);
+        for (let i = 0; i < targets.length; i++) {
+          setProgress(t('users.exportLogins.progress', { done: i, total: targets.length }));
+          const pw = newPassword();
+          await resetStaffPassword({ uid: targets[i].id, newPassword: pw });
+          passwords[targets[i].id] = pw;
+        }
+      }
+      const XLSX = await import('xlsx');
+      const rows = users.map((u) => {
+        const d = describe(u);
+        return {
+          [t('common.name')]: u.name || '', [t('users.jobTitleLabel')]: u.jobTitle || '', [t('users.exportLogins.department')]: d.department,
+          [t('users.roleLabel')]: d.role, [t('common.branch')]: d.branches, [t('users.exportLogins.username')]: u.email || '',
+          [t('users.passwordLabel')]: passwords[u.id] || (reset && !resettable(u) ? t('users.exportLogins.notReset') : t('users.exportLogins.unchanged')),
+          [t('users.exportLogins.link')]: loginUrl,
+        };
+      });
+      const ws = XLSX.utils.json_to_sheet(rows);
+      ws['!cols'] = [{ wch: 26 }, { wch: 24 }, { wch: 20 }, { wch: 16 }, { wch: 22 }, { wch: 32 }, { wch: 16 }, { wch: 36 }];
+      const wb = XLSX.utils.book_new();
+      wb.Workbook = { Views: [{ RTL: true }] };
+      XLSX.utils.book_append_sheet(wb, ws, 'Logins');
+      XLSX.writeFile(wb, `${t('users.exportLogins.fileName')}.xlsx`);
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+      setProgress('');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 z-[110] flex items-center justify-center p-4">
+      <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 space-y-4">
+        <h2 className="text-lg font-bold text-slate-900">{t('users.exportLogins.title')}</h2>
+        <p className="text-sm text-slate-600">{t('users.exportLogins.count', { count: users.length })}{!filtersActive && <span className="text-amber-700"> {t('users.exportLogins.noFilter')}</span>}</p>
+        <p className="text-xs text-slate-500 bg-slate-50 rounded-xl p-3">{t('users.exportLogins.why')}</p>
+        {canReset && (
+          <label className="flex items-start gap-2 text-sm bg-amber-50 border border-amber-200 rounded-xl p-3">
+            <input type="checkbox" className="mt-1" checked={reset} onChange={(e) => setReset(e.target.checked)} />
+            <span><b>{t('users.exportLogins.reset')}</b><span className="block text-xs text-amber-800 mt-1">{t('users.exportLogins.resetWarning', { count: users.filter(resettable).length })}</span></span>
+          </label>
+        )}
+        {progress && <p className="text-sm text-slate-600 flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" />{progress}</p>}
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} disabled={busy} className="px-4 py-2 text-sm rounded-xl border border-slate-300 bg-white">{t('common.cancel')}</button>
+          <button onClick={run} disabled={busy || !users.length} className="px-5 py-2 text-sm rounded-xl bg-primary text-white font-medium flex items-center gap-2 disabled:opacity-50">
+            {busy && <Loader2 className="w-4 h-4 animate-spin" />}{reset ? t('users.exportLogins.resetAndExport') : t('users.exportLogins.export')}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

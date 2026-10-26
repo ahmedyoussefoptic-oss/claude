@@ -932,7 +932,25 @@
     "platformAccessHint": "Shows the platform section (leaves, new customers, current students) and its notifications. Platform settings stay yours only.",
     "platformTag": "Platform",
     "typingHint": "Arabic fields first (name, job title), then English (email, phone, password) — switch keyboard language only once.",
-    "generatePassword": "Generate"
+    "generatePassword": "Generate",
+    "exportLogins": {
+      "button": "Export logins",
+      "title": "Login sheet",
+      "count": "{{count}} users from the current filters (branch, role, department…).",
+      "noFilter": "No filter chosen: the file will include every user.",
+      "why": "The file has name, job title, department, branches, username (email) and the login link. Current passwords are stored hashed and cannot be read by anyone, so the file only carries new passwords if you issue them.",
+      "reset": "Issue a new password for each user and put it in the file",
+      "resetWarning": "{{count}} users get new passwords: old ones stop working at once. System admins are not changed. Keep the file safe.",
+      "progress": "Issuing passwords… {{done}} of {{total}}",
+      "export": "Export",
+      "resetAndExport": "Issue passwords & export",
+      "department": "Department",
+      "username": "Username (email)",
+      "link": "Login link",
+      "unchanged": "Current password (cannot be shown)",
+      "notReset": "System admin — unchanged",
+      "fileName": "System logins"
+    }
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",
