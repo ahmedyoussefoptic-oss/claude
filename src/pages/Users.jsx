@@ -303,19 +303,7 @@ export default function Users() {
           </div>
           {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{error}</div>}
           <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.name')}</label>
-              <div className="relative">
-                <UserIcon className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
-                  className="w-full pl-3 pr-10 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary"
-                  required
-                />
-              </div>
-            </div>
+            {!editingId && <p className="md:col-span-2 text-xs text-slate-500 -mb-1">{t('users.typingHint')}</p>}
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.emailLabel')}</label>
               <div className="relative">
@@ -323,6 +311,9 @@ export default function Users() {
                 <input
                   type="email"
                   dir="ltr"
+                  lang="en"
+                  autoComplete="off"
+                  inputMode="email"
                   value={form.email}
                   onChange={(e) => setForm((p) => ({ ...p, email: e.target.value }))}
                   disabled={!!editingId}
@@ -339,6 +330,8 @@ export default function Users() {
                   <input
                     type="password"
                     dir="ltr"
+                    lang="en"
+                    autoComplete="new-password"
                     value={form.password}
                     onChange={(e) => setForm((p) => ({ ...p, password: e.target.value }))}
                     className="w-full pl-3 pr-10 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary"
@@ -362,11 +355,29 @@ export default function Users() {
               </div>
             </div>
             <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.name')}</label>
+              <div className="relative">
+                <UserIcon className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
+                <input
+                  type="text"
+                  dir="auto"
+                  lang="ar"
+                  autoComplete="off"
+                  value={form.name}
+                  onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))}
+                  className="w-full pl-3 pr-10 py-2 border border-slate-200 rounded-xl outline-none focus:border-primary"
+                  required
+                />
+              </div>
+            </div>
+            <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('users.jobTitleLabel')}</label>
               <div className="relative">
                 <Briefcase className="absolute right-3 top-2.5 w-5 h-5 text-slate-400" />
                 <input
                   type="text"
+                  dir="auto"
+                  lang="ar"
                   value={form.jobTitle}
                   onChange={(e) => setForm((p) => ({ ...p, jobTitle: e.target.value }))}
                   placeholder={t('users.jobTitlePlaceholder')}
