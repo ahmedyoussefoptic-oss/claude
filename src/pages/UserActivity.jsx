@@ -4,11 +4,12 @@ import { collection, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { formatDistanceToNowStrict, format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
-import { Activity, Loader2, Search, Users as UsersIcon, LogIn, Moon, Wifi } from 'lucide-react';
+import { Activity, Loader2, Search, Users as UsersIcon, LogIn, Moon, Wifi, BarChart3 } from 'lucide-react';
 import { db, functions } from '../config/firebase';
 import { useBranches } from '../hooks/useOrgData';
 import StatCard from '../components/dashboard/StatCard';
 import { ROLE_LABELS } from '../config/roles';
+import ActivityReport from '../components/activity/ActivityReport';
 
 const ONLINE_MS = 3 * 60 * 1000;
 const PAGE_NAMES = {
@@ -31,6 +32,7 @@ export default function UserActivity() {
   const [now, setNow] = useState(Date.now());
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('ALL');
+  const [view, setView] = useState('now');
 
   useEffect(() => {
     const load = () => httpsCallable(functions, 'getUserActivity')().then(({ data }) => setAccounts(data.users)).catch((err) => setError(err.message));
@@ -72,6 +74,12 @@ export default function UserActivity() {
         <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><Activity className="w-6 h-6 text-primary" />{t('activity.title')}</h1>
         <p className="text-slate-500 mt-1">{t('activity.subtitle')}</p>
       </div>
+      <div className="flex gap-1 bg-white rounded-xl border border-slate-100 shadow-sm p-1 w-fit">
+        {[['now', Wifi], ['report', BarChart3]].map(([k, Icon]) => (
+          <button key={k} onClick={() => setView(k)} className={`px-4 py-2 rounded-lg text-sm flex items-center gap-1.5 ${view === k ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-100'}`}><Icon className="w-4 h-4" />{t(`activity.tabs.${k}`)}</button>
+        ))}
+      </div>
+      {view === 'report' ? <ActivityReport /> : (<>
       {error && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl p-3">{error}</div>}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title={t('activity.onlineNow')} value={String(stats.online)} icon={Wifi} gradient="from-emerald-500 to-teal-600" />
@@ -113,6 +121,7 @@ export default function UserActivity() {
         )}
       </div>
       <p className="text-xs text-slate-400">{t('activity.note')}</p>
+      </>)}
     </div>
   );
 }

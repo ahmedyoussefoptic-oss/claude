@@ -5798,12 +5798,17 @@ exports.remindLostFoundBranches = onCall({ timeoutSeconds: 120 }, async (request
 // The owner (or users the owner shared the page with, users.activityAccess)
 // gets every staff account with its Firebase Auth times: last sign-in, last
 // token refresh (≈ last time the app was open) and creation.
-exports.getUserActivity = onCall({ timeoutSeconds: 60 }, async (request) => {
+async function activityCaller(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   const caller = (await db.collection("users").doc(request.auth.uid).get()).data();
   if (!caller || !(caller.isOwner === true || (caller.activityAccess === true && caller.active !== false))) {
     throw new HttpsError("permission-denied", "هذه الصفحة لمنشئ النظام ومن يشاركها معهم.");
   }
+  return caller;
+}
+
+exports.getUserActivity = onCall({ timeoutSeconds: 60 }, async (request) => {
+  await activityCaller(request);
   const times = {};
   let pageToken;
   do {
@@ -5822,6 +5827,89 @@ exports.getUserActivity = onCall({ timeoutSeconds: 60 }, async (request) => {
         branches: u.access === "all" ? ["*"] : (Array.isArray(u.branches) && u.branches.length ? u.branches : u.branch ? [u.branch] : []),
         active: u.active !== false, isOwner: u.isOwner === true,
         lastSignIn: ms(tm.lastSignIn), lastRefresh: ms(tm.lastRefresh), created: ms(tm.created), disabled: tm.disabled === true,
+      };
+    }),
+  };
+});
+
+// «تقرير نشاط المستخدمين»: what each user did between two days (Riyadh) —
+// the actions they logged in each section (the activityLog of complaints,
+// tech support, lost & found, trips and visits; the activity of platform
+// leads) and how long the system was open on their screen (usage/<uid>_<day>,
+// one minute per presence heartbeat). System actions (no actor) are left out.
+const ACTIVITY_MODULES = { complaints: "complaints", techSupportTickets: "techSupport", lostFoundItems: "lostFound", trips: "trips", appointments: "visits", leads: "platform" };
+const activityKind = (a) => (/COMMENT|^NOTE$/.test(a) ? "comments" : /_CREATED$|_REGISTERED$|_REQUESTED$|^REQUESTED$|^CREATED$/.test(a) ? "created" : "updates");
+exports.getUserActivityReport = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+  await activityCaller(request);
+  const day = /^\d{4}-\d{2}-\d{2}$/;
+  const from = String(request.data?.from || "");
+  const to = String(request.data?.to || "");
+  if (!day.test(from) || !day.test(to) || to < from) throw new HttpsError("invalid-argument", "حدّد فترة صحيحة.");
+  const start = Date.parse(`${from}T00:00:00+03:00`);
+  const end = Date.parse(`${to}T00:00:00+03:00`) + 86400e3;
+  if (end - start > 366 * 86400e3) throw new HttpsError("invalid-argument", "أقصى فترة للتقرير سنة واحدة.");
+  const range = (q, field) => q.where(field, ">=", Timestamp.fromMillis(start)).where(field, "<", Timestamp.fromMillis(end));
+  const [logs, leadActs, usage, usersSnap] = await Promise.all([
+    range(db.collectionGroup("activityLog"), "createdAt").select("action", "actorId", "actorName", "createdAt").get(),
+    range(db.collectionGroup("activity"), "at").select("type", "byId", "byName", "at").get(),
+    db.collection("usage").where("day", ">=", from).where("day", "<=", to).get(),
+    db.collection("users").get(),
+  ]);
+  const riyadh = (ms) => new Date(ms + 3 * 3600e3).toISOString().slice(0, 10);
+  const per = {};
+  const row = (uid, name) => (per[uid] ||= { name: name || "", actions: 0, modules: {}, kinds: { created: 0, updates: 0, comments: 0 }, actionTypes: {}, days: new Set(), minutes: 0, lastActionAt: null });
+  const totals = { actions: 0, minutes: 0, modules: {} };
+  const daily = {};
+  const count = (uid, name, module, action, ms) => {
+    if (!uid || !ms) return;
+    const r = row(uid, name);
+    const d = riyadh(ms);
+    r.actions += 1;
+    r.modules[module] = (r.modules[module] || 0) + 1;
+    r.kinds[activityKind(action)] += 1;
+    r.actionTypes[`${module}:${action}`] = (r.actionTypes[`${module}:${action}`] || 0) + 1;
+    r.days.add(d);
+    r.lastActionAt = Math.max(r.lastActionAt || 0, ms);
+    totals.actions += 1;
+    totals.modules[module] = (totals.modules[module] || 0) + 1;
+    (daily[d] ||= { actions: 0, users: new Set(), minutes: 0 }).actions += 1;
+    daily[d].users.add(uid);
+  };
+  logs.docs.forEach((d) => {
+    const x = d.data();
+    const parent = d.ref.parent.parent?.parent?.id;
+    count(x.actorId, x.actorName, ACTIVITY_MODULES[parent] || "other", x.action || "OTHER", x.createdAt?.toMillis?.());
+  });
+  leadActs.docs.forEach((d) => {
+    if (d.ref.parent.parent?.parent?.id !== "leads") return;
+    const x = d.data();
+    count(x.byId, x.byName, "platform", x.type || "NOTE", x.at?.toMillis?.());
+  });
+  usage.docs.forEach((d) => {
+    const x = d.data();
+    if (!x.uid) return;
+    const r = row(x.uid, "");
+    const m = Number(x.minutes) || 0;
+    r.minutes += m;
+    r.days.add(x.day);
+    totals.minutes += m;
+    (daily[x.day] ||= { actions: 0, users: new Set(), minutes: 0 }).minutes += m;
+    daily[x.day].users.add(x.uid);
+  });
+  const users = Object.fromEntries(usersSnap.docs.map((d) => [d.id, d.data()]));
+  const ids = new Set([...Object.keys(per), ...usersSnap.docs.filter((d) => d.data().active !== false).map((d) => d.id)]);
+  return {
+    from, to, totals,
+    daily: Object.entries(daily).sort(([a], [b]) => a.localeCompare(b)).map(([d, v]) => ({ day: d, actions: v.actions, users: v.users.size, minutes: v.minutes })),
+    users: [...ids].map((id) => {
+      const u = users[id] || {};
+      const r = per[id] || row(id, "");
+      return {
+        id, name: u.name || r.name || "", email: u.email || "", role: u.role || "", jobTitle: u.jobTitle || "",
+        branches: u.access === "all" ? ["*"] : (Array.isArray(u.branches) && u.branches.length ? u.branches : u.branch ? [u.branch] : []),
+        active: users[id] ? u.active !== false : false, deleted: !users[id],
+        actions: r.actions, modules: r.modules, kinds: r.kinds, minutes: r.minutes, activeDays: r.days.size, lastActionAt: r.lastActionAt,
+        topActions: Object.entries(r.actionTypes).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, n]) => ({ module: k.split(":")[0], action: k.split(":")[1], count: n })),
       };
     }),
   };

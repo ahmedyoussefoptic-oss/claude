@@ -3209,7 +3209,7 @@
   },
   "activity": {
     "title": "User activity",
-    "subtitle": "Who is using the system now, and each user’s last sign-in and activity.",
+    "subtitle": "Who is using the system now, each user's last sign-in and activity, and a report of what each user did in a period.",
     "onlineNow": "Online now",
     "lastHour": "Active in the last hour",
     "today": "Used it today",
@@ -3234,6 +3234,61 @@
       "lastActive": "Last active",
       "branches": "Branches",
       "device": "Device"
+    },
+    "tabs": {
+      "now": "Online now",
+      "report": "Activity report"
+    },
+    "report": {
+      "title": "User activity report",
+      "period": "Period: {{from}} — {{to}}",
+      "count": "{{count}} users",
+      "presets": {
+        "today": "Today",
+        "week": "Last 7 days",
+        "month": "This month",
+        "days30": "Last 30 days"
+      },
+      "excel": "Export Excel",
+      "print": "Print report",
+      "activeUsers": "Active users",
+      "actions": "Actions",
+      "usage": "Time on system",
+      "minutes": "Minutes",
+      "mostActive": "Most active",
+      "avgPerUser": "{{n}} per active user on average",
+      "actionsCount": "{{count}} actions",
+      "usersCount": "{{count}} users",
+      "duration": "{{h}}h {{m}}m",
+      "activeDays": "Active days",
+      "lastAction": "Last action",
+      "role": "Job title",
+      "kinds": {
+        "created": "New records",
+        "updates": "Updates",
+        "comments": "Comments"
+      },
+      "bySection": "Actions by section",
+      "daily": "Daily actions",
+      "byUser": "Activity per user",
+      "filters": {
+        "ALL": "All",
+        "ACTIVE": "With activity",
+        "NONE": "No activity"
+      },
+      "details": "Details",
+      "topActions": "Top actions:",
+      "noActions": "No actions in this period.",
+      "modules": {
+        "complaints": "Feedback",
+        "techSupport": "Tech support",
+        "lostFound": "Lost & found",
+        "trips": "School trips",
+        "visits": "Visit appointments",
+        "platform": "Platform (admissions)",
+        "other": "Other"
+      },
+      "note": "Actions = everything the user recorded in the follow-up logs (new records, status changes, assignments, comments, payments…), excluding automatic actions. Time on system = minutes the system was open on their screen, counted from when this report was enabled."
     }
   }
 }
