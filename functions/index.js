@@ -3,7 +3,7 @@ const { onDocumentUpdated, onDocumentCreated, onDocumentWritten } = require("fir
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const { initializeApp } = require("firebase-admin/app");
-const { getFirestore, Timestamp, FieldValue } = require("firebase-admin/firestore");
+const { getFirestore, Timestamp, FieldValue, FieldPath } = require("firebase-admin/firestore");
 const { getAuth } = require("firebase-admin/auth");
 const { getMessaging } = require("firebase-admin/messaging");
 const { getStorage } = require("firebase-admin/storage");
@@ -232,7 +232,7 @@ exports.createStaffUser = onCall(async (request) => {
       trips: !!perms?.trips,
       tripFinance: !!perms?.tripFinance,
       // Trip edit / delete / students / payments (unset = role-based default).
-      ...Object.fromEntries(["tripEdit", "tripDelete", "tripStudents", "tripPayments"].filter((k) => typeof perms?.[k] === "boolean").map((k) => [k, perms[k]])),
+      ...Object.fromEntries(["tripEdit", "tripDelete", "tripStudents", "tripPayments", "tripAccounts"].filter((k) => typeof perms?.[k] === "boolean").map((k) => [k, perms[k]])),
     },
     phone: phone || null,
     jobTitle: jobTitle || null,
@@ -4260,6 +4260,126 @@ exports.verifyTripPassword = onCall(async (request) => {
   const caller = await tripCaller(request);
   await checkTripPassword(caller, request.data?.password);
   return { ok: true };
+});
+
+// --- Trip accounts ------------------------------------------------------------
+// Costs, profit and margin of each trip. Open to the owner, system admins and
+// staff given perms.tripAccounts, and only after the trip-accounts password
+// (secureConfig/tripAccountsLock, set by the owner) is entered: that writes
+// secureConfig/tripAccountsUnlock_<uid> with an expiry, checked on every call.
+// Costs live in tripAccounts/<tripId>, which clients can't read.
+const TRIP_ACCOUNTS_UNLOCK_MINUTES = 60;
+const TRIP_COST_KINDS = ["TRIP", "STUDENT"]; // a lump sum / per participating student
+const tripAccountsAllowed = (u) => u.isOwner === true || u.role === "ADMIN" || u.perms?.tripAccounts === true;
+async function tripAccountsCaller(request, unlocked = true) {
+  const caller = await tripCaller(request);
+  if (!tripAccountsAllowed(caller)) throw new HttpsError("permission-denied", "حسابات الرحلات غير متاحة لحسابك.");
+  if (unlocked) {
+    const snap = await db.collection("secureConfig").doc(`tripAccountsUnlock_${caller.uid}`).get();
+    if (!snap.exists || snap.data().expiresAt.toMillis() < Date.now()) {
+      throw new HttpsError("failed-precondition", "انتهت جلسة حسابات الرحلات، أدخل الرقم السري مرة أخرى.");
+    }
+  }
+  return caller;
+}
+
+exports.tripAccountsStatus = onCall(async (request) => {
+  const caller = await tripAccountsCaller(request, false);
+  const [lock, unlock] = await Promise.all([
+    db.collection("secureConfig").doc("tripAccountsLock").get(),
+    db.collection("secureConfig").doc(`tripAccountsUnlock_${caller.uid}`).get(),
+  ]);
+  const until = unlock.exists ? unlock.data().expiresAt.toMillis() : 0;
+  return { passwordSet: lock.exists, unlockedUntil: until > Date.now() ? until : null, isOwner: caller.isOwner === true };
+});
+
+exports.setTripAccountsPassword = onCall(async (request) => {
+  const caller = await adminCaller(request);
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "تغيير الرقم السري لحسابات الرحلات متاح لمنشئ النظام فقط.");
+  const next = request.data?.next;
+  if (typeof next !== "string" || next.length < 4) throw new HttpsError("invalid-argument", "يجب ألا يقل الرقم السري عن 4 خانات.");
+  const salt = crypto.randomBytes(16).toString("hex");
+  await db.collection("secureConfig").doc("tripAccountsLock").set({ salt, hash: hashPassword(next, salt), updatedAt: Timestamp.now() });
+  // A new password ends every open session except the owner's own.
+  const open = await db.collection("secureConfig").where(FieldPath.documentId(), ">=", "tripAccountsUnlock_").where(FieldPath.documentId(), "<", "tripAccountsUnlock`").get();
+  const batch = db.batch();
+  open.docs.forEach((d) => batch.delete(d.ref));
+  const expiresAt = Timestamp.fromMillis(Date.now() + TRIP_ACCOUNTS_UNLOCK_MINUTES * 60000);
+  batch.set(db.collection("secureConfig").doc(`tripAccountsUnlock_${caller.uid}`), { expiresAt });
+  await batch.commit();
+  return { unlockedUntil: expiresAt.toMillis() };
+});
+
+exports.unlockTripAccounts = onCall(async (request) => {
+  const caller = await tripAccountsCaller(request, false);
+  const lock = await db.collection("secureConfig").doc("tripAccountsLock").get();
+  if (!lock.exists) throw new HttpsError("failed-precondition", "لم يحدد منشئ النظام الرقم السري لحسابات الرحلات بعد.");
+  const guardRef = db.collection("secureConfig").doc(`tripAccountsAttempts_${caller.uid}`);
+  const guard = (await guardRef.get()).data() || {};
+  const recent = guard.lastAt && Date.now() - guard.lastAt.toMillis() < 15 * 60000;
+  if (recent && (guard.failures || 0) >= 5) throw new HttpsError("resource-exhausted", "محاولات كثيرة خاطئة، حاول بعد 15 دقيقة.");
+  const { salt, hash } = lock.data();
+  const candidate = Buffer.from(hashPassword(request.data?.password || "", salt), "hex");
+  const stored = Buffer.from(hash, "hex");
+  if (!(candidate.length === stored.length && crypto.timingSafeEqual(candidate, stored))) {
+    await guardRef.set({ failures: (recent ? guard.failures || 0 : 0) + 1, lastAt: Timestamp.now() });
+    throw new HttpsError("permission-denied", "الرقم السري لحسابات الرحلات غير صحيح.");
+  }
+  if (guard.failures) await guardRef.delete();
+  const expiresAt = Timestamp.fromMillis(Date.now() + TRIP_ACCOUNTS_UNLOCK_MINUTES * 60000);
+  await db.collection("secureConfig").doc(`tripAccountsUnlock_${caller.uid}`).set({ expiresAt });
+  return { unlockedUntil: expiresAt.toMillis() };
+});
+
+exports.lockTripAccounts = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  await db.collection("secureConfig").doc(`tripAccountsUnlock_${request.auth.uid}`).delete();
+  return { ok: true };
+});
+
+// Trips between two days (not drafts or cancelled) in the caller's branches,
+// with their figures (trip.stats) and saved costs.
+exports.getTripAccounts = onCall(async (request) => {
+  const caller = await tripAccountsCaller(request);
+  const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v || "") ? v : "");
+  const from = day(request.data?.from) || "0000-01-01";
+  const to = day(request.data?.to) || "9999-12-31";
+  const snap = await db.collection("trips").where("date", ">=", from).where("date", "<=", to).get();
+  const trips = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+    .filter((tr) => !["DRAFT", "PENDING_APPROVAL", "CANCELLED"].includes(tr.status))
+    .filter((tr) => callerAll(caller) || (tr.branches || []).some((b) => callerHasBranch(caller, b)));
+  const costs = trips.length ? await db.getAll(...trips.map((tr) => db.collection("tripAccounts").doc(tr.id))) : [];
+  return {
+    trips: trips.map((tr, i) => {
+      const c = costs[i].exists ? costs[i].data() : {};
+      const s = tr.stats || {};
+      return {
+        id: tr.id, tripCode: tr.tripCode, title: tr.title, destination: tr.destination || "", date: tr.date, status: tr.status,
+        branches: tr.branches || [], stages: tr.stages || [], fee: Number(tr.fee) || 0, targeted: tr.targetedCount ?? null,
+        approved: s.approved || 0, confirmed: s.confirmed || 0, boarded: s.boarded || 0, collected: s.collected || 0,
+        items: c.items || [], notes: c.notes || "", costsUpdatedAt: c.updatedAt?.toMillis?.() || null, costsUpdatedBy: c.updatedByName || "",
+      };
+    }),
+  };
+});
+
+exports.saveTripCosts = onCall(async (request) => {
+  const caller = await tripAccountsCaller(request);
+  const { ref, trip } = await loadTrip(request.data?.tripId, null, null);
+  if (!(callerAll(caller) || (trip.branches || []).some((b) => callerHasBranch(caller, b)))) {
+    throw new HttpsError("permission-denied", "لا تملك صلاحية على هذه الرحلة.");
+  }
+  const raw = Array.isArray(request.data?.items) ? request.data.items : [];
+  if (raw.length > 30) throw new HttpsError("invalid-argument", "عدد بنود التكلفة كبير جداً.");
+  const items = raw.map((x) => ({
+    label: String(x?.label || "").trim().slice(0, 80),
+    kind: TRIP_COST_KINDS.includes(x?.kind) ? x.kind : "TRIP",
+    amount: Math.round((Number(x?.amount) || 0) * 100) / 100,
+  })).filter((x) => x.label && x.amount > 0);
+  const notes = String(request.data?.notes || "").trim().slice(0, 1000);
+  await db.collection("tripAccounts").doc(ref.id).set({ items, notes, updatedAt: Timestamp.now(), updatedBy: caller.uid, updatedByName: caller.name || "" });
+  await tripLog(ref, "costsUpdated", caller, { items: items.length });
+  return { items, notes };
 });
 
 exports.lockSettings = onCall(async (request) => {

@@ -962,7 +962,9 @@
       "tripStudents": "Edit / remove students’ trip records",
       "tripStudentsHint": "Record, change or remove a consent for a parent",
       "tripPayments": "Change payment method / cancel a payment",
-      "tripPaymentsHint": "Correct the method or collector, or cancel a recorded payment"
+      "tripPaymentsHint": "Correct the method or collector, or cancel a recorded payment",
+      "tripAccounts": "Trip accounts",
+      "tripAccountsHint": "Costs, profit and margin — opened with the trip accounts password"
     }
   },
   "settings": {
@@ -2117,6 +2119,71 @@
       "printedAt": "Printed: {{date}}",
       "code": "Trip no.",
       "time": "Time"
+    },
+    "studentsSheet": {
+      "title": "Students list",
+      "print": "Print students list",
+      "shown": "Shown"
+    },
+    "accounts": {
+      "tab": "Trip accounts",
+      "lockedTitle": "Trip accounts are password-protected",
+      "enterHint": "Enter the trip accounts password. It stays open for an hour.",
+      "setHint": "No password yet. Choose one (at least 4 characters); everyone opening this section will need it.",
+      "noPassword": "The system owner hasn't set the trip accounts password yet.",
+      "password": "Password",
+      "newPassword": "New password",
+      "setPassword": "Save password and open",
+      "open": "Open accounts",
+      "tooShort": "The password must be at least 4 characters.",
+      "lock": "Lock",
+      "printReport": "Print report",
+      "reportTitle": "Trip Accounts Report",
+      "revenue": "Collected revenue",
+      "revenueSub": "{{count}} of {{total}} trips have costs entered",
+      "withCostsOnly": "Trips with costs entered",
+      "totalCost": "Total cost",
+      "netProfit": "Net profit",
+      "avgMargin": "Profit margin",
+      "expectedProfit": "Expected profit",
+      "expectedSub": "If every approved student pays",
+      "ranking": "Most profitable trips",
+      "rankingEmpty": "Enter trip costs to rank trips by profit.",
+      "byTrip": "Accounts per trip",
+      "participants": "Participants",
+      "approved": "Approved",
+      "fixedCost": "Fixed costs",
+      "perStudentCost": "Cost per student",
+      "costPerStudent": "Actual cost per student",
+      "profit": "Profit",
+      "margin": "Margin",
+      "breakEven": "Break-even (students)",
+      "costItems": "Cost items",
+      "noCosts": "No costs entered yet",
+      "addCosts": "Add costs",
+      "editCosts": "Edit costs",
+      "costSplit": "fixed {{fixed}} + {{per}} per student",
+      "costsTitle": "Trip base cost",
+      "itemLabel": "Item",
+      "amount": "Amount",
+      "addItem": "Add item",
+      "removeItem": "Remove item",
+      "notes": "Notes (optional)",
+      "forStudents": "for {{count}} students",
+      "kind": {
+        "TRIP": "Lump sum for the trip",
+        "STUDENT": "Per participating student"
+      },
+      "suggest": {
+        "transport": "Transport (buses)",
+        "tickets": "Entry tickets",
+        "meals": "Meals",
+        "supervisors": "Supervisor allowances",
+        "gifts": "Gifts & organisation",
+        "insurance": "Insurance",
+        "other": "Other"
+      },
+      "formula": "Cost = fixed costs + (cost per student × confirmed participants). Profit = collected − cost. Margin = profit ÷ collected. Break-even = fewest students whose fees cover the costs."
     }
   },
   "tripConsent": {

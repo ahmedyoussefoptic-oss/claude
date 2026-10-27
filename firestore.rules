@@ -506,6 +506,11 @@ service cloud.firestore {
     match /apiKeys/{id} {
       allow read, write: if false;
     }
+    // Trip costs (trip accounts): only through Cloud Functions, behind the
+    // trip-accounts password.
+    match /tripAccounts/{id} {
+      allow read, write: if false;
+    }
     match /accountAccessLog/{id} {
       allow read: if isAdmin();
       allow write: if false;
@@ -527,7 +532,7 @@ service cloud.firestore {
         'itemCategories', 'settings', 'settingsUnlocks', 'secureConfig', 'complaints', 'trips', 'tripVerify',
         'appointments', 'deletedComplaints', 'deletedLostFoundItems', 'deletedTechSupportTickets', 'lostFoundItems',
         'techSupportTickets', 'students', 'notifications',
-        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage', 'waDailyReports', 'presence'
+        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage', 'waDailyReports', 'presence', 'tripAccounts'
       ]);
     }
   }

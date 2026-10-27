@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { httpsCallable } from 'firebase/functions';
-import { Bus, Plus, CalendarDays, List, ChevronRight, ChevronLeft, Loader2, Hourglass, CheckCircle2, Wallet, AlertTriangle, MapPin, Users as UsersIcon, FileBarChart, Star, Clock, Flag, UserCheck, ThumbsUp, ThumbsDown, HelpCircle, X, Search, FileDown, Printer } from 'lucide-react';
+import { Bus, Plus, CalendarDays, List, ChevronRight, ChevronLeft, Loader2, Hourglass, CheckCircle2, Wallet, AlertTriangle, MapPin, Users as UsersIcon, FileBarChart, Star, Clock, Flag, UserCheck, ThumbsUp, ThumbsDown, HelpCircle, X, Search, FileDown, Printer, Calculator } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, addDays, addMonths, isSameMonth } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { functions } from '../config/firebase';
@@ -13,6 +13,7 @@ import TripForm from '../components/trips/TripForm';
 import TripDetails from '../components/trips/TripDetails';
 import TripsReport from '../components/trips/TripsReport';
 import TripStudentSearch from '../components/trips/TripStudentSearch';
+import TripAccounts from '../components/trips/TripAccounts';
 import { canSeeTrips } from '../utils/scope';
 import { printPage, escapeHtml } from '../utils/printPage';
 import { TRIP_STATUSES, TRIP_STATUS_STYLES, TRIP_DOT, TRIP_GENDER_STYLES, ENROLLMENT_STATUS_STYLES, canCreateTrips, tripConflicts, dayToDate, tripTime } from '../config/trips';
@@ -40,6 +41,8 @@ export default function Trips() {
   const [formTrip, setFormTrip] = useState(null); // {} new, trip to edit
   const [tripPassword, setTripPassword] = useState(); // entered before editing
   const openId = searchParams.get('openId');
+  // «حسابات الرحلات» (password-protected on the server as well).
+  const canTripAccounts = userData?.isOwner === true || userData?.role === 'ADMIN' || userData?.perms?.tripAccounts === true;
 
   const load = useCallback(async () => {
     try {
@@ -178,8 +181,9 @@ export default function Trips() {
             <button onClick={() => setView('calendar')} className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 ${view === 'calendar' ? 'bg-white shadow-sm text-primary font-medium' : 'text-slate-600'}`}><CalendarDays className="w-4 h-4" />{t('trips.viewCalendar')}</button>
             <button onClick={() => setView('list')} className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 ${view === 'list' ? 'bg-white shadow-sm text-primary font-medium' : 'text-slate-600'}`}><List className="w-4 h-4" />{t('trips.viewList')}</button>
             <button onClick={() => setView('report')} className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 ${view === 'report' ? 'bg-white shadow-sm text-primary font-medium' : 'text-slate-600'}`}><FileBarChart className="w-4 h-4" />{t('trips.viewReport')}</button>
+            {canTripAccounts && <button onClick={() => setView('accounts')} className={`px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 ${view === 'accounts' ? 'bg-white shadow-sm text-primary font-medium' : 'text-slate-600'}`}><Calculator className="w-4 h-4" />{t('trips.accounts.tab')}</button>}
           </div>
-          {view !== 'report' && <>{select(branchFilter, setBranchFilter, [['ALL', t('common.allBranches')], ...branches.map((b) => [b.id, b.name])])}
+          {!['report', 'accounts'].includes(view) && <>{select(branchFilter, setBranchFilter, [['ALL', t('common.allBranches')], ...branches.map((b) => [b.id, b.name])])}
           {select(deptFilter, setDeptFilter, [['ALL', t('trips.allSections')], ...departments.map((d) => [d.id, d.name])])}
           {select(statusFilter, setStatusFilter, [['ALL', t('trips.allStatuses')], ...TRIP_STATUSES.map((s) => [s, t(`trips.status.${s}`)])])}</>}
           {view === 'list' && !loading && shown.length > 0 && (
@@ -189,6 +193,8 @@ export default function Trips() {
 
         {view === 'report' ? (
           <TripsReport onOpenTrip={openTrip} />
+        ) : view === 'accounts' && canTripAccounts ? (
+          <TripAccounts onOpenTrip={openTrip} />
         ) : loading ? (
           <div className="py-16 flex justify-center"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>
         ) : error ? (

@@ -445,6 +445,41 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
   td:nth-child(1) { width: 8mm } td:nth-child(7), td:nth-child(8) { width: 14mm } .sign { display: flex; justify-content: space-between; margin-top: 8mm; font-size: 10pt }`);
   };
 
+  // Students sheet: the students shown (status filter and search), a page per
+  // branch, with their reply and payment.
+  const printStudents = () => {
+    const logoUrl = new URL(logo, window.location.origin).href;
+    const when = format(dayToDate(trip.date), 'EEEE d MMMM yyyy', { locale: dateLocale });
+    const byBranch = [...new Set(filtered.map((r) => r.branch || ''))].sort((a, b) => branchName(a).localeCompare(branchName(b), 'ar'));
+    const order = (a, b) => `${a.grade} ${a.className}`.localeCompare(`${b.grade} ${b.className}`, 'en', { numeric: true }) || (a.name || '').localeCompare(b.name || '', 'ar');
+    const payText = (r) => {
+      if (!trip.fee) return '';
+      if (r.e?.payStatus === 'PAID') return `${t(`trips.collectMethod.${r.e.collectMethod || (r.e.payMethod === 'BANK' ? 'TRANSFER' : 'CASH')}`)} — ${r.e.paidAmount ?? trip.fee}`;
+      return r.e?.payMethod ? t(`trips.payMethod.${r.e.payMethod}`) : '';
+    };
+    const filterText = studentFilter === 'ALL' ? t('trips.allStudents') : t(`trips.enrollment.${studentFilter}`);
+    const sheet = (branch) => {
+      const list = filtered.filter((r) => (r.branch || '') === branch).sort(order);
+      const count = (st) => list.filter((r) => r.status === st).length;
+      return `<section class="sheet">
+  <header><img src="${logoUrl}" alt=""><div><h2>${escapeHtml(t('trips.studentsSheet.title'))}</h2><div class="trip">${escapeHtml(trip.title)}${trip.destination ? ` — ${escapeHtml(trip.destination)}` : ''}</div></div></header>
+  <div class="info">
+    <div><b>${escapeHtml(t('trips.sheet.branch'))}:</b> ${escapeHtml(branchName(branch) || '—')}</div>
+    <div><b>${escapeHtml(t('trips.sheet.date'))}:</b> ${escapeHtml(when)}</div>
+    <div><b>${escapeHtml(t('trips.sheet.stage'))}:</b> ${escapeHtml(`${stageText} — ${sectionText}`)}</div>
+    <div><b>${escapeHtml(t('trips.studentsSheet.shown'))}:</b> ${escapeHtml(filterText)} (${list.length})</div>
+    <div class="wide">${['CONFIRMED', 'AWAITING_PAYMENT', 'RECEIPT_REVIEW', 'DECLINED', 'NO_RESPONSE'].map((st) => `${escapeHtml(t(`trips.enrollment.${st}`))}: <b>${count(st)}</b>`).join(' · ')}</div>
+  </div>
+  <table><thead><tr><th>#</th><th>${escapeHtml(t('trips.col.student'))}</th><th>${escapeHtml(t('trips.col.nationalId'))}</th><th>${escapeHtml(t('trips.col.grade'))}</th><th>${escapeHtml(t('trips.col.status'))}</th>${trip.fee ? `<th>${escapeHtml(t('trips.col.paid'))}</th>` : ''}<th>${escapeHtml(t('trips.sheet.parentPhone'))}</th><th>${escapeHtml(t('trips.healthNotes'))}</th></tr></thead>
+  <tbody>${list.map((r, i) => `<tr><td>${i + 1}</td><td>${escapeHtml(r.name)}</td><td dir="ltr">${escapeHtml(r.id)}</td><td dir="ltr">${escapeHtml(`${r.grade || ''} ${r.className || ''}`)}</td><td>${escapeHtml(t(`trips.enrollment.${r.status}`))}</td>${trip.fee ? `<td>${escapeHtml(payText(r))}</td>` : ''}<td dir="ltr">${escapeHtml(parentPhoneOf(r))}</td><td>${escapeHtml(r.e?.healthNotes || '')}</td></tr>`).join('')}</tbody></table>
+</section>`;
+    };
+    printHtml(`${trip.title} — ${t('trips.studentsSheet.title')}`, byBranch.map(sheet).join(''), `@page { size: A4; margin: 10mm } .sheet { padding: 2mm; break-after: page } .sheet:last-child { break-after: auto }
+  header { display: flex; align-items: center; gap: 5mm; border-bottom: 0.6mm solid #0369a1; padding-bottom: 3mm; margin-bottom: 3mm } header img { height: 16mm } h2 { margin: 0; color: #0369a1 } .trip { font-size: 12pt; font-weight: bold; margin-top: 1mm }
+  .info { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5mm 6mm; font-size: 10pt; margin-bottom: 4mm; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 2mm; padding: 3mm } .info .wide { grid-column: 1 / -1 }
+  table { width: 100%; border-collapse: collapse; font-size: 9pt } th, td { border: 1px solid #cbd5e1; padding: 1.6mm; text-align: right } th { background: #f1f5f9 } thead { display: table-header-group } tr { break-inside: avoid } td:nth-child(1) { width: 8mm }`);
+  };
+
   const tabs = [
     ['overview', t('trips.tabOverview')],
     ...(perms.seeStudents ? [['students', t('trips.tabStudents')]] : []),
@@ -668,6 +703,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                   <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t('trips.searchStudents')} className={`${inputCls} pr-9`} />
                 </div>
                 <button onClick={exportExcel} className={`${btn} border border-slate-300 bg-white text-slate-700`}><FileDown className="w-4 h-4" />{t('trips.exportExcel')}</button>
+                <button onClick={printStudents} disabled={!filtered.length} className={`${btn} border border-slate-300 bg-white text-slate-700`}><Printer className="w-4 h-4" />{t('trips.studentsSheet.print')}</button>
               </div>
               {rows.length === 0 && <p className="text-sm text-slate-500 bg-amber-50 border border-amber-100 rounded-xl p-3">{t('trips.noRoster')}</p>}
               <div className="overflow-x-auto border border-slate-100 rounded-2xl">

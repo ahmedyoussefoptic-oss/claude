@@ -42,7 +42,7 @@ const emptyForm = {
   role: ROLES.CUSTOMER_SERVICE,
   branches: [],
   access: 'branch',
-  perms: { edit: false, delete: false, users: false, trips: false, tripFinance: false, tripEdit: false, tripDelete: false, tripStudents: false, tripPayments: false },
+  perms: { edit: false, delete: false, users: false, trips: false, tripFinance: false, tripEdit: false, tripDelete: false, tripStudents: false, tripPayments: false, tripAccounts: false },
   isPrincipal: false,
   isQuality: false,
   isCounselor: false,
@@ -61,7 +61,7 @@ const emptyForm = {
 // user (mirrors tripCan in functions/index.js).
 function tripPermDefaults(u) {
   const manage = !!u.perms?.trips || u.isPrincipal === true;
-  const legacy = { tripEdit: manage, tripDelete: manage, tripStudents: manage || !!u.perms?.tripFinance, tripPayments: !!u.perms?.tripFinance };
+  const legacy = { tripEdit: manage, tripDelete: manage, tripStudents: manage || !!u.perms?.tripFinance, tripPayments: !!u.perms?.tripFinance, tripAccounts: false };
   return Object.fromEntries(Object.entries(legacy).map(([k, v]) => [k, typeof u.perms?.[k] === 'boolean' ? u.perms[k] : v]));
 }
 
@@ -153,7 +153,7 @@ export default function Users() {
       ...prev,
       role,
       ...(role === ROLES.ADMIN
-        ? { access: 'all', perms: { edit: true, delete: true, users: true, trips: true, tripFinance: true, tripEdit: true, tripDelete: true, tripStudents: true, tripPayments: true } }
+        ? { access: 'all', perms: { edit: true, delete: true, users: true, trips: true, tripFinance: true, tripEdit: true, tripDelete: true, tripStudents: true, tripPayments: true, tripAccounts: true } }
         : {}),
     }));
   };
@@ -560,7 +560,7 @@ export default function Users() {
               <div className="mt-3 pt-3 border-t border-slate-200">
                 <p className="text-xs font-bold text-slate-700 mb-2">{t('users.tripPerms.title')}</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {['tripEdit', 'tripDelete', 'tripStudents', 'tripPayments'].map((k) => (
+                  {['tripEdit', 'tripDelete', 'tripStudents', 'tripPayments', 'tripAccounts'].map((k) => (
                     <label key={k} className="flex items-start gap-2 text-sm text-slate-700">
                       <input type="checkbox" className="mt-1" checked={!!form.perms[k]} disabled={isAdminRole} onChange={(e) => setForm((p) => ({ ...p, perms: { ...p.perms, [k]: e.target.checked } }))} />
                       <span>{t(`users.tripPerms.${k}`)}<span className="block text-xs text-slate-500">{t(`users.tripPerms.${k}Hint`)}</span></span>
