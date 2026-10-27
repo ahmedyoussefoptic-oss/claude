@@ -2106,6 +2106,17 @@
       "fee": "Fee",
       "repliedAt": "Replied",
       "openTrip": "Open trip"
+    },
+    "print": {
+      "school": "Al Moktashef International Schools",
+      "reportTitle": "School Trips Report",
+      "listTitle": "School Trips List",
+      "printList": "Print list",
+      "period": "From {{from}} to {{to}}",
+      "count": "Trips: {{count}}",
+      "printedAt": "Printed: {{date}}",
+      "code": "Trip no.",
+      "time": "Time"
     }
   },
   "tripConsent": {

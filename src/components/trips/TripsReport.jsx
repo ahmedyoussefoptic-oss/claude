@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
 import { Loader2, FileDown, Printer, Bus, Users as UsersIcon, Wallet, Star, ThumbsUp, Flag } from 'lucide-react';
 import { functions } from '../../config/firebase';
 import { useBranches } from '../../hooks/useOrgData';
 import { TRIP_STATUS_STYLES, TRIP_STAGES, TRIP_RATINGS } from '../../config/trips';
+import { printPage } from '../../utils/printPage';
 
 const pct = (a, b) => (b > 0 ? Math.round((100 * a) / b) : null);
 const fmtPct = (v) => (v == null ? '—' : `${v}%`);
@@ -19,8 +20,9 @@ function academicYearRange(now = new Date()) {
 // Trips report (getTripsReport): participation, collection, satisfaction
 // per trip, per branch and per grade, and decline reasons.
 export default function TripsReport({ onOpenTrip }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const branches = useBranches();
+  const contentRef = useRef(null);
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
   const [range, setRange] = useState(academicYearRange);
   const [branch, setBranch] = useState('');
@@ -57,6 +59,22 @@ export default function TripsReport({ onOpenTrip }) {
   const methodName = (m) => t(`trips.collectMethod.${m}`, { defaultValue: m });
   const reasons = Object.entries(data?.declineReasons || {}).sort((a, b) => b[1] - a[1]);
   const reasonTotal = reasons.reduce((a, [, n]) => a + n, 0);
+
+  // The report as shown (cards and tables), in its own window.
+  const print = () => {
+    if (!contentRef.current) return;
+    printPage({
+      title: t('trips.print.reportTitle'),
+      subtitle: `${t('trips.print.period', { from: range.from, to: range.to })} · ${branch ? branchName(branch) : t('common.allBranches')}`,
+      school: t('trips.print.school'),
+      body: contentRef.current.outerHTML,
+      landscape: true,
+      copyStyles: true,
+      css: '#report-print-area .whitespace-nowrap { white-space: normal !important } #report-print-area section, #report-print-area table { break-inside: auto }',
+      dir: i18n.dir(),
+      lang: i18n.language,
+    });
+  };
 
   const exportExcel = async () => {
     const XLSX = await import('xlsx');
@@ -104,7 +122,7 @@ export default function TripsReport({ onOpenTrip }) {
         </select>
         <div className="flex-1" />
         <button onClick={exportExcel} disabled={!trips.length} className="px-3 py-2 rounded-xl text-sm border border-emerald-300 text-emerald-700 bg-white flex items-center gap-1.5 disabled:opacity-50"><FileDown className="w-4 h-4" />{t('trips.exportExcel')}</button>
-        <button onClick={() => window.print()} className="px-3 py-2 rounded-xl text-sm border border-slate-300 bg-white text-slate-700 flex items-center gap-1.5"><Printer className="w-4 h-4" />{t('common.print')}</button>
+        <button onClick={print} disabled={loading || !!error} className="px-3 py-2 rounded-xl text-sm border border-slate-300 bg-white text-slate-700 flex items-center gap-1.5 disabled:opacity-50"><Printer className="w-4 h-4" />{t('common.print')}</button>
       </div>
 
       {loading ? (
@@ -112,7 +130,7 @@ export default function TripsReport({ onOpenTrip }) {
       ) : error ? (
         <p className="py-10 text-center text-sm text-red-600">{error}</p>
       ) : (
-        <>
+        <div ref={contentRef} className="space-y-5">
           <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
             {card(t('trips.report.trips'), totals.trips, null, Bus, 'text-slate-800')}
             {card(t('trips.report.completed'), totals.completed, null, Flag, 'text-indigo-700')}
@@ -266,7 +284,7 @@ export default function TripsReport({ onOpenTrip }) {
               </div>
             </section>
           </div>
-        </>
+        </div>
       )}
     </div>
   );

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { httpsCallable } from 'firebase/functions';
-import { Bus, Plus, CalendarDays, List, ChevronRight, ChevronLeft, Loader2, Hourglass, CheckCircle2, Wallet, AlertTriangle, MapPin, Users as UsersIcon, FileBarChart, Star, Clock, Flag, UserCheck, ThumbsUp, ThumbsDown, HelpCircle, X, Search, FileDown } from 'lucide-react';
+import { Bus, Plus, CalendarDays, List, ChevronRight, ChevronLeft, Loader2, Hourglass, CheckCircle2, Wallet, AlertTriangle, MapPin, Users as UsersIcon, FileBarChart, Star, Clock, Flag, UserCheck, ThumbsUp, ThumbsDown, HelpCircle, X, Search, FileDown, Printer } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, startOfWeek, addDays, addMonths, isSameMonth } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { functions } from '../config/firebase';
@@ -14,6 +14,7 @@ import TripDetails from '../components/trips/TripDetails';
 import TripsReport from '../components/trips/TripsReport';
 import TripStudentSearch from '../components/trips/TripStudentSearch';
 import { canSeeTrips } from '../utils/scope';
+import { printPage, escapeHtml } from '../utils/printPage';
 import { TRIP_STATUSES, TRIP_STATUS_STYLES, TRIP_DOT, TRIP_GENDER_STYLES, ENROLLMENT_STATUS_STYLES, canCreateTrips, tripConflicts, dayToDate, tripTime } from '../config/trips';
 
 const ymd = (d) => format(d, 'yyyy-MM-dd');
@@ -71,6 +72,51 @@ export default function Trips() {
       noAnswer: coming.reduce((s, tr) => s + Math.max(0, (tr.targetedCount || 0) - (tr.stats?.responses || 0)), 0),
     };
   }, [trips, today]);
+  // The trips list as filtered on screen, as a printable table.
+  const printList = () => {
+    const filters = [
+      branchFilter === 'ALL' ? t('common.allBranches') : branchName(branchFilter),
+      deptFilter === 'ALL' ? t('trips.allSections') : departments.find((d) => d.id === deptFilter)?.name || deptFilter,
+      statusFilter === 'ALL' ? t('trips.allStatuses') : t(`trips.status.${statusFilter}`),
+    ].join(' · ');
+    const cell = (v) => `<td>${escapeHtml(v)}</td>`;
+    const live = (tr) => ['OPEN', 'CLOSED', 'COMPLETED'].includes(tr.status);
+    const rows = [...shown].sort((a, b) => a.date.localeCompare(b.date) || (a.departTime || '').localeCompare(b.departTime || '')).map((tr, i) => {
+      const s = tr.stats || {};
+      return `<tr>${[
+        i + 1,
+        tr.tripCode,
+        `${tr.title}${tr.gender && tr.gender !== 'ALL' ? ` (${t(`trips.gender.${tr.gender}`)})` : ''}`,
+        tr.destination,
+        `${format(dayToDate(tr.date), 'EEEE', { locale: dateLocale })} ${tr.date}`,
+        tr.departTime ? `${tripTime(tr.departTime, i18n.language)} – ${tripTime(tr.returnTime, i18n.language)}` : '',
+        tr.meetingPoint || '',
+        (tr.branches || []).map(branchName).join('، '),
+        stageText(tr),
+        tr.fee > 0 ? t('trips.feeValue', { fee: tr.fee }) : t('trips.free'),
+        live(tr) ? tr.targetedCount ?? '' : '',
+        live(tr) ? s.responses || 0 : '',
+        live(tr) ? s.approved || 0 : '',
+        live(tr) ? s.declined || 0 : '',
+        live(tr) ? `${s.confirmed || 0}${tr.capacity > 0 ? `/${tr.capacity}` : ''}` : '',
+        live(tr) && tr.fee > 0 ? `${(s.collected || 0).toLocaleString('en')} / ${((s.approved || 0) * tr.fee).toLocaleString('en')}` : '',
+        t(`trips.status.${tr.status}`),
+      ].map(cell).join('')}</tr>`;
+    }).join('');
+    const head = ['#', t('trips.print.code'), t('trips.report.trip'), t('trips.form.destination'), t('common.date'), t('trips.print.time'), t('trips.form.meetingPoint'),
+      t('trips.form.branches'), t('trips.form.grades'), t('trips.search.fee'), t('trips.list.targeted'), t('trips.list.responses'), t('trips.list.approved'),
+      t('trips.list.declined'), t('trips.list.confirmed'), t('trips.list.collected'), t('trips.col.status')].map((h) => `<th>${escapeHtml(h)}</th>`).join('');
+    printPage({
+      title: t('trips.print.listTitle'),
+      subtitle: `${filters} · ${t('trips.print.count', { count: shown.length })} · ${t('trips.print.printedAt', { date: format(new Date(), 'yyyy-MM-dd HH:mm') })}`,
+      school: t('trips.print.school'),
+      body: `<table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table>`,
+      landscape: true,
+      css: 'table { width: 100%; border-collapse: collapse; font-size: 8.5pt } th, td { border: 1px solid #cbd5e1; padding: 4px 5px; text-align: start; vertical-align: top } th { background: #f1f5f9 } thead { display: table-header-group } tr { break-inside: avoid } tbody tr:nth-child(even) td { background: #f8fafc }',
+      dir: i18n.dir(),
+      lang: i18n.language,
+    });
+  };
   const [drill, setDrill] = useState(null); // enrollment status shown in the students list
   const showTrips = (status) => { setStatusFilter(status); setView('list'); };
 
@@ -136,6 +182,9 @@ export default function Trips() {
           {view !== 'report' && <>{select(branchFilter, setBranchFilter, [['ALL', t('common.allBranches')], ...branches.map((b) => [b.id, b.name])])}
           {select(deptFilter, setDeptFilter, [['ALL', t('trips.allSections')], ...departments.map((d) => [d.id, d.name])])}
           {select(statusFilter, setStatusFilter, [['ALL', t('trips.allStatuses')], ...TRIP_STATUSES.map((s) => [s, t(`trips.status.${s}`)])])}</>}
+          {view === 'list' && !loading && shown.length > 0 && (
+            <button onClick={printList} className="ms-auto px-3 py-2 rounded-xl text-sm border border-slate-300 bg-white text-slate-700 flex items-center gap-1.5"><Printer className="w-4 h-4" />{t('trips.print.printList')}</button>
+          )}
         </div>
 
         {view === 'report' ? (
