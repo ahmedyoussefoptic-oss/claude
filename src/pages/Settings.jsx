@@ -344,7 +344,7 @@ function ReorderControls({ index, count, move }) {
   );
 }
 
-function EditableList({ title, icon: Icon, items, collectionName, flag }) {
+function EditableList({ title, icon: Icon, items, collectionName, flags = [] }) {
   const { t } = useTranslation();
   const [editingId, setEditingId] = useState(null);
   const [draftName, setDraftName] = useState('');
@@ -395,9 +395,9 @@ function EditableList({ title, icon: Icon, items, collectionName, flag }) {
     }
   };
 
-  // Optional per-item boolean (e.g. problem types / platforms "يخص ولي
+  // Optional per-item booleans (e.g. problem types / platforms "يخص ولي
   // الأمر"). Seeds the collection first in case it's still the fallback.
-  const toggleFlag = async (item) => {
+  const toggleFlag = async (item, flag) => {
     try {
       await ensureSeeded(collectionName);
       await setDoc(doc(db, collectionName, item.id), { [flag.key]: !item[flag.key] }, { merge: true });
@@ -475,15 +475,17 @@ function EditableList({ title, icon: Icon, items, collectionName, flag }) {
               <>
                 <ReorderControls index={index} count={items.length} move={move} />
                 <span className="flex-1 text-sm text-slate-800">{item.name}</span>
-                {flag && (
+                {flags.map((flag) => (
                   <button
+                    key={flag.key}
                     type="button"
-                    onClick={() => toggleFlag(item)}
+                    onClick={() => toggleFlag(item, flag)}
+                    title={flag.hint}
                     className={`text-xs px-2 py-1 rounded-full border transition-colors ${item[flag.key] ? 'bg-amber-100 text-amber-800 border-amber-200' : 'bg-white text-slate-400 border-slate-200 hover:text-slate-600'}`}
                   >
                     {item[flag.key] ? '✓ ' : ''}{flag.label}
                   </button>
-                )}
+                ))}
                 <span className="text-xs text-slate-400 font-mono" dir="ltr">{item.id}</span>
                 <button onClick={() => startEdit(item)} className="p-1.5 text-slate-500 hover:text-primary hover:bg-primary/10 rounded-lg" title={t('settings.editNameTitle')}>
                   <Pencil className="w-4 h-4" />
@@ -691,10 +693,10 @@ export default function Settings() {
 
       <EditableList title={t('settings.branchesTitle')} icon={Building2} items={branches} collectionName="branches" />
       <EditableList title={t('settings.departmentsTitle')} icon={GraduationCap} items={departments} collectionName="departments" />
-      <EditableList title={t('settings.complaintTypesTitle')} icon={Tag} items={complaintTypes} collectionName="complaintTypes" flag={{ key: 'appointment', label: t('settings.appointmentFlag') }} />
+      <EditableList title={t('settings.complaintTypesTitle')} icon={Tag} items={complaintTypes} collectionName="complaintTypes" flags={[{ key: 'appointment', label: t('settings.appointmentFlag') }, { key: 'adminQuality', label: t('settings.adminQualityFlag'), hint: t('settings.adminQualityHint') }]} />
       <SubTypesEditor complaintTypes={complaintTypes} subTypes={subTypes} />
-      <EditableList title={t('settings.problemTypesTitle')} icon={Wrench} items={problemTypes} collectionName="problemTypes" flag={{ key: 'parentRelated', label: t('settings.parentRelatedFlag') }} />
-      <EditableList title={t('settings.platformsTitle')} icon={Monitor} items={platforms} collectionName="platforms" flag={{ key: 'parentRelated', label: t('settings.parentRelatedFlag') }} />
+      <EditableList title={t('settings.problemTypesTitle')} icon={Wrench} items={problemTypes} collectionName="problemTypes" flags={[{ key: 'parentRelated', label: t('settings.parentRelatedFlag') }]} />
+      <EditableList title={t('settings.platformsTitle')} icon={Monitor} items={platforms} collectionName="platforms" flags={[{ key: 'parentRelated', label: t('settings.parentRelatedFlag') }]} />
       <EditableList title={t('settings.itemCategoriesTitle')} icon={Package} items={itemCategories} collectionName="itemCategories" />
       <StudentImport />
       <StudentAccountsImport />

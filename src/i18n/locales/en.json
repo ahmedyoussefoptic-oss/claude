@@ -1015,6 +1015,8 @@
     "savedCheck": "Saved ✓",
     "parentRelatedFlag": "Parent's account",
     "appointmentFlag": "Visit appointment",
+    "adminQualityFlag": "Admin & quality",
+    "adminQualityHint": "Feedback in this category is auto-assigned only to the branch's administrative specialists and quality officers (not principals or counselors).",
     "dragToReorder": "Drag to reorder",
     "moveUp": "Move up",
     "moveDown": "Move down",

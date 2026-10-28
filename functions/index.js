@@ -1252,6 +1252,13 @@ async function findAutoAssignees({ branch, departments, stage, curriculum, users
   // Nor do staff whose complaints / tech-support section is turned off.
   const section = departments.includes("IT") ? "techSupport" : "complaints";
   const users = (preloaded || await loadActiveUsers()).filter((u) => u.tripsAccess !== "tripsOnly" && !moduleOff(u, section));
+  // Categories flagged «للإداريين والجودة» route to the administrative
+  // specialists; when every category is such, principals and counselors
+  // are left out.
+  const aq = section === "complaints" ? await adminQualityTypes() : new Set();
+  const types = departments.filter(Boolean);
+  const adminQualityOnly = types.length > 0 && types.every((d) => aq.has(d));
+  departments = types.map((d) => (aq.has(d) ? "ADMINISTRATIVE" : d));
   const inBranch = (u) => (u.branches || []).includes(branch) || u.branch === branch;
   const covers = (u) => coversStage(u, stage) && coversCurriculum(u, curriculum);
   const specialists = [];
@@ -1266,13 +1273,19 @@ async function findAutoAssignees({ branch, departments, stage, curriculum, users
       allBranchSpecialists,
     ].find((list) => list.length) || []));
   }
-  const principals = users.filter((u) => u.isPrincipal === true && (u.access === "all" || inBranch(u)) && covers(u));
+  const principals = adminQualityOnly ? [] : users.filter((u) => u.isPrincipal === true && (u.access === "all" || inBranch(u)) && covers(u));
   const seen = new Set();
   // Complaints (not IT tickets) also go to the branch's student counselors.
-  const counselors = departments.includes("IT") ? [] : complaintCounselors(users, branch, stage, curriculum);
+  const counselors = departments.includes("IT") || adminQualityOnly ? [] : complaintCounselors(users, branch, stage, curriculum);
   return [...specialists, ...principals, ...qualityOfficers(users, branch), ...counselors]
     .filter((u) => !seen.has(u.id) && seen.add(u.id))
     .map((u) => ({ id: u.id, name: u.name || "" }));
+}
+
+// Complaint categories set «للإداريين والجودة» in Settings (adminQuality).
+async function adminQualityTypes() {
+  const snap = await db.collection("complaintTypes").where("adminQuality", "==", true).get();
+  return new Set(snap.docs.map((d) => d.id));
 }
 
 async function loadActiveUsers() {
@@ -1317,7 +1330,14 @@ function autoAssigneesFor(kind, record, users) {
 async function ensureQualityAssigned(ref, data, { counselors = false } = {}) {
   const users = await loadActiveUsers();
   const current = data.assignedTo || [];
-  const auto = [...qualityOfficers(users, data.branch), ...(counselors ? complaintCounselors(users, data.branch, data.stage, data.department) : [])];
+  // A complaint whose categories are all «للإداريين والجودة» gets that
+  // routing (administrative specialists + quality) instead of the counselors.
+  const types = counselors ? complaintTypesOf(data) : [];
+  const aq = types.length ? await adminQualityTypes() : new Set();
+  const adminQualityOnly = types.length > 0 && types.every((d) => aq.has(d));
+  const auto = adminQualityOnly
+    ? await autoAssigneesFor("complaint", data, users)
+    : [...qualityOfficers(users, data.branch), ...(counselors ? complaintCounselors(users, data.branch, data.stage, data.department) : [])];
   const missing = auto.filter((u, i) => !current.includes(u.id) && auto.findIndex((x) => x.id === u.id) === i);
   if (!missing.length) return;
   await ref.update({
