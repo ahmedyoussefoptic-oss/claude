@@ -28,6 +28,10 @@ export const canSeePlatform = (userData) => isOwner(userData) || (userData?.plat
 export const LEAVE_ROLES = ['approve', 'call', 'exit'];
 export const leaveRoleOf = (userData, role) => canSeePlatform(userData) || (userData?.active !== false && userData?.leaveRoles?.[role] === true);
 export const canSeeLeaves = (userData) => LEAVE_ROLES.some((r) => leaveRoleOf(userData, r));
+// «مهام الاتصال»: admins and the owner hold both roles; other staff the
+// roles given on the Users page (calling agent / call supervisor).
+export const callRoleOf = (userData, role) => userData?.active !== false && (isOwner(userData) || userData?.role === 'ADMIN' || userData?.callRoles?.[role] === true);
+export const canSeeCallTasks = (userData) => callRoleOf(userData, 'agent') || callRoleOf(userData, 'supervisor');
 
 export function adminCan(userData, caps, cap) {
   if (isOwner(userData)) return true;

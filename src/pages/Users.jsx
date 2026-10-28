@@ -49,6 +49,7 @@ const emptyForm = {
   platformAccess: false,
   activityAccess: false,
   leaveRoles: { approve: false, call: false, exit: false },
+  callRoles: { agent: false, supervisor: false },
   tripsAccess: 'all',
   modules: {},
   recordScope: 'branch',
@@ -138,6 +139,7 @@ export default function Users() {
       platformAccess: u.platformAccess === true,
       activityAccess: u.activityAccess === true,
       leaveRoles: { approve: u.leaveRoles?.approve === true, call: u.leaveRoles?.call === true, exit: u.leaveRoles?.exit === true },
+      callRoles: { agent: u.callRoles?.agent === true, supervisor: u.callRoles?.supervisor === true },
       tripsAccess: ['tripsOnly', 'none'].includes(u.tripsAccess) ? u.tripsAccess : 'all',
       modules: u.modules && typeof u.modules === 'object' ? u.modules : {},
       recordScope: u.recordScope === 'assigned' ? 'assigned' : 'branch',
@@ -191,6 +193,7 @@ export default function Users() {
           access: form.access,
           perms: form.perms,
           leaveRoles: form.leaveRoles,
+          callRoles: form.callRoles,
           isPrincipal: form.isPrincipal,
           isQuality: form.isQuality,
           isCounselor: form.isCounselor,
@@ -219,6 +222,7 @@ export default function Users() {
           access: form.access,
           perms: form.perms,
           leaveRoles: form.leaveRoles,
+          callRoles: form.callRoles,
           isPrincipal: form.isPrincipal,
           isQuality: form.isQuality,
           isCounselor: form.isCounselor,
@@ -583,6 +587,17 @@ export default function Users() {
                   ))}
                 </div>
                 <p className="text-xs text-slate-500 mt-1">{t('users.leaveRoles.hint')}</p>
+              </div>
+              <div className="mt-3 pt-3 border-t border-slate-200">
+                <p className="text-xs font-bold text-slate-700 mb-2">📞 {t('users.callRoles.title')}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {['agent', 'supervisor'].map((k) => (
+                    <label key={k} className="flex items-start gap-2 text-sm text-slate-700">
+                      <input type="checkbox" className="mt-1" checked={!!form.callRoles[k]} disabled={isAdminRole} onChange={(e) => setForm((p) => ({ ...p, callRoles: { ...p.callRoles, [k]: e.target.checked } }))} />
+                      <span>{t(`users.callRoles.${k}`)}<span className="block text-xs text-slate-500">{t(`users.callRoles.${k}Hint`)}</span></span>
+                    </label>
+                  ))}
+                </div>
               </div>
               <p className="text-xs text-slate-500 mt-2">
                 {t('users.accessPermsHint')}

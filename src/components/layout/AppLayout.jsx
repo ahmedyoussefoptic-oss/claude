@@ -1,12 +1,12 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
-import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText, Activity } from 'lucide-react';
+import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText, Activity, PhoneOutgoing } from 'lucide-react';
 import AssistantPanel from '../assistant/AssistantPanel';
 import { useEffect, useState, useRef } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
-import { useAdminPermissions, adminCan, isOwner, canSeePlatform, canSeeActivity, canSeeLeaves } from '../../config/adminPermissions';
+import { useAdminPermissions, adminCan, isOwner, canSeePlatform, canSeeActivity, canSeeLeaves, canSeeCallTasks } from '../../config/adminPermissions';
 import { startPresence } from '../../utils/presence';
 import NotificationBell from './NotificationBell';
 import Watermark from '../common/Watermark';
@@ -92,6 +92,9 @@ export default function AppLayout() {
   }
   if (canSeeActivity(userData)) {
     navItems.push({ name: t('activity.title'), path: '/activity', icon: Activity });
+  }
+  if (!tripsOnly && canSeeCallTasks(userData)) {
+    navItems.push({ name: t('callTasks.title'), path: '/call-tasks', icon: PhoneOutgoing });
   }
   // Staff given leave-request steps (approve / call / exit) outside the platform.
   if (!canSeePlatform(userData) && canSeeLeaves(userData)) {

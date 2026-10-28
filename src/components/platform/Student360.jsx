@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
 import { collection, addDoc, doc, updateDoc, Timestamp } from 'firebase/firestore';
-import { Loader2, Phone, MessageCircle, FileText, Wrench, PackageSearch, Bus, DoorOpen, ShieldCheck, Plus, Trash2, RotateCcw } from 'lucide-react';
+import { Loader2, Phone, MessageCircle, FileText, Wrench, PackageSearch, Bus, DoorOpen, ShieldCheck, Plus, Trash2, RotateCcw, PhoneOutgoing } from 'lucide-react';
 import { format } from 'date-fns';
 import { db, functions } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
@@ -67,7 +67,7 @@ export default function Student360({ studentId, branchName, onClose }) {
       {data && (
         <>
           <div className="flex flex-wrap gap-2">
-            {[[FileText, 'complaints', data.complaints.length], [Wrench, 'tickets', data.tickets.length], [PackageSearch, 'lostFound', data.lostFound.length], [Bus, 'trips', data.trips.length], [DoorOpen, 'leaves', data.leaves.length]].map(([Icon, k, n]) => (
+            {[[FileText, 'complaints', data.complaints.length], [Wrench, 'tickets', data.tickets.length], [PackageSearch, 'lostFound', data.lostFound.length], [Bus, 'trips', data.trips.length], [DoorOpen, 'leaves', data.leaves.length], [PhoneOutgoing, 'calls', (data.calls || []).length]].map(([Icon, k, n]) => (
               <span key={k} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-slate-100 text-slate-700"><Icon className="w-4 h-4" />{t(`platform.students.kinds.${k}`)}: <b>{n}</b></span>
             ))}
             {data.reenrollments.map((r) => <Pill key={r.id} className={REENROLL_STYLES[r.intent]}><RotateCcw className="w-3 h-3 ml-1" />{r.year}: {t(`platform.reenroll.intents.${r.intent}`)}</Pill>)}
@@ -79,6 +79,12 @@ export default function Student360({ studentId, branchName, onClose }) {
             ))}
             {section(t('platform.students.kinds.leaves'), DoorOpen, data.leaves, (l) => (
               <li key={l.id} className="py-1.5 flex justify-between gap-2"><span>{t(`platform.leaves.reasons.${l.reason}`)} — {l.pickup}</span><span className="text-xs text-slate-500 shrink-0">{t(`platform.leaves.status.${l.status}`)} · {day(l.at)}</span></li>
+            ))}
+            {section(t('platform.students.kinds.calls'), PhoneOutgoing, data.calls || [], (c, i) => (
+              <li key={i} className="py-1.5 flex justify-between gap-2">
+                <span><b className="text-slate-700">{c.campaign}</b> — {c.outcome || t(`callTasks.results.${c.result}`)}{c.note && <span className="block text-xs text-slate-500">{c.note}</span>}</span>
+                <span className="text-xs text-slate-500 shrink-0 text-end">{c.byName} · {day(c.at)}{c.verified === true && <span className="block text-emerald-700">✓ Bevatel</span>}{c.verified === false && <span className="block text-rose-700">✗ Bevatel</span>}</span>
+              </li>
             ))}
             {section(t('platform.students.kinds.trips'), Bus, data.trips, (tr) => (
               <li key={tr.tripId} className="py-1.5 flex justify-between gap-2"><span>{tr.title}</span><span className="text-xs text-slate-500 shrink-0">{t(`trips.decision.${tr.decision}`, tr.decision || '')}{tr.boarded === true ? ` · ${t('trips.attended')}` : ''} · {tr.date}</span></li>

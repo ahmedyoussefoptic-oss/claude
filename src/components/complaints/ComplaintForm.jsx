@@ -31,7 +31,7 @@ const SOURCES = [
   { id: 'MOBILE_APP', name: 'Mobile App' },
 ];
 
-export default function ComplaintForm({ onClose }) {
+export default function ComplaintForm({ onClose, prefill }) {
   const { t } = useTranslation();
   const { user, userData } = useAuthStore();
   const fileInputRef = useRef(null);
@@ -104,6 +104,13 @@ export default function ComplaintForm({ onClose }) {
     }));
     setStudentSuggestions([]);
   };
+
+  // Opened from a call (مهام الاتصال): the student and the call note.
+  useEffect(() => {
+    if (!prefill?.studentId) return;
+    setFormData((prev) => ({ ...prev, studentId: prefill.studentId, parentPhone: prefill.parentPhone || prev.parentPhone, details: prefill.details || prev.details }));
+    lookupStudentById(prefill.studentId).then((s) => { if (s) applyStudent(s); }).catch(() => {});
+  }, [prefill?.studentId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStudentIdBlur = async () => {
     if (!formData.studentId) return;

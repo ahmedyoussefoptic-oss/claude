@@ -975,6 +975,13 @@
       "exit": "Exit handover",
       "exitHint": "Check the receiver's ID, hand the student over, record the return",
       "hint": "They get the «Leave requests» page for their branches and a notification at each step of theirs."
+    },
+    "callRoles": {
+      "title": "Call tasks",
+      "agent": "Calling agent",
+      "agentHint": "Gets «My calls today» and records each call's result",
+      "supervisor": "Call supervisor",
+      "supervisorHint": "Creates call campaigns, deals them and follows progress in their branches"
     }
   },
   "settings": {
@@ -1623,7 +1630,8 @@
       "trips": "School trips",
       "reminder": "Reminders",
       "platform": "MIS platform",
-      "leaves": "Leave request steps"
+      "leaves": "Leave request steps",
+      "callTasks": "Call tasks"
     },
     "hints": {
       "assigned": "When feedback, a tech ticket or lost item is assigned to you",
@@ -1639,7 +1647,8 @@
       "trips": "A trip awaiting your approval, your trip approved, or a payment receipt to review",
       "reminder": "When a colleague sends you a reminder about a record assigned to you",
       "platform": "New leave requests and new customer inquiries",
-      "leaves": "Approval, calling and handover, and the parent's notices (on the way, arrived, changed, cancelled)"
+      "leaves": "Approval, calling and handover, and the parent's notices (on the way, arrived, changed, cancelled)",
+      "callTasks": "New calls assigned, the morning reminder of today's calls, and the supervisor's daily summary"
     },
     "channelsTitle": "Delivery (in addition to the in-app bell)",
     "channels": {
@@ -2734,7 +2743,8 @@
         "tickets": "Tech tickets",
         "lostFound": "Lost & found",
         "trips": "Trips",
-        "leaves": "Leaves"
+        "leaves": "Leaves",
+        "calls": "Contact log"
       },
       "pickups": "Authorised to collect",
       "noPickups": "No one authorised yet.",
@@ -3355,6 +3365,155 @@
         "other": "Other"
       },
       "note": "Actions = everything the user recorded in the follow-up logs (new records, status changes, assignments, comments, payments…), excluding automatic actions. Time on system = minutes the system was open on their screen, counted from when this report was enabled."
+    }
+  },
+  "callTasks": {
+    "title": "Call tasks",
+    "subtitle": "Customer-service calls to parents on topics set by management, with progress tracking and Bevatel call verification.",
+    "tabs": {
+      "mine": "My calls today",
+      "campaigns": "Campaigns"
+    },
+    "urgent": "Urgent",
+    "attempt": "Attempt {{n}}",
+    "call": "Call",
+    "whatsapp": "WhatsApp",
+    "toComplaint": "Turn into feedback",
+    "goal": "Goal",
+    "script": "Script",
+    "notePlaceholder": "Note (optional)",
+    "results": {
+      "ANSWERED": "Answered",
+      "NO_ANSWER": "No answer",
+      "WRONG_NUMBER": "Wrong number",
+      "CALLBACK": "Call back later"
+    },
+    "todayProgress": "Today's progress",
+    "doneOf": "{{done}} of {{total}}",
+    "laterCount": "Later today: {{later}} · Coming days: {{upcoming}}",
+    "allDone": "No calls due right now.",
+    "laterToday": "Call back later today",
+    "complaintDetails": "Feedback from the parent during a «{{campaign}}» call: ",
+    "campaignsHint": "Create a campaign per call topic, deal it to the calling agents, and follow progress and outcomes.",
+    "newCampaign": "New campaign",
+    "noCampaigns": "No campaigns yet.",
+    "createdMsg": "Campaign created with {{n}} calls.",
+    "cardLine": "{{done}} of {{total}} done · {{answered}} answered · {{pending}} left",
+    "status": {
+      "ACTIVE": "Active",
+      "PAUSED": "Paused",
+      "CLOSED": "Closed"
+    },
+    "priority": {
+      "NORMAL": "Normal",
+      "URGENT": "Urgent"
+    },
+    "taskStatus": {
+      "PENDING": "Pending",
+      "DONE": "Done",
+      "FAILED": "Unreachable"
+    },
+    "backToCampaigns": "All campaigns",
+    "quotaLine": "{{n}} calls a day per agent",
+    "pause": "Pause",
+    "resume": "Resume",
+    "close": "Close campaign",
+    "closeConfirm": "Closing hides the remaining calls from the agents' lists. Continue?",
+    "print": "Print report",
+    "stat": {
+      "progress": "Progress",
+      "progressSub": "{{done}} of {{total}}",
+      "answered": "Answered",
+      "failed": "Unreachable",
+      "wrong": "Wrong number: {{n}}",
+      "pending": "Left",
+      "unassigned": "Unassigned: {{n}}",
+      "late": "Late"
+    },
+    "bevatelMissing": "Bevatel hasn't synced yet, so calls stay «awaiting check». Enter the Bevatel key in Settings to start automatic verification.",
+    "outcomesTitle": "Call outcomes",
+    "byAgent": "Agents' progress",
+    "agentCol": {
+      "total": "Assigned",
+      "done": "Done",
+      "pending": "Left",
+      "late": "Late",
+      "today": "Today",
+      "attempts": "Attempts",
+      "verified": "Verified/not",
+      "unverified": "Not verified"
+    },
+    "unassigned": "Unassigned",
+    "filters": {
+      "ALL": "All",
+      "PENDING": "Pending",
+      "LATE": "Late",
+      "UNASSIGNED": "Unassigned",
+      "DONE": "Answered",
+      "FAILED": "Unreachable",
+      "UNVERIFIED": "Not verified in Bevatel"
+    },
+    "selected": "Selected: {{n}}",
+    "assignTo": "Assign to…",
+    "assign": "Assign",
+    "col": {
+      "student": "Student / parent",
+      "ids": "IDs",
+      "grade": "Grade",
+      "agent": "Agent",
+      "due": "Due",
+      "status": "Status",
+      "outcome": "Outcome",
+      "note": "Note",
+      "attempts": "Attempts",
+      "verify": "Bevatel check"
+    },
+    "verified": "Verified ({{time}})",
+    "unverified": "No call found",
+    "verifyPending": "Awaiting check",
+    "noBevatel": "Bevatel not connected",
+    "noCalls": "No calls for this filter.",
+    "firstThousand": "Showing the first 1000 of {{n}} — export Excel for all.",
+    "summaryLine": "Total {{total}} · answered {{answered}} · unreachable {{failed}} · left {{pending}} · late {{late}}",
+    "form": {
+      "title": "New call campaign",
+      "name": "Campaign title",
+      "priority": "Priority",
+      "scriptHint": "Shown to the agent during the call.",
+      "outcomes": "Call outcomes",
+      "outcomesHint": "One option per line (or comma-separated); the agent picks one when answered.",
+      "outcomesPlaceholder": "Will attend\nWon't attend\nNot sure",
+      "targets": "Target parents",
+      "mode": {
+        "ROSTER": "From the student roster",
+        "IDS": "Excel file"
+      },
+      "classes": "Classes (optional)",
+      "classesHint": "e.g. DA8-A DA8-B — leave empty for all classes.",
+      "uploadExcel": "Upload an Excel file with student IDs",
+      "fromExcel": "{{name}} — {{n}} IDs",
+      "distribution": "Dealing to agents",
+      "dist": {
+        "AUTO": "Automatic",
+        "MANUAL": "Manual"
+      },
+      "distHint": {
+        "AUTO": "Calls are dealt evenly to the chosen agents by their branches, at the daily quota.",
+        "MANUAL": "Calls are created unassigned; you assign each agent's calls from the campaign page."
+      },
+      "noAgents": "No calling agents — enable «Calling agent» for staff on the Users page.",
+      "startDay": "From",
+      "endDay": "To",
+      "quota": "Daily quota per agent",
+      "preview": "Preview count",
+      "create": "Create campaign",
+      "previewCalls": "{{n}} calls will be created (one per parent).",
+      "previewDetail": "Matching students {{students}} · no valid mobile {{noPhone}} · not in the roster {{notFound}} · outside your branches {{outOfScope}}",
+      "previewSpread": "About {{per}} calls per agent, the last on {{last}}",
+      "previewOver": "past the campaign's end date — raise the quota or add agents.",
+      "titleRequired": "Enter a campaign title.",
+      "excelRequired": "Upload an Excel file with IDs.",
+      "agentsRequired": "Choose at least one calling agent for automatic dealing."
     }
   }
 }

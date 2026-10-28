@@ -192,7 +192,7 @@ exports.createStaffUser = onCall(async (request) => {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
-  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, isCounselor, stages, curricula, notificationPrefs, notificationChannels, tripsAccess, modules, recordScope, platformAccess, activityAccess, leaveRoles } = request.data || {};
+  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, isCounselor, stages, curricula, notificationPrefs, notificationChannels, tripsAccess, modules, recordScope, platformAccess, activityAccess, leaveRoles, callRoles } = request.data || {};
   if (!name || !email || !password || !role) {
     throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
   }
@@ -250,6 +250,8 @@ exports.createStaffUser = onCall(async (request) => {
     activityAccess: caller.isOwner === true && activityAccess === true,
     // Leave requests: approve / call the student / hand over at the exit.
     leaveRoles: Object.fromEntries(["approve", "call", "exit"].map((k) => [k, leaveRoles?.[k] === true])),
+    // «مهام الاتصال»: calling agent / call supervisor.
+    callRoles: { agent: callRoles?.agent === true, supervisor: callRoles?.supervisor === true },
     ...(role !== "ADMIN" ? cleanUserModules(modules, recordScope) : {}),
     active: active !== false,
     createdAt: Timestamp.now(),
@@ -370,6 +372,7 @@ const NOTIFICATION_CATEGORIES = {
   trips: ["TRIP_APPROVAL_REQUESTED", "TRIP_DECIDED", "TRIP_RECEIPT"],
   reminder: ["REMINDER", "IT_REMINDER", "LF_REMINDER"],
   platform: ["LEAVE_REQUESTED", "LEAD_NEW"],
+  callTasks: ["CALL_ASSIGNED", "CALL_DAILY", "CALL_SUMMARY", "CALL_WRONG_NUMBER"],
   leaves: ["LEAVE_APPROVED", "LEAVE_CALLED", "LEAVE_PREPARE", "LEAVE_ARRIVED", "LEAVE_CANCELLED", "LEAVE_RESCHEDULED"],
 };
 const categoryOfType = (type) => Object.keys(NOTIFICATION_CATEGORIES).find((c) => NOTIFICATION_CATEGORIES[c].includes(type));
@@ -5115,7 +5118,7 @@ exports.getStudent360 = onCall(async (request) => {
   await ownerCaller(request);
   const studentId = normalizeDigits(request.data?.studentId);
   if (!studentId) throw new HttpsError("invalid-argument", "رقم الطالب مطلوب.");
-  const [student, complaints, tickets, lost, enroll, leaves, pickups, reenroll] = await Promise.all([
+  const [student, complaints, tickets, lost, enroll, leaves, pickups, reenroll, calls] = await Promise.all([
     db.collection("students").doc(studentId).get(),
     db.collection("complaints").where("studentId", "==", studentId).get(),
     db.collection("techSupportTickets").where("nationalId", "==", studentId).get(),
@@ -5124,6 +5127,7 @@ exports.getStudent360 = onCall(async (request) => {
     db.collection("leaveRequests").where("studentId", "==", studentId).get(),
     db.collection("authorizedPickups").where("studentId", "==", studentId).get(),
     db.collection("reenrollments").where("studentId", "==", studentId).get(),
+    db.collection("callTasks").where("studentIds", "array-contains", studentId).get(),
   ]);
   const ms = (t) => t?.toMillis?.() || null;
   const tripDocs = await Promise.all(enroll.docs.map((d) => d.ref.parent.parent.get()));
@@ -5136,6 +5140,10 @@ exports.getStudent360 = onCall(async (request) => {
     leaves: leaves.docs.map((d) => ({ id: d.id, code: d.data().code, reason: d.data().reason, status: d.data().status, at: ms(d.data().requestedAt), pickup: d.data().pickup?.name || "" })),
     pickups: pickups.docs.map((d) => ({ id: d.id, ...d.data(), createdAt: ms(d.data().createdAt) })),
     reenrollments: reenroll.docs.map((d) => ({ id: d.id, ...d.data(), updatedAt: ms(d.data().updatedAt) })),
+    // «سجل التواصل»: every call-campaign attempt to this student's parent.
+    calls: calls.docs.flatMap((d) => (d.data().history || []).map((h) => ({
+      campaign: d.data().campaignTitle, result: h.result, outcome: h.outcome || "", note: h.note || "", at: ms(h.at), byName: h.byName || "", verified: h.verified ?? null, talkSec: h.talkSec || 0,
+    }))).sort((a, b) => (b.at || 0) - (a.at || 0)),
   };
 });
 
@@ -5608,7 +5616,9 @@ async function syncBevatelDays(fromDay, toDay) {
     await batch.commit();
   }
   await cfgRef.set({ lastSyncAt: now, lastSyncCount: records.length, lastSyncError: FieldValue.delete() }, { merge: true });
-  return { inbound: inbound.length, outbound: outbound.length };
+  // Call-task attempts waiting for their Bevatel check («مهام الاتصال»).
+  const verified = await verifyPendingCallTasks(now.toMillis()).catch((err) => { console.error("call verify", err.message); return 0; });
+  return { inbound: inbound.length, outbound: outbound.length, verified };
 }
 
 exports.bevatelSync = onSchedule({ schedule: "every 15 minutes", timeZone: "Asia/Riyadh", timeoutSeconds: 300 }, async () => {
@@ -6182,4 +6192,354 @@ exports.issueTripInvoice = onCall(async (request) => {
       collector: e.collectorName || "", confirmedBy: e.reviewedByName || "", confirmedAt: e.reviewedAt?.toMillis?.() || null, ref: e.cashReceiptNo || "",
     },
   };
+});
+
+// --- «مهام الاتصال»: customer-service call campaigns -------------------------
+// Admins and call supervisors (users.callRoles.supervisor) create a campaign:
+// the topic, the script, the outcomes to record, the parents to call (roster
+// filters or student IDs from an Excel file; siblings share one call) and the
+// agents (callRoles.agent). Calls are dealt to the agents automatically
+// (evenly, by branch) or assigned by the supervisor, at a daily quota per
+// agent (dueDay). recordCallResult saves each attempt, retries unanswered
+// calls, and every attempt is checked against Bevatel's outbound calls to
+// the parent's number (verifyCallTask, after each Bevatel sync).
+const CALL_RESULTS = ["ANSWERED", "NO_ANSWER", "WRONG_NUMBER", "CALLBACK"];
+const CALL_MAX_NO_ANSWER = 3;
+const CALL_MAX_TASKS = 6000;
+const CALL_VERIFY_BEFORE_MS = 90 * 60e3;
+const CALL_VERIFY_AFTER_MS = 10 * 60e3;
+
+function callRoleOf(u, role) {
+  if (!u || u.active === false) return false;
+  if (u.isOwner === true || u.role === "ADMIN") return true;
+  return u.callRoles?.[role] === true;
+}
+const callScope = (u) => (u.isOwner === true || u.role === "ADMIN" || u.access === "all" ? null : [...new Set([...(u.branches || []), ...(u.branch ? [u.branch] : [])])]);
+const inCallScope = (u, branch) => { const s = callScope(u); return !s || s.includes(branch); };
+async function callCaller(request, role) {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const u = (await db.collection("users").doc(request.auth.uid).get()).data();
+  if (!callRoleOf(u, role)) throw new HttpsError("permission-denied", role === "supervisor" ? "إدارة حملات الاتصال للمدير ومشرفي الاتصال." : "مهام الاتصال لموظفي الاتصال.");
+  return { ...u, uid: request.auth.uid };
+}
+// Working days (Sunday–Thursday) from a YYYY-MM-DD day.
+function addWorkDays(day, n) {
+  const d = new Date(`${day}T12:00:00Z`);
+  const skip = () => { while ([5, 6].includes(d.getUTCDay())) d.setUTCDate(d.getUTCDate() + 1); };
+  skip();
+  for (let i = 0; i < n; i++) { d.setUTCDate(d.getUTCDate() + 1); skip(); }
+  return d.toISOString().slice(0, 10);
+}
+const riyadhDayOf = (ms) => new Date(ms + 3 * 3600e3).toISOString().slice(0, 10);
+
+// The parents a campaign calls: one task per parent mobile (siblings merged).
+async function callTargets(caller, target) {
+  const branchOf = await branchResolver();
+  const scope = callScope(caller);
+  let students;
+  if (target?.mode === "IDS") {
+    const ids = [...new Set((Array.isArray(target.ids) ? target.ids : []).map((x) => normalizeDigits(x).replace(/\D/g, "")).filter((x) => /^\d{6,15}$/.test(x)))].slice(0, CALL_MAX_TASKS * 2);
+    if (!ids.length) throw new HttpsError("invalid-argument", "لم يُعثر على أرقام هوية في الملف.");
+    students = [];
+    for (let i = 0; i < ids.length; i += 300) {
+      const snaps = await db.getAll(...ids.slice(i, i + 300).map((id) => db.collection("students").doc(id)));
+      snaps.forEach((s) => { if (s.exists) students.push({ id: s.id, ...s.data() }); });
+    }
+    students.notFound = ids.length - students.length;
+  } else {
+    const snap = await db.collection("students").get();
+    const branches = Array.isArray(target?.branches) ? target.branches.filter(Boolean) : [];
+    const stages = Array.isArray(target?.stages) ? target.stages.filter(Boolean) : [];
+    const classes = Array.isArray(target?.classes) ? target.classes.map((c) => String(c).trim().toUpperCase()).filter(Boolean) : [];
+    students = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((s) => s.active !== false
+      && (!branches.length || branches.includes(branchOf(s)))
+      && (!stages.length || stages.includes(studentGrade(s)))
+      && (!classes.length || classes.includes(String(s.className || "").trim().toUpperCase())));
+    students.notFound = 0;
+  }
+  const byPhone = new Map();
+  let outOfScope = 0;
+  let noPhone = 0;
+  for (const s of students) {
+    const branch = branchOf(s);
+    if (scope && !scope.includes(branch)) { outOfScope++; continue; }
+    const phone = callPhone(s.mobile);
+    if (!/^05\d{8}$/.test(phone)) { noPhone++; continue; }
+    const kid = { id: s.id, name: s.nameAr || s.name || "", grade: studentGrade(s), className: s.className || "" };
+    if (byPhone.has(phone)) byPhone.get(phone).students.push(kid);
+    else byPhone.set(phone, { phone, branch, students: [kid] });
+  }
+  return { parents: [...byPhone.values()], students: students.length, notFound: students.notFound, outOfScope, noPhone };
+}
+
+// Deals tasks to agents: each to the least-loaded agent covering its branch
+// (any agent when none does), then each agent's list is spread over working
+// days at the daily quota.
+function dealCallTasks(tasks, agents, { startDay, quota, existing = {} }) {
+  const load = Object.fromEntries(agents.map((a) => [a.id, existing[a.id] || 0]));
+  for (const tk of tasks) {
+    const covering = agents.filter((a) => inCallScope(a, tk.branch));
+    const pool = covering.length ? covering : agents;
+    const pick = pool.reduce((best, a) => (load[a.id] < load[best.id] ? a : best), pool[0]);
+    tk.assignedTo = pick.id;
+    tk.assignedName = pick.name || "";
+    tk.dueDay = addWorkDays(startDay, Math.floor(load[pick.id] / quota));
+    load[pick.id] += 1;
+  }
+}
+
+function callCampaignOut(id, c) {
+  return {
+    id, title: c.title, goal: c.goal || "", script: c.script || "", outcomes: c.outcomes || [], priority: c.priority, status: c.status,
+    startDay: c.startDay, endDay: c.endDay, dailyQuota: c.dailyQuota, distribution: c.distribution, agents: c.agents || [], agentNames: c.agentNames || {},
+    branches: c.branches || [], target: c.targetLabel || "", createdByName: c.createdByName || "", createdAt: c.createdAt?.toMillis?.() || null,
+    counts: c.counts || {}, outcomeCounts: c.outcomeCounts || {},
+  };
+}
+
+exports.saveCallCampaign = onCall({ timeoutSeconds: 300, memory: "1GiB" }, async (request) => {
+  const caller = await callCaller(request, "supervisor");
+  const d = request.data || {};
+  const title = str(d.title, 120);
+  if (!title) throw new HttpsError("invalid-argument", "اكتب عنوان الحملة.");
+  const day = /^\d{4}-\d{2}-\d{2}$/;
+  const startDay = day.test(d.startDay || "") ? d.startDay : riyadhDay();
+  const endDay = day.test(d.endDay || "") && d.endDay >= startDay ? d.endDay : startDay;
+  const quota = Math.min(500, Math.max(1, Math.floor(Number(d.dailyQuota) || 30)));
+  const outcomes = [...new Set((Array.isArray(d.outcomes) ? d.outcomes : []).map((o) => str(o, 60)).filter(Boolean))].slice(0, 12);
+  const distribution = d.distribution === "MANUAL" ? "MANUAL" : "AUTO";
+  const priority = d.priority === "URGENT" ? "URGENT" : "NORMAL";
+  const t = await callTargets(caller, d.target);
+  const parents = t.parents.slice(0, CALL_MAX_TASKS);
+  const summary = { parents: parents.length, students: t.students, notFound: t.notFound, outOfScope: t.outOfScope, noPhone: t.noPhone, truncated: t.parents.length - parents.length };
+  const users = await loadActiveUsers();
+  const agents = users.filter((u) => (d.agents || []).includes(u.id) && callRoleOf(u, "agent"));
+  if (distribution === "AUTO" && !agents.length) throw new HttpsError("invalid-argument", "اختر موظف اتصال واحداً على الأقل للتوزيع التلقائي.");
+  // Spread: the last due day at this quota, to warn when the period is short.
+  const perAgent = agents.length ? Math.ceil(parents.length / agents.length) : 0;
+  summary.lastDay = perAgent ? addWorkDays(startDay, Math.floor((perAgent - 1) / quota)) : startDay;
+  if (d.preview) return summary;
+  if (!parents.length) throw new HttpsError("failed-precondition", "لا يوجد أولياء أمور مطابقون (بأرقام جوال صحيحة) لهذه الحملة.");
+
+  const now = Timestamp.now();
+  const branches = [...new Set(parents.map((p) => p.branch).filter(Boolean))];
+  const campRef = db.collection("callCampaigns").doc();
+  const tasks = parents.map((p) => ({
+    campaignId: campRef.id, campaignTitle: title, priority, phone: p.phone, branch: p.branch,
+    studentId: p.students[0].id, studentIds: p.students.map((s) => s.id), studentName: p.students.map((s) => s.name).join("، "),
+    grade: p.students.map((s) => [s.grade, s.className].filter(Boolean).join(" ")).join("، "),
+    status: "PENDING", assignedTo: null, assignedName: "", dueDay: startDay, dueAt: null, attempts: 0, noAnswerCount: 0, history: [], verifyPending: false, createdAt: now,
+  }));
+  if (distribution === "AUTO") dealCallTasks(tasks, agents, { startDay, quota });
+  await campRef.set({
+    title, goal: str(d.goal, 500), script: str(d.script, 3000), outcomes, priority, status: "ACTIVE", startDay, endDay, dailyQuota: quota, distribution,
+    agents: agents.map((a) => a.id), agentNames: Object.fromEntries(agents.map((a) => [a.id, a.name || ""])), branches,
+    targetLabel: str(d.targetLabel, 200), createdBy: caller.uid, createdByName: caller.name || "", createdAt: now, updatedAt: now,
+    counts: { total: tasks.length, pending: tasks.length, done: 0, answered: 0, noAnswer: 0, wrong: 0, failed: 0, unassigned: tasks.filter((x) => !x.assignedTo).length },
+    outcomeCounts: {},
+  });
+  for (let i = 0; i < tasks.length; i += 450) {
+    const batch = db.batch();
+    tasks.slice(i, i + 450).forEach((x) => batch.set(db.collection("callTasks").doc(), x));
+    await batch.commit();
+  }
+  const perAgentCount = {};
+  tasks.forEach((x) => { if (x.assignedTo) perAgentCount[x.assignedTo] = (perAgentCount[x.assignedTo] || 0) + 1; });
+  for (const [uid, n] of Object.entries(perAgentCount)) {
+    await notifyUsers([uid], { title: `حملة اتصال جديدة: ${title}`, body: `أُسند إليك ${n} اتصالاً، بمعدل ${quota} يومياً من ${startDay}.`, complaintId: campRef.id, type: "CALL_ASSIGNED" });
+  }
+  return { id: campRef.id, ...summary, created: tasks.length };
+});
+
+async function loadCallCampaign(caller, id) {
+  const ref = db.collection("callCampaigns").doc(String(id || ""));
+  const c = (await ref.get()).data();
+  if (!c) throw new HttpsError("not-found", "لم يتم العثور على الحملة.");
+  const scope = callScope(caller);
+  if (scope && c.createdBy !== caller.uid && !(c.branches || []).some((b) => scope.includes(b))) throw new HttpsError("permission-denied", "هذه الحملة خارج فروعك.");
+  return { ref, c };
+}
+
+exports.listCallCampaigns = onCall(async (request) => {
+  const caller = await callCaller(request, "supervisor");
+  const snap = await db.collection("callCampaigns").orderBy("createdAt", "desc").limit(200).get();
+  const scope = callScope(caller);
+  return {
+    campaigns: snap.docs.filter((x) => !scope || x.data().createdBy === caller.uid || (x.data().branches || []).some((b) => scope.includes(b))).map((x) => callCampaignOut(x.id, x.data())),
+  };
+});
+
+exports.getCallCampaign = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+  const caller = await callCaller(request, "supervisor");
+  const { ref, c } = await loadCallCampaign(caller, request.data?.id);
+  const [tasks, bev] = await Promise.all([db.collection("callTasks").where("campaignId", "==", ref.id).get(), db.collection("settings").doc("bevatel").get()]);
+  return {
+    campaign: callCampaignOut(ref.id, c),
+    bevatelSyncAt: bev.data()?.lastSyncAt?.toMillis?.() || null,
+    tasks: tasks.docs.map((x) => {
+      const k = x.data();
+      return {
+        id: x.id, studentName: k.studentName, studentIds: k.studentIds, grade: k.grade, branch: k.branch, phone: k.phone, status: k.status,
+        assignedTo: k.assignedTo, assignedName: k.assignedName, dueDay: k.dueDay, dueAt: k.dueAt?.toMillis?.() || null, attempts: k.attempts, outcome: k.outcome || "",
+        result: k.result || "", note: k.note || "", completedAt: k.completedAt?.toMillis?.() || null,
+        history: (k.history || []).map((h) => ({ result: h.result, outcome: h.outcome || "", note: h.note || "", at: h.at?.toMillis?.() || null, byName: h.byName || "", verified: h.verified ?? null, talkSec: h.talkSec || 0, callAgent: h.callAgent || "" })),
+      };
+    }),
+  };
+});
+
+// Supervisor: hand tasks to an agent (manual distribution, or moving late
+// calls), scheduled from today at the campaign's daily quota.
+exports.assignCallTasks = onCall({ timeoutSeconds: 120 }, async (request) => {
+  const caller = await callCaller(request, "supervisor");
+  const { ref, c } = await loadCallCampaign(caller, request.data?.campaignId);
+  const agent = (await db.collection("users").doc(String(request.data?.agentId || "")).get()).data();
+  if (!callRoleOf(agent, "agent")) throw new HttpsError("invalid-argument", "اختر موظف اتصال.");
+  const ids = [...new Set(Array.isArray(request.data?.taskIds) ? request.data.taskIds.map(String) : [])].slice(0, 3000);
+  if (!ids.length) throw new HttpsError("invalid-argument", "اختر الاتصالات المراد إسنادها.");
+  const agentId = String(request.data.agentId);
+  const mine = await db.collection("callTasks").where("campaignId", "==", ref.id).where("assignedTo", "==", agentId).where("status", "==", "PENDING").get();
+  const startDay = c.startDay > riyadhDay() ? c.startDay : riyadhDay();
+  let load = mine.size;
+  let wasUnassigned = 0;
+  let moved = 0;
+  for (let i = 0; i < ids.length; i += 300) {
+    const snaps = await db.getAll(...ids.slice(i, i + 300).map((id) => db.collection("callTasks").doc(id)));
+    const batch = db.batch();
+    snaps.forEach((s) => {
+      const k = s.data();
+      if (!k || k.campaignId !== ref.id || k.status !== "PENDING" || k.assignedTo === agentId) return;
+      if (!k.assignedTo) wasUnassigned++;
+      batch.update(s.ref, { assignedTo: agentId, assignedName: agent.name || "", dueDay: addWorkDays(startDay, Math.floor(load / (c.dailyQuota || 30))), dueAt: null });
+      load++;
+      moved++;
+    });
+    await batch.commit();
+  }
+  await ref.set({ counts: { unassigned: FieldValue.increment(-wasUnassigned) }, agents: FieldValue.arrayUnion(agentId), agentNames: { [agentId]: agent.name || "" }, updatedAt: Timestamp.now() }, { merge: true });
+  if (moved) await notifyUsers([agentId], { title: `اتصالات جديدة: ${c.title}`, body: `أُسند إليك ${moved} اتصالاً.`, complaintId: ref.id, type: "CALL_ASSIGNED" });
+  return { moved };
+});
+
+exports.setCallCampaignStatus = onCall(async (request) => {
+  const caller = await callCaller(request, "supervisor");
+  const { ref } = await loadCallCampaign(caller, request.data?.id);
+  const status = ["ACTIVE", "PAUSED", "CLOSED"].includes(request.data?.status) ? request.data.status : null;
+  if (!status) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  await ref.update({ status, updatedAt: Timestamp.now() });
+  return { ok: true };
+});
+
+// Each attempt against Bevatel's outbound calls to the parent's number: a
+// call between 90 minutes before and 10 minutes after the attempt was saved
+// verifies it (with its talk time). Without one, the attempt is marked
+// unverified once Bevatel has synced past it; until then it stays pending.
+async function verifyCallTask(ref, lastSyncMs) {
+  const k = (await ref.get()).data();
+  if (!k || !(k.history || []).some((h) => h.verified == null)) return;
+  const calls = (await db.collection("calls").where("phone", "==", k.phone).where("dir", "==", "out").get()).docs.map((x) => x.data());
+  let pending = false;
+  const history = k.history.map((h) => {
+    if (h.verified != null) return h;
+    const at = h.at.toMillis();
+    const match = calls.filter((c) => { const t = c.at?.toMillis?.() || 0; return t >= at - CALL_VERIFY_BEFORE_MS && t <= at + CALL_VERIFY_AFTER_MS; })
+      .sort((a, b) => (b.talkSec || 0) - (a.talkSec || 0))[0];
+    if (match) return { ...h, verified: true, talkSec: match.talkSec || 0, callAt: match.at, callAgent: match.agent || "" };
+    if (lastSyncMs && lastSyncMs > at + CALL_VERIFY_AFTER_MS + 5 * 60e3) return { ...h, verified: false };
+    if (Date.now() - at > 3 * 86400e3) return { ...h, verified: false };
+    pending = true;
+    return h;
+  });
+  await ref.update({ history, verifyPending: pending });
+}
+async function verifyPendingCallTasks(lastSyncMs) {
+  const snap = await db.collection("callTasks").where("verifyPending", "==", true).limit(500).get();
+  for (const x of snap.docs) await verifyCallTask(x.ref, lastSyncMs);
+  return snap.size;
+}
+
+exports.recordCallResult = onCall(async (request) => {
+  const caller = await callCaller(request, "agent");
+  const d = request.data || {};
+  const ref = db.collection("callTasks").doc(String(d.taskId || ""));
+  const k = (await ref.get()).data();
+  if (!k) throw new HttpsError("not-found", "لم يتم العثور على الاتصال.");
+  if (k.assignedTo !== caller.uid && !(callRoleOf(caller, "supervisor") && inCallScope(caller, k.branch))) throw new HttpsError("permission-denied", "هذا الاتصال مسند لموظف آخر.");
+  if (k.status !== "PENDING") throw new HttpsError("failed-precondition", "تم تسجيل نتيجة هذا الاتصال من قبل.");
+  const result = CALL_RESULTS.includes(d.result) ? d.result : null;
+  if (!result) throw new HttpsError("invalid-argument", "اختر نتيجة الاتصال.");
+  const campRef = db.collection("callCampaigns").doc(k.campaignId);
+  const camp = (await campRef.get()).data() || {};
+  const outcome = str(d.outcome, 60);
+  if (result === "ANSWERED" && (camp.outcomes || []).length && !(camp.outcomes || []).includes(outcome)) throw new HttpsError("invalid-argument", "اختر نتيجة المكالمة.");
+  const callbackAt = result === "CALLBACK" ? Number(d.callbackAt) : null;
+  if (result === "CALLBACK" && !(callbackAt > Date.now() && callbackAt < Date.now() + 14 * 86400e3)) throw new HttpsError("invalid-argument", "حدّد وقت معاودة الاتصال.");
+  const now = Timestamp.now();
+  const entry = {
+    result, outcome: result === "ANSWERED" ? outcome : "", note: str(d.note, 500), at: now, byId: caller.uid, byName: caller.name || "", verified: null,
+    ...(callbackAt ? { callbackAt: Timestamp.fromMillis(callbackAt) } : {}),
+  };
+  const update = { attempts: FieldValue.increment(1), lastAttemptAt: now, result, note: entry.note, history: FieldValue.arrayUnion(entry), verifyPending: true };
+  const counts = {};
+  if (result === "ANSWERED") {
+    Object.assign(update, { status: "DONE", outcome: entry.outcome, completedAt: now, completedByName: caller.name || "" });
+    Object.assign(counts, { pending: -1, done: 1, answered: 1 });
+  } else if (result === "WRONG_NUMBER") {
+    Object.assign(update, { status: "FAILED", completedAt: now, completedByName: caller.name || "" });
+    Object.assign(counts, { pending: -1, failed: 1, wrong: 1 });
+  } else if (result === "NO_ANSWER") {
+    const n = (k.noAnswerCount || 0) + 1;
+    update.noAnswerCount = n;
+    counts.noAnswer = 1;
+    if (n >= CALL_MAX_NO_ANSWER) {
+      Object.assign(update, { status: "FAILED", completedAt: now, completedByName: caller.name || "" });
+      Object.assign(counts, { pending: -1, failed: 1 });
+    } else {
+      // Retry in two hours, then on the next working day.
+      const next = n === 1 ? Date.now() + 2 * 3600e3 : Date.parse(`${addWorkDays(riyadhDayOf(Date.now()), 1)}T08:00:00+03:00`);
+      Object.assign(update, { dueAt: Timestamp.fromMillis(next), dueDay: riyadhDayOf(next) });
+    }
+  } else {
+    Object.assign(update, { dueAt: Timestamp.fromMillis(callbackAt), dueDay: riyadhDayOf(callbackAt) });
+  }
+  await ref.update(update);
+  await campRef.set({
+    counts: Object.fromEntries(Object.entries(counts).map(([key, v]) => [key, FieldValue.increment(v)])),
+    ...(result === "ANSWERED" && entry.outcome ? { outcomeCounts: { [entry.outcome]: FieldValue.increment(1) } } : {}),
+    updatedAt: now,
+  }, { merge: true });
+  if (result === "WRONG_NUMBER" && camp.createdBy) {
+    await notifyUsers([camp.createdBy], { title: "رقم ولي أمر غير صحيح", body: `${k.studentName} — ${k.phone} (حملة: ${camp.title || ""}). يحتاج تحديث الرقم في سجل الطلاب.`, complaintId: k.campaignId, type: "CALL_WRONG_NUMBER" });
+  }
+  const bev = (await db.collection("settings").doc("bevatel").get()).data();
+  await verifyCallTask(ref, bev?.lastSyncAt?.toMillis?.() || 0);
+  return { ok: true, status: update.status || "PENDING" };
+});
+
+// Morning: each agent's calls for today. Afternoon: each campaign's day,
+// to whoever created it.
+exports.callTasksMorning = onSchedule({ schedule: "0 7 * * 0-4", timeZone: "Asia/Riyadh" }, async () => {
+  const today = riyadhDay();
+  const [tasks, camps] = await Promise.all([db.collection("callTasks").where("status", "==", "PENDING").get(), db.collection("callCampaigns").where("status", "==", "ACTIVE").get()]);
+  const active = new Set(camps.docs.map((x) => x.id));
+  const per = {};
+  tasks.docs.forEach((x) => { const k = x.data(); if (k.assignedTo && active.has(k.campaignId) && k.dueDay <= today) per[k.assignedTo] = (per[k.assignedTo] || 0) + 1; });
+  for (const [uid, n] of Object.entries(per)) await notifyUsers([uid], { title: "مهام الاتصال اليوم", body: `لديك ${n} اتصالاً مطلوباً اليوم.`, complaintId: "", type: "CALL_DAILY" });
+});
+exports.callTasksSummary = onSchedule({ schedule: "0 16 * * 0-4", timeZone: "Asia/Riyadh" }, async () => {
+  const today = riyadhDay();
+  const camps = await db.collection("callCampaigns").where("status", "==", "ACTIVE").get();
+  for (const cd of camps.docs) {
+    const c = cd.data();
+    const tasks = await db.collection("callTasks").where("campaignId", "==", cd.id).get();
+    let attempts = 0;
+    let answered = 0;
+    tasks.docs.forEach((x) => (x.data().history || []).forEach((h) => { if (riyadhDayOf(h.at.toMillis()) === today) { attempts++; if (h.result === "ANSWERED") answered++; } }));
+    const late = tasks.docs.filter((x) => x.data().status === "PENDING" && x.data().dueDay < today).length;
+    await notifyUsers([c.createdBy], {
+      title: `ملخص اليوم: ${c.title}`,
+      body: `اتصالات اليوم ${attempts} (ردّ ${answered}). المنجز ${c.counts?.done || 0} من ${c.counts?.total || 0}، المتبقي ${c.counts?.pending || 0}${late ? `، متأخر ${late}` : ""}.`,
+      complaintId: cd.id, type: "CALL_SUMMARY",
+    });
+  }
 });

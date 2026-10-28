@@ -16,6 +16,7 @@ export const NOTIFICATION_CATEGORIES = [
   { id: 'trips', types: ['TRIP_APPROVAL_REQUESTED', 'TRIP_DECIDED', 'TRIP_RECEIPT'] },
   { id: 'reminder', types: ['REMINDER', 'IT_REMINDER', 'LF_REMINDER'] },
   { id: 'platform', types: ['LEAVE_REQUESTED', 'LEAD_NEW'] },
+  { id: 'callTasks', types: ['CALL_ASSIGNED', 'CALL_DAILY', 'CALL_SUMMARY', 'CALL_WRONG_NUMBER'] },
   { id: 'leaves', types: ['LEAVE_APPROVED', 'LEAVE_CALLED', 'LEAVE_PREPARE', 'LEAVE_ARRIVED', 'LEAVE_CANCELLED', 'LEAVE_RESCHEDULED'] },
 ];
 export const NOTIFICATION_CHANNELS = ['push', 'email'];

@@ -91,6 +91,10 @@ service cloud.firestore {
       let r = myDoc() != null && myDoc().get('active', true) != false ? myDoc().get('leaveRoles', {}) : {};
       return r.get('approve', false) == true || r.get('call', false) == true || r.get('exit', false) == true;
     }
+    function callStaffUser() {
+      let r = myDoc() != null && myDoc().get('active', true) != false ? myDoc().get('callRoles', {}) : {};
+      return r.get('agent', false) == true || r.get('supervisor', false) == true;
+    }
     function adminPerm(cap) {
       let p = /databases/$(database)/documents/settings/adminPermissions;
       return isOwner() || (isAdmin() && (!exists(p) || get(p).data.get(cap, true) == true));
@@ -457,6 +461,17 @@ service cloud.firestore {
       allow read: if platformUser() || (leaveStaffUser() && inMyScope(resource.data.branch));
       allow write: if platformUser();
     }
+    // «مهام الاتصال»: campaigns are read by call staff (the script and
+    // outcomes); each agent reads the calls assigned to them. Everything is
+    // written by the functions (saveCallCampaign, recordCallResult...).
+    match /callCampaigns/{id} {
+      allow read: if isAdmin() || isOwner() || callStaffUser();
+      allow write: if false;
+    }
+    match /callTasks/{id} {
+      allow read: if isAdmin() || isOwner() || (callStaffUser() && resource.data.assignedTo == request.auth.uid);
+      allow write: if false;
+    }
     match /deletedLeaveRequests/{id} {
       allow read: if platformUser();
       allow write: if false;
@@ -558,7 +573,7 @@ service cloud.firestore {
         'itemCategories', 'settings', 'settingsUnlocks', 'secureConfig', 'complaints', 'trips', 'tripVerify',
         'appointments', 'deletedComplaints', 'deletedLostFoundItems', 'deletedTechSupportTickets', 'lostFoundItems',
         'techSupportTickets', 'students', 'notifications',
-        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage', 'waDailyReports', 'presence', 'tripAccounts', 'usage', 'deletedLeaveRequests'
+        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage', 'waDailyReports', 'presence', 'tripAccounts', 'usage', 'deletedLeaveRequests', 'callCampaigns', 'callTasks'
       ]);
     }
   }
