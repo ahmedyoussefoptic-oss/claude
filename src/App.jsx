@@ -24,7 +24,7 @@ import TripConsent from './pages/TripConsent';
 import Settings from './pages/Settings';
 import DeletedComplaints from './pages/DeletedComplaints';
 import { ROLES } from './config/roles';
-import { isOwner, canSeePlatform, canSeeActivity } from './config/adminPermissions';
+import { isOwner, canSeePlatform, canSeeActivity, canSeeLeaves } from './config/adminPermissions';
 import UserActivity from './pages/UserActivity';
 import Calls from './pages/Calls';
 import WaReports from './pages/WaReports';
@@ -48,6 +48,11 @@ function ActivityOnly({ children }) {
   const { userData } = useAuthStore();
   if (!userData) return null;
   return canSeeActivity(userData) ? children : <Navigate to="/dashboard" replace />;
+}
+function LeavesOnly({ children }) {
+  const { userData } = useAuthStore();
+  if (!userData) return null;
+  return canSeeLeaves(userData) ? children : <Navigate to="/dashboard" replace />;
 }
 function PlatformOnly({ children }) {
   const { userData } = useAuthStore();
@@ -100,7 +105,7 @@ function App() {
           <Route path="activity" element={<ActivityOnly><UserActivity /></ActivityOnly>} />
           <Route path="platform" element={<Navigate to="/platform/home" replace />} />
           <Route path="platform/home" element={<PlatformOnly><PlatformHome /></PlatformOnly>} />
-          <Route path="platform/leaves" element={<PlatformOnly><Leaves /></PlatformOnly>} />
+          <Route path="platform/leaves" element={<LeavesOnly><Leaves /></LeavesOnly>} />
           <Route path="platform/leads" element={<PlatformOnly><Leads /></PlatformOnly>} />
           <Route path="platform/students" element={<PlatformOnly><CurrentStudents /></PlatformOnly>} />
           <Route path="platform/settings" element={<OwnerOnly><PlatformSettings /></OwnerOnly>} />

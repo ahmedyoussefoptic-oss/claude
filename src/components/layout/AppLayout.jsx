@@ -6,7 +6,7 @@ import AssistantPanel from '../assistant/AssistantPanel';
 import { useEffect, useState, useRef } from 'react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
-import { useAdminPermissions, adminCan, isOwner, canSeePlatform, canSeeActivity } from '../../config/adminPermissions';
+import { useAdminPermissions, adminCan, isOwner, canSeePlatform, canSeeActivity, canSeeLeaves } from '../../config/adminPermissions';
 import { startPresence } from '../../utils/presence';
 import NotificationBell from './NotificationBell';
 import Watermark from '../common/Watermark';
@@ -77,7 +77,6 @@ export default function AppLayout() {
   const navItems = moduleNav.filter(([key]) => canSeeModule(userData, key)).map(([, path, icon, label]) => ({ name: t(label), path, icon }));
   // A section the employee may not see redirects to their first allowed one.
   const blockedModule = userData && moduleNav.find(([key, path]) => (location.pathname === path || location.pathname.startsWith(`${path}/`)) && !canSeeModule(userData, key));
-  const homePath = blockedModule ? (navItems[0]?.path || '/no-access') : null;
 
   if (!tripsOnly && (role === 'ADMIN' ? adminCan(userData, caps, 'users') : userData?.perms?.users)) {
     navItems.push({ name: t('nav.users'), path: '/users', icon: User });
@@ -94,6 +93,10 @@ export default function AppLayout() {
   if (canSeeActivity(userData)) {
     navItems.push({ name: t('activity.title'), path: '/activity', icon: Activity });
   }
+  // Staff given leave-request steps (approve / call / exit) outside the platform.
+  if (!canSeePlatform(userData) && canSeeLeaves(userData)) {
+    navItems.push({ name: t('platform.leaves.title'), path: '/platform/leaves', icon: DoorOpen });
+  }
   // منصة المكتشف — the owner and the users the owner shared it with; its
   // settings, the owner only (also enforced in firestore.rules).
   if (canSeePlatform(userData)) {
@@ -106,6 +109,9 @@ export default function AppLayout() {
       ...(isOwner(userData) ? [{ name: t('platform.settings.title'), path: '/platform/settings', icon: Settings2 }] : []),
     );
   }
+
+  // After every section is listed, so staff with only leave steps land there.
+  const homePath = blockedModule ? (navItems[0]?.path || '/no-access') : null;
 
   if (!user) {
     return <Outlet />;

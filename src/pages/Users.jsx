@@ -48,6 +48,7 @@ const emptyForm = {
   isCounselor: false,
   platformAccess: false,
   activityAccess: false,
+  leaveRoles: { approve: false, call: false, exit: false },
   tripsAccess: 'all',
   modules: {},
   recordScope: 'branch',
@@ -136,6 +137,7 @@ export default function Users() {
       isCounselor: u.isCounselor === true,
       platformAccess: u.platformAccess === true,
       activityAccess: u.activityAccess === true,
+      leaveRoles: { approve: u.leaveRoles?.approve === true, call: u.leaveRoles?.call === true, exit: u.leaveRoles?.exit === true },
       tripsAccess: ['tripsOnly', 'none'].includes(u.tripsAccess) ? u.tripsAccess : 'all',
       modules: u.modules && typeof u.modules === 'object' ? u.modules : {},
       recordScope: u.recordScope === 'assigned' ? 'assigned' : 'branch',
@@ -188,6 +190,7 @@ export default function Users() {
           branches,
           access: form.access,
           perms: form.perms,
+          leaveRoles: form.leaveRoles,
           isPrincipal: form.isPrincipal,
           isQuality: form.isQuality,
           isCounselor: form.isCounselor,
@@ -215,6 +218,7 @@ export default function Users() {
           branches,
           access: form.access,
           perms: form.perms,
+          leaveRoles: form.leaveRoles,
           isPrincipal: form.isPrincipal,
           isQuality: form.isQuality,
           isCounselor: form.isCounselor,
@@ -567,6 +571,18 @@ export default function Users() {
                     </label>
                   ))}
                 </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-slate-200">
+                <p className="text-xs font-bold text-slate-700 mb-2">🚪 {t('users.leaveRoles.title')}</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  {['approve', 'call', 'exit'].map((k) => (
+                    <label key={k} className="flex items-start gap-2 text-sm text-slate-700">
+                      <input type="checkbox" className="mt-1" checked={!!form.leaveRoles[k]} onChange={(e) => setForm((p) => ({ ...p, leaveRoles: { ...p.leaveRoles, [k]: e.target.checked } }))} />
+                      <span>{t(`users.leaveRoles.${k}`)}<span className="block text-xs text-slate-500">{t(`users.leaveRoles.${k}Hint`)}</span></span>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500 mt-1">{t('users.leaveRoles.hint')}</p>
               </div>
               <p className="text-xs text-slate-500 mt-2">
                 {t('users.accessPermsHint')}

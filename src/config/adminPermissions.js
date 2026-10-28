@@ -23,6 +23,11 @@ export const isOwner = (userData) => userData?.isOwner === true;
 // «نشاط المستخدمين»: the owner and the users the owner shared it with.
 export const canSeeActivity = (userData) => isOwner(userData) || (userData?.activityAccess === true && userData?.active !== false);
 export const canSeePlatform = (userData) => isOwner(userData) || (userData?.platformAccess === true && userData?.active !== false);
+// Leave requests (الاستئذانات): the platform users hold every step; other
+// staff the steps given to them on the Users page (approve / call / exit).
+export const LEAVE_ROLES = ['approve', 'call', 'exit'];
+export const leaveRoleOf = (userData, role) => canSeePlatform(userData) || (userData?.active !== false && userData?.leaveRoles?.[role] === true);
+export const canSeeLeaves = (userData) => LEAVE_ROLES.some((r) => leaveRoleOf(userData, r));
 
 export function adminCan(userData, caps, cap) {
   if (isOwner(userData)) return true;

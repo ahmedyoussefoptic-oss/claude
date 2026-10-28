@@ -965,6 +965,16 @@
       "tripPaymentsHint": "Correct the method or collector, or cancel a recorded payment",
       "tripAccounts": "Trip accounts",
       "tripAccountsHint": "Costs, profit and margin — opened with the trip accounts password"
+    },
+    "leaveRoles": {
+      "title": "Leave requests",
+      "approve": "Approval",
+      "approveHint": "Approve, decline or cancel leave requests",
+      "call": "Calling",
+      "callHint": "Call the student to reception and get them ready",
+      "exit": "Exit handover",
+      "exitHint": "Check the receiver's ID, hand the student over, record the return",
+      "hint": "They get the «Leave requests» page for their branches and a notification at each step of theirs."
     }
   },
   "settings": {
@@ -1612,7 +1622,8 @@
       "appointment": "Visit appointment requests",
       "trips": "School trips",
       "reminder": "Reminders",
-      "platform": "MIS platform"
+      "platform": "MIS platform",
+      "leaves": "Leave request steps"
     },
     "hints": {
       "assigned": "When feedback, a tech ticket or lost item is assigned to you",
@@ -1627,7 +1638,8 @@
       "appointment": "A parent requested a visit slot that needs confirming",
       "trips": "A trip awaiting your approval, your trip approved, or a payment receipt to review",
       "reminder": "When a colleague sends you a reminder about a record assigned to you",
-      "platform": "New leave requests and new customer inquiries"
+      "platform": "New leave requests and new customer inquiries",
+      "leaves": "Approval, calling and handover, and the parent's notices (on the way, arrived, changed, cancelled)"
     },
     "channelsTitle": "Delivery (in addition to the in-app bell)",
     "channels": {
@@ -2507,7 +2519,13 @@
       "parentConfirmed": "I confirmed by phone with the parent (registered number) that this person may collect the student.",
       "exitAt": "Exit time",
       "exitedAt": "Left {{time}} with {{name}}",
-      "returnedAt": "Returned {{time}}"
+      "returnedAt": "Returned {{time}}",
+      "openExists": "This student already has an active leave request ({{code}}). A second one can't be opened until it's closed.",
+      "idImage": "Receiver's ID photo",
+      "idImageCompare": "Compare the photo with the receiver's ID before handing over",
+      "addedByParent": "New pickup added by parent",
+      "parentPrepare": "Parent on the way — get the student ready ({{time}})",
+      "parentArrived": "Receiver has arrived ({{time}})"
     },
     "leads": {
       "title": "New customers",
@@ -2719,7 +2737,9 @@
       "noPickups": "No one authorised yet.",
       "addPickup": "Add person",
       "deactivate": "Disable",
-      "reactivate": "Re-enable"
+      "reactivate": "Re-enable",
+      "idImage": "ID photo",
+      "addedByParent": "added by the parent via the leave link"
     },
     "reenroll": {
       "intent": "Parent decision",
@@ -2851,7 +2871,7 @@
   },
   "leaveRequest": {
     "title": "Student leave request",
-    "subtitle": "Ask for your child to leave school during the day and name who will collect them.",
+    "subtitle": "Ask for your child to leave school during the day, and follow the request from this same link.",
     "time": "Requested time (today)",
     "pickup": "Who will collect the student?",
     "noAuthorized": "No authorised list on file; enter the person's details.",
@@ -2861,7 +2881,48 @@
     "pickupRequired": "Who will collect the student?",
     "openExists": "There's already an open request: {{code}}.",
     "doneTitle": "Leave request received",
-    "doneBody": "The school will review it; the student is handed over after checking the collector's ID. Request number:"
+    "doneBody": "Your leave request was sent. Follow it here; once approved you can ask the school to get the student ready, then tell them you've arrived.",
+    "verifyHint": "Enter the student's ID and the last 4 digits of the registered parent mobile. If you have a current request, you'll follow it here.",
+    "newPickup": "Someone else (new receiver)",
+    "newPickupNote": "The receiver will be added to the student's authorized pickups and offered in future requests.",
+    "idImage": "Receiver's ID photo",
+    "optional": "optional",
+    "idRequired": "Enter the receiver's ID number (10 digits).",
+    "idImageRequired": "Attach the receiver's ID photo.",
+    "recent": "Last request: {{code}} — {{status}}.",
+    "track": {
+      "code": "Request number",
+      "refresh": "Refresh",
+      "rescheduled": "changed",
+      "view": "View path",
+      "inProgress": "in progress",
+      "receivedBy": "collected by {{name}}",
+      "steps": {
+        "REQUESTED": "Request sent",
+        "APPROVED": "School approval",
+        "CALLED": "Student called to reception",
+        "EXITED": "Student handed over",
+        "RETURNED": "Student back at school"
+      },
+      "pendingHint": "Waiting for the school's approval. Once approved, the get-ready and arrival buttons appear here.",
+      "prepare": "Get the student ready — on my way",
+      "arrived": "I've arrived to collect",
+      "prepareSent": "Get-ready notice sent {{time}}.",
+      "arrivedSent": "Arrival notice sent {{time}}.",
+      "changeTime": "Change the leaving time",
+      "changeTimeHint": "Changing the time sends the request back for approval.",
+      "cancel": "Cancel the request",
+      "cancelConfirm": "Cancel this leave request?",
+      "rejected": "The school declined the request. Reason: {{reason}}",
+      "cancelled": "Cancelled {{time}}.",
+      "newRequest": "New leave request",
+      "done": {
+        "cancel": "The request was cancelled.",
+        "reschedule": "Time changed; waiting for the school's approval.",
+        "prepare": "The school was asked to get the student ready.",
+        "arrived": "The school knows you've arrived; the student is handed over after the ID check."
+      }
+    }
   },
   "join": {
     "pageTitle": "Enroll at Al Moktashef International Schools",

@@ -87,6 +87,10 @@ service cloud.firestore {
     function platformUser() {
       return isOwner() || (myDoc() != null && myDoc().get('platformAccess', false) == true && myDoc().get('active', true) != false);
     }
+    function leaveStaffUser() {
+      let r = myDoc() != null && myDoc().get('active', true) != false ? myDoc().get('leaveRoles', {}) : {};
+      return r.get('approve', false) == true || r.get('call', false) == true || r.get('exit', false) == true;
+    }
     function adminPerm(cap) {
       let p = /databases/$(database)/documents/settings/adminPermissions;
       return isOwner() || (isAdmin() && (!exists(p) || get(p).data.get(cap, true) == true));
@@ -446,8 +450,12 @@ service cloud.firestore {
     // منصة المكتشف (leaves, new customers, current students) — the system
     // owner and the users the owner shared it with; its settings, the owner. Public parent pages write
     // through Cloud Functions (Admin SDK), never directly.
+    // Leave requests: the platform users, and staff given a leave role
+    // (users.leaveRoles — approve / call / exit) read their branches'; staff
+    // steps go through leaveAction, parents through the /leave functions.
     match /leaveRequests/{id} {
-      allow read, write: if platformUser();
+      allow read: if platformUser() || (leaveStaffUser() && inMyScope(resource.data.branch));
+      allow write: if platformUser();
     }
     match /authorizedPickups/{id} {
       allow read, write: if platformUser();

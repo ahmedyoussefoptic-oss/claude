@@ -95,7 +95,9 @@ export default function Student360({ studentId, branchName, onClose }) {
               <ul className="divide-y divide-slate-50 text-sm mb-3">
                 {data.pickups.map((p) => (
                   <li key={p.id} className={`py-1.5 flex justify-between gap-2 ${p.active ? '' : 'opacity-50 line-through'}`}>
-                    <span>{p.name} <span className="text-xs text-slate-500">{t(`platform.relations.${p.relation}`, p.relation)}</span> {p.nationalId && <span className="text-xs text-slate-400" dir="ltr">{p.nationalId}</span>}</span>
+                    <span>{p.name} <span className="text-xs text-slate-500">{t(`platform.relations.${p.relation}`, p.relation)}</span> {p.nationalId && <span className="text-xs text-slate-400" dir="ltr">{p.nationalId}</span>}
+                      {p.idImage?.fileUrl && <a href={p.idImage.fileUrl} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline ms-1">{t('platform.students.idImage')}</a>}
+                      {p.source === 'PARENT_LEAVE' && <span className="text-[11px] text-amber-700 ms-1">({t('platform.students.addedByParent')})</span>}</span>
                     <button onClick={() => togglePickup(p)} className="text-xs text-slate-500 hover:text-rose-600 flex items-center gap-1">{p.active ? <><Trash2 className="w-3.5 h-3.5" />{t('platform.students.deactivate')}</> : t('platform.students.reactivate')}</button>
                   </li>
                 ))}

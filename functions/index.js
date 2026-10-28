@@ -192,7 +192,7 @@ exports.createStaffUser = onCall(async (request) => {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
-  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, isCounselor, stages, curricula, notificationPrefs, notificationChannels, tripsAccess, modules, recordScope, platformAccess, activityAccess } = request.data || {};
+  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, isCounselor, stages, curricula, notificationPrefs, notificationChannels, tripsAccess, modules, recordScope, platformAccess, activityAccess, leaveRoles } = request.data || {};
   if (!name || !email || !password || !role) {
     throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
   }
@@ -248,6 +248,8 @@ exports.createStaffUser = onCall(async (request) => {
     // Only the owner shares منصة المكتشف.
     platformAccess: caller.isOwner === true && platformAccess === true,
     activityAccess: caller.isOwner === true && activityAccess === true,
+    // Leave requests: approve / call the student / hand over at the exit.
+    leaveRoles: Object.fromEntries(["approve", "call", "exit"].map((k) => [k, leaveRoles?.[k] === true])),
     ...(role !== "ADMIN" ? cleanUserModules(modules, recordScope) : {}),
     active: active !== false,
     createdAt: Timestamp.now(),
@@ -368,6 +370,7 @@ const NOTIFICATION_CATEGORIES = {
   trips: ["TRIP_APPROVAL_REQUESTED", "TRIP_DECIDED", "TRIP_RECEIPT"],
   reminder: ["REMINDER", "IT_REMINDER", "LF_REMINDER"],
   platform: ["LEAVE_REQUESTED", "LEAD_NEW"],
+  leaves: ["LEAVE_APPROVED", "LEAVE_CALLED", "LEAVE_PREPARE", "LEAVE_ARRIVED", "LEAVE_CANCELLED", "LEAVE_RESCHEDULED"],
 };
 const categoryOfType = (type) => Object.keys(NOTIFICATION_CATEGORIES).find((c) => NOTIFICATION_CATEGORIES[c].includes(type));
 
@@ -4714,17 +4717,66 @@ async function verifyStudentParent(scope, studentIdRaw, last4Raw) {
 }
 
 // --- Leave permissions (الاستئذان) ------------------------------------------
+// The parent asks through /leave, follows the request there (its path,
+// cancel, change the time, «جهّزوا الطالب», «وصلت للاستلام») and can't
+// open a second one while one is active. A new receiver comes with an ID
+// photo and is saved to the student's authorized pickups. Staff act by
+// role (users.leaveRoles: approve / call / exit, in their branches; the
+// platform users hold every role).
 const LEAVE_REASONS = ["MEDICAL", "ILLNESS", "FAMILY", "OFFICIAL", "OTHER"];
 const LEAVE_ACTIVE = ["PENDING", "APPROVED", "CALLED"];
+const LEAVE_ROLES = ["approve", "call", "exit"];
+const PARENT_LEAVE = "ولي الأمر (رابط الاستئذان)";
+
+function leaveCan(u, role, branch) {
+  if (!u || u.active === false) return false;
+  if (hasPlatform(u)) return true;
+  return u.leaveRoles?.[role] === true && (u.access === "all" || (u.branches || []).includes(branch) || u.branch === branch);
+}
+// Staff holding a leave role in a branch (platform users are told of new
+// requests separately, as before).
+async function leaveStaff(branch, roles) {
+  const users = await loadActiveUsers();
+  return users.filter((u) => !hasPlatform(u) && roles.some((r) => leaveCan(u, r, branch))).map((u) => u.id);
+}
+const leaveMs = (v) => v?.toMillis?.() || null;
+function leaveTrack(x) {
+  return {
+    code: x.code, status: x.status, type: x.type, reason: x.reason, note: x.note || "", requestedAt: leaveMs(x.requestedAt), createdAt: leaveMs(x.createdAt),
+    pickup: { name: x.pickup?.name || "", relation: x.pickup?.relation || "", authorized: x.pickup?.authorized === true },
+    approvedAt: leaveMs(x.approvedAt), calledAt: leaveMs(x.calledAt), exitAt: leaveMs(x.exitAt), returnAt: leaveMs(x.returnAt),
+    cancelledAt: leaveMs(x.cancelledAt), rejectReason: x.rejectReason || "", receiverName: x.receiver?.name || "",
+    parentPrepareAt: leaveMs(x.parentPrepareAt), parentArrivedAt: leaveMs(x.parentArrivedAt), rescheduled: (x.history || []).some((h) => h.action === "RESCHEDULED"),
+  };
+}
+async function activeLeave(studentId) {
+  const snap = await db.collection("leaveRequests").where("studentId", "==", studentId).where("status", "in", LEAVE_ACTIVE).get();
+  return snap.docs.sort((a, b) => leaveMs(b.data().createdAt) - leaveMs(a.data().createdAt))[0] || null;
+}
+function leaveTime(raw) {
+  const v = Number(raw);
+  if (!(v > Date.now() - 3600e3 && v < Date.now() + 14 * 86400e3)) throw new HttpsError("invalid-argument", "اختر وقت خروج صحيحاً.");
+  return v;
+}
+async function uploadLeaveImage(studentId, att) {
+  if (!att) return null;
+  if (!/^image\//.test(att.mimeType || "") && att.mimeType !== "application/pdf") throw new HttpsError("invalid-argument", "أرفق صورة الهوية (صورة أو PDF).");
+  return uploadPublicAttachment(getStorage().bucket(), `authorizedPickups/${studentId}`, att);
+}
 
 exports.getLeaveContext = onCall(async (request) => {
   const v = await verifyStudentParent("leave", request.data?.studentId, request.data?.last4);
-  const pickups = await db.collection("authorizedPickups").where("studentId", "==", v.studentId).where("active", "==", true).get();
-  const open = await db.collection("leaveRequests").where("studentId", "==", v.studentId).where("status", "in", LEAVE_ACTIVE).get();
+  const [pickups, active, recentSnap] = await Promise.all([
+    db.collection("authorizedPickups").where("studentId", "==", v.studentId).where("active", "==", true).get(),
+    activeLeave(v.studentId),
+    db.collection("leaveRequests").where("studentId", "==", v.studentId).where("createdAt", ">=", Timestamp.fromMillis(Date.now() - 86400e3)).get(),
+  ]);
+  const recent = recentSnap.docs.map((d) => d.data()).filter((x) => !LEAVE_ACTIVE.includes(x.status)).sort((a, b) => leaveMs(b.createdAt) - leaveMs(a.createdAt))[0];
   return {
     studentName: v.student.nameAr || v.student.name || "", grade: v.grade, className: v.student.className || "",
-    pickups: pickups.docs.map((d) => ({ id: d.id, name: d.data().name, relation: d.data().relation })),
-    open: open.docs.map((d) => ({ code: d.data().code, status: d.data().status, requestedAt: d.data().requestedAt?.toMillis?.() || null })),
+    pickups: pickups.docs.map((d) => ({ id: d.id, name: d.data().name, relation: d.data().relation, hasIdImage: !!d.data().idImage?.fileUrl })),
+    active: active ? leaveTrack(active.data()) : null,
+    recent: recent ? leaveTrack(recent) : null,
   };
 });
 
@@ -4733,32 +4785,151 @@ exports.submitLeaveRequest = onCall(async (request) => {
   const v = await verifyStudentParent("leave", d.studentId, d.last4);
   const reason = LEAVE_REASONS.includes(d.reason) ? d.reason : null;
   if (!reason) throw new HttpsError("invalid-argument", "اختر سبب الاستئذان.");
-  const requestedMs = Number(d.requestedAt);
-  if (!(requestedMs > Date.now() - 3600e3 && requestedMs < Date.now() + 14 * 86400e3)) throw new HttpsError("invalid-argument", "اختر وقت خروج صحيحاً.");
+  const requestedMs = leaveTime(d.requestedAt);
+  const open = await activeLeave(v.studentId);
+  if (open) throw new HttpsError("already-exists", `يوجد طلب استئذان حالي للطالب/ة (${open.data().code}). يمكنكم متابعته أو تعديله أو إلغاؤه من رابط تقديم الطلب نفسه.`);
+  const now = Timestamp.now();
   let pickup;
   if (typeof d.pickupId === "string" && d.pickupId) {
-    const p = await db.collection("authorizedPickups").doc(d.pickupId).get();
-    if (!p.exists || p.data().studentId !== v.studentId || p.data().active !== true) throw new HttpsError("invalid-argument", "المستلم غير موجود في قائمة المفوّضين.");
-    pickup = { authorizedId: p.id, name: p.data().name, relation: p.data().relation, nationalId: p.data().nationalId || "", authorized: true };
+    const pRef = db.collection("authorizedPickups").doc(d.pickupId);
+    const p = (await pRef.get()).data();
+    if (!p || p.studentId !== v.studentId || p.active !== true) throw new HttpsError("invalid-argument", "المستلم غير موجود في قائمة المفوّضين.");
+    let idImage = p.idImage || null;
+    if (!idImage && d.idImage) {
+      idImage = await uploadLeaveImage(v.studentId, d.idImage);
+      await pRef.update({ idImage, updatedAt: now });
+    }
+    pickup = { authorizedId: pRef.id, name: p.name, relation: p.relation, nationalId: p.nationalId || "", phone: p.phone || "", authorized: true, idImageUrl: idImage?.fileUrl || "" };
   } else {
     const name = str(d.pickupName, 80);
+    const nationalId = normalizeDigits(d.pickupNationalId).replace(/\D/g, "").slice(0, 15);
     if (!name) throw new HttpsError("invalid-argument", "اكتب اسم من سيستلم الطالب.");
-    pickup = { name, relation: str(d.pickupRelation, 40), nationalId: normalizeDigits(d.pickupNationalId).slice(0, 15), phone: str(d.pickupPhone, 20), authorized: false };
+    if (!/^\d{10}$/.test(nationalId)) throw new HttpsError("invalid-argument", "أدخل رقم هوية المستلم (10 أرقام).");
+    if (!d.idImage) throw new HttpsError("invalid-argument", "أرفق صورة هوية المستلم.");
+    const relation = str(d.pickupRelation, 40);
+    const phone = str(normalizeDigits(d.pickupPhone), 20);
+    // Same ID already on the list (perhaps hidden): reuse and re-activate it.
+    const same = await db.collection("authorizedPickups").where("studentId", "==", v.studentId).where("nationalId", "==", nationalId).limit(1).get();
+    const idImage = await uploadLeaveImage(v.studentId, d.idImage);
+    let pRef;
+    if (!same.empty) {
+      pRef = same.docs[0].ref;
+      await pRef.update({ name, relation, ...(phone ? { phone } : {}), idImage, active: true, updatedAt: now });
+    } else {
+      pRef = await db.collection("authorizedPickups").add({
+        studentId: v.studentId, branch: v.branch, name, relation, nationalId, phone, idImage, active: true,
+        source: "PARENT_LEAVE", createdByName: PARENT_LEAVE, createdAt: now, updatedAt: now,
+      });
+    }
+    pickup = { authorizedId: pRef.id, name, relation, nationalId, phone, authorized: true, addedByParent: true, idImageUrl: idImage.fileUrl };
   }
   let attachment = null;
   if (d.attachment) attachment = await uploadPublicAttachment(getStorage().bucket(), `leaveRequests/${v.studentId}`, d.attachment);
   const code = await newCode("leaveRequests", "code", "LV");
-  const now = Timestamp.now();
-  const ref = await db.collection("leaveRequests").add({
+  const doc = {
     code, studentId: v.studentId, studentName: v.student.nameAr || v.student.name || "", branch: v.branch, grade: v.grade, className: v.student.className || "", section: v.section,
     parentPhone: v.student.mobile || "", reason, note: str(d.note, 300), type: d.type === "TEMPORARY" ? "TEMPORARY" : "FULL",
     requestedAt: Timestamp.fromMillis(requestedMs), pickup, attachment, source: "PARENT", status: "PENDING",
-    history: [{ action: "REQUESTED", at: now, byName: "ولي الأمر (رابط الاستئذان)" }], createdAt: now, updatedAt: now,
+    history: [{ action: "REQUESTED", at: now, byName: PARENT_LEAVE }], createdAt: now, updatedAt: now,
+  };
+  const ref = await db.collection("leaveRequests").add(doc);
+  await notifyUsers([...(await platformOwners()), ...(await leaveStaff(v.branch, ["approve"]))], {
+    title: "طلب استئذان جديد", body: `${doc.studentName} — ${formatRiyadh(requestedMs)} — المستلم: ${pickup.name}${pickup.addedByParent ? " (مفوّض جديد من ولي الأمر)" : ""}`, complaintId: ref.id, type: "LEAVE_REQUESTED",
   });
-  await notifyUsers(await platformOwners(), {
-    title: "طلب استئذان جديد", body: `${v.student.nameAr || v.student.name || ""} — ${pickup.name}${pickup.authorized ? "" : " (غير مفوّض)"}`, complaintId: ref.id, type: "LEAVE_REQUESTED",
-  });
-  return { code };
+  return { code, track: leaveTrack(doc) };
+});
+
+// The parent's actions on the active request, from the same link.
+const PARENT_LEAVE_ACTIONS = {
+  cancel: { from: LEAVE_ACTIVE, log: "CANCELLED" },
+  reschedule: { from: ["PENDING", "APPROVED"], log: "RESCHEDULED" },
+  prepare: { from: ["APPROVED", "CALLED"], log: "PARENT_PREPARE" },
+  arrived: { from: ["APPROVED", "CALLED"], log: "PARENT_ARRIVED" },
+};
+exports.parentLeaveAction = onCall(async (request) => {
+  const d = request.data || {};
+  const v = await verifyStudentParent("leave", d.studentId, d.last4);
+  const step = PARENT_LEAVE_ACTIONS[d.action];
+  if (!step) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  const snap = await activeLeave(v.studentId);
+  if (!snap) throw new HttpsError("not-found", "لا يوجد طلب استئذان حالي.");
+  const x = snap.data();
+  if (!step.from.includes(x.status)) {
+    throw new HttpsError("failed-precondition", d.action === "reschedule" ? "لا يمكن تعديل الوقت بعد استدعاء الطالب، تواصلوا مع الفرع." : "يتاح هذا الإجراء بعد الموافقة على الطلب.");
+  }
+  const now = Timestamp.now();
+  const stamp = { prepare: "parentPrepareAt", arrived: "parentArrivedAt" }[d.action];
+  if (stamp && x[stamp] && Date.now() - x[stamp].toMillis() < 2 * 60e3) throw new HttpsError("resource-exhausted", "تم إرسال الإشعار قبل قليل.");
+  const update = { updatedAt: now };
+  const entry = { action: step.log, at: now, byName: PARENT_LEAVE };
+  if (d.action === "cancel") Object.assign(update, { status: "CANCELLED", cancelledAt: now, cancelledByName: PARENT_LEAVE });
+  if (d.action === "reschedule") {
+    const at = leaveTime(d.requestedAt);
+    // A changed time goes back for approval.
+    Object.assign(update, { requestedAt: Timestamp.fromMillis(at), status: "PENDING", approvedAt: null, approvedByName: null });
+    entry.note = `${formatRiyadh(x.requestedAt.toMillis())} ← ${formatRiyadh(at)}`;
+  }
+  if (stamp) update[stamp] = now;
+  update.history = FieldValue.arrayUnion(entry);
+  await snap.ref.update(update);
+  const who = `${x.studentName} (${x.code})`;
+  const note = {
+    cancel: { roles: LEAVE_ROLES, title: "ألغى ولي الأمر طلب الاستئذان", body: who, type: "LEAVE_CANCELLED" },
+    reschedule: { roles: ["approve"], title: "تعديل وقت الاستئذان — بانتظار الموافقة", body: `${who}: ${entry.note}`, type: "LEAVE_RESCHEDULED" },
+    prepare: { roles: ["call"], title: "جهّزوا الطالب — ولي الأمر في الطريق", body: `${who} — المستلم: ${x.pickup?.name || ""}`, type: "LEAVE_PREPARE" },
+    arrived: { roles: ["call", "exit"], title: "وصل المستلم لاستلام الطالب", body: `${who} — المستلم: ${x.pickup?.name || ""}`, type: "LEAVE_ARRIVED" },
+  }[d.action];
+  await notifyUsers([...(await platformOwners()), ...(await leaveStaff(x.branch, note.roles))], { title: note.title, body: note.body, complaintId: snap.id, type: note.type });
+  return { track: leaveTrack({ ...x, ...update, history: [...(x.history || []), entry] }) };
+});
+
+// Staff steps, each checked against the caller's leave roles in the branch.
+const STAFF_LEAVE_ACTIONS = {
+  approve: { role: "approve", from: ["PENDING"], to: "APPROVED" },
+  reject: { role: "approve", from: ["PENDING"], to: "REJECTED" },
+  call: { role: "call", from: ["APPROVED"], to: "CALLED" },
+  exit: { role: "exit", from: ["APPROVED", "CALLED"], to: "EXITED" },
+  return: { role: "exit", from: ["EXITED"], to: "RETURNED" },
+  cancel: { role: "approve", from: LEAVE_ACTIVE, to: "CANCELLED" },
+};
+exports.leaveAction = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const d = request.data || {};
+  const step = STAFF_LEAVE_ACTIONS[d.action];
+  if (!step) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  const caller = (await db.collection("users").doc(request.auth.uid).get()).data();
+  const ref = db.collection("leaveRequests").doc(String(d.id || ""));
+  const x = (await ref.get()).data();
+  if (!x) throw new HttpsError("not-found", "لم يتم العثور على الطلب.");
+  if (!leaveCan(caller, step.role, x.branch)) throw new HttpsError("permission-denied", "هذا الإجراء ليس من صلاحياتك في الاستئذانات.");
+  if (!step.from.includes(x.status)) throw new HttpsError("failed-precondition", "حالة الطلب تغيّرت، حدّث الصفحة.");
+  const now = Timestamp.now();
+  const byName = caller.name || "";
+  const reason = str(d.reason, 300);
+  if (d.action === "reject" && !reason) throw new HttpsError("invalid-argument", "اكتب سبب الرفض.");
+  const update = { status: step.to, updatedAt: now };
+  if (d.action === "approve") Object.assign(update, { approvedAt: now, approvedByName: byName });
+  if (d.action === "reject") update.rejectReason = reason;
+  if (d.action === "call") Object.assign(update, { calledAt: now, calledByName: byName });
+  if (d.action === "return") update.returnAt = now;
+  if (d.action === "cancel") Object.assign(update, { cancelledAt: now, cancelledByName: byName });
+  if (d.action === "exit") {
+    const receiverName = str(d.receiverName, 80);
+    if (!receiverName) throw new HttpsError("invalid-argument", "اكتب اسم المستلم.");
+    const authorized = x.pickup?.authorized === true;
+    if (!authorized && d.parentConfirmed !== true) throw new HttpsError("failed-precondition", "أكّد موافقة ولي الأمر على المستلم.");
+    Object.assign(update, { exitAt: now, exitByName: byName, receiver: { name: receiverName, nationalId: str(normalizeDigits(d.receiverId), 15), authorized, parentConfirmed: !authorized } });
+  }
+  update.history = FieldValue.arrayUnion({ action: step.to, at: now, byName, byId: request.auth.uid, ...(reason ? { note: reason } : {}) });
+  await ref.update(update);
+  const who = `${x.studentName} (${x.code})`;
+  if (d.action === "approve") {
+    await notifyUsers(await leaveStaff(x.branch, ["call"]), { title: "استئذان معتمد — استدعاء الطالب", body: `${who} — ${formatRiyadh(x.requestedAt.toMillis())}`, complaintId: ref.id, type: "LEAVE_APPROVED" });
+  }
+  if (d.action === "call") {
+    await notifyUsers(await leaveStaff(x.branch, ["exit"]), { title: "الطالب في الاستقبال — جاهز للتسليم", body: `${who} — المستلم: ${x.pickup?.name || ""}`, complaintId: ref.id, type: "LEAVE_CALLED" });
+  }
+  return { ok: true, status: step.to };
 });
 
 // --- New customers / enrollment follow-up (العملاء الجدد) --------------------

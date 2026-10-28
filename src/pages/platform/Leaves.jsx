@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
-import { collection, query, orderBy, limit, onSnapshot, addDoc, doc, updateDoc, getDocs, where, arrayUnion, Timestamp } from 'firebase/firestore';
-import { DoorOpen, Plus, Loader2, Clock, CheckCircle2, XCircle, Megaphone, LogOut, Undo2, Ban, MessageCircle, ShieldCheck, ShieldAlert, Link2, Copy, Check, Repeat, Paperclip, FileDown } from 'lucide-react';
+import { collection, query, orderBy, limit, onSnapshot, addDoc, getDocs, where, Timestamp } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
+import { DoorOpen, Plus, Loader2, Clock, CheckCircle2, XCircle, Megaphone, LogOut, Undo2, Ban, MessageCircle, ShieldCheck, ShieldAlert, Link2, Check, Repeat, Paperclip, FileDown, IdCard, Car, MapPin } from 'lucide-react';
 import { format, isToday, startOfMonth } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
-import { db } from '../../config/firebase';
+import { db, functions } from '../../config/firebase';
+import { canSeePlatform, leaveRoleOf } from '../../config/adminPermissions';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches } from '../../hooks/useOrgData';
 import { waLink } from '../../utils/whatsapp';
@@ -16,6 +18,7 @@ import {
 } from '../../config/platform';
 
 const ms = (ts) => ts?.toMillis?.() || 0;
+const leaveAction = (data) => httpsCallable(functions, 'leaveAction')(data);
 
 // New leave request taken at reception / by phone.
 function LeaveForm({ onClose, branchName }) {
@@ -41,6 +44,9 @@ function LeaveForm({ onClose, branchName }) {
     if (!chosen && !form.pickupName.trim()) { setError(t('platform.leaves.pickupRequired')); return; }
     setBusy(true);
     try {
+      // One active request per student.
+      const open = await getDocs(query(collection(db, 'leaveRequests'), where('studentId', '==', student.nationalId), where('status', 'in', LEAVE_OPEN)));
+      if (!open.empty) { setError(t('platform.leaves.openExists', { code: open.docs[0].data().code })); setBusy(false); return; }
       const now = Timestamp.now();
       await addDoc(collection(db, 'leaveRequests'), {
         code: randomCode('LV'), studentId: student.nationalId, studentName: student.name, branch: student.branch || '', grade: rosterGrade(student),
@@ -95,20 +101,22 @@ function LeaveForm({ onClose, branchName }) {
 // Handing the student over: verify the person collecting them.
 function ExitDialog({ leave, onClose }) {
   const { t } = useTranslation();
-  const { user, userData } = useAuthStore();
   const [receiverName, setReceiverName] = useState(leave.pickup?.name || '');
   const [receiverId, setReceiverId] = useState(leave.pickup?.nationalId || '');
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
   const authorized = leave.pickup?.authorized;
   const save = async () => {
     setBusy(true);
-    const now = Timestamp.now();
-    await updateDoc(doc(db, 'leaveRequests', leave.id), {
-      status: 'EXITED', exitAt: now, exitByName: userData?.name || '', receiver: { name: receiverName.trim(), nationalId: receiverId.trim(), authorized: !!authorized, parentConfirmed: !authorized && confirmed },
-      history: arrayUnion({ action: 'EXITED', at: now, byName: userData?.name || '', byId: user.uid }), updatedAt: now,
-    });
-    onClose();
+    setError(null);
+    try {
+      await leaveAction({ id: leave.id, action: 'exit', receiverName: receiverName.trim(), receiverId: receiverId.trim(), parentConfirmed: !authorized && confirmed });
+      onClose();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
   };
   return (
     <Modal title={t('platform.leaves.exitTitle')} subtitle={`${leave.studentName} · ${leave.code}`} onClose={onClose} size="max-w-lg" z="z-[120]"
@@ -117,6 +125,13 @@ function ExitDialog({ leave, onClose }) {
         {authorized ? <ShieldCheck className="w-5 h-5 shrink-0" /> : <ShieldAlert className="w-5 h-5 shrink-0" />}
         {authorized ? t('platform.leaves.authorizedNote', { name: leave.pickup.name }) : t('platform.leaves.notAuthorizedNote', { name: leave.pickup?.name || '' })}
       </div>
+      {leave.pickup?.idImageUrl && (
+        <a href={leave.pickup.idImageUrl} target="_blank" rel="noreferrer" className="block border border-slate-200 rounded-xl overflow-hidden">
+          <img src={leave.pickup.idImageUrl} alt={t('platform.leaves.idImage')} className="w-full max-h-56 object-contain bg-slate-50" />
+          <span className="block text-xs text-center text-primary py-1">{t('platform.leaves.idImageCompare')}</span>
+        </a>
+      )}
+      {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl p-3">{error}</div>}
       <div className="grid grid-cols-2 gap-3">
         <Field label={t('platform.leaves.receiverName')} required><input value={receiverName} onChange={(e) => setReceiverName(e.target.value)} className={inputCls} /></Field>
         <Field label={t('platform.leaves.nationalId')}><input value={receiverId} onChange={(e) => setReceiverId(e.target.value)} className={inputCls} dir="ltr" /></Field>
@@ -144,10 +159,16 @@ function NoteDialog({ title, label, onClose, onConfirm }) {
 export default function Leaves() {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
-  const { user, userData } = useAuthStore();
+  const { userData } = useAuthStore();
   const branches = useBranches();
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id || '—';
   const settings = usePlatformSettings();
+  const platform = canSeePlatform(userData);
+  const can = { approve: leaveRoleOf(userData, 'approve'), call: leaveRoleOf(userData, 'call'), exit: leaveRoleOf(userData, 'exit') };
+  // Leave-role staff read their own branches only (firestore.rules).
+  const myBranches = platform || userData?.access === 'all' ? null : [...new Set([...(userData?.branches || []), ...(userData?.branch ? [userData.branch] : [])])].slice(0, 30);
+  const scopeKey = myBranches ? myBranches.join(',') : '*';
+  const [actError, setActError] = useState(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const [leaves, setLeaves] = useState(null);
   const [range, setRange] = useState('TODAY');
@@ -159,9 +180,14 @@ export default function Leaves() {
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
-  useEffect(() => onSnapshot(query(collection(db, 'leaveRequests'), orderBy('createdAt', 'desc'), limit(1000)), (snap) => {
-    setLeaves(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
-  }, () => setLeaves([])), []);
+  useEffect(() => {
+    const branchesIn = scopeKey === '*' ? null : scopeKey.split(',').filter(Boolean);
+    if (branchesIn && !branchesIn.length) { setLeaves([]); return undefined; }
+    const q = branchesIn
+      ? query(collection(db, 'leaveRequests'), where('branch', 'in', branchesIn), orderBy('createdAt', 'desc'), limit(1000))
+      : query(collection(db, 'leaveRequests'), orderBy('createdAt', 'desc'), limit(1000));
+    return onSnapshot(q, (snap) => setLeaves(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setLeaves([]));
+  }, [scopeKey]);
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 30000); return () => clearInterval(id); }, []);
 
   const openId = searchParams.get('openId');
@@ -184,12 +210,9 @@ export default function Leaves() {
     repeated: Object.values(monthCount).filter((n) => n >= settings.leaveMonthlyLimit).length,
   };
 
-  const act = async (l, status, extra = {}, note) => {
-    const at = Timestamp.now();
-    await updateDoc(doc(db, 'leaveRequests', l.id), {
-      status, ...extra, updatedAt: at,
-      history: arrayUnion({ action: status, at, byName: userData?.name || '', byId: user.uid, ...(note ? { note } : {}) }),
-    });
+  const act = async (l, action, reason) => {
+    setActError(null);
+    try { await leaveAction({ id: l.id, action, ...(reason ? { reason } : {}) }); } catch (err) { setActError(err.message); }
   };
   const link = `${window.location.origin}/leave`;
   const fmtTime = (ts) => (ts?.toDate ? format(ts.toDate(), 'p', { locale: dateLocale }) : '');
@@ -217,7 +240,7 @@ export default function Leaves() {
         <div className="flex flex-wrap gap-2">
           <button onClick={async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ } }} className={btn.ghost}>{copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Link2 className="w-4 h-4" />}{t('platform.leaves.copyParentLink')}</button>
           <button onClick={exportExcel} className={btn.ghost}><FileDown className="w-4 h-4" />{t('platform.exportExcel')}</button>
-          <button onClick={() => setShowForm(true)} className={btn.primary}><Plus className="w-4 h-4" />{t('platform.leaves.new')}</button>
+          {platform && <button onClick={() => setShowForm(true)} className={btn.primary}><Plus className="w-4 h-4" />{t('platform.leaves.new')}</button>}
         </div>
       </div>
 
@@ -228,6 +251,7 @@ export default function Leaves() {
         <Tile label={t('platform.leaves.statRepeated', { n: settings.leaveMonthlyLimit })} value={stats.repeated} icon={Repeat} tone="text-rose-600" />
       </div>
 
+      {actError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl p-3">{actError}</div>}
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
         <div className="p-4 border-b border-slate-100 flex flex-wrap items-center gap-2">
           {['TODAY', 'ALL'].map((r) => <button key={r} onClick={() => setRange(r)} className={`px-3 py-1.5 rounded-lg text-sm ${range === r ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}>{t(`platform.range.${r}`)}</button>)}
@@ -238,7 +262,7 @@ export default function Leaves() {
           </select>
           <select value={branchFilter} onChange={(e) => setBranchFilter(e.target.value)} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white">
             <option value="">{t('common.allBranches')}</option>
-            {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            {branches.filter((b) => !myBranches || myBranches.includes(b.id)).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         </div>
         {!leaves ? <div className="py-16 flex justify-center"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>
@@ -266,8 +290,17 @@ export default function Leaves() {
                         <span className="font-medium text-slate-800">{l.pickup?.name}</span>
                         <span className="text-xs text-slate-500">{t(`platform.relations.${l.pickup?.relation}`, l.pickup?.relation || '')}</span>
                         {l.pickup?.authorized ? <Pill className="bg-emerald-50 text-emerald-700 border-emerald-200">{t('platform.leaves.authorized')}</Pill> : <Pill className="bg-amber-50 text-amber-800 border-amber-200">{t('platform.leaves.notAuthorized')}</Pill>}
+                        {l.pickup?.addedByParent && <Pill className="bg-sky-50 text-sky-700 border-sky-200">{t('platform.leaves.addedByParent')}</Pill>}
+                        {l.pickup?.idImageUrl && <a href={l.pickup.idImageUrl} target="_blank" rel="noreferrer" className="text-xs text-primary inline-flex items-center gap-1"><IdCard className="w-3.5 h-3.5" />{t('platform.leaves.idImage')}</a>}
                         {l.attachment?.fileUrl && <a href={l.attachment.fileUrl} target="_blank" rel="noreferrer" className="text-xs text-primary inline-flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" />{t('platform.attachment')}</a>}
                       </p>
+                      {LEAVE_OPEN.includes(l.status) && (l.parentPrepareAt || l.parentArrivedAt) && (
+                        <p className="text-sm mt-1 flex flex-wrap gap-2">
+                          {l.parentArrivedAt
+                            ? <Pill className="bg-emerald-100 text-emerald-800 border-emerald-200"><MapPin className="w-3 h-3 ml-1" />{t('platform.leaves.parentArrived', { time: fmtTime(l.parentArrivedAt) })}</Pill>
+                            : <Pill className="bg-indigo-50 text-indigo-700 border-indigo-200"><Car className="w-3 h-3 ml-1" />{t('platform.leaves.parentPrepare', { time: fmtTime(l.parentPrepareAt) })}</Pill>}
+                        </p>
+                      )}
                       <p className="text-xs text-slate-400 mt-1">
                         <span dir="ltr">{l.code}</span> · {t(`platform.leaves.source.${l.source}`, l.source)}
                         {l.rejectReason && <span className="text-rose-600"> · {l.rejectReason}</span>}
@@ -278,14 +311,14 @@ export default function Leaves() {
                     <div className="shrink-0 lg:text-left space-y-2">
                       <p className="text-sm font-bold text-slate-800 flex items-center gap-1 lg:justify-end"><Clock className="w-4 h-4 text-slate-400" />{fmtTime(l.requestedAt)}{!isToday(l.requestedAt?.toDate?.() || new Date(0)) && <span className="text-xs font-normal text-slate-400"> · {l.requestedAt?.toDate && format(l.requestedAt.toDate(), 'd MMM', { locale: dateLocale })}</span>}</p>
                       <div className="flex flex-wrap gap-1.5 lg:justify-end">
-                        {l.status === 'PENDING' && <>
-                          <button onClick={() => act(l, 'APPROVED', { approvedAt: Timestamp.now(), approvedByName: userData?.name || '' })} className={`${btn.small} bg-emerald-600 text-white`}><CheckCircle2 className="w-3.5 h-3.5" />{t('platform.leaves.approve')}</button>
+                        {l.status === 'PENDING' && can.approve && <>
+                          <button onClick={() => act(l, 'approve')} className={`${btn.small} bg-emerald-600 text-white`}><CheckCircle2 className="w-3.5 h-3.5" />{t('platform.leaves.approve')}</button>
                           <button onClick={() => setRejecting(l)} className={`${btn.small} bg-rose-50 text-rose-700 border border-rose-200`}><XCircle className="w-3.5 h-3.5" />{t('platform.leaves.reject')}</button>
                         </>}
-                        {l.status === 'APPROVED' && <button onClick={() => act(l, 'CALLED', { calledAt: Timestamp.now() })} className={`${btn.small} bg-indigo-600 text-white`}><Megaphone className="w-3.5 h-3.5" />{t('platform.leaves.call')}</button>}
-                        {['APPROVED', 'CALLED'].includes(l.status) && <button onClick={() => setExiting(l)} className={`${btn.small} bg-primary text-white`}><LogOut className="w-3.5 h-3.5" />{t('platform.leaves.handOver')}</button>}
-                        {l.status === 'EXITED' && l.type === 'TEMPORARY' && <button onClick={() => act(l, 'RETURNED', { returnAt: Timestamp.now() })} className={`${btn.small} bg-teal-600 text-white`}><Undo2 className="w-3.5 h-3.5" />{t('platform.leaves.returned')}</button>}
-                        {LEAVE_OPEN.includes(l.status) && <button onClick={() => act(l, 'CANCELLED')} className={`${btn.small} text-slate-500 hover:bg-slate-100`}><Ban className="w-3.5 h-3.5" />{t('platform.leaves.cancel')}</button>}
+                        {l.status === 'APPROVED' && can.call && <button onClick={() => act(l, 'call')} className={`${btn.small} bg-indigo-600 text-white`}><Megaphone className="w-3.5 h-3.5" />{t('platform.leaves.call')}</button>}
+                        {['APPROVED', 'CALLED'].includes(l.status) && can.exit && <button onClick={() => setExiting(l)} className={`${btn.small} bg-primary text-white`}><LogOut className="w-3.5 h-3.5" />{t('platform.leaves.handOver')}</button>}
+                        {l.status === 'EXITED' && l.type === 'TEMPORARY' && can.exit && <button onClick={() => act(l, 'return')} className={`${btn.small} bg-teal-600 text-white`}><Undo2 className="w-3.5 h-3.5" />{t('platform.leaves.returned')}</button>}
+                        {LEAVE_OPEN.includes(l.status) && can.approve && <button onClick={() => act(l, 'cancel')} className={`${btn.small} text-slate-500 hover:bg-slate-100`}><Ban className="w-3.5 h-3.5" />{t('platform.leaves.cancel')}</button>}
                         {l.parentPhone && ['APPROVED', 'CALLED'].includes(l.status) && <a href={waLink(l.parentPhone, msg(l, 'approved'))} target="_blank" rel="noreferrer" className={`${btn.small} bg-[#25D366] text-white`}><MessageCircle className="w-3.5 h-3.5" />{t('platform.leaves.waApproved')}</a>}
                         {l.parentPhone && l.status === 'EXITED' && <a href={waLink(l.parentPhone, msg(l, 'exit'))} target="_blank" rel="noreferrer" className={`${btn.small} bg-[#25D366] text-white`}><MessageCircle className="w-3.5 h-3.5" />{t('platform.leaves.waExit')}</a>}
                       </div>
@@ -299,7 +332,7 @@ export default function Leaves() {
 
       {showForm && <LeaveForm onClose={() => setShowForm(false)} branchName={branchName} />}
       {exiting && <ExitDialog leave={exiting} onClose={() => setExiting(null)} />}
-      {rejecting && <NoteDialog title={t('platform.leaves.reject')} label={t('platform.leaves.rejectReason')} onClose={() => setRejecting(null)} onConfirm={async (note) => { await act(rejecting, 'REJECTED', { rejectReason: note }, note); setRejecting(null); }} />}
+      {rejecting && <NoteDialog title={t('platform.leaves.reject')} label={t('platform.leaves.rejectReason')} onClose={() => setRejecting(null)} onConfirm={async (note) => { await act(rejecting, 'reject', note); setRejecting(null); }} />}
     </div>
   );
 }

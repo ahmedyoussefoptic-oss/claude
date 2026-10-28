@@ -44,6 +44,12 @@ const NOTIFICATION_TARGET_PATH = {
   IT_REMINDER: '/tech-support',
   LF_REMINDER: '/lost-found',
   LEAVE_REQUESTED: '/platform/leaves',
+  LEAVE_APPROVED: '/platform/leaves',
+  LEAVE_CALLED: '/platform/leaves',
+  LEAVE_PREPARE: '/platform/leaves',
+  LEAVE_ARRIVED: '/platform/leaves',
+  LEAVE_CANCELLED: '/platform/leaves',
+  LEAVE_RESCHEDULED: '/platform/leaves',
   LEAD_NEW: '/platform/leads',
 };
 
