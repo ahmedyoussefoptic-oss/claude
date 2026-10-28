@@ -5650,11 +5650,37 @@ exports.setBevatelKey = onCall({ timeoutSeconds: 60 }, async (request) => {
     await cfgRef.set({ connected: false, updatedAt: Timestamp.now() }, { merge: true });
     return { connected: false };
   }
-  let queues;
-  try {
-    queues = (await bevatelGet(apiKey, "/v1/settings/queues")).data || [];
-  } catch (err) {
-    throw new HttpsError("invalid-argument", `تعذر الاتصال ببيفاتيل بهذا المفتاح (${err.message}).`);
+  // The queue list proves the key; Bevatel sometimes answers it with a
+  // server error (500), so retry once, then accept the key if a call report
+  // opens with it (the queues can be loaded later).
+  let queues = [];
+  let checked = false;
+  const errors = [];
+  for (const attempt of [1, 2]) {
+    try {
+      queues = (await bevatelGet(apiKey, "/v1/settings/queues")).data || [];
+      checked = true;
+      break;
+    } catch (err) {
+      errors.push(err.message);
+      if (/Bevatel 40[13]/.test(err.message)) break;
+      if (attempt === 1) await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+  if (!checked && !errors.some((m) => /Bevatel 40[13]/.test(m))) {
+    try {
+      const today = riyadhDay().split("-").reverse().join("-");
+      await bevatelGet(apiKey, "/v1/reports/outbound/detailed-calls", { from_date: today, to_date: today, time_zone: "+03:00", page: 1, per_page: 1 });
+      checked = true;
+    } catch (err) {
+      errors.push(err.message);
+    }
+  }
+  if (!checked) {
+    const unauthorized = errors.some((m) => /Bevatel 40[13]/.test(m));
+    throw new HttpsError("invalid-argument", unauthorized
+      ? `رفضت بيفاتيل هذا المفتاح (${errors[errors.length - 1]}). تأكد من نسخه كاملاً من Client Console.`
+      : `خادم بيفاتيل لم يستجب لهذا المفتاح (${errors[errors.length - 1]}). تأكد أن المفتاح مُنشأ من Client Console ومفعّلة له صلاحية تقارير مركز الاتصال، أو أعد المحاولة لاحقاً أو تواصل مع دعم بيفاتيل.`);
   }
   await db.collection("secureConfig").doc("bevatel").set({ apiKey, savedAt: Timestamp.now(), savedBy: caller.uid });
   const list = queues.map((q) => ({ number: String(q.number || ""), name: String(q.name || ""), type: q.type || "" }));
