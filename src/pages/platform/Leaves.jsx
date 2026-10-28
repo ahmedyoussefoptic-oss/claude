@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { collection, query, orderBy, limit, onSnapshot, addDoc, getDocs, where, Timestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { DoorOpen, Plus, Loader2, Clock, CheckCircle2, XCircle, Megaphone, LogOut, Undo2, Ban, MessageCircle, ShieldCheck, ShieldAlert, Link2, Check, Repeat, Paperclip, FileDown, IdCard, Car, MapPin } from 'lucide-react';
+import { DoorOpen, Plus, Loader2, Clock, CheckCircle2, XCircle, Megaphone, LogOut, Undo2, Ban, MessageCircle, ShieldCheck, ShieldAlert, Link2, Check, Repeat, Paperclip, FileDown, IdCard, Car, MapPin, Trash2 } from 'lucide-react';
 import { format, isToday, startOfMonth } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { db, functions } from '../../config/firebase';
@@ -177,6 +177,7 @@ export default function Leaves() {
   const [showForm, setShowForm] = useState(false);
   const [exiting, setExiting] = useState(null);
   const [rejecting, setRejecting] = useState(null);
+  const [deleting, setDeleting] = useState(null);
   const [copied, setCopied] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
@@ -319,6 +320,7 @@ export default function Leaves() {
                         {['APPROVED', 'CALLED'].includes(l.status) && can.exit && <button onClick={() => setExiting(l)} className={`${btn.small} bg-primary text-white`}><LogOut className="w-3.5 h-3.5" />{t('platform.leaves.handOver')}</button>}
                         {l.status === 'EXITED' && l.type === 'TEMPORARY' && can.exit && <button onClick={() => act(l, 'return')} className={`${btn.small} bg-teal-600 text-white`}><Undo2 className="w-3.5 h-3.5" />{t('platform.leaves.returned')}</button>}
                         {LEAVE_OPEN.includes(l.status) && can.approve && <button onClick={() => act(l, 'cancel')} className={`${btn.small} text-slate-500 hover:bg-slate-100`}><Ban className="w-3.5 h-3.5" />{t('platform.leaves.cancel')}</button>}
+                        {can.approve && <button onClick={() => setDeleting(l)} title={t('platform.leaves.delete')} className={`${btn.small} text-rose-600 hover:bg-rose-50`}><Trash2 className="w-3.5 h-3.5" />{t('platform.leaves.delete')}</button>}
                         {l.parentPhone && ['APPROVED', 'CALLED'].includes(l.status) && <a href={waLink(l.parentPhone, msg(l, 'approved'))} target="_blank" rel="noreferrer" className={`${btn.small} bg-[#25D366] text-white`}><MessageCircle className="w-3.5 h-3.5" />{t('platform.leaves.waApproved')}</a>}
                         {l.parentPhone && l.status === 'EXITED' && <a href={waLink(l.parentPhone, msg(l, 'exit'))} target="_blank" rel="noreferrer" className={`${btn.small} bg-[#25D366] text-white`}><MessageCircle className="w-3.5 h-3.5" />{t('platform.leaves.waExit')}</a>}
                       </div>
@@ -332,6 +334,12 @@ export default function Leaves() {
 
       {showForm && <LeaveForm onClose={() => setShowForm(false)} branchName={branchName} />}
       {exiting && <ExitDialog leave={exiting} onClose={() => setExiting(null)} />}
+      {deleting && <NoteDialog title={t('platform.leaves.deleteTitle', { code: deleting.code, name: deleting.studentName })} label={t('platform.leaves.deleteReason')} onClose={() => setDeleting(null)}
+        onConfirm={async (reason) => {
+          setActError(null);
+          try { await httpsCallable(functions, 'deleteLeaveRequest')({ id: deleting.id, reason }); } catch (err) { setActError(err.message); }
+          setDeleting(null);
+        }} />}
       {rejecting && <NoteDialog title={t('platform.leaves.reject')} label={t('platform.leaves.rejectReason')} onClose={() => setRejecting(null)} onConfirm={async (note) => { await act(rejecting, 'reject', note); setRejecting(null); }} />}
     </div>
   );

@@ -457,6 +457,10 @@ service cloud.firestore {
       allow read: if platformUser() || (leaveStaffUser() && inMyScope(resource.data.branch));
       allow write: if platformUser();
     }
+    match /deletedLeaveRequests/{id} {
+      allow read: if platformUser();
+      allow write: if false;
+    }
     match /authorizedPickups/{id} {
       allow read, write: if platformUser();
     }
@@ -554,7 +558,7 @@ service cloud.firestore {
         'itemCategories', 'settings', 'settingsUnlocks', 'secureConfig', 'complaints', 'trips', 'tripVerify',
         'appointments', 'deletedComplaints', 'deletedLostFoundItems', 'deletedTechSupportTickets', 'lostFoundItems',
         'techSupportTickets', 'students', 'notifications',
-        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage', 'waDailyReports', 'presence', 'tripAccounts', 'usage'
+        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage', 'waDailyReports', 'presence', 'tripAccounts', 'usage', 'deletedLeaveRequests'
       ]);
     }
   }

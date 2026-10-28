@@ -4932,6 +4932,23 @@ exports.leaveAction = onCall(async (request) => {
   return { ok: true, status: step.to };
 });
 
+// Deleting a leave request (approval holders in the branch, platform users):
+// it moves to deletedLeaveRequests with who, when and why.
+exports.deleteLeaveRequest = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const reason = str(request.data?.reason, 300);
+  if (!reason) throw new HttpsError("invalid-argument", "اكتب سبب الحذف.");
+  const caller = (await db.collection("users").doc(request.auth.uid).get()).data();
+  const ref = db.collection("leaveRequests").doc(String(request.data?.id || ""));
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "لم يتم العثور على الطلب.");
+  if (!leaveCan(caller, "approve", snap.data().branch)) throw new HttpsError("permission-denied", "حذف الطلبات لمن لديه صلاحية الموافقة على الاستئذانات.");
+  const now = Timestamp.now();
+  await db.collection("deletedLeaveRequests").doc(snap.id).set({ ...snap.data(), deletedAt: now, deletedBy: request.auth.uid, deletedByName: caller.name || "", deleteReason: reason });
+  await ref.delete();
+  return { ok: true };
+});
+
 // --- New customers / enrollment follow-up (العملاء الجدد) --------------------
 const LEAD_SOURCES = ["CALL_CENTER", "WHATSAPP", "WALK_IN", "WEBSITE", "CAMPAIGN", "REFERRAL", "OTHER"];
 const normalizePhone = (p) => toIntlNumber(p);

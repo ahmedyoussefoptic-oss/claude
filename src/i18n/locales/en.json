@@ -2525,7 +2525,10 @@
       "idImageCompare": "Compare the photo with the receiver's ID before handing over",
       "addedByParent": "New pickup added by parent",
       "parentPrepare": "Parent on the way — get the student ready ({{time}})",
-      "parentArrived": "Receiver has arrived ({{time}})"
+      "parentArrived": "Receiver has arrived ({{time}})",
+      "delete": "Delete",
+      "deleteTitle": "Delete request {{code}} — {{name}}",
+      "deleteReason": "Reason for deleting (the request is archived with your name and the reason)"
     },
     "leads": {
       "title": "New customers",

@@ -2539,7 +2539,10 @@
       "idImageCompare": "قارن الصورة بهوية المستلم قبل التسليم",
       "addedByParent": "مفوّض جديد من ولي الأمر",
       "parentPrepare": "ولي الأمر في الطريق — جهّزوا الطالب ({{time}})",
-      "parentArrived": "المستلم وصل للاستلام ({{time}})"
+      "parentArrived": "المستلم وصل للاستلام ({{time}})",
+      "delete": "حذف",
+      "deleteTitle": "حذف الطلب {{code}} — {{name}}",
+      "deleteReason": "سبب الحذف (يُحفظ الطلب في الأرشيف مع اسمك والسبب)"
     },
     "leads": {
       "title": "العملاء الجدد",
