@@ -479,6 +479,15 @@ service cloud.firestore {
     match /authorizedPickups/{id} {
       allow read, write: if platformUser();
     }
+    // Ministry special-education templates and the parents' entries
+    // (created through submitSpedEntry only).
+    match /spedForms/{id} {
+      allow read, write: if platformUser();
+    }
+    match /spedSubmissions/{id} {
+      allow read, delete: if platformUser();
+      allow create, update: if false;
+    }
     match /leads/{id} {
       allow read, write: if platformUser();
       match /activity/{a} {
@@ -573,7 +582,7 @@ service cloud.firestore {
         'itemCategories', 'settings', 'settingsUnlocks', 'secureConfig', 'complaints', 'trips', 'tripVerify',
         'appointments', 'deletedComplaints', 'deletedLostFoundItems', 'deletedTechSupportTickets', 'lostFoundItems',
         'techSupportTickets', 'students', 'notifications',
-        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage', 'waDailyReports', 'presence', 'tripAccounts', 'usage', 'deletedLeaveRequests', 'callCampaigns', 'callTasks'
+        'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage', 'waDailyReports', 'presence', 'tripAccounts', 'usage', 'deletedLeaveRequests', 'callCampaigns', 'callTasks', 'spedForms', 'spedSubmissions'
       ]);
     }
   }

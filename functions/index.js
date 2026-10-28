@@ -6573,3 +6573,113 @@ exports.callTasksSummary = onSchedule({ schedule: "0 16 * * 0-4", timeZone: "Asi
     });
   }
 });
+
+// --- Special education data (بيانات التربية الخاصة) --------------------------
+// The ministry's import template (one per branch stage and academic year) is
+// uploaded on the platform as a form (spedForms: the file itself, its stage
+// and year, and the dropdown lists). Parents fill its columns through
+// /sped/<formId>: one entry per student, and sending again with the same
+// student and guardian IDs updates it. The platform downloads the entries
+// written into that same template, ready to upload to the ministry.
+const SPED_MAX = 500;
+const SPED_ID = /^[12]\d{9}$/;
+
+async function spedFormOf(formId) {
+  if (typeof formId !== "string" || !/^[A-Za-z0-9]{6,40}$/.test(formId)) throw new HttpsError("invalid-argument", "الرابط غير صحيح.");
+  const snap = await db.collection("spedForms").doc(formId).get();
+  if (!snap.exists) throw new HttpsError("not-found", "الرابط غير صحيح.");
+  return snap.data();
+}
+const spedId = (v) => normalizeDigits(v).replace(/\D/g, "");
+function spedPhone(v) {
+  let d = normalizeDigits(v).replace(/\D/g, "");
+  if (d.startsWith("00")) d = d.slice(2);
+  if (/^9665\d{8}$/.test(d)) d = `0${d.slice(3)}`;
+  if (/^5\d{8}$/.test(d)) d = `0${d}`;
+  return d;
+}
+// Gregorian "YYYY-MM-DD" from minYear up to today.
+function spedDate(v, minYear) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(v || ""));
+  if (!m) return "";
+  const ms = Date.UTC(+m[1], +m[2] - 1, +m[3]);
+  const d = new Date(ms);
+  if (d.getUTCDate() !== +m[3] || +m[1] < minYear || ms > Date.now()) return "";
+  return m[0];
+}
+const spedOut = (x) => ({
+  studentName: x.studentName, studentId: x.studentId, studentDob: x.studentDob, guardianName: x.guardianName, guardianId: x.guardianId,
+  guardianDob: x.guardianDob, relation: x.relation, email: x.email, phone: x.phone, altPhone: x.altPhone || "",
+  grade: x.grade, inclusionType: x.inclusionType, disability: x.disability,
+});
+
+exports.getSpedForm = onCall(async (request) => {
+  const f = await spedFormOf(request.data?.formId);
+  if (f.active === false) throw new HttpsError("failed-precondition", "انتهى استقبال البيانات عبر هذا الرابط. للاستفسار تواصلوا مع المدرسة.");
+  return { title: f.title || "", stageName: f.stageName || "", year: f.year || "", lists: f.lists || {} };
+});
+
+// An entry sent earlier, for the parent to edit: both IDs must match.
+exports.getSpedEntry = onCall(async (request) => {
+  const formId = request.data?.formId;
+  await spedFormOf(formId);
+  const studentId = spedId(request.data?.studentId);
+  const guardianId = spedId(request.data?.guardianId);
+  if (!SPED_ID.test(studentId) || !SPED_ID.test(guardianId)) throw new HttpsError("invalid-argument", "أدخل رقم هوية الطالب/ة ورقم هوية ولي الأمر (10 أرقام).");
+  const guardRef = db.collection("tripVerify").doc(`sped_${formId}_${studentId}`);
+  const guard = (await guardRef.get()).data() || {};
+  const recent = guard.lastAt && Date.now() - guard.lastAt.toMillis() < 3600 * 1000;
+  if (recent && (guard.failures || 0) >= 8) throw new HttpsError("resource-exhausted", "محاولات كثيرة، حاول بعد ساعة أو تواصل مع المدرسة.");
+  const x = (await db.collection("spedSubmissions").doc(`${formId}_${studentId}`).get()).data();
+  if (!x || x.guardianId !== guardianId) {
+    await guardRef.set({ failures: (recent ? guard.failures || 0 : 0) + 1, lastAt: Timestamp.now() });
+    throw new HttpsError("not-found", "لا توجد بيانات مرسلة بهذين الرقمين.");
+  }
+  if (guard.failures) await guardRef.delete();
+  return spedOut(x);
+});
+
+exports.submitSpedEntry = onCall(async (request) => {
+  const d = request.data || {};
+  const f = await spedFormOf(d.formId);
+  if (f.active === false) throw new HttpsError("failed-precondition", "انتهى استقبال البيانات عبر هذا الرابط.");
+  const lists = f.lists || {};
+  const bad = (msg) => { throw new HttpsError("invalid-argument", msg); };
+  const e = {
+    studentName: str(d.studentName, 120), studentId: spedId(d.studentId), studentDob: spedDate(d.studentDob, 1990),
+    guardianName: str(d.guardianName, 120), guardianId: spedId(d.guardianId), guardianDob: spedDate(d.guardianDob, 1930),
+    relation: str(d.relation, 60), email: str(d.email, 120).toLowerCase(), phone: spedPhone(d.phone), altPhone: spedPhone(d.altPhone),
+    grade: str(d.grade, 120), inclusionType: str(d.inclusionType, 120), disability: str(d.disability, 160),
+  };
+  if (!e.studentName || !e.guardianName) bad("أدخل اسم الطالب/ة واسم ولي الأمر.");
+  if (!SPED_ID.test(e.studentId)) bad("رقم هوية الطالب/ة يجب أن يكون 10 أرقام.");
+  if (!SPED_ID.test(e.guardianId)) bad("رقم هوية ولي الأمر يجب أن يكون 10 أرقام.");
+  if (e.studentId === e.guardianId) bad("رقم هوية ولي الأمر مطابق لرقم هوية الطالب/ة.");
+  if (!e.studentDob) bad("أدخل تاريخ ميلاد الطالب/ة بالتقويم الميلادي.");
+  if (!e.guardianDob) bad("أدخل تاريخ ميلاد ولي الأمر بالتقويم الميلادي.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e.email)) bad("أدخل بريداً إلكترونياً صحيحاً.");
+  if (!/^05\d{8}$/.test(e.phone)) bad("أدخل رقم جوال صحيحاً (05xxxxxxxx).");
+  if (e.altPhone && !/^0\d{8,9}$/.test(e.altPhone)) bad("رقم التواصل الآخر غير صحيح.");
+  const inList = (key, v, label) => { if (!(lists[key] || []).includes(v)) bad(`اختر ${label} من القائمة.`); };
+  inList("relations", e.relation, "العلاقة مع الطالب/ة");
+  inList("grades", e.grade, "الصف");
+  inList("inclusionTypes", e.inclusionType, "نوع الدمج التعليمي");
+  inList("disabilities", e.disability, "نوع الإعاقة");
+
+  const ref = db.collection("spedSubmissions").doc(`${d.formId}_${e.studentId}`);
+  const prev = (await ref.get()).data();
+  if (prev && prev.guardianId !== e.guardianId) {
+    throw new HttpsError("already-exists", "تم إرسال بيانات هذا الطالب/ة مسبقاً برقم هوية ولي أمر مختلف. للتعديل تواصلوا مع المدرسة.");
+  }
+  if (!prev) {
+    const n = (await db.collection("spedSubmissions").where("formId", "==", d.formId).count().get()).data().count;
+    if (n >= SPED_MAX) throw new HttpsError("resource-exhausted", "اكتمل العدد المسموح في هذا النموذج. تواصلوا مع المدرسة.");
+  }
+  const s = (await db.collection("students").doc(e.studentId).get()).data();
+  const now = Timestamp.now();
+  await ref.set({
+    ...e, formId: d.formId, inRoster: !!s, rosterName: s ? s.nameAr || s.name || "" : "", rosterBranch: s ? (await branchResolver())(s) : "",
+    createdAt: prev?.createdAt || now, updatedAt: now, editCount: prev ? (prev.editCount || 0) + 1 : 0,
+  });
+  return { updated: !!prev };
+});

@@ -1,7 +1,7 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
-import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText, Activity, PhoneOutgoing } from 'lucide-react';
+import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText, Activity, PhoneOutgoing, HeartHandshake } from 'lucide-react';
 import AssistantPanel from '../assistant/AssistantPanel';
 import { useEffect, useState, useRef } from 'react';
 import { httpsCallable } from 'firebase/functions';
@@ -109,6 +109,7 @@ export default function AppLayout() {
       { name: t('platform.leaves.title'), path: '/platform/leaves', icon: DoorOpen },
       { name: t('platform.leads.title'), path: '/platform/leads', icon: UserPlus },
       { name: t('platform.students.title'), path: '/platform/students', icon: GraduationCap },
+      { name: t('platform.sped.title'), path: '/platform/sped', icon: HeartHandshake },
       ...(isOwner(userData) ? [{ name: t('platform.settings.title'), path: '/platform/settings', icon: Settings2 }] : []),
     );
   }

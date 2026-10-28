@@ -35,6 +35,8 @@ import Leads from './pages/platform/Leads';
 import CurrentStudents from './pages/platform/CurrentStudents';
 import PlatformSettings from './pages/platform/PlatformSettings';
 import LeaveRequest from './pages/LeaveRequest';
+import SpecialEducationForm from './pages/SpecialEducationForm';
+import SpecialEducation from './pages/platform/SpecialEducation';
 import JoinInquiry from './pages/JoinInquiry';
 import SchoolVisitRequest from './pages/SchoolVisitRequest';
 
@@ -84,6 +86,7 @@ function App() {
         <Route path="/contact/:id" element={<ContactBranch />} />
         <Route path="/trip/:code" element={<TripConsent />} />
         <Route path="/leave" element={<LeaveRequest />} />
+        <Route path="/sped/:formId" element={<SpecialEducationForm />} />
         <Route path="/join" element={<JoinInquiry />} />
         <Route path="/school-visit" element={<SchoolVisitRequest />} />
         <Route path="/login" element={<Login />} />
@@ -115,6 +118,7 @@ function App() {
           <Route path="platform/leaves" element={<LeavesOnly><Leaves /></LeavesOnly>} />
           <Route path="platform/leads" element={<PlatformOnly><Leads /></PlatformOnly>} />
           <Route path="platform/students" element={<PlatformOnly><CurrentStudents /></PlatformOnly>} />
+          <Route path="platform/sped" element={<PlatformOnly><SpecialEducation /></PlatformOnly>} />
           <Route path="platform/settings" element={<OwnerOnly><PlatformSettings /></OwnerOnly>} />
           <Route path="branch-qr" element={
             <ProtectedRoute allowedRoles={[ROLES.ADMIN]} allowPrincipal>
