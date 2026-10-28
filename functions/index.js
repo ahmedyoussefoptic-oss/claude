@@ -5678,9 +5678,13 @@ exports.setBevatelKey = onCall({ timeoutSeconds: 60 }, async (request) => {
   }
   if (!checked) {
     const unauthorized = errors.some((m) => /Bevatel 40[13]/.test(m));
+    // Which parts of the account the key reaches, for Bevatel support.
+    const probe = async (path) => { try { await bevatelGet(apiKey, path, { page: 1, per_page: 1 }); return "200"; } catch (err) { return (/Bevatel (\d{3})/.exec(err.message) || [])[1] || "?"; } };
+    const [contacts, agents] = unauthorized ? [] : await Promise.all([probe("/v1/contacts"), probe("/v1/settings/agents")]);
+    const diag = unauthorized ? "" : ` [تشخيص: /v1/contacts=${contacts} · /v1/settings/agents=${agents} · /v1/settings/queues=500 · /v1/reports/outbound/detailed-calls=${(/Bevatel (\d{3})/.exec(errors[errors.length - 1]) || [])[1] || "?"}]`;
     throw new HttpsError("invalid-argument", unauthorized
       ? `رفضت بيفاتيل هذا المفتاح (${errors[errors.length - 1]}). تأكد من نسخه كاملاً من Client Console.`
-      : `خادم بيفاتيل لم يستجب لهذا المفتاح (${errors[errors.length - 1]}). تأكد أن المفتاح مُنشأ من Client Console ومفعّلة له صلاحية تقارير مركز الاتصال، أو أعد المحاولة لاحقاً أو تواصل مع دعم بيفاتيل.`);
+      : `المفتاح صحيح لكن خادم بيفاتيل يرفض طلبات مركز الاتصال به (${errors[errors.length - 1]}). تأكد أن المفتاح مُنشأ من حساب مركز الاتصال ومفعّلة له صلاحية التقارير، أو أرسل هذا التشخيص لدعم بيفاتيل.${diag}`);
   }
   await db.collection("secureConfig").doc("bevatel").set({ apiKey, savedAt: Timestamp.now(), savedBy: caller.uid });
   const list = queues.map((q) => ({ number: String(q.number || ""), name: String(q.name || ""), type: q.type || "" }));
