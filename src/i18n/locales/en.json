@@ -2929,7 +2929,10 @@
         "inclusionType": "Inclusion",
         "disability": "Disability",
         "sentAt": "Sent"
-      }
+      },
+      "replace": "Replace template file",
+      "replaced": "Template replaced with {{name}}. The link and the sent entries are unchanged; the ministry file now downloads with the new template.",
+      "replaceOther": "The new file is for a different stage or year ({{stage}} — {{year}}). Replace anyway?"
     }
   },
   "leaveRequest": {

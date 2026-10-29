@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, deleteDoc, doc, Timestamp } from 'firebase/firestore';
-import { HeartHandshake, Upload, Copy, Check, FileSpreadsheet, Loader2, Search, Trash2, Eye, Power } from 'lucide-react';
+import { HeartHandshake, Upload, Copy, Check, FileSpreadsheet, Loader2, Search, Trash2, Eye, Power, FileUp } from 'lucide-react';
 import { db } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches } from '../../hooks/useOrgData';
@@ -37,6 +37,8 @@ export default function SpecialEducation() {
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState('');
   const fileRef = useRef(null);
+  const replaceRef = useRef(null);
+  const [notice, setNotice] = useState(null);
 
   useEffect(() => onSnapshot(query(collection(db, 'spedForms'), orderBy('createdAt', 'desc')), (snap) => {
     const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
@@ -80,6 +82,25 @@ export default function SpecialEducation() {
       setBusy(false);
     }
   };
+  // A corrected template for the same form: the link and the entries stay.
+  const replace = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setError(null);
+    setNotice(null);
+    try {
+      const { meta, lists, template, fileName } = await parseSpedTemplate(file);
+      if ((meta.stageId !== form.stageId || meta.yearId !== form.yearId) && !window.confirm(t('platform.sped.replaceOther', { stage: meta.stageName, year: meta.year }))) return;
+      setBusy(true);
+      await updateDoc(doc(db, 'spedForms', form.id), { ...meta, lists, template, fileName, replacedAt: Timestamp.now(), replacedBy: user.uid });
+      setNotice(t('platform.sped.replaced', { name: fileName }));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
   const copy = (id) => navigator.clipboard.writeText(link(id)).then(() => { setCopied(id); setTimeout(() => setCopied(''), 1500); });
   const exportFile = async () => {
     setBusy(true);
@@ -114,6 +135,7 @@ export default function SpecialEducation() {
         <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={pick} />
       </div>
       {error && <p className="text-sm bg-rose-50 border border-rose-100 text-rose-700 rounded-xl p-3">{error}</p>}
+      {notice && <p className="text-sm bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-xl p-3">{notice}</p>}
 
       {!forms.length ? (
         <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-10 text-center text-sm text-slate-500">{t('platform.sped.empty')}</div>
@@ -140,6 +162,8 @@ export default function SpecialEducation() {
                   <button type="button" onClick={() => copy(form.id)} className="text-primary shrink-0 flex items-center gap-1">{copied === form.id ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}{t(copied === form.id ? 'platform.sped.copied' : 'platform.sped.copy')}</button>
                 </div>
                 <button type="button" disabled={busy || !rows.length} onClick={exportFile} className={btn.primary}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}{t('platform.sped.download')}</button>
+                <button type="button" disabled={busy} onClick={() => replaceRef.current?.click()} className={btn.ghost}><FileUp className="w-4 h-4" />{t('platform.sped.replace')}</button>
+                <input ref={replaceRef} type="file" accept=".xlsx" className="hidden" onChange={replace} />
                 <button type="button" onClick={() => updateDoc(doc(db, 'spedForms', form.id), { active: form.active === false })} className={btn.ghost}><Power className="w-4 h-4" />{t(form.active === false ? 'platform.sped.reopen' : 'platform.sped.close')}</button>
                 {!rows.length && <button type="button" onClick={removeForm} className={btn.danger}><Trash2 className="w-4 h-4" />{t('platform.sped.deleteForm')}</button>}
               </div>
