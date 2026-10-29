@@ -153,7 +153,7 @@ export default function SpecialEducationForm() {
 
             {section(t('spedForm.enrollment'))}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label={t('spedForm.grade')} required>{select('grade', 'grades')}</Field>
+              <Field label={t('spedForm.grade')} required hint={t('spedForm.gradeHint')}><input required maxLength={120} value={form.grade} onChange={set('grade')} className={inputCls} /></Field>
               <Field label={t('spedForm.inclusionType')} required>{select('inclusionType', 'inclusionTypes')}</Field>
               <div className="sm:col-span-2"><Field label={t('spedForm.disability')} required>{select('disability', 'disabilities')}</Field></div>
             </div>

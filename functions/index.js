@@ -6662,7 +6662,7 @@ exports.submitSpedEntry = onCall(async (request) => {
   if (e.altPhone && !/^0\d{8,9}$/.test(e.altPhone)) bad("رقم التواصل الآخر غير صحيح.");
   const inList = (key, v, label) => { if (!(lists[key] || []).includes(v)) bad(`اختر ${label} من القائمة.`); };
   inList("relations", e.relation, "العلاقة مع الطالب/ة");
-  inList("grades", e.grade, "الصف");
+  if (!e.grade) bad("أدخل الصف.");
   inList("inclusionTypes", e.inclusionType, "نوع الدمج التعليمي");
   inList("disabilities", e.disability, "نوع الإعاقة");
 
