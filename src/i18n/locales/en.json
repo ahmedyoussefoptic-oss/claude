@@ -2207,6 +2207,12 @@
         "other": "Other"
       },
       "formula": "Cost = fixed costs + (cost per student × confirmed participants). Profit = collected − cost. Margin = profit ÷ collected. Break-even = fewest students whose fees cover the costs."
+    },
+    "sendLink": {
+      "button": "Send link",
+      "sent": "Sent",
+      "hintApi": "Sends the trip link to the parent on WhatsApp",
+      "hintManual": "Opens WhatsApp with a message holding the trip link for the parent"
     }
   },
   "tripConsent": {

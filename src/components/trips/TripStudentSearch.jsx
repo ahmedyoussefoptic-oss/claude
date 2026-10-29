@@ -6,6 +6,8 @@ import { functions } from '../../config/firebase';
 import { searchStudents, studentDisplayName } from '../../utils/students';
 import { ENROLLMENT_STATUS_STYLES, tripTime } from '../../config/trips';
 import { printTripInvoice } from '../../utils/tripInvoice';
+import { useWhatsAppApi } from '../../hooks/useWhatsAppApi';
+import SendTripLink from './SendTripLink';
 
 const call = (name, data) => httpsCallable(functions, name)(data).then((r) => r.data);
 
@@ -22,6 +24,7 @@ export default function TripStudentSearch({ branchName, onOpenTrip }) {
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null);
   const timer = useRef(null);
+  const waApi = useWhatsAppApi();
 
   useEffect(() => {
     clearTimeout(timer.current);
@@ -133,6 +136,7 @@ export default function TripStudentSearch({ branchName, onOpenTrip }) {
                 {tr.surveyAverage != null && kv(t('trips.overallRating'), tr.surveyAverage.toFixed(1))}
                 <div className="flex flex-wrap gap-2 pt-1">
                   <button type="button" onClick={() => onOpenTrip(tr.tripId)} className="px-2.5 py-1 rounded-lg text-xs border border-slate-300 bg-white text-slate-700 flex items-center gap-1"><ExternalLink className="w-3.5 h-3.5" />{t('trips.search.openTrip')}</button>
+                  <SendTripLink tripId={tr.tripId} studentId={student.nationalId} waApi={waApi} />
                   {tr.payStatus === 'PAID' && (
                     <button type="button" disabled={busy === tr.tripId} onClick={() => invoice(tr)} className="px-2.5 py-1 rounded-lg text-xs border border-sky-300 bg-white text-sky-700 flex items-center gap-1 disabled:opacity-50">
                       {busy === tr.tripId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}{tr.invoiceNo ? t('trips.invoice.reprint') : t('trips.invoice.issue')}

@@ -3445,6 +3445,48 @@ exports.sendTripAnnouncement = onCall({ secrets: WA_SECRETS, timeoutSeconds: 540
   return { ...result, total: recipients.length };
 });
 
+// One parent: the trip link with the line that fits where the student
+// stands (invitation / reply reminder / payment reminder / details), from
+// the student search, the trip's students list or the dashboard lists.
+// Without the WhatsApp API the text and number come back for wa.me.
+exports.sendTripLink = onCall({ secrets: WA_SECRETS }, async (request) => {
+  const caller = await tripCaller(request);
+  const { ref, trip } = await loadTrip(request.data?.tripId, caller, "supervise");
+  if (!TRIP_PUBLIC.includes(trip.status)) throw new HttpsError("failed-precondition", "رابط الرحلة متاح بعد اعتمادها فقط.");
+  const studentId = normalizeDigits(request.data?.studentId);
+  if (!/^\d{5,15}$/.test(studentId)) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  const [sSnap, eSnap] = await Promise.all([db.collection("students").doc(studentId).get(), ref.collection("enrollments").doc(studentId).get()]);
+  const s = sSnap.data();
+  const e = eSnap.data();
+  const branchOf = await branchResolver();
+  if (!e && !(s && tripTargets(trip, s, branchOf))) throw new HttpsError("failed-precondition", "الطالب/ة ليس ضمن المستهدفين بهذه الرحلة.");
+  const phone = (s && s.mobile) || e?.parentPhone || "";
+  if (!toIntlNumber(phone)) throw new HttpsError("failed-precondition", "لا يوجد رقم جوال لولي الأمر في سجل الطالب/ة.");
+
+  const status = enrollmentStatus(e, trip.fee);
+  const open = trip.status === "OPEN" && riyadhDay() <= trip.payDeadline;
+  const line = status === "NO_RESPONSE" && open ? TRIP_LINES.announce(trip)
+    : ["AWAITING_PAYMENT", "RECEIPT_REJECTED"].includes(status) && open ? TRIP_LINES.remindPayment(trip)
+      : "نرسل لكم رابط الرحلة للاطلاع على تفاصيلها ومتابعة حالة الطالب/ة.";
+  const studentName = (s && (s.nameAr || s.name)) || e?.studentName || "";
+  const logRef = ref.collection("linkSends").doc(studentId);
+
+  const settings = await waTripSettings();
+  const now = Timestamp.now();
+  const record = { at: now, by: caller.uid, byName: caller.name || "", count: FieldValue.increment(1) };
+  if (!settings) {
+    await logRef.set({ ...record, via: "manual" }, { merge: true });
+    const link = `${PUBLIC_APP_URL}/trip/${trip.tripCode}`;
+    return { sent: false, phone: toIntlNumber(phone), text: `ولي أمر الطالب/ة ${studentName}،\nرحلة: ${trip.title} — ${tripWhen(trip)}\n${line}\n${link}\n${SCHOOL_NAME}` };
+  }
+  const last = (await logRef.get()).data();
+  if (last?.at && Date.now() - last.at.toMillis() < 120e3) throw new HttpsError("resource-exhausted", "أُرسل الرابط لولي الأمر قبل أقل من دقيقتين.");
+  await sendTripNotice({ settings, trip: { ...trip, id: ref.id }, phone, studentName, branch: s ? branchOf(s) : e?.branch, section: s ? studentSection(s) : "", line });
+  await logRef.set({ ...record, via: "whatsapp" }, { merge: true });
+  await tripLog(ref, "TRIP_LINK_SENT", caller, { studentId, status });
+  return { sent: true };
+});
+
 // --- Public parent page ---------------------------------------------------
 async function tripByCode(code) {
   const tripCode = String(code || "").trim().toUpperCase();

@@ -13,6 +13,8 @@ import TripForm from '../components/trips/TripForm';
 import TripDetails from '../components/trips/TripDetails';
 import TripsReport from '../components/trips/TripsReport';
 import TripStudentSearch from '../components/trips/TripStudentSearch';
+import SendTripLink from '../components/trips/SendTripLink';
+import { useWhatsAppApi } from '../hooks/useWhatsAppApi';
 import TripAccounts from '../components/trips/TripAccounts';
 import { canSeeTrips } from '../utils/scope';
 import { printPage, escapeHtml } from '../utils/printPage';
@@ -373,6 +375,7 @@ function TripListStats({ tr, t, today }) {
 // coming trips only; a row opens its trip.
 function EnrollmentDrill({ status, branchName, onClose, onOpenTrip }) {
   const { t } = useTranslation();
+  const waApi = useWhatsAppApi();
   const [rows, setRows] = useState(null);
   const [error, setError] = useState(null);
   const [q, setQ] = useState('');
@@ -407,7 +410,7 @@ function EnrollmentDrill({ status, branchName, onClose, onOpenTrip }) {
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-slate-50"><tr className="text-slate-500 text-xs">
                   <th className="text-start px-4 py-2">{t('trips.col.student')}</th><th className="text-start">{t('trips.col.branch')}</th><th className="text-start">{t('trips.col.grade')}</th>
-                  <th className="text-start">{t('trips.report.trip')}</th><th className="text-start">{t('trips.col.status')}</th><th className="text-start">{t('trips.col.payMethod')}</th>
+                  <th className="text-start">{t('trips.report.trip')}</th><th className="text-start">{t('trips.col.status')}</th><th className="text-start">{t('trips.col.payMethod')}</th><th />
                 </tr></thead>
                 <tbody>
                   {shown.map((r) => (
@@ -418,6 +421,7 @@ function EnrollmentDrill({ status, branchName, onClose, onOpenTrip }) {
                       <td><p className="text-slate-800">{r.tripTitle}</p><p className="text-xs text-slate-400" dir="ltr">{r.tripDate}</p></td>
                       <td><span className={`inline-block px-2 py-0.5 rounded-md text-xs font-medium border ${ENROLLMENT_STATUS_STYLES[r.status] || ''}`}>{t(`trips.enrollment.${r.status}`)}</span></td>
                       <td className="text-xs text-slate-600">{r.collectMethod ? t(`trips.collectMethod.${r.collectMethod}`) : r.payMethod ? t(`trips.payMethod.${r.payMethod}`) : '—'}</td>
+                      <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}><SendTripLink tripId={r.tripId} studentId={r.studentId} waApi={waApi} /></td>
                     </tr>
                   ))}
                 </tbody>

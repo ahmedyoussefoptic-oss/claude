@@ -19,6 +19,7 @@ import { useWhatsAppApi } from '../../hooks/useWhatsAppApi';
 import { userBranches } from '../../utils/scope';
 import logo from '../../assets/logo.png';
 import { printTripInvoice } from '../../utils/tripInvoice';
+import SendTripLink from './SendTripLink';
 import {
   TRIP_STATUS_STYLES, ENROLLMENT_STATUSES, ENROLLMENT_STATUS_STYLES, TRIP_PAY_METHODS, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES,
   enrollmentStatus, tripPermissions, tripConflicts, tripLink, dayToDate, TRIP_BANK_LETTER_URL, tripTime, TRIP_COLLECT_METHODS,
@@ -769,6 +770,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                                 <button disabled={!!busy} onClick={() => setDialog({ title: t('trips.payEdit.undoTitle', { name: r.name }), label: t('trips.payEdit.undoReason'), required: true, onConfirm: async (note) => { await review(r.id, 'undo', note); setDialog(null); } })} className="px-2 py-1 rounded-lg text-xs text-rose-600 hover:bg-rose-50">{t('trips.payEdit.undo')}</button>
                               </>
                             )}
+                            {perms.supervise && ['OPEN', 'CLOSED', 'COMPLETED'].includes(trip.status) && r.hasMobile !== false && <SendTripLink tripId={trip.id} studentId={r.id} waApi={waApi} />}
                             {perms.editStudents && ['OPEN', 'CLOSED'].includes(trip.status) && !r.offRoster && (
                               <button onClick={() => setDialog({ manual: r })} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 flex items-center gap-1" title={t('trips.manual.title')}><UserPlus className="w-3.5 h-3.5" />{r.e ? t('trips.manual.edit') : t('trips.manual.add')}</button>
                             )}
