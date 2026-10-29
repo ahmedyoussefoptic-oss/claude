@@ -98,6 +98,46 @@ function searchKeywords(name, nameAr) {
   return [...new Set(words)].slice(0, 20);
 }
 
+// One roster record from its plain fields (a file row or the student form
+// in سجل الطلاب): the system's branch, the forms' stage / section / class,
+// and the search keys.
+export function buildStudentRecord(f, branches) {
+  const nationalId = normalizeStudentId(f.nationalId);
+  const name = String(f.name ?? '').trim();
+  const nameAr = String(f.nameAr ?? '').trim();
+  const branchName = String(f.branchName ?? '').trim();
+  const branch = f.branch || matchBranchCode(branchName, branches);
+  const stageName = String(f.stageName ?? '').trim();
+  const gradeName = String(f.gradeName ?? '').trim();
+  const className = String(f.className ?? '').trim();
+  const stage = stageFromGradeName(gradeName);
+  return {
+    nationalId,
+    name: name || nameAr,
+    nameAr,
+    // The system's name for the branch (the file says e.g. «السلامة بنات»
+    // for «السلامة 1»); the file's spelling is kept alongside.
+    branchName: branches.find((b) => b.id === branch)?.name || branchName,
+    branchNameFile: branchName,
+    branch,
+    stageName,
+    gradeName,
+    className,
+    // Ready-made form values (stage / section / class dropdowns).
+    stage,
+    department: SECTION_BY_STAGE_NAME[normalizeArabic(stageName)] || SECTION_BY_STAGE_NAME[stageName] || '',
+    grade: classFromClassName(className, stage),
+    mobile: normalizeMobile(f.mobile),
+    parentNationalId: normalizeStudentId(f.parentNationalId),
+    // Optional gender column → 'M' / 'F' (used by boys-/girls-only trips).
+    gender: normalizeGender(f.gender),
+    nameLower: normalizeLatin(name),
+    nameArNorm: normalizeArabic(nameAr),
+    keywords: searchKeywords(name, nameAr),
+    active: true,
+  };
+}
+
 // Parses a raw sheet (array of row objects from XLSX.utils.sheet_to_json)
 // into normalized student records, tolerant of header casing/whitespace.
 // Columns: id_num, name, name_ar, branch_name, stage_name, grade_name,
@@ -118,52 +158,27 @@ export function parseStudentRows(rows, branches) {
       return undefined;
     };
 
-    const nationalId = normalizeStudentId(get('id_num', 'national_id', 'nationalid', 'student_id'));
-    const name = String(get('name', 'student_name', 'name_en') ?? '').trim();
-    const nameAr = String(get('name_ar', 'arabic_name', 'student_name_ar') ?? '').trim();
+    const record = buildStudentRecord({
+      nationalId: get('id_num', 'national_id', 'nationalid', 'student_id'),
+      name: get('name', 'student_name', 'name_en'),
+      nameAr: get('name_ar', 'arabic_name', 'student_name_ar'),
+      branchName: get('branch_name', 'branch'),
+      stageName: get('stage_name', 'stage'),
+      gradeName: get('grade_name', 'grade'),
+      className: get('class_name', 'class'),
+      mobile: get('mobile', 'phone', 'parent_mobile'),
+      parentNationalId: get('father_id', 'parent_id', 'guardian_id', 'parent_national_id'),
+      gender: get('gender', 'sex', 'الجنس', 'student_gender'),
+    }, branches);
 
-    if (!nationalId || (!name && !nameAr)) {
+    if (!record.nationalId || !record.name) {
       skipped.push(index + 2); // +2: 1-based + header row
       return;
     }
-
-    const branchName = String(get('branch_name', 'branch') ?? '').trim();
-    const branch = matchBranchCode(branchName, branches);
-    if (!branch && branchName) unmatchedBranches[branchName] = (unmatchedBranches[branchName] || 0) + 1;
-    const stageName = String(get('stage_name', 'stage') ?? '').trim();
-    const gradeName = String(get('grade_name', 'grade') ?? '').trim();
-    const className = String(get('class_name', 'class') ?? '').trim();
-    const stage = stageFromGradeName(gradeName);
-    const mobile = normalizeMobile(get('mobile', 'phone', 'parent_mobile'));
-    const parentNationalId = normalizeStudentId(get('father_id', 'parent_id', 'guardian_id', 'parent_national_id'));
-    if (!mobile) missingMobile++;
-    if (!parentNationalId) missingParentId++;
-
-    records.push({
-      nationalId,
-      name: name || nameAr,
-      nameAr,
-      // The system's name for the branch (the file says e.g. «السلامة بنات»
-      // for «السلامة 1»); the file's spelling is kept alongside.
-      branchName: branches.find((b) => b.id === branch)?.name || branchName,
-      branchNameFile: branchName,
-      branch,
-      stageName,
-      gradeName,
-      className,
-      // Ready-made form values (stage / section / class dropdowns).
-      stage,
-      department: SECTION_BY_STAGE_NAME[normalizeArabic(stageName)] || SECTION_BY_STAGE_NAME[stageName] || '',
-      grade: classFromClassName(className, stage),
-      mobile,
-      parentNationalId,
-      // Optional gender column → 'M' / 'F' (used by boys-/girls-only trips).
-      gender: normalizeGender(get('gender', 'sex', 'الجنس', 'student_gender')),
-      nameLower: normalizeLatin(name),
-      nameArNorm: normalizeArabic(nameAr),
-      keywords: searchKeywords(name, nameAr),
-      active: true,
-    });
+    if (!record.branch && record.branchNameFile) unmatchedBranches[record.branchNameFile] = (unmatchedBranches[record.branchNameFile] || 0) + 1;
+    if (!record.mobile) missingMobile++;
+    if (!record.parentNationalId) missingParentId++;
+    records.push({ ...record, source: 'import' });
   });
 
   return { records, skipped, unmatchedBranches, missingMobile, missingParentId };
@@ -191,10 +206,12 @@ export async function upsertStudents(records, onProgress, deactivateIds = []) {
   return written;
 }
 
-// IDs of every student currently in the roster (to find who left).
+// IDs of every student currently in the roster (to find who left). Students
+// added by hand in سجل الطلاب aren't in the school's file, so they don't
+// count as having left.
 export async function listStudentIds() {
   const snap = await getDocs(collection(db, STUDENTS_COLLECTION));
-  return snap.docs.filter((d) => d.data().active !== false).map((d) => d.id);
+  return snap.docs.filter((d) => d.data().active !== false && d.data().source !== 'manual').map((d) => d.id);
 }
 
 // Direct doc-id lookup — students are keyed by their national ID, so this is

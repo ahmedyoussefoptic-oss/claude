@@ -5189,6 +5189,46 @@ exports.getStudent360 = onCall(async (request) => {
   };
 });
 
+// --- سجل الطلاب: adding a student / editing a roster student ---------------
+// The owner, the platform users and admins with the settings permission. The
+// client builds the record the same way as the roster import (buildStudentRecord)
+// and the fields are whitelisted here. «بيانات إضافية» (extraFields, label →
+// value) are kept across imports; the roster's own fields are overwritten by
+// the next import of the school's file.
+const ROSTER_TEXT_FIELDS = ["name", "nameAr", "branchName", "branch", "stageName", "gradeName", "className", "stage", "department", "grade", "nameLower", "nameArNorm"];
+exports.saveRosterStudent = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const u = (await db.collection("users").doc(request.auth.uid).get()).data();
+  if (!u || u.active === false || !(hasPlatform(u) || callerCan(u, "settings", await loadAdminCaps()))) {
+    throw new HttpsError("permission-denied", "إضافة الطلاب وتعديل بياناتهم لمدير النظام أو منشئ النظام.");
+  }
+  const d = request.data?.student || {};
+  const isNew = request.data?.isNew === true;
+  const nationalId = normalizeDigits(d.nationalId);
+  if (!/^[0-9A-Za-z]{5,20}$/.test(nationalId)) throw new HttpsError("invalid-argument", "رقم هوية الطالب غير صحيح.");
+  const rec = Object.fromEntries(ROSTER_TEXT_FIELDS.map((k) => [k, str(d[k], 160)]));
+  if (!rec.name && !rec.nameAr) throw new HttpsError("invalid-argument", "اسم الطالب مطلوب.");
+  rec.mobile = normalizeDigits(d.mobile);
+  if (rec.mobile && !/^05\d{8}$/.test(rec.mobile)) throw new HttpsError("invalid-argument", "جوال ولي الأمر يجب أن يكون بصيغة 05xxxxxxxx.");
+  rec.parentNationalId = normalizeDigits(d.parentNationalId).slice(0, 20);
+  rec.gender = d.gender === "M" || d.gender === "F" ? d.gender : "";
+  rec.keywords = (Array.isArray(d.keywords) ? d.keywords : []).map((k) => str(k, 40)).filter(Boolean).slice(0, 20);
+  const extra = {};
+  for (const [label, value] of Object.entries(d.extraFields && typeof d.extraFields === "object" ? d.extraFields : {}).slice(0, 30)) {
+    const k = str(label, 60).replace(/[.~*/[\]`]/g, " ").trim();
+    if (k && str(value)) extra[k] = str(value, 500);
+  }
+  const ref = db.collection("students").doc(nationalId);
+  const snap = await ref.get();
+  if (isNew && snap.exists && snap.data().active !== false) throw new HttpsError("already-exists", "الطالب مسجل مسبقاً في سجل الطلاب — ابحث عنه وعدّل بياناته.");
+  if (!isNew && !snap.exists) throw new HttpsError("not-found", "لم يتم العثور على الطالب.");
+  const now = Timestamp.now();
+  const data = { ...rec, nationalId, extraFields: extra, active: true, updatedAt: now, updatedBy: request.auth.uid, updatedByName: u.name || "" };
+  if (snap.exists) await ref.update(data);
+  else await ref.set({ ...data, source: "manual", createdAt: now, createdBy: request.auth.uid, createdByName: u.name || "" });
+  return { ok: true, nationalId };
+});
+
 // --- New customers: visit / school-tour appointments (leadVisits) ---------
 // Owner-only like the rest of the platform. Reminders go through the
 // WhatsApp API with the template named in platformSettings/main

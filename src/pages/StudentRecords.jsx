@@ -10,6 +10,7 @@ import { TICKET_STATUS_BADGE } from '../config/techSupport';
 import { ITEM_STATUS_BADGE } from '../config/lostFound';
 import { studentKey } from '../utils/studentKey';
 import StudentTrips from '../components/trips/StudentTrips';
+import StudentSmartSearch from '../components/students/StudentSmartSearch';
 import { canAccessTechSupport, canSeeTrips } from '../utils/scope';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import TechSupportDetails from '../components/techSupport/TechSupportDetails';
@@ -185,6 +186,8 @@ export default function StudentRecords() {
           {t('studentRecords.exportExcel')}
         </button>
       </div>
+
+      <StudentSmartSearch records={records} branchName={(id) => branches.find((b) => b.id === id)?.name || ''} />
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[[t('studentRecords.studentsCount'), students.length, 'bg-sky-50 text-sky-600', GraduationCap],
