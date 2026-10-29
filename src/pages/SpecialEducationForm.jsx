@@ -15,6 +15,9 @@ const STUDENT = { studentName: '', studentId: '', studentDob: '' };
 const GUARDIAN = { guardianName: '', guardianId: '', guardianDob: '', relation: '', email: '', phone: '', altPhone: '' };
 const ENROLL = { grade: '', inclusionType: '', disability: '' };
 const today = new Date().toISOString().slice(0, 10);
+// The grades offered to parents, for every stage (the template's own list
+// covers its stage only).
+const SPED_GRADES = ['الصف الأول الابتدائي', 'الصف الثاني الابتدائي', 'الصف الثالث الابتدائي', 'الصف الرابع الابتدائي', 'الصف الخامس الابتدائي', 'الصف السادس الابتدائي', 'الصف الأول متوسط', 'الصف الثاني متوسط', 'الصف الثالث متوسط', 'الصف الأول ثانوي', 'الصف الثاني ثانوي', 'الصف الثالث ثانوي'];
 
 function Field({ label, required, hint, children }) {
   return (
@@ -153,7 +156,7 @@ export default function SpecialEducationForm() {
 
             {section(t('spedForm.enrollment'))}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Field label={t('spedForm.grade')} required hint={t('spedForm.gradeHint')}><input required maxLength={120} value={form.grade} onChange={set('grade')} className={inputCls} /></Field>
+              <Field label={t('spedForm.grade')} required><select required value={form.grade} onChange={set('grade')} className={inputCls}><option value="">{t('spedForm.choose')}</option>{SPED_GRADES.map((v) => <option key={v} value={v}>{v}</option>)}</select></Field>
               <Field label={t('spedForm.inclusionType')} required>{select('inclusionType', 'inclusionTypes')}</Field>
               <div className="sm:col-span-2"><Field label={t('spedForm.disability')} required>{select('disability', 'disabilities')}</Field></div>
             </div>

@@ -6583,6 +6583,8 @@ exports.callTasksSummary = onSchedule({ schedule: "0 16 * * 0-4", timeZone: "Asi
 // written into that same template, ready to upload to the ministry.
 const SPED_MAX = 500;
 const SPED_ID = /^[12]\d{9}$/;
+// The grades offered to parents (SpecialEducationForm.jsx keeps the same list).
+const SPED_GRADES = ["الصف الأول الابتدائي", "الصف الثاني الابتدائي", "الصف الثالث الابتدائي", "الصف الرابع الابتدائي", "الصف الخامس الابتدائي", "الصف السادس الابتدائي", "الصف الأول متوسط", "الصف الثاني متوسط", "الصف الثالث متوسط", "الصف الأول ثانوي", "الصف الثاني ثانوي", "الصف الثالث ثانوي"];
 
 async function spedFormOf(formId) {
   if (typeof formId !== "string" || !/^[A-Za-z0-9]{6,40}$/.test(formId)) throw new HttpsError("invalid-argument", "الرابط غير صحيح.");
@@ -6662,7 +6664,7 @@ exports.submitSpedEntry = onCall(async (request) => {
   if (e.altPhone && !/^0\d{8,9}$/.test(e.altPhone)) bad("رقم التواصل الآخر غير صحيح.");
   const inList = (key, v, label) => { if (!(lists[key] || []).includes(v)) bad(`اختر ${label} من القائمة.`); };
   inList("relations", e.relation, "العلاقة مع الطالب/ة");
-  if (!e.grade) bad("أدخل الصف.");
+  if (!SPED_GRADES.includes(e.grade)) bad("اختر الصف من القائمة.");
   inList("inclusionTypes", e.inclusionType, "نوع الدمج التعليمي");
   inList("disabilities", e.disability, "نوع الإعاقة");
 

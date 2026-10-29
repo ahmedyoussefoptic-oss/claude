@@ -3598,7 +3598,6 @@
     "editSent": "Edit data I sent before",
     "editTitle": "Edit sent data",
     "editHint": "Enter the student's and guardian's national IDs as sent.",
-    "load": "Show data",
-    "gradeHint": "e.g. First intermediate grade"
+    "load": "Show data"
   }
 }
