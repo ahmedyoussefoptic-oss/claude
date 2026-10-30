@@ -5814,8 +5814,10 @@ exports.bevatelSyncNow = onCall({ timeoutSeconds: 540, memory: "512MiB" }, async
 
 // --- Bevatel webhooks -------------------------------------------------------
 // Set in Bevatel (Integrations › Webhooks, service call center) with this
-// function's URL and the header X-Webhook-Key: the key from Settings
-// (createBevatelWebhookKey), kept here as its sha256 and shown once. Bevatel
+// function's URL and the header XWebhookKey: the key from Settings
+// (createBevatelWebhookKey), kept here as its sha256 and shown once. Bevatel's
+// form takes letters and digits only in a header, so both are written that way.
+// Bevatel
 // wants a 200 within 5 seconds, retries three times without one and switches
 // the webhook off after 30 errors in 30 minutes, so once the key checks out the
 // answer is always 200; a repeated event just rewrites the same call.
@@ -5823,12 +5825,12 @@ exports.bevatelSyncNow = onCall({ timeoutSeconds: 540, memory: "512MiB" }, async
 // Transferred update the same call (data.call_id); Call Started adds nothing
 // a later event doesn't. event_type's values aren't documented, so the payload's
 // shape decides too, and the values seen are kept on settings/bevatel.
-const BEVATEL_WEBHOOK_HEADER = "X-Webhook-Key";
+const BEVATEL_WEBHOOK_HEADER = "XWebhookKey";
 const BEVATEL_WEBHOOK_URL = "https://us-central1-mis-complaints.cloudfunctions.net/bevatelWebhook";
 
 exports.createBevatelWebhookKey = onCall(async (request) => {
   await bevatelOwner(request);
-  const key = `bwh_${crypto.randomBytes(24).toString("base64url")}`;
+  const key = crypto.randomBytes(24).toString("hex");
   const now = Timestamp.now();
   await db.collection("secureConfig").doc("bevatelWebhook").set({ hash: sha256(key), createdAt: now, createdBy: request.auth.uid });
   await db.collection("settings").doc("bevatel").set({ webhookKeyAt: now }, { merge: true });
