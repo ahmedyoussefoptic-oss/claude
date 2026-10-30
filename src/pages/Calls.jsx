@@ -133,7 +133,7 @@ export default function Calls() {
         </div>
       </div>
 
-      {cfg && cfg.connected !== true && (
+      {cfg && cfg.connected !== true && !cfg.webhookLastAt && (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3 flex gap-2"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />{t('calls.notConnected')}</div>
       )}
       {cfg?.lastSyncError && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl p-3">{t('calls.syncError', { error: cfg.lastSyncError })}</div>}

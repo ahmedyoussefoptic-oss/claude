@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
-import { PhoneCall, Loader2, Check, RefreshCw } from 'lucide-react';
+import { PhoneCall, Loader2, Check, RefreshCw, Webhook, Copy } from 'lucide-react';
 import { db, functions } from '../../config/firebase';
 import { useBranches } from '../../hooks/useOrgData';
 
@@ -20,6 +20,7 @@ export default function BevatelSettings() {
   const [map, setMap] = useState({});
   const [busy, setBusy] = useState(null);
   const [msg, setMsg] = useState(null);
+  const [webhook, setWebhook] = useState(null); // { url, header, key }: the key is shown once
 
   useEffect(() => onSnapshot(doc(db, 'settings', 'bevatel'), (snap) => {
     const d = snap.data() || {};
@@ -42,7 +43,20 @@ export default function BevatelSettings() {
   const saveKey = (remove) => run('key', async () => { await call('setBevatelKey', { apiKey: remove ? '' : apiKey }); setApiKey(''); }, remove ? t('bevatel.removed') : t('bevatel.connectedOk'));
   const saveMap = () => run('map', () => call('saveBevatelQueues', { queueBranch: map }), t('bevatel.mapSaved'));
   const syncNow = (days) => run(`sync${days}`, () => call('bevatelSyncNow', { days }), (r) => t('bevatel.synced', { inbound: r.inbound || 0, outbound: r.outbound || 0 }));
+  const makeWebhookKey = () => {
+    if (cfg.webhookKeyAt && !window.confirm(t('bevatel.webhook.replaceConfirm'))) return;
+    run('webhook', async () => setWebhook(await call('createBevatelWebhookKey')), t('bevatel.webhook.created'));
+  };
   const queues = cfg.queues || [];
+  const copyRow = (label, value) => (
+    <div>
+      <p className="text-xs text-slate-600 mb-1">{label}</p>
+      <div className="flex gap-2">
+        <input readOnly dir="ltr" value={value} className={inputCls} onFocus={(e) => e.target.select()} />
+        <button type="button" onClick={() => navigator.clipboard.writeText(value)} className="px-3 rounded-xl border border-slate-300 bg-white text-slate-600 shrink-0"><Copy className="w-4 h-4" /></button>
+      </div>
+    </div>
+  );
 
   return (
     <section>
@@ -57,7 +71,31 @@ export default function BevatelSettings() {
         {cfg.connected && <button disabled={!!busy} onClick={() => saveKey(true)} className="px-4 py-2 rounded-xl text-sm text-rose-600 border border-rose-200 bg-white">{t('bevatel.disconnect')}</button>}
       </div>
 
-      {cfg.connected && (
+      <div className="mt-4 bg-slate-50 border border-slate-100 rounded-xl p-3 space-y-2">
+        <p className="text-xs font-bold text-slate-700 flex items-center gap-1.5"><Webhook className="w-4 h-4 text-primary" />{t('bevatel.webhook.title')}</p>
+        <p className="text-xs text-slate-500">{t('bevatel.webhook.hint')}</p>
+        <button disabled={!!busy} onClick={makeWebhookKey} className="px-4 py-2 rounded-xl text-sm bg-primary text-white font-medium flex items-center gap-2 disabled:opacity-50">
+          {busy === 'webhook' && <Loader2 className="w-4 h-4 animate-spin" />}{t(cfg.webhookKeyAt ? 'bevatel.webhook.replace' : 'bevatel.webhook.create')}
+        </button>
+        {webhook && (
+          <div className="space-y-2">
+            {copyRow(t('bevatel.webhook.url'), webhook.url)}
+            {copyRow(t('bevatel.webhook.headerKey'), webhook.header)}
+            {copyRow(t('bevatel.webhook.headerValue'), webhook.key)}
+            <p className="text-xs text-amber-700">{t('bevatel.webhook.once')}</p>
+          </div>
+        )}
+        {cfg.webhookKeyAt && !cfg.webhookLastAt && <p className="text-xs text-slate-500">{t('bevatel.webhook.waiting')}</p>}
+        {cfg.webhookLastAt && (
+          <div className="text-xs text-slate-600 space-y-0.5">
+            <p>{t('bevatel.webhook.last', { time: format(cfg.webhookLastAt.toDate(), 'yyyy-MM-dd HH:mm'), count: cfg.webhookCount || 0 })}</p>
+            <p dir="ltr" className="text-start text-slate-400">{Object.entries(cfg.webhookEvents || {}).map(([k, v]) => `${k}: ${v}`).join(' · ')}</p>
+            {[...(cfg.webhookDirections || []), ...(cfg.webhookDialStatuses || [])].length > 0 && <p dir="ltr" className="text-start text-slate-400">{[...(cfg.webhookDirections || []), ...(cfg.webhookDialStatuses || [])].join(' · ')}</p>}
+          </div>
+        )}
+      </div>
+
+      {(cfg.connected || queues.length > 0) && (
         <div className="mt-4 space-y-3">
           <p className="text-xs font-bold text-slate-700">{t('bevatel.queuesTitle')}</p>
           {queues.length === 0 ? <p className="text-xs text-slate-500">{t('bevatel.noQueues')}</p> : (
@@ -75,7 +113,7 @@ export default function BevatelSettings() {
           )}
           <div className="flex flex-wrap gap-2">
             {queues.length > 0 && <button disabled={!!busy} onClick={saveMap} className="px-4 py-2 rounded-xl text-sm bg-primary text-white font-medium flex items-center gap-2 disabled:opacity-50">{busy === 'map' && <Loader2 className="w-4 h-4 animate-spin" />}{t('bevatel.saveMap')}</button>}
-            {[7, 30].map((d) => (
+            {cfg.connected && [7, 30].map((d) => (
               <button key={d} disabled={!!busy} onClick={() => syncNow(d)} className="px-4 py-2 rounded-xl text-sm border border-slate-300 bg-white text-slate-700 flex items-center gap-2 disabled:opacity-50">
                 {busy === `sync${d}` ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}{t('bevatel.syncDays', { days: d })}
               </button>

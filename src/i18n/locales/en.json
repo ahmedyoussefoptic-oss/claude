@@ -3204,7 +3204,21 @@
     "mapSaved": "Saved. Sync to apply it to earlier calls.",
     "syncDays": "Sync last {{days}} days",
     "synced": "Synced: {{inbound}} inbound, {{outbound}} outbound.",
-    "lastSync": "Last sync {{time}} ({{count}} calls)"
+    "lastSync": "Last sync {{time}} ({{count}} calls)",
+    "webhook": {
+      "title": "Live calls (webhook)",
+      "hint": "Calls arrive live from Bevatel, without an API key. Create the key here, then add the URL and header in Bevatel: Integrations › Webhooks, service Call Center.",
+      "create": "Create webhook key",
+      "replace": "Replace key",
+      "replaceConfirm": "The current webhook stops until the new key is set in Bevatel. Continue?",
+      "created": "Key created.",
+      "url": "Webhook URL",
+      "headerKey": "Header: Key",
+      "headerValue": "Header: Value",
+      "once": "Copy the value now: it won't be shown again.",
+      "waiting": "The key is ready; no event has arrived from Bevatel yet.",
+      "last": "Last event {{time}} — {{count}} events in total"
+    }
   },
   "calls": {
     "title": "Call analytics",

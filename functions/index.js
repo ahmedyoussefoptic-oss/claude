@@ -5622,8 +5622,9 @@ exports.mcp = onRequest({ timeoutSeconds: 120, memory: "512MiB" }, async (req, r
 });
 
 // ===========================================================================
-// Bevatel call center — calls are pulled from Bevatel's reports API every
-// 15 minutes into calls/<dir>_<id> (Bevatel sends no call webhooks). The
+// Bevatel call center — calls reach calls/<dir>_<id> in two ways: live through
+// Bevatel's call webhooks (bevatelWebhook, further down), and pulled from the
+// reports API every 15 minutes when that works for the account. The
 // owner saves the API key (secureConfig/bevatel, never readable by clients)
 // and maps each Bevatel queue to a branch (settings/bevatel.queueBranch).
 // Each run re-reads the whole current day (and the previous one just after
@@ -5721,6 +5722,9 @@ exports.bevatelSync = onSchedule({ schedule: "every 15 minutes", timeZone: "Asia
     console.error("bevatel sync", err.message);
     await db.collection("settings").doc("bevatel").set({ lastSyncError: err.message, lastSyncErrorAt: Timestamp.now() }, { merge: true });
   }
+  // Webhooks only (no API key): the waiting call-task attempts are checked here.
+  const cfg = (await db.collection("settings").doc("bevatel").get()).data() || {};
+  if (cfg.webhookLastAt && !cfg.connected) await verifyPendingCallTasks(cfg.lastSyncAt?.toMillis?.() || 0).catch((err) => console.error("call verify", err.message));
 });
 
 async function bevatelOwner(request) {
@@ -5787,6 +5791,11 @@ exports.saveBevatelQueues = onCall(async (request) => {
   const map = request.data?.queueBranch || {};
   const clean = Object.fromEntries(Object.entries(map).filter(([q, b]) => q && typeof b === "string" && b).map(([q, b]) => [String(q).slice(0, 40), b.slice(0, 60)]));
   await db.collection("settings").doc("bevatel").set({ queueBranch: clean, updatedAt: Timestamp.now() }, { merge: true });
+  // Calls that came by webhook before their queue had a branch.
+  const unmapped = await db.collection("calls").where("branch", "==", "").limit(5000).get();
+  const writer = db.bulkWriter();
+  unmapped.docs.forEach((d) => { if (clean[d.data().queue]) writer.update(d.ref, { branch: clean[d.data().queue] }); });
+  await writer.close();
   return { ok: true };
 });
 
@@ -5801,6 +5810,119 @@ exports.bevatelSyncNow = onCall({ timeoutSeconds: 540, memory: "512MiB" }, async
   } catch (err) {
     throw new HttpsError("internal", err.message);
   }
+});
+
+// --- Bevatel webhooks -------------------------------------------------------
+// Set in Bevatel (Integrations › Webhooks, service call center) with this
+// function's URL and the header X-Webhook-Key: the key from Settings
+// (createBevatelWebhookKey), kept here as its sha256 and shown once. Bevatel
+// wants a 200 within 5 seconds, retries three times without one and switches
+// the webhook off after 30 errors in 30 minutes, so once the key checks out the
+// answer is always 200; a repeated event just rewrites the same call.
+// Call Ended carries the whole call (data.id); Abandoned, Timed Out and
+// Transferred update the same call (data.call_id); Call Started adds nothing
+// a later event doesn't. event_type's values aren't documented, so the payload's
+// shape decides too, and the values seen are kept on settings/bevatel.
+const BEVATEL_WEBHOOK_HEADER = "X-Webhook-Key";
+const BEVATEL_WEBHOOK_URL = "https://us-central1-mis-complaints.cloudfunctions.net/bevatelWebhook";
+
+exports.createBevatelWebhookKey = onCall(async (request) => {
+  await bevatelOwner(request);
+  const key = `bwh_${crypto.randomBytes(24).toString("base64url")}`;
+  const now = Timestamp.now();
+  await db.collection("secureConfig").doc("bevatelWebhook").set({ hash: sha256(key), createdAt: now, createdBy: request.auth.uid });
+  await db.collection("settings").doc("bevatel").set({ webhookKeyAt: now }, { merge: true });
+  return { key, url: BEVATEL_WEBHOOK_URL, header: BEVATEL_WEBHOOK_HEADER };
+});
+
+const secHms = (v) => {
+  const s = Math.max(0, Math.round(Number(v) || 0));
+  return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+};
+function bevatelTimeMs(v) {
+  if (typeof v === "number") return v;
+  const s = String(v || "");
+  if (!s) return null;
+  const ms = Date.parse(/(Z|[+-]\d{2}:?\d{2})$/i.test(s) ? s : `${s.replace(" ", "T")}+03:00`);
+  return Number.isNaN(ms) ? null : ms;
+}
+function bevatelEventKind(body) {
+  const d = body.data || {};
+  const type = String(body.event_type || "");
+  if (/abandon/i.test(type)) return "ABANDON";
+  if (/time.?out/i.test(type)) return "EXITWITHTIMEOUT";
+  if (/transfer/i.test(type)) return "TRANSFER";
+  if (/start/i.test(type)) return "STARTED";
+  if (/end/i.test(type)) return "ENDED";
+  if ("dial_status" in d || "ended_at" in d) return "ENDED";
+  if ("transfer_type" in d || "transferred_at" in d) return "TRANSFER";
+  if ("started_at" in d) return "STARTED";
+  if ("caller_number" in d) return "extension" in d ? "EXITWITHTIMEOUT" : "ABANDON";
+  return "";
+}
+// A webhook event as a row of the reports API, for callRecord (null when it
+// isn't a call to record).
+function bevatelWebhookRow(body) {
+  const d = body.data || {};
+  const kind = bevatelEventKind(body);
+  const id = d.id || d.call_id;
+  if (!id || !kind || kind === "STARTED" || /internal/i.test(d.direction || "")) return null;
+  const ms = bevatelTimeMs(d.start_ringing_at) || bevatelTimeMs(d.answered_at) || bevatelTimeMs(d.ended_at) || bevatelTimeMs(d.transferred_at) || bevatelTimeMs(body.timestamp);
+  if (!ms) return null;
+  return {
+    dir: /out/i.test(d.direction || "") ? "out" : "in",
+    answered: !!d.answered_at,
+    row: {
+      id, date: new Date(ms + 3 * 3600000).toISOString().slice(0, 19).replace("T", " "), number: d.connected_line_num || d.caller_number || "",
+      queue_number: d.queue_number || "", queue_name: d.queue_name || "", agent: d.agent_name || d.transferred_from_agent || "", agent_number: d.extension || "",
+      event: kind === "ENDED" ? d.dial_status || "" : kind, talk_time: secHms(d.talk_time), ring_time: secHms(d.ring_time), wait_time: secHms(d.wait_time), did: d.did || "",
+    },
+  };
+}
+
+async function saveBevatelEvent(body) {
+  const cfgRef = db.collection("settings").doc("bevatel");
+  const cfg = (await cfgRef.get()).data() || {};
+  const d = body.data || {};
+  const now = Timestamp.now();
+  const parsed = bevatelWebhookRow(body);
+  const queue = str(d.queue_number, 40);
+  const newQueue = queue && !(cfg.queues || []).some((q) => q.number === queue);
+  if (parsed) {
+    const queues = Object.fromEntries((cfg.queues || []).map((q) => [q.number, q.name]));
+    const rec = callRecord(parsed.dir, parsed.row, cfg.queueBranch || {}, queues);
+    if (rec) {
+      const ref = db.collection("calls").doc(`${rec.dir}_${rec.callId.replace(/[^A-Za-z0-9._-]/g, "_")}`);
+      const prev = (await ref.get()).data();
+      const answered = rec.answered || parsed.answered;
+      // A queue rings several agents: an agent who didn't answer doesn't replace the one who did.
+      if (!(prev?.answered && !answered)) {
+        const first = prev && prev.at.toMillis() <= rec.at.toMillis() ? prev : rec;
+        const filled = prev ? Object.fromEntries(Object.entries(rec).filter(([, v]) => v !== "" && v !== 0)) : rec;
+        await ref.set({ ...filled, answered: answered || !!prev?.answered, at: first.at, day: first.day, hour: first.hour, weekday: first.weekday, via: "webhook", syncedAt: now }, { merge: true });
+      }
+    }
+  }
+  await cfgRef.set({
+    webhookLastAt: now, webhookCount: FieldValue.increment(1),
+    webhookEvents: { [str(body.event_type, 40).replace(/[.~*/[\]`]/g, "_") || "unknown"]: FieldValue.increment(1) },
+    ...(parsed ? { lastSyncAt: now } : {}),
+    ...(d.direction ? { webhookDirections: FieldValue.arrayUnion(str(d.direction, 30)) } : {}),
+    ...(d.dial_status ? { webhookDialStatuses: FieldValue.arrayUnion(str(d.dial_status, 30)) } : {}),
+    ...(newQueue ? { queues: FieldValue.arrayUnion({ number: queue, name: str(d.queue_name, 80), type: "" }) } : {}),
+  }, { merge: true });
+}
+
+exports.bevatelWebhook = onRequest(async (req, res) => {
+  if (req.method !== "POST") { res.status(405).send("POST only"); return; }
+  const saved = (await db.collection("secureConfig").doc("bevatelWebhook").get()).data();
+  if (!saved?.hash || sha256(req.get(BEVATEL_WEBHOOK_HEADER) || "") !== saved.hash) { res.status(401).send("unauthorized"); return; }
+  try {
+    await saveBevatelEvent(req.body || {});
+  } catch (err) {
+    console.error("bevatel webhook", err.message);
+  }
+  res.status(200).send("ok");
 });
 
 // ===========================================================================
