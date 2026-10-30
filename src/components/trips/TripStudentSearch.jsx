@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
-import { Search, Loader2, X, ExternalLink, FileText, Paperclip, HeartPulse, Phone, Bus } from 'lucide-react';
+import { Search, Loader2, X, ExternalLink, FileText, Paperclip, HeartPulse, Phone, Bus, UserPlus } from 'lucide-react';
 import { functions } from '../../config/firebase';
+import useAuthStore from '../../stores/useAuthStore';
 import { searchStudents, studentDisplayName } from '../../utils/students';
-import { ENROLLMENT_STATUS_STYLES, tripTime } from '../../config/trips';
+import { ENROLLMENT_STATUS_STYLES, tripPermissions, tripTime } from '../../config/trips';
 import { printTripInvoice } from '../../utils/tripInvoice';
 import { useWhatsAppApi } from '../../hooks/useWhatsAppApi';
 import SendTripLink from './SendTripLink';
+import ManualConsentDialog from './ManualConsentDialog';
 
 const call = (name, data) => httpsCallable(functions, name)(data).then((r) => r.data);
 
@@ -16,6 +18,7 @@ const call = (name, data) => httpsCallable(functions, name)(data).then((r) => r.
 // payment status with who collected / confirmed it, and the invoice.
 export default function TripStudentSearch({ branchName, onOpenTrip }) {
   const { t, i18n } = useTranslation();
+  const { user, userData } = useAuthStore();
   const [q, setQ] = useState('');
   const [hits, setHits] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -23,6 +26,7 @@ export default function TripStudentSearch({ branchName, onOpenTrip }) {
   const [trips, setTrips] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(null);
+  const [manual, setManual] = useState(null); // the trip whose reply is being recorded
   const timer = useRef(null);
   const waApi = useWhatsAppApi();
 
@@ -37,17 +41,20 @@ export default function TripStudentSearch({ branchName, onOpenTrip }) {
     return () => clearTimeout(timer.current);
   }, [q, student]);
 
-  const open = async (s) => {
-    setStudent(s);
-    setHits([]);
-    setTrips(null);
-    setError(null);
+  const loadTrips = async (s) => {
     try {
       const { trips: list } = await call('getStudentTrips', { studentId: s.nationalId, full: true });
       setTrips(list);
     } catch (err) {
       setError(err.message);
     }
+  };
+  const open = (s) => {
+    setStudent(s);
+    setHits([]);
+    setTrips(null);
+    setError(null);
+    return loadTrips(s);
   };
   // Trips-only staff can't browse the roster: a full ID still works.
   const submit = (e) => {
@@ -137,6 +144,9 @@ export default function TripStudentSearch({ branchName, onOpenTrip }) {
                 <div className="flex flex-wrap gap-2 pt-1">
                   <button type="button" onClick={() => onOpenTrip(tr.tripId)} className="px-2.5 py-1 rounded-lg text-xs border border-slate-300 bg-white text-slate-700 flex items-center gap-1"><ExternalLink className="w-3.5 h-3.5" />{t('trips.search.openTrip')}</button>
                   <SendTripLink tripId={tr.tripId} studentId={student.nationalId} waApi={waApi} />
+                  {tripPermissions(userData, tr, user?.uid).editStudents && ['OPEN', 'CLOSED'].includes(tr.tripStatus) && (
+                    <button type="button" onClick={() => setManual(tr)} className="px-2.5 py-1 rounded-lg text-xs border border-primary/30 bg-white text-primary hover:bg-primary/5 flex items-center gap-1 whitespace-nowrap"><UserPlus className="w-3.5 h-3.5" />{t(tr.decision ? 'trips.manual.edit' : 'trips.manual.add')}</button>
+                  )}
                   {tr.payStatus === 'PAID' && (
                     <button type="button" disabled={busy === tr.tripId} onClick={() => invoice(tr)} className="px-2.5 py-1 rounded-lg text-xs border border-sky-300 bg-white text-sky-700 flex items-center gap-1 disabled:opacity-50">
                       {busy === tr.tripId ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5" />}{tr.invoiceNo ? t('trips.invoice.reprint') : t('trips.invoice.issue')}
@@ -147,6 +157,12 @@ export default function TripStudentSearch({ branchName, onOpenTrip }) {
             </div>
           ))}
         </div>
+      )}
+      {manual && (
+        <ManualConsentDialog trip={{ id: manual.tripId, fee: manual.fee, payMethods: manual.payMethods }} current={manual.decision ? manual : null}
+          student={{ id: student.nationalId, name: studentDisplayName(student) || student.nationalId, grade: student.gradeName, className: student.className }}
+          canCollect={tripPermissions(userData, manual, user?.uid).finance} defaultCollector={userData?.name}
+          onCancel={() => setManual(null)} onSaved={() => { setManual(null); loadTrips(student); }} />
       )}
     </div>
   );

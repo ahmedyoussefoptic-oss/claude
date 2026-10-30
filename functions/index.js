@@ -3726,7 +3726,9 @@ exports.reviewTripPayment = onCall({ secrets: WA_SECRETS }, async (request) => {
   return { ok: true, messageSent };
 });
 
-// A consent taken by phone or on paper, recorded by the coordinator / finance.
+// A consent taken by phone or on paper (with the student, without the link),
+// recorded by the coordinator / finance. A paid student's reply can't be
+// removed or turned into a decline until the payment is cancelled.
 exports.staffSetTripEnrollment = onCall(async (request) => {
   const caller = await tripCaller(request);
   const d = request.data || {};
@@ -3741,6 +3743,10 @@ exports.staffSetTripEnrollment = onCall(async (request) => {
   const s = roster.find((x) => x.id === studentId);
   if (!s) throw new HttpsError("not-found", "الطالب ليس ضمن الصفوف المستهدفة.");
   const enrollRef = ref.collection("enrollments").doc(studentId);
+  const existing = (await enrollRef.get()).data();
+  if (existing?.payStatus === "PAID" && (d.remove === true || d.decision === "DECLINED")) {
+    throw new HttpsError("failed-precondition", "هذا الطالب مسجّل كمدفوع. ألغِ الدفع أولاً ثم عدّل الرد.");
+  }
   if (d.remove === true) {
     await enrollRef.delete();
     await tripLog(ref, "TRIP_ENROLLMENT_REMOVED", caller, { studentId, studentName: s.name });
@@ -3749,11 +3755,13 @@ exports.staffSetTripEnrollment = onCall(async (request) => {
   const decision = d.decision === "DECLINED" ? "DECLINED" : "APPROVED";
   const declineReason = decision === "DECLINED" && TRIP_DECLINE_REASONS.includes(d.declineReason) ? d.declineReason : null;
   const payMethod = decision === "APPROVED" && trip.fee > 0 ? (TRIP_PAY_METHODS.includes(d.payMethod) ? d.payMethod : "RECEPTION") : null;
-  const existing = (await enrollRef.get()).data();
+  // The signed sheet that came with the student (the parent's own optional
+  // pledge upload on the link).
+  const pledge = decision === "APPROVED" && d.pledge ? await uploadPublicAttachment(getStorage().bucket(), `trips/${ref.id}/pledges/${studentId}`, d.pledge) : null;
   const now = Timestamp.now();
   const record = {
     studentId, studentName: s.name, branch: s.branch, grade: s.grade, section: s.section, className: s.className, parentPhone: s.mobile,
-    decision, declineReason, payMethod,
+    decision, declineReason, payMethod, ...(pledge ? { pledge } : {}),
     payStatus: !payMethod ? null
       : existing?.payStatus === "PAID" ? "PAID"
         : payMethod === "BANK" && existing?.receipt && ["REVIEW", "REJECTED"].includes(existing.payStatus) ? existing.payStatus
@@ -4139,7 +4147,7 @@ exports.getStudentTrips = onCall(async (request) => {
     const e = d.data();
     const survey = await tripRef.collection("surveys").doc(studentId).get();
     out.push({
-      tripId: tripRef.id, tripCode: trip.tripCode, title: trip.title, destination: trip.destination, date: trip.date, tripStatus: trip.status,
+      tripId: tripRef.id, tripCode: trip.tripCode, title: trip.title, destination: trip.destination, date: trip.date, tripStatus: trip.status, branches: trip.branches || [], payMethods: trip.payMethods || [],
       status: enrollmentStatus(e, trip.fee), declineReason: e.declineReason || null, boarded: e.boarded ?? null, returned: e.returned ?? null,
       healthNotes: e.healthNotes || "",
       incidents: (e.incidents || []).map((x) => ({ note: x.note, byName: x.byName, at: x.at?.toMillis?.() || null })),
@@ -4165,7 +4173,7 @@ exports.getStudentTrips = onCall(async (request) => {
         if (!["OPEN", "CLOSED"].includes(trip.status) || out.some((o) => o.tripId === t.id)) return;
         if (!(callerAll(caller) || (trip.branches || []).some((b) => callerHasBranch(caller, b)))) return;
         if (!tripTargets(trip, st, branchOf)) return;
-        out.push({ tripId: t.id, tripCode: trip.tripCode, title: trip.title, destination: trip.destination, date: trip.date, tripStatus: trip.status, status: "NO_RESPONSE",
+        out.push({ tripId: t.id, tripCode: trip.tripCode, title: trip.title, destination: trip.destination, date: trip.date, tripStatus: trip.status, branches: trip.branches || [], payMethods: trip.payMethods || [], status: "NO_RESPONSE",
           fee: trip.fee || 0, departTime: trip.departTime || "", returnTime: trip.returnTime || "", meetingPoint: trip.meetingPoint || "", payDeadline: trip.payDeadline || "", incidents: [] });
       });
     }

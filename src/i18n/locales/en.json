@@ -1976,11 +1976,16 @@
     "cashPaid": "Cash payment",
     "cashReceiptLabel": "Receipt voucher number (optional)",
     "manual": {
-      "title": "Record parent response",
-      "add": "Record",
+      "title": "Record parent response manually",
+      "add": "Record manually",
       "edit": "Edit response",
       "remove": "Remove response",
-      "hint": "For consents received by phone or on paper. Transfer receipts are uploaded by the parent from the trip link."
+      "hint": "For consents received on paper with the student or by phone, without the link. Transfer receipts are uploaded by the parent from the trip link.",
+      "received": "Fee received ({{fee}} SAR) with the consent",
+      "sheet": "Photo of the consent sheet (optional, up to 4 MB)",
+      "sheetTooBig": "The file can't be larger than 4 MB.",
+      "financeCollects": "Recording the money is for finance; the student shows for them as awaiting payment.",
+      "alreadyPaid": "The fee is recorded as paid. Cancel the payment before removing the response or changing it to a decline."
     },
     "boardingList": "Bus boarding sheet",
     "students": "students",

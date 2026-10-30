@@ -20,8 +20,9 @@ import { userBranches } from '../../utils/scope';
 import logo from '../../assets/logo.png';
 import { printTripInvoice } from '../../utils/tripInvoice';
 import SendTripLink from './SendTripLink';
+import ManualConsentDialog from './ManualConsentDialog';
 import {
-  TRIP_STATUS_STYLES, ENROLLMENT_STATUSES, ENROLLMENT_STATUS_STYLES, TRIP_PAY_METHODS, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES,
+  TRIP_STATUS_STYLES, ENROLLMENT_STATUSES, ENROLLMENT_STATUS_STYLES, TRIP_RATINGS, TRIP_GENDER_STYLES,
   enrollmentStatus, tripPermissions, tripConflicts, tripLink, dayToDate, TRIP_BANK_LETTER_URL, tripTime, TRIP_COLLECT_METHODS,
 } from '../../config/trips';
 
@@ -124,78 +125,6 @@ function NoteDialog({ title, label, required, onCancel, onConfirm, busy }) {
           <button disabled={busy || (required && !note.trim())} onClick={() => onConfirm(note.trim())} className="px-5 py-2 text-sm rounded-xl bg-primary text-white font-medium flex items-center gap-2 disabled:opacity-50">
             {busy && <Loader2 className="w-4 h-4 animate-spin" />}{t('common.confirm')}
           </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Consent taken by phone / on paper (staffSetTripEnrollment).
-function ManualConsentDialog({ trip, student, current, onCancel, onSaved }) {
-  const { t } = useTranslation();
-  const [decision, setDecision] = useState(current?.decision || 'APPROVED');
-  const [declineReason, setDeclineReason] = useState(current?.declineReason || '');
-  const [payMethod, setPayMethod] = useState(current?.payMethod || (trip.payMethods || [])[0] || 'RECEPTION');
-  const [healthNotes, setHealthNotes] = useState(current?.healthNotes || '');
-  const [emergencyPhone, setEmergencyPhone] = useState(current?.emergencyPhone || '');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState(null);
-  const save = async (remove = false) => {
-    setBusy(true);
-    setError(null);
-    try {
-      await call('staffSetTripEnrollment', { id: trip.id, studentId: student.id, decision, declineReason, payMethod, healthNotes, emergencyPhone, remove });
-      onSaved();
-    } catch (err) {
-      setError(err.message);
-      setBusy(false);
-    }
-  };
-  return (
-    <div className="fixed inset-0 bg-slate-900/50 z-[130] flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5 space-y-3">
-        <h3 className="font-bold text-slate-900">{t('trips.manual.title')}</h3>
-        <p className="text-sm text-slate-600">{student.name} — <span dir="ltr">{student.grade} {student.className}</span></p>
-        <div className="flex gap-2">
-          {['APPROVED', 'DECLINED'].map((d) => (
-            <button key={d} onClick={() => setDecision(d)} className={`flex-1 py-2 rounded-xl text-sm border ${decision === d ? (d === 'APPROVED' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-rose-600 text-white border-rose-600') : 'bg-white text-slate-600 border-slate-200'}`}>
-              {t(`trips.decision.${d}`)}
-            </button>
-          ))}
-        </div>
-        {decision === 'DECLINED' && (
-          <div>
-            <label className="block text-xs text-slate-600 mb-1">{t('tripConsent.declineReason')}</label>
-            <select value={declineReason} onChange={(e) => setDeclineReason(e.target.value)} className={inputCls}>
-              <option value="">{t('common.optional')}</option>
-              {TRIP_DECLINE_REASONS.map((r) => <option key={r} value={r}>{t(`trips.declineReason.${r}`)}</option>)}
-            </select>
-          </div>
-        )}
-        {decision === 'APPROVED' && trip.fee > 0 && (
-          <div>
-            <label className="block text-xs text-slate-600 mb-1">{t('trips.form.payMethods')}</label>
-            <select value={payMethod} onChange={(e) => setPayMethod(e.target.value)} className={inputCls}>
-              {TRIP_PAY_METHODS.map((m) => <option key={m} value={m}>{t(`trips.payMethod.${m}`)}</option>)}
-            </select>
-          </div>
-        )}
-        {decision === 'APPROVED' && (
-          <>
-            <div><label className="block text-xs text-slate-600 mb-1">{t('trips.healthNotes')}</label><input value={healthNotes} onChange={(e) => setHealthNotes(e.target.value)} className={inputCls} /></div>
-            <div><label className="block text-xs text-slate-600 mb-1">{t('trips.emergencyPhone')}</label><input dir="ltr" value={emergencyPhone} onChange={(e) => setEmergencyPhone(e.target.value)} className={inputCls} /></div>
-          </>
-        )}
-        <p className="text-xs text-slate-400">{t('trips.manual.hint')}</p>
-        {error && <p className="text-sm text-red-600">{error}</p>}
-        <div className="flex justify-between gap-2">
-          {current ? <button disabled={busy} onClick={() => save(true)} className="px-3 py-2 text-sm rounded-xl text-rose-600 hover:bg-rose-50 flex items-center gap-1"><Trash2 className="w-4 h-4" />{t('trips.manual.remove')}</button> : <span />}
-          <div className="flex gap-2">
-            <button onClick={onCancel} className="px-4 py-2 text-sm rounded-xl border border-slate-300 bg-white">{t('common.cancel')}</button>
-            <button disabled={busy} onClick={() => save(false)} className="px-5 py-2 text-sm rounded-xl bg-primary text-white font-medium flex items-center gap-2 disabled:opacity-50">
-              {busy && <Loader2 className="w-4 h-4 animate-spin" />}{t('common.save')}
-            </button>
-          </div>
         </div>
       </div>
     </div>
@@ -772,7 +701,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
                             )}
                             {perms.supervise && ['OPEN', 'CLOSED', 'COMPLETED'].includes(trip.status) && r.hasMobile !== false && <SendTripLink tripId={trip.id} studentId={r.id} waApi={waApi} />}
                             {perms.editStudents && ['OPEN', 'CLOSED'].includes(trip.status) && !r.offRoster && (
-                              <button onClick={() => setDialog({ manual: r })} className="px-2 py-1 rounded-lg text-xs text-slate-500 hover:bg-slate-100 flex items-center gap-1" title={t('trips.manual.title')}><UserPlus className="w-3.5 h-3.5" />{r.e ? t('trips.manual.edit') : t('trips.manual.add')}</button>
+                              <button onClick={() => setDialog({ manual: r })} className="px-2 py-1 rounded-lg text-xs border border-primary/30 bg-white text-primary hover:bg-primary/5 flex items-center gap-1 whitespace-nowrap" title={t('trips.manual.title')}><UserPlus className="w-3.5 h-3.5" />{r.e ? t('trips.manual.edit') : t('trips.manual.add')}</button>
                             )}
                           </div>
                         </td>
@@ -898,7 +827,7 @@ function TripDetailsInner({ tripId, listed, allTrips, onClose, onEdit, onChanged
       )}
       {dialog && !dialog.manual && <NoteDialog {...dialog} busy={!!busy} onCancel={() => setDialog(null)} />}
       {dialog?.manual && (
-        <ManualConsentDialog trip={trip} student={dialog.manual} current={dialog.manual.e} onCancel={() => setDialog(null)} onSaved={() => setDialog(null)} />
+        <ManualConsentDialog trip={trip} student={dialog.manual} current={dialog.manual.e} canCollect={perms.finance} defaultCollector={userData?.name} onCancel={() => setDialog(null)} onSaved={() => setDialog(null)} />
       )}
     </div>
   );
