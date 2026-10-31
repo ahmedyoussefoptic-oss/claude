@@ -11,13 +11,13 @@ import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import TechSupportDetails from '../components/techSupport/TechSupportDetails';
 import { normalizeAssignees } from '../utils/assignees';
 import { scopeConstraints } from '../utils/scope';
-import { formatDuration } from '../utils/duration';
+import { formatDuration, formatMinutes } from '../utils/duration';
 import { RESOLVED_TICKET_STATUSES, isTicketOverdue } from '../config/techSupport';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import logo from '../assets/logo.png';
 import { Printer, FileSpreadsheet, RotateCcw, Star } from 'lucide-react';
-import VisitsReport from '../components/reports/VisitsReport';
+import VisitsReport, { reportVisits } from '../components/reports/VisitsReport';
 import ComplaintsReport from '../components/reports/ComplaintsReport';
 import { complaintMetrics, ticketMetrics, timingRows, timingByBranch } from '../utils/reportMetrics';
 import { useSlaSettings, elapsedMs, businessMs } from '../utils/businessTime';
@@ -77,7 +77,11 @@ export default function Reports() {
   const [includeTech, setIncludeTech] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [includeVisits, setIncludeVisits] = useState(false);
+  const [includeSurvey, setIncludeSurvey] = useState(false);
+  const [includeLost, setIncludeLost] = useState(false);
   const mergeTech = includeTech && canSeeTech;
+  const mergedSurvey = reportType === 'COMPLAINTS' && includeSurvey;
+  const mergedLost = reportType === 'COMPLAINTS' && includeLost && canSeeLost;
   const sla = useSlaSettings();
 
   // Keeps the open detail drawer's complaint in sync with live Firestore
@@ -322,6 +326,110 @@ export default function Reports() {
   const handleExportExcel = async () => {
     const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
+    // A merged report repeats labels, and two sheets can't share a name.
+    const addSheet = (sheet, label) => {
+      const base = sheetName(label);
+      let name = base;
+      for (let i = 2; wb.SheetNames.includes(name); i++) name = `${base.slice(0, 28)} ${i}`;
+      XLSX.utils.book_append_sheet(wb, sheet, name);
+    };
+
+    const addSurveySheets = (prefix = '', details = true) => {
+      const label = (text) => `${prefix}${text}`;
+      addSheet(XLSX.utils.aoa_to_sheet([
+        [t('reports.respondentCount'), surveyStats.count],
+        [t('reports.overallSatisfactionAvg'), surveyStats.average != null ? surveyStats.average.toFixed(1) : '—'],
+        [t('reports.surveyResponseRate'), surveyStats.responseRate != null ? `${surveyStats.responseRate}%` : '—'],
+        [t('reports.reopenedWithoutRating'), surveyStats.reopenedWithoutRatingCount],
+        ...RATING_KEYS.map((key) => [t(`ratings.${key}`), surveyStats.detailAverages[key] != null ? surveyStats.detailAverages[key].toFixed(1) : '—']),
+      ]), label(t('reports.generalSummary')));
+
+      if (satisfactionByBranch.length) {
+        addSheet(XLSX.utils.json_to_sheet(satisfactionByBranch.map((b) => ({
+          [t('common.branch')]: b.name,
+          [t('reports.respondentCount')]: b.count,
+          [t('reports.satisfactionAvg')]: b.avg.toFixed(1),
+        }))), label(t('reports.satisfactionByBranch')));
+      }
+
+      if (satisfactionByEmployee.length) {
+        addSheet(XLSX.utils.json_to_sheet(satisfactionByEmployee.map((e) => ({
+          [t('reports.employeeLabel')]: e.name,
+          [t('reports.respondentCount')]: e.count,
+          [t('reports.satisfactionAvg')]: e.avg.toFixed(1),
+        }))), label(t('reports.satisfactionByEmployee')));
+      }
+      if (!details) return;
+
+      addSheet(XLSX.utils.json_to_sheet(surveyed.map((c) => ({
+        [t('reports.complaintNumber')]: c.complaintId,
+        [t('common.date')]: c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd') : '',
+        [t('common.branch')]: branchName(c.branch),
+        [t('reports.specialistShort')]: c.assignedToNames?.join(listSep) || '',
+        [t('reports.overallRating')]: c.satisfactionRate,
+        ...Object.fromEntries(RATING_KEYS.map((key) => [t(`ratings.${key}`), c.satisfactionDetails?.[key] ?? ''])),
+        [t('reports.parentFeedbackLabel')]: c.parentFeedback || '',
+        [t('reports.studentNameColumn')]: c.studentName || '',
+        [t('reports.studentIdColumn')]: c.studentId || '',
+        [t('reports.studentPhoneColumn')]: c.parentPhone || '',
+        [t('reports.stageColumn')]: c.stage || '',
+      }))), label(t('reports.surveyDetailsLabel')));
+
+      if (reopenedWithoutRating.length) {
+        addSheet(XLSX.utils.json_to_sheet(reopenedWithoutRating.map((c) => ({
+          [t('reports.complaintNumber')]: c.complaintId,
+          [t('common.branch')]: branchName(c.branch),
+          [t('reports.specialistShort')]: c.assignedToNames?.join(listSep) || '',
+          [t('reports.parentFeedbackLabel')]: c.parentFeedback || '',
+        }))), label(t('reports.reopenedWithoutRating')));
+      }
+    };
+
+    const addLostSheets = (prefix = '', details = true) => {
+      const label = (text) => `${prefix}${text}`;
+      const m = lostMetrics;
+      const catName = (id) => itemCategories.find((c) => c.id === id)?.name || id || '';
+      const dur = (v) => (v == null ? '' : formatDuration(v, t));
+      addSheet(XLSX.utils.aoa_to_sheet([
+        [t('lfReport.total'), m.total], [t('lfReport.lostFound'), `${m.lost} / ${m.found}`], [t('lfReport.returned'), m.returned], [t('lfReport.returnRate'), `${m.returnRate}%`],
+        [t('lfReport.open'), m.open], [t('lfReport.notAcknowledged'), m.notAcknowledged], [t('lfReport.closed'), m.closed],
+        [t('lfReport.avgAck'), dur(m.avgAck)], [t('lfReport.avgFound'), dur(m.avgFound)], [t('lfReport.avgReturn'), dur(m.avgReturn)],
+      ]), label(t('reports.generalSummary')));
+      const groupSheet = (rows, nameOf, title) => XLSX.utils.json_to_sheet(rows.map((r) => ({
+        [title]: nameOf(r.key), [t('lfReport.total')]: r.total, [t('lfReport.returned')]: r.returned, [t('lfReport.open')]: r.open,
+        [t('lfReport.returnRate')]: `${r.returnRate}%`, [t('lfReport.avgReturn')]: dur(r.avgReturn),
+      })));
+      addSheet(groupSheet(m.byBranch, branchName, t('common.branch')), label(t('common.branch')));
+      addSheet(groupSheet(m.byCategory, catName, t('lfReport.category')), label(t('lfReport.category')));
+      if (m.byStaff.length) {
+        addSheet(XLSX.utils.json_to_sheet(m.byStaff.map((s) => ({
+          [t('lfReport.staff')]: s.name, [t('lfReport.acknowledged')]: s.acknowledged, [t('lfReport.foundCol')]: s.found, [t('lfReport.returned')]: s.returned,
+        }))), label(t('lfReport.byStaff')));
+      }
+      if (!details) return;
+      const when = (ts) => (ts?.toDate ? format(ts.toDate(), 'yyyy-MM-dd HH:mm') : '');
+      addSheet(XLSX.utils.json_to_sheet(lostResults.map((i) => ({
+        [t('lfReport.code')]: i.itemCode, [t('lfReport.item')]: i.itemName || '', [t('lfReport.category')]: catName(i.category),
+        [t('lfReport.type')]: t(`lostFoundCommon.reportTypes.${i.reportType}`, i.reportType || ''), [t('common.branch')]: branchName(i.branch),
+        [t('lfReport.student')]: i.studentName || '', [t('lfReport.status')]: t(`statuses.lostFound.${i.status}`, i.status),
+        [t('lfReport.createdAt')]: when(i.createdAt), [t('lfReport.acknowledged')]: [i.acknowledgedByName, when(i.acknowledgedAt)].filter(Boolean).join(' — '),
+        [t('lfReport.foundCol')]: [i.foundByName, when(i.foundAt), i.foundPlace].filter(Boolean).join(' — '),
+        [t('lfReport.returned')]: [i.returnedTo, i.returnedToRelation, when(i.returnedAt)].filter(Boolean).join(' — '),
+        [t('lfReport.assignees')]: (i.assignedToNames || []).join(listSep),
+      }))), label(t('reports.detailsLabel')));
+    };
+
+    const addVisitsSheet = () => addSheet(XLSX.utils.json_to_sheet(reportVisits(complaints, filters).map((v) => ({
+      [t('reports.full.recordNumber')]: v.c.complaintId,
+      [t('visitsReport.arrival')]: format(v.arrived, 'yyyy-MM-dd HH:mm'),
+      [t('common.branch')]: branchName(v.c.branch),
+      [t('common.parent')]: v.c.parentName || '',
+      [t('common.student')]: v.c.studentName || '',
+      [t('visitsReport.reason')]: v.c.subject || complaintTypesLabel(v.c, typeName, listSep),
+      [t('visitsReport.metBy')]: v.c.visitMetByName || '',
+      [t('visitsReport.wait')]: v.met ? formatMinutes(v.wait, t) : t('visitsReport.notMetShort'),
+      [t('common.status')]: complaintStatusLabel(v.c, t),
+    }))), t('visitsReport.detailsTitle'));
 
     if (reportType === 'COMPLAINTS') {
       const m = complaintMetrics(results, sla);
@@ -486,6 +594,9 @@ export default function Reports() {
         ]);
         XLSX.utils.book_append_sheet(wb, detailSheet, sheetName(t('reports.detailsLabel')));
       }
+      if (includeVisits) addVisitsSheet();
+      if (mergedSurvey) addSurveySheets(`${t('reports.full.surveyTag')} - `, showDetails);
+      if (mergedLost) addLostSheets(`${t('reports.full.lostTag')} - `, showDetails);
     } else if (reportType === 'TECH_SUPPORT') {
       const summarySheet = XLSX.utils.aoa_to_sheet([
         [t('reports.totalTickets'), ticketSummary.total],
@@ -525,90 +636,12 @@ export default function Reports() {
         [t('reports.stageColumn')]: tk.stage || '',
       })));
       XLSX.utils.book_append_sheet(wb, detailSheet, sheetName(t('reports.detailsLabel')));
+    } else if (reportType === 'SURVEY') {
+      addSurveySheets();
+    } else if (reportType === 'LOST_FOUND') {
+      addLostSheets();
     } else {
-      const summarySheet = XLSX.utils.aoa_to_sheet([
-        [t('reports.respondentCount'), surveyStats.count],
-        [t('reports.overallSatisfactionAvg'), surveyStats.average != null ? surveyStats.average.toFixed(1) : '—'],
-        [t('reports.surveyResponseRate'), surveyStats.responseRate != null ? `${surveyStats.responseRate}%` : '—'],
-        [t('reports.reopenedWithoutRating'), surveyStats.reopenedWithoutRatingCount],
-        ...RATING_KEYS.map((key) => [t(`ratings.${key}`), surveyStats.detailAverages[key] != null ? surveyStats.detailAverages[key].toFixed(1) : '—']),
-      ]);
-      XLSX.utils.book_append_sheet(wb, summarySheet, sheetName(t('reports.generalSummary')));
-
-      if (satisfactionByBranch.length) {
-        const branchSheet = XLSX.utils.json_to_sheet(satisfactionByBranch.map((b) => ({
-          [t('common.branch')]: b.name,
-          [t('reports.respondentCount')]: b.count,
-          [t('reports.satisfactionAvg')]: b.avg.toFixed(1),
-        })));
-        XLSX.utils.book_append_sheet(wb, branchSheet, sheetName(t('reports.satisfactionByBranch')));
-      }
-
-      if (satisfactionByEmployee.length) {
-        const employeeSheet = XLSX.utils.json_to_sheet(satisfactionByEmployee.map((e) => ({
-          [t('reports.employeeLabel')]: e.name,
-          [t('reports.respondentCount')]: e.count,
-          [t('reports.satisfactionAvg')]: e.avg.toFixed(1),
-        })));
-        XLSX.utils.book_append_sheet(wb, employeeSheet, sheetName(t('reports.satisfactionByEmployee')));
-      }
-
-      const detailSheet = XLSX.utils.json_to_sheet(surveyed.map((c) => ({
-        [t('reports.complaintNumber')]: c.complaintId,
-        [t('common.date')]: c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd') : '',
-        [t('common.branch')]: branchName(c.branch),
-        [t('reports.specialistShort')]: c.assignedToNames?.join(listSep) || '',
-        [t('reports.overallRating')]: c.satisfactionRate,
-        ...Object.fromEntries(RATING_KEYS.map((key) => [t(`ratings.${key}`), c.satisfactionDetails?.[key] ?? ''])),
-        [t('reports.parentFeedbackLabel')]: c.parentFeedback || '',
-        [t('reports.studentNameColumn')]: c.studentName || '',
-        [t('reports.studentIdColumn')]: c.studentId || '',
-        [t('reports.studentPhoneColumn')]: c.parentPhone || '',
-        [t('reports.stageColumn')]: c.stage || '',
-      })));
-      XLSX.utils.book_append_sheet(wb, detailSheet, sheetName(t('reports.surveyDetailsLabel')));
-
-      if (reopenedWithoutRating.length) {
-        const reopenedSheet = XLSX.utils.json_to_sheet(reopenedWithoutRating.map((c) => ({
-          [t('reports.complaintNumber')]: c.complaintId,
-          [t('common.branch')]: branchName(c.branch),
-          [t('reports.specialistShort')]: c.assignedToNames?.join(listSep) || '',
-          [t('reports.parentFeedbackLabel')]: c.parentFeedback || '',
-        })));
-        XLSX.utils.book_append_sheet(wb, reopenedSheet, sheetName(t('reports.reopenedWithoutRating')));
-      }
-    }
-
-    if (reportType === 'LOST_FOUND') {
-      const m = lostMetrics;
-      const catName = (id) => itemCategories.find((c) => c.id === id)?.name || id || '';
-      const dur = (v) => (v == null ? '' : formatDuration(v, t));
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([
-        [t('lfReport.total'), m.total], [t('lfReport.lostFound'), `${m.lost} / ${m.found}`], [t('lfReport.returned'), m.returned], [t('lfReport.returnRate'), `${m.returnRate}%`],
-        [t('lfReport.open'), m.open], [t('lfReport.notAcknowledged'), m.notAcknowledged], [t('lfReport.closed'), m.closed],
-        [t('lfReport.avgAck'), dur(m.avgAck)], [t('lfReport.avgFound'), dur(m.avgFound)], [t('lfReport.avgReturn'), dur(m.avgReturn)],
-      ]), sheetName(t('reports.generalSummary')));
-      const groupSheet = (rows, nameOf, label) => XLSX.utils.json_to_sheet(rows.map((r) => ({
-        [label]: nameOf(r.key), [t('lfReport.total')]: r.total, [t('lfReport.returned')]: r.returned, [t('lfReport.open')]: r.open,
-        [t('lfReport.returnRate')]: `${r.returnRate}%`, [t('lfReport.avgReturn')]: dur(r.avgReturn),
-      })));
-      XLSX.utils.book_append_sheet(wb, groupSheet(m.byBranch, branchName, t('common.branch')), sheetName(t('common.branch')));
-      XLSX.utils.book_append_sheet(wb, groupSheet(m.byCategory, catName, t('lfReport.category')), sheetName(t('lfReport.category')));
-      if (m.byStaff.length) {
-        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(m.byStaff.map((s) => ({
-          [t('lfReport.staff')]: s.name, [t('lfReport.acknowledged')]: s.acknowledged, [t('lfReport.foundCol')]: s.found, [t('lfReport.returned')]: s.returned,
-        }))), sheetName(t('lfReport.byStaff')));
-      }
-      const when = (ts) => (ts?.toDate ? format(ts.toDate(), 'yyyy-MM-dd HH:mm') : '');
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(lostResults.map((i) => ({
-        [t('lfReport.code')]: i.itemCode, [t('lfReport.item')]: i.itemName || '', [t('lfReport.category')]: catName(i.category),
-        [t('lfReport.type')]: t(`lostFoundCommon.reportTypes.${i.reportType}`, i.reportType || ''), [t('common.branch')]: branchName(i.branch),
-        [t('lfReport.student')]: i.studentName || '', [t('lfReport.status')]: t(`statuses.lostFound.${i.status}`, i.status),
-        [t('lfReport.createdAt')]: when(i.createdAt), [t('lfReport.acknowledged')]: [i.acknowledgedByName, when(i.acknowledgedAt)].filter(Boolean).join(' — '),
-        [t('lfReport.foundCol')]: [i.foundByName, when(i.foundAt), i.foundPlace].filter(Boolean).join(' — '),
-        [t('lfReport.returned')]: [i.returnedTo, i.returnedToRelation, when(i.returnedAt)].filter(Boolean).join(' — '),
-        [t('lfReport.assignees')]: (i.assignedToNames || []).join(listSep),
-      }))), sheetName(t('reports.detailsLabel')));
+      addVisitsSheet();
     }
 
     const fileName = `${t('reports.types.' + reportType)} - ${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
@@ -721,6 +754,16 @@ export default function Reports() {
               {t('visitsReport.optInclude')}
             </label>
             <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={includeSurvey} onChange={(e) => setIncludeSurvey(e.target.checked)} />
+              {t('reports.full.optIncludeSurvey')}
+            </label>
+            {canSeeLost && (
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" checked={includeLost} onChange={(e) => setIncludeLost(e.target.checked)} />
+                {t('reports.full.optIncludeLost')}
+              </label>
+            )}
+            <label className="flex items-center gap-2 text-sm text-slate-700">
               <input type="checkbox" checked={showDetails} onChange={(e) => setShowDetails(e.target.checked)} />
               {t('reports.full.optShowDetails')}
             </label>
@@ -739,6 +782,8 @@ export default function Reports() {
               <p className="text-sm text-slate-500">
                 {reportType === 'COMPLAINTS' && mergeTech ? t('reports.full.mergedTitle') : t(`reports.types.${reportType}`)}
                 {reportType === 'COMPLAINTS' && includeVisits && ` + ${t('reports.types.VISITS')}`}
+                {mergedSurvey && ` + ${t('reports.types.SURVEY')}`}
+                {mergedLost && ` + ${t('reports.types.LOST_FOUND')}`}
               </p>
             </div>
           </div>
@@ -781,10 +826,6 @@ export default function Reports() {
             onOpenComplaint={setSelectedComplaint}
             merged={reportType === 'COMPLAINTS'}
           />
-        )}
-
-        {reportType === 'LOST_FOUND' && (
-          <LostFoundReport m={lostMetrics} branches={branches} categories={itemCategories} onOpen={setSelectedLost} canRemind={userData?.role === 'ADMIN' || userData?.isPrincipal === true || userData?.perms?.edit === true || userData?.isQuality === true} />
         )}
 
         {reportType === 'TECH_SUPPORT' && (
@@ -905,8 +946,9 @@ export default function Reports() {
         </>
         )}
 
-        {reportType === 'SURVEY' && (
-        <>
+        {(reportType === 'SURVEY' || mergedSurvey) && (
+        <div className={`space-y-8 ${mergedSurvey ? 'pt-8 border-t-4 border-amber-100' : ''}`}>
+        {mergedSurvey && <h2 className="text-lg font-bold text-amber-800">{t('reports.types.SURVEY')}</h2>}
         {/* Survey summary */}
         <div>
           <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.generalSummary')}</h3>
@@ -1019,6 +1061,7 @@ export default function Reports() {
         )}
 
         {/* Detailed listing */}
+        {(!mergedSurvey || showDetails) && (
         <div>
           <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.surveyDetailsLabel')} ({surveyed.length})</h3>
           {surveyed.length === 0 ? (
@@ -1092,7 +1135,12 @@ export default function Reports() {
             </div>
           )}
         </div>
-        </>
+        )}
+        </div>
+        )}
+
+        {(reportType === 'LOST_FOUND' || mergedLost) && (
+          <LostFoundReport m={lostMetrics} branches={branches} categories={itemCategories} onOpen={setSelectedLost} merged={mergedLost} canRemind={!mergedLost && (userData?.role === 'ADMIN' || userData?.isPrincipal === true || userData?.perms?.edit === true || userData?.isQuality === true)} />
         )}
       </div>
 

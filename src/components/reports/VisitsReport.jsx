@@ -47,26 +47,36 @@ function SectionTitle({ children, sub }) {
 // (walk-ins and booked appointments) and the visit-appointment requests.
 // Visits are dated by arrival, appointments by their slot; the branch /
 // date filters of the reports page apply to both.
-export default function VisitsReport({ complaints, filters, branches, complaintTypes, showDetails, onOpenComplaint, merged }) {
-  const { t, i18n } = useTranslation();
-  const dateLocale = i18n.language === 'ar' ? ar : enUS;
-  const listSep = t('publicReport.listSeparator');
-  const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
-  const typeName = (id) => complaintTypes.find((ct) => ct.id === id)?.name || id;
+const rangeOf = (filters) => {
   const fromMs = filters.from ? new Date(filters.from).getTime() : -Infinity;
   const toMs = filters.to ? new Date(filters.to).getTime() + DAY_MS - 1 : Infinity;
-  const inRange = (ms) => ms != null && ms >= fromMs && ms <= toMs;
-  const inBranch = (c) => !filters.branch || c.branch === filters.branch;
-  const now = Date.now();
+  return (ms) => ms != null && ms >= fromMs && ms <= toMs;
+};
 
-  const visits = complaints
-    .filter((c) => c.viaVisitQr && inBranch(c) && inRange(c.visitArrivedAt?.toMillis?.()))
+// The report's visits, latest first (also the Excel sheet in Reports).
+export function reportVisits(complaints, filters) {
+  const inRange = rangeOf(filters);
+  return complaints
+    .filter((c) => c.viaVisitQr && (!filters.branch || c.branch === filters.branch) && inRange(c.visitArrivedAt?.toMillis?.()))
     .map((c) => {
       const arrived = c.visitArrivedAt.toMillis();
       const met = c.visitStatus === 'MET' && c.visitMetAt ? c.visitMetAt.toMillis() : null;
       return { c, arrived, met, wait: met ? minutes(arrived, met) : null, booked: c.appointment?.status === 'CHECKED_IN' };
     })
     .sort((a, b) => b.arrived - a.arrived);
+}
+
+export default function VisitsReport({ complaints, filters, branches, complaintTypes, showDetails, onOpenComplaint, merged }) {
+  const { t, i18n } = useTranslation();
+  const dateLocale = i18n.language === 'ar' ? ar : enUS;
+  const listSep = t('publicReport.listSeparator');
+  const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
+  const typeName = (id) => complaintTypes.find((ct) => ct.id === id)?.name || id;
+  const inRange = rangeOf(filters);
+  const inBranch = (c) => !filters.branch || c.branch === filters.branch;
+  const now = Date.now();
+
+  const visits = reportVisits(complaints, filters);
   const met = visits.filter((v) => v.met);
   const waits = met.map((v) => v.wait);
   const waiting = visits.filter((v) => !v.met);

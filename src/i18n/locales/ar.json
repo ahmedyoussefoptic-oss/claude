@@ -1174,7 +1174,11 @@
       "techResolvedCol": "تقنية — تم حلها",
       "recordNumber": "الرقم",
       "resolvedOfTotal": "{{resolved}} من {{total}}",
-      "multiCategoryNote": "{{count}} ملاحظة متعددة التصنيفات تُحسب في كل تصنيف"
+      "multiCategoryNote": "{{count}} ملاحظة متعددة التصنيفات تُحسب في كل تصنيف",
+      "optIncludeSurvey": "دمج تقرير استبيان رضا أولياء الأمور مع التقرير العام",
+      "optIncludeLost": "دمج تقرير المفقودات مع التقرير العام",
+      "surveyTag": "الاستبيان",
+      "lostTag": "المفقودات"
     },
     "timing": {
       "title": "زمن الحل والتأخير",

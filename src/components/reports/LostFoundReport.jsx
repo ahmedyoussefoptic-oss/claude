@@ -7,7 +7,7 @@ import { formatDuration } from '../../utils/duration';
 import { ITEM_STATUS_BADGE } from '../../config/lostFound';
 
 // Reports › المفقودات (numbers from lostFoundMetrics).
-export default function LostFoundReport({ m, branches, categories, onOpen, canRemind }) {
+export default function LostFoundReport({ m, branches, categories, onOpen, canRemind, merged }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(null);
@@ -51,7 +51,8 @@ export default function LostFoundReport({ m, branches, categories, onOpen, canRe
   );
 
   return (
-    <div className="space-y-8">
+    <div className={`space-y-8 ${merged ? 'pt-8 border-t-4 border-sky-100' : ''}`}>
+      {merged && <h2 className="text-lg font-bold text-sky-800">{t('reports.types.LOST_FOUND')}</h2>}
       {canRemind && m.byStatus.find((s) => s.status === 'UNCLAIMED')?.count > 0 && (
         <div className="no-print flex flex-wrap items-center gap-3 bg-amber-50 border border-amber-200 rounded-xl p-3">
           <button disabled={busy} onClick={remind} className="px-4 py-2 rounded-lg bg-amber-600 text-white text-sm font-medium flex items-center gap-2 disabled:opacity-60">
