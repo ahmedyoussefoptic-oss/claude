@@ -3299,7 +3299,8 @@
     "resultMissed": "Not answered",
     "avgWaitShort": "Wait",
     "dataSince": "Calls reach the system live only since {{day}}: earlier days are in Bevatel, not here. To compare, pick a period starting on this date.",
-    "criteria": "Each call counts once, however many agents or queues it rang. Missed: inbound calls that ended unanswered. Outbound: answered calls only, as no unanswered outbound attempts arrive from Bevatel.",
+    "criteria": "Each call counts once, however many agents or queues it rang, so a call that moved between two queues is two rows in Bevatel's report and one call here. Missed: inbound calls that ended unanswered. Days imported from a Bevatel report are complete; other days lack what Bevatel did not send live, including unanswered outbound calls.",
+    "import": {"button": "Import Bevatel report", "hint": "Pick all of the day's files together: outbound call details (one file per page) and the inbound report.", "confirm": "{{files}} files: {{outbound}} outbound rows and {{inbound}} inbound rows. The report replaces these days' results. Continue?", "done": "Imported ({{days}}): {{outbound}} outbound and {{inbound}} inbound — {{added}} added, {{updated}} updated, {{removed}} duplicates merged.", "badFile": "\"{{name}}\" is not a Bevatel call report."},
     "untimedNote": "{{count}} answered calls have no recorded duration (saved before the duration fix) and aren't in the averages."
   },
   "assistant": {

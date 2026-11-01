@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collection, doc, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { format, subDays } from 'date-fns';
-import { PhoneCall, PhoneIncoming, PhoneMissed, PhoneOutgoing, Clock, Timer, Loader2, AlertTriangle, PhoneForwarded, Repeat, FileSpreadsheet, Printer } from 'lucide-react';
-import { db } from '../config/firebase';
+import { PhoneCall, PhoneIncoming, PhoneMissed, PhoneOutgoing, Clock, Timer, Loader2, AlertTriangle, PhoneForwarded, Repeat, FileSpreadsheet, Printer, Upload } from 'lucide-react';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../config/firebase';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
 import StatCard from '../components/dashboard/StatCard';
 import { userBranches } from '../utils/scope';
+import { isOwner } from '../config/adminPermissions';
+import { readBevatelReport, BevatelReportError } from '../utils/bevatelReport';
 import logo from '../assets/logo.png';
 
 const inputCls = 'px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
@@ -34,6 +37,9 @@ export default function Calls() {
   const [error, setError] = useState(null);
   const [cfg, setCfg] = useState(null);
   const [students, setStudents] = useState({}); // phone → names
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState(null);
+  const [reload, setReload] = useState(0);
 
   const allBranches = userData?.role === 'ADMIN' || userData?.access === 'all';
   const myBranches = allBranches ? null : userBranches(userData);
@@ -50,7 +56,7 @@ export default function Calls() {
       .then((snap) => { if (!cancelled) setCalls(snap.docs.map((d) => ({ id: d.id, ...d.data() }))); })
       .catch((err) => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
-  }, [from, to, branch, myBranches?.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [from, to, branch, reload, myBranches?.join(',')]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const a = useMemo(() => {
     if (!calls) return null;
@@ -163,6 +169,28 @@ export default function Calls() {
     XLSX.writeFile(wb, `${t('calls.title')} ${from} - ${to}.xlsx`);
   };
 
+  // Bevatel exports 100 rows a file, so a day's report is picked as several files.
+  const importReports = async (e) => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    if (!files.length) return;
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const reports = await Promise.all(files.map(readBevatelReport));
+      const rows = reports.flatMap((r) => r.rows);
+      const count = (dir) => rows.filter((r) => r.dir === dir).length;
+      if (!window.confirm(t('calls.import.confirm', { files: files.length, outbound: count('out'), inbound: count('in') }))) return;
+      const { data } = await httpsCallable(functions, 'importBevatelCalls')({ rows });
+      setImportResult({ ok: true, text: t('calls.import.done', { ...data, days: data.days.join('، ') }) });
+      setReload((n) => n + 1);
+    } catch (err) {
+      setImportResult({ ok: false, text: err instanceof BevatelReportError ? t('calls.import.badFile', { name: err.message }) : err.message });
+    } finally {
+      setImporting(false);
+    }
+  };
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 no-print">
@@ -178,6 +206,12 @@ export default function Calls() {
             <option value="ALL">{t('common.allBranches')}</option>
             {branches.filter((b) => !myBranches || myBranches.includes(b.id)).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+          {isOwner(userData) && (
+            <label className={`px-4 py-2 flex items-center gap-2 bg-white border border-primary/40 text-primary rounded-xl hover:bg-primary/5 font-medium text-sm cursor-pointer ${importing ? 'opacity-50 pointer-events-none' : ''}`} title={t('calls.import.hint')}>
+              {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}{t('calls.import.button')}
+              <input type="file" accept=".xlsx,.xls,.csv" multiple className="hidden" onChange={importReports} />
+            </label>
+          )}
           <button type="button" disabled={!a} onClick={exportExcel} className="px-4 py-2 flex items-center gap-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium text-sm disabled:opacity-50"><FileSpreadsheet className="w-4 h-4" />{t('reports.exportExcel')}</button>
           <button type="button" disabled={!a} onClick={() => window.print()} className="px-4 py-2 flex items-center gap-2 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm disabled:opacity-50"><Printer className="w-4 h-4" />{t('reports.printSavePdf')}</button>
         </div>
@@ -186,6 +220,7 @@ export default function Calls() {
       {cfg && cfg.connected !== true && !cfg.webhookLastAt && (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3 flex gap-2"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />{t('calls.notConnected')}</div>
       )}
+      {importResult && <div className={`text-sm rounded-xl p-3 border no-print ${importResult.ok ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-rose-50 border-rose-200 text-rose-700'}`}>{importResult.text}</div>}
       {firstDay && from < firstDay && <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3 flex gap-2 no-print"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />{t('calls.dataSince', { day: firstDay })}</div>}
       {cfg?.lastSyncError && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl p-3">{t('calls.syncError', { error: cfg.lastSyncError })}</div>}
       {error && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl p-3">{error}</div>}

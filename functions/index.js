@@ -504,6 +504,7 @@ exports.notifyTechSupportInternalComment = onDocumentCreated("techSupportTickets
 // SLA hours and working-time rules live in settings/sla (Settings page);
 // due dates count only working time — see ./businessTime.js.
 const { normalizeSla, businessMs, addBusinessMs } = require("./businessTime");
+const { cleanReportRows, mergeQueueHops, matchReportCalls, isShortNumber, phoneTail } = require("./bevatelImport");
 async function loadSla() {
   const snap = await db.collection("settings").doc("sla").get();
   return normalizeSla(snap.exists ? snap.data() : null);
@@ -5665,7 +5666,7 @@ function callPhone(v) {
   let d = normalizeDigits(v).replace(/\D/g, "");
   if (d.startsWith("00")) d = d.slice(2);
   // Outbound calls keep the exchange's dial prefix: 2 + 05xxxxxxxx.
-  if (/^20\d{9}$/.test(d)) d = d.slice(1);
+  if (/^2(0\d{9}|5\d{8})$/.test(d)) d = d.slice(1);
   if (/^9665\d{8}$/.test(d)) return `0${d.slice(3)}`;
   if (/^5\d{8}$/.test(d)) return `0${d}`;
   return d;
@@ -5708,6 +5709,14 @@ async function syncBevatelDays(fromDay, toDay) {
     const batch = db.batch();
     records.slice(i, i + 400).forEach((r) => batch.set(db.collection("calls").doc(`${r.dir}_${r.callId.replace(/[^A-Za-z0-9._-]/g, "_")}`), { ...r, syncedAt: now }, { merge: true }));
     await batch.commit();
+  }
+  // Reports imported by hand give way to the API's records of the same days.
+  const saved = await db.collection("calls").where("day", ">=", fromDay).where("day", "<=", toDay).get();
+  const imported = saved.docs.filter((d) => d.data().via === "report");
+  if (imported.length) {
+    const writer = db.bulkWriter();
+    imported.forEach((d) => writer.delete(d.ref));
+    await writer.close();
   }
   await cfgRef.set({ lastSyncAt: now, lastSyncCount: records.length, lastSyncError: FieldValue.delete() }, { merge: true });
   // Call-task attempts waiting for their Bevatel check («مهام الاتصال»).
@@ -5878,7 +5887,7 @@ function bevatelWebhookRow(body) {
   const d = body.data || {};
   const kind = bevatelEventKind(body);
   const id = d.id || d.call_id;
-  if (!id || !kind || kind === "STARTED" || /internal/i.test(d.direction || "")) return null;
+  if (!id || !kind || kind === "STARTED" || /internal/i.test(d.direction || "") || isShortNumber(d.connected_line_num)) return null;
   const ringing = bevatelTimeMs(d.start_ringing_at);
   const answeredAt = bevatelTimeMs(d.answered_at);
   const endedAt = bevatelTimeMs(d.ended_at);
@@ -5931,6 +5940,49 @@ async function saveBevatelEvent(body) {
     ...(newQueue ? { queues: FieldValue.arrayUnion({ number: queue, name: str(d.queue_name, 80), type: "" }) } : {}),
   }, { merge: true });
 }
+
+// Bevatel's Excel reports for what the webhooks leave out (see bevatelImport.js).
+// The report is the record of those days: a call it has twice is one row
+// merged here, and each saved call takes the report's result and times.
+exports.importBevatelCalls = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
+  await bevatelOwner(request);
+  const rows = cleanReportRows(request.data?.rows);
+  if (!rows.length) throw new HttpsError("invalid-argument", "لا توجد مكالمات صالحة في الملفات.");
+  const cfgRef = db.collection("settings").doc("bevatel");
+  const cfg = (await cfgRef.get()).data() || {};
+  const queueNames = Object.fromEntries((cfg.queues || []).map((q) => [q.number, q.name]));
+  const calls = [...rows.filter((r) => r.dir === "out"), ...mergeQueueHops(rows.filter((r) => r.dir === "in"))].map((r) => {
+    const [, name, number] = /^(.*?)\s*\((\d+)\)$/.exec(r.queue) || [null, r.queue, ""];
+    const key = `rep-${r.date.replace(/\D/g, "")}-${callPhone(r.number) || "unknown"}-${r.event}`;
+    const rec = callRecord(r.dir, { id: key, date: r.date, number: r.number, queue_number: number, queue_name: name, agent: r.agent, event: r.event, talk_time: secHms(r.talkSec), wait_time: secHms(r.waitSec), did: r.did }, cfg.queueBranch || {}, queueNames);
+    return { key, dir: r.dir, ms: r.ms, phone: phoneTail(rec.phone), answered: rec.answered, waitSec: r.waitSec, rec };
+  });
+  const days = calls.map((c) => c.rec.day).sort();
+  const savedSnap = await db.collection("calls").where("day", ">=", days[0]).where("day", "<=", days[days.length - 1]).get();
+  const saved = savedSnap.docs.map((d) => { const x = d.data(); return { id: d.id, dir: x.dir, ms: x.at?.toMillis?.() || 0, phone: phoneTail(x.phone), answered: !!x.answered, reportKey: x.reportKey || "", via: x.via || "" }; });
+  const { pairs, extra } = matchReportCalls(calls, saved);
+
+  const now = Timestamp.now();
+  const writer = db.bulkWriter();
+  let added = 0;
+  calls.forEach((c) => {
+    const match = pairs.get(c.key);
+    if (match) {
+      const { callId, at, day, hour, weekday, ...fields } = c.rec;
+      writer.update(db.collection("calls").doc(match.id), { ...Object.fromEntries(Object.entries(fields).filter(([, v]) => v !== "")), reportKey: c.key, syncedAt: now });
+    } else {
+      added += 1;
+      writer.set(db.collection("calls").doc(`${c.dir}_${c.key}`), { ...c.rec, via: "report", reportKey: c.key, syncedAt: now });
+    }
+  });
+  extra.forEach((c) => writer.delete(db.collection("calls").doc(c.id)));
+  await writer.close();
+
+  const newQueues = [...new Map(calls.filter((c) => c.rec.queue && !queueNames[c.rec.queue]).map((c) => [c.rec.queue, c.rec.queueName])).entries()];
+  await cfgRef.set({ lastImportAt: now, lastImportCount: calls.length, ...(newQueues.length ? { queues: FieldValue.arrayUnion(...newQueues.map(([number, name]) => ({ number, name, type: "" }))) } : {}) }, { merge: true });
+  await recheckCallTasks();
+  return { outbound: calls.filter((c) => c.dir === "out").length, inbound: calls.filter((c) => c.dir === "in").length, added, updated: calls.length - added, removed: extra.length, days: [...new Set(days)] };
+});
 
 exports.bevatelWebhook = onRequest(async (req, res) => {
   if (req.method !== "POST") { res.status(405).send("POST only"); return; }
