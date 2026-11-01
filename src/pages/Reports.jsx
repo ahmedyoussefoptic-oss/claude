@@ -63,6 +63,7 @@ export default function Reports() {
   const [complaints, setComplaints] = useState([]);
   const [techTickets, setTechTickets] = useState([]);
   const [specialists, setSpecialists] = useState([]);
+  const [itIds, setItIds] = useState(new Set());
   const [filters, setFilters] = useState(emptyFilters);
   const [reportType, setReportType] = useState('COMPLAINTS');
   const [selectedComplaint, setSelectedComplaint] = useState(null);
@@ -148,6 +149,7 @@ export default function Reports() {
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'users'), (snapshot) => {
+      setItIds(new Set(snapshot.docs.filter((d) => d.data().department === 'IT').map((d) => d.id)));
       setSpecialists(
         snapshot.docs
           .map((d) => ({ id: d.id, ...d.data() }))
@@ -447,7 +449,7 @@ export default function Reports() {
         [t('dashboard.overdueTechTickets')]: r.overdue,
         [t('reports.avgResolutionTime')]: formatDuration(r.avgResolutionMs, t),
       }))), t('reports.channels.title'));
-      const employees = ticketChannelByEmployee(ticketResults, t('reports.unassigned'));
+      const employees = ticketChannelByEmployee(ticketResults, itIds, t('reports.unassigned'));
       if (employees.length) {
         addSheet(XLSX.utils.json_to_sheet(employees.map((e) => ({
           [t('reports.employeeLabel')]: e.name,
@@ -856,7 +858,7 @@ export default function Reports() {
           />
         )}
 
-        {reportType === 'COMPLAINTS' && mergeTech && <TechResolutionReport tickets={ticketResults} sla={sla} />}
+        {reportType === 'COMPLAINTS' && mergeTech && <TechResolutionReport tickets={ticketResults} itIds={itIds} sla={sla} />}
 
         {(reportType === 'VISITS' || (reportType === 'COMPLAINTS' && includeVisits)) && (
           <VisitsReport
@@ -899,7 +901,7 @@ export default function Reports() {
           </div>
         </div>
 
-        <TechResolutionReport tickets={ticketResults} sla={sla} />
+        <TechResolutionReport tickets={ticketResults} itIds={itIds} sla={sla} />
 
         {/* By problem type */}
         {byProblemType.length > 0 && (

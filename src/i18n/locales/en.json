@@ -1221,7 +1221,7 @@
       "shareOfResolved": "{{pct}}% of solved tickets",
       "notSent": "Solved, sending not recorded",
       "byEmployee": "Solved tickets by employee",
-      "byEmployeeSub": "A ticket assigned to several employees counts for each of them."
+      "byEmployeeSub": "Student Accounts: whoever sent the logins. Assignees: IT staff only, not the quality officers added automatically; a ticket assigned to several IT staff counts for each of them."
     },
     "openLate": {
       "title": "Late, unresolved complaints — by branch",

@@ -10,10 +10,10 @@ const CHANNEL_STYLE = {
 
 // Tech report: tickets solved straight from «حسابات الطلاب» against those
 // solved by the people they were assigned to. The same helpers feed Excel.
-export default function TechResolutionReport({ tickets, sla }) {
+export default function TechResolutionReport({ tickets, itIds, sla }) {
   const { t } = useTranslation();
   const rows = ticketChannelRows(tickets, sla);
-  const employees = ticketChannelByEmployee(tickets, t('reports.unassigned'));
+  const employees = ticketChannelByEmployee(tickets, itIds, t('reports.unassigned'));
   const th = 'text-right py-2 px-2 font-medium';
   const td = 'py-2 px-2 text-slate-800 tabular-nums';
 

@@ -161,12 +161,22 @@ export function ticketChannelRows(tickets, cfg) {
   });
 }
 
-// Solved tickets per person and way of solving. A ticket with several
+// Who a solved ticket is credited to: the sender for «حسابات الطلاب», the IT
+// assignees otherwise. Tickets also carry the quality officers added
+// automatically (ensureQualityAssigned), who didn't solve them. assignedTo and
+// assignedToNames line up by index.
+function ticketSolvers(tk, itIds) {
+  const names = tk.assignedToNames || [];
+  const it = ticketChannel(tk) === 'ASSIGNED' ? names.filter((_, i) => itIds.has(tk.assignedTo?.[i])) : [];
+  return (it.length ? it : names.slice(0, 1)).filter(Boolean);
+}
+
+// Solved tickets per person and way of solving. A ticket with several IT
 // assignees counts once for each of them.
-export function ticketChannelByEmployee(tickets, unassignedLabel) {
+export function ticketChannelByEmployee(tickets, itIds, unassignedLabel) {
   const map = new Map();
   tickets.filter((tk) => RESOLVED_TICKET_STATUSES.includes(tk.status)).forEach((tk) => {
-    const names = (tk.assignedToNames || []).filter(Boolean);
+    const names = ticketSolvers(tk, itIds);
     (names.length ? names : [unassignedLabel]).forEach((name) => {
       if (!map.has(name)) map.set(name, { name, ACCOUNTS: 0, ASSIGNED: 0 });
       map.get(name)[ticketChannel(tk)] += 1;
