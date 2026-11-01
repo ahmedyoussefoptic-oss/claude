@@ -1210,6 +1210,19 @@
       "escalatedCol": "Escalated",
       "openEscalatedCol": "Escalated & unresolved"
     },
+    "channels": {
+      "title": "How tech issues were solved",
+      "sub": "Based on the ticket's source: anything sent from the Student Accounts tool counts as solved directly; every other ticket counts as solved by its assignees.",
+      "ACCOUNTS": "Directly from Student Accounts (customer service)",
+      "ASSIGNED": "By assignees (IT team)",
+      "short": { "ACCOUNTS": "Student Accounts", "ASSIGNED": "Assignees" },
+      "method": "Solved via",
+      "all": "All methods",
+      "shareOfResolved": "{{pct}}% of solved tickets",
+      "notSent": "Solved, sending not recorded",
+      "byEmployee": "Solved tickets by employee",
+      "byEmployeeSub": "A ticket assigned to several employees counts for each of them."
+    },
     "openLate": {
       "title": "Late, unresolved complaints — by branch",
       "sub": "Every open record past its deadline or escalated, with its details, grouped by branch. Click one to open it.",

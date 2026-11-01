@@ -1,5 +1,5 @@
 import { isComplaintOverdue, isEscalatedResolved, wasComplaintEscalated } from '../config/complaintTypes';
-import { RESOLVED_TICKET_STATUSES, isTicketOverdue, isTicketEscalatedResolved } from '../config/techSupport';
+import { RESOLVED_TICKET_STATUSES, TICKET_CHANNELS, isTicketOverdue, isTicketEscalatedResolved, ticketChannel } from '../config/techSupport';
 import { businessMs } from './businessTime';
 
 const isResolved = (c) => c.status === 'SOLVED' || c.status === 'CLOSED';
@@ -142,4 +142,35 @@ export function ticketMetrics(list, cfg) {
     openDelayed: list.filter((tk) => !RESOLVED_TICKET_STATUSES.includes(tk.status) && ticketDelayMs(tk, cfg) > 0).length,
     ...timingStats(done.map((tk) => ticketResolutionMs(tk, cfg)), list.map((tk) => ticketDelayMs(tk, cfg)).filter((d) => d != null)),
   };
+}
+
+// One row per way of solving a ticket. `resolved` adds up to the report's
+// headline count, so a solved ticket whose message never went out is kept
+// there and shown separately as `notSent`.
+export function ticketChannelRows(tickets, cfg) {
+  const allResolved = tickets.filter((tk) => RESOLVED_TICKET_STATUSES.includes(tk.status)).length;
+  return TICKET_CHANNELS.map((id) => {
+    const list = tickets.filter((tk) => ticketChannel(tk) === id);
+    const m = ticketMetrics(list, cfg);
+    return {
+      ...m,
+      id,
+      share: allResolved ? Math.round((m.resolved / allResolved) * 100) : null,
+      notSent: list.filter((tk) => RESOLVED_TICKET_STATUSES.includes(tk.status) && !tk.resolutionMessageSentAt).length,
+    };
+  });
+}
+
+// Solved tickets per person and way of solving. A ticket with several
+// assignees counts once for each of them.
+export function ticketChannelByEmployee(tickets, unassignedLabel) {
+  const map = new Map();
+  tickets.filter((tk) => RESOLVED_TICKET_STATUSES.includes(tk.status)).forEach((tk) => {
+    const names = (tk.assignedToNames || []).filter(Boolean);
+    (names.length ? names : [unassignedLabel]).forEach((name) => {
+      if (!map.has(name)) map.set(name, { name, ACCOUNTS: 0, ASSIGNED: 0 });
+      map.get(name)[ticketChannel(tk)] += 1;
+    });
+  });
+  return [...map.values()].sort((a, b) => (b.ACCOUNTS + b.ASSIGNED) - (a.ACCOUNTS + a.ASSIGNED));
 }

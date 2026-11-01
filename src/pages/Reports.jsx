@@ -12,14 +12,15 @@ import TechSupportDetails from '../components/techSupport/TechSupportDetails';
 import { normalizeAssignees } from '../utils/assignees';
 import { scopeConstraints } from '../utils/scope';
 import { formatDuration, formatMinutes } from '../utils/duration';
-import { RESOLVED_TICKET_STATUSES, isTicketOverdue } from '../config/techSupport';
+import { RESOLVED_TICKET_STATUSES, TICKET_CHANNELS, isTicketOverdue, ticketChannel } from '../config/techSupport';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import logo from '../assets/logo.png';
 import { Printer, FileSpreadsheet, RotateCcw, Star } from 'lucide-react';
 import VisitsReport, { reportVisits } from '../components/reports/VisitsReport';
 import ComplaintsReport from '../components/reports/ComplaintsReport';
-import { complaintMetrics, ticketMetrics, timingRows, timingByBranch } from '../utils/reportMetrics';
+import TechResolutionReport from '../components/reports/TechResolutionReport';
+import { complaintMetrics, ticketMetrics, timingRows, timingByBranch, ticketChannelRows, ticketChannelByEmployee } from '../utils/reportMetrics';
 import { useSlaSettings, elapsedMs, businessMs } from '../utils/businessTime';
 import { canAccessTechSupport, canSeeModule } from '../utils/scope';
 import { complaintStatusLabel, complaintHasType, complaintTypesLabel } from '../config/complaintTypes';
@@ -48,7 +49,7 @@ function Stars({ value }) {
   );
 }
 
-const emptyFilters = { from: '', to: '', complaintType: '', subType: '', branch: '', assignedTo: '' };
+const emptyFilters = { from: '', to: '', complaintType: '', subType: '', branch: '', assignedTo: '', techChannel: '' };
 
 export default function Reports() {
   const { t, i18n } = useTranslation();
@@ -82,6 +83,7 @@ export default function Reports() {
   const mergeTech = includeTech && canSeeTech;
   const mergedSurvey = reportType === 'COMPLAINTS' && includeSurvey;
   const mergedLost = reportType === 'COMPLAINTS' && includeLost && canSeeLost;
+  const showsTech = reportType === 'TECH_SUPPORT' || (reportType === 'COMPLAINTS' && mergeTech);
   const sla = useSlaSettings();
 
   // Keeps the open detail drawer's complaint in sync with live Firestore
@@ -215,6 +217,7 @@ export default function Reports() {
     return techTickets.filter((tk) => {
       if (filters.branch && tk.branch !== filters.branch) return false;
       if (filters.assignedTo && !tk.assignedTo?.includes(filters.assignedTo)) return false;
+      if (filters.techChannel && ticketChannel(tk) !== filters.techChannel) return false;
       if (filters.from) {
         const createdAt = tk.createdAt?.toDate?.();
         if (!createdAt || createdAt < new Date(filters.from)) return false;
@@ -320,6 +323,7 @@ export default function Reports() {
   if (reportType !== 'TECH_SUPPORT' && filters.subType) activeFilterLabels.push(`${t('complaintForm.subTypeLabel')}: ${filters.subType}`);
   if (filters.branch) activeFilterLabels.push(`${t('reports.branchShort')} ${branchName(filters.branch)}`);
   if (filters.assignedTo) activeFilterLabels.push(`${t('reports.employeeShort')} ${specialists.find((s) => s.id === filters.assignedTo)?.name || ''}`);
+  if (showsTech && filters.techChannel) activeFilterLabels.push(`${t('reports.channels.method')}: ${t(`reports.channels.short.${filters.techChannel}`)}`);
 
   const handlePrint = () => window.print();
 
@@ -430,6 +434,29 @@ export default function Reports() {
       [t('visitsReport.wait')]: v.met ? formatMinutes(v.wait, t) : t('visitsReport.notMetShort'),
       [t('common.status')]: complaintStatusLabel(v.c, t),
     }))), t('visitsReport.detailsTitle'));
+
+    const channelName = (tk) => t(`reports.channels.short.${ticketChannel(tk)}`);
+    const addChannelSheets = () => {
+      addSheet(XLSX.utils.json_to_sheet(ticketChannelRows(ticketResults, sla).map((r) => ({
+        [t('reports.channels.method')]: t(`reports.channels.${r.id}`),
+        [t('reports.full.colTotal')]: r.total,
+        [t('reports.resolvedCount')]: r.resolved,
+        [t('reports.percentLabel')]: r.share == null ? '—' : `${r.share}%`,
+        [t('reports.channels.notSent')]: r.notSent,
+        [t('statuses.techSupport.IN_PROGRESS')]: r.inProgress,
+        [t('dashboard.overdueTechTickets')]: r.overdue,
+        [t('reports.avgResolutionTime')]: formatDuration(r.avgResolutionMs, t),
+      }))), t('reports.channels.title'));
+      const employees = ticketChannelByEmployee(ticketResults, t('reports.unassigned'));
+      if (employees.length) {
+        addSheet(XLSX.utils.json_to_sheet(employees.map((e) => ({
+          [t('reports.employeeLabel')]: e.name,
+          [t('reports.channels.short.ACCOUNTS')]: e.ACCOUNTS,
+          [t('reports.channels.short.ASSIGNED')]: e.ASSIGNED,
+          [t('reports.full.colTotal')]: e.ACCOUNTS + e.ASSIGNED,
+        }))), t('reports.channels.byEmployee'));
+      }
+    };
 
     if (reportType === 'COMPLAINTS') {
       const m = complaintMetrics(results, sla);
@@ -583,6 +610,7 @@ export default function Reports() {
             [t('common.branch')]: branchName(tk.branch),
             [t('common.type')]: t('dashboard.categories.techSupport'),
             [t('complaintForm.subTypeLabel')]: problemTypeName(tk.problemType),
+            [t('reports.channels.method')]: channelName(tk),
             [t('reports.specialistShort')]: tk.assignedToNames?.join(listSep) || '',
             [t('common.status')]: t(`statuses.techSupport.${tk.status}`, tk.status),
             [t('reports.timing.dueDate')]: dueText(tk),
@@ -594,6 +622,7 @@ export default function Reports() {
         ]);
         XLSX.utils.book_append_sheet(wb, detailSheet, sheetName(t('reports.detailsLabel')));
       }
+      if (mergeTech) addChannelSheets();
       if (includeVisits) addVisitsSheet();
       if (mergedSurvey) addSurveySheets(`${t('reports.full.surveyTag')} - `, showDetails);
       if (mergedLost) addLostSheets(`${t('reports.full.lostTag')} - `, showDetails);
@@ -606,6 +635,7 @@ export default function Reports() {
         [t('reports.avgResolutionTime'), formatDuration(ticketSummary.avgResolutionMs, t)],
       ]);
       XLSX.utils.book_append_sheet(wb, summarySheet, sheetName(t('reports.generalSummary')));
+      addChannelSheets();
 
       if (byProblemType.length) {
         const typeSheet = XLSX.utils.json_to_sheet(byProblemType.map((pt) => ({
@@ -629,6 +659,7 @@ export default function Reports() {
         [t('common.date')]: tk.createdAt?.toDate ? format(tk.createdAt.toDate(), 'yyyy-MM-dd') : '',
         [t('common.branch')]: branchName(tk.branch),
         [t('techSupportList.problemType')]: problemTypeName(tk.problemType),
+        [t('reports.channels.method')]: channelName(tk),
         [t('reports.specialistShort')]: tk.assignedToNames?.join(listSep) || '',
         [t('common.status')]: t(`statuses.techSupport.${tk.status}`, tk.status),
         [t('reports.resolutionTime')]: tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(elapsedMs(tk.createdAt, tk.resolutionMessageSentAt, sla), t) : '',
@@ -740,6 +771,15 @@ export default function Reports() {
               {specialists.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>}
+          {showsTech && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('reports.channels.method')}</label>
+              <select name="techChannel" value={filters.techChannel} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
+                <option value="">{t('reports.channels.all')}</option>
+                {TICKET_CHANNELS.map((id) => <option key={id} value={id}>{t(`reports.channels.short.${id}`)}</option>)}
+              </select>
+            </div>
+          )}
         </div>
         {reportType === 'COMPLAINTS' && (
           <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-4 border-t border-slate-100">
@@ -816,6 +856,8 @@ export default function Reports() {
           />
         )}
 
+        {reportType === 'COMPLAINTS' && mergeTech && <TechResolutionReport tickets={ticketResults} sla={sla} />}
+
         {(reportType === 'VISITS' || (reportType === 'COMPLAINTS' && includeVisits)) && (
           <VisitsReport
             complaints={complaints}
@@ -856,6 +898,8 @@ export default function Reports() {
             </div>
           </div>
         </div>
+
+        <TechResolutionReport tickets={ticketResults} sla={sla} />
 
         {/* By problem type */}
         {byProblemType.length > 0 && (
@@ -918,6 +962,7 @@ export default function Reports() {
                   <th className="text-right py-2 font-medium">{t('common.date')}</th>
                   <th className="text-right py-2 font-medium">{t('common.branch')}</th>
                   <th className="text-right py-2 font-medium">{t('techSupportList.problemType')}</th>
+                  <th className="text-right py-2 font-medium">{t('reports.channels.method')}</th>
                   <th className="text-right py-2 font-medium">{t('reports.specialistShort')}</th>
                   <th className="text-right py-2 font-medium">{t('common.status')}</th>
                   <th className="text-right py-2 font-medium">{t('reports.resolutionTime')}</th>
@@ -932,6 +977,7 @@ export default function Reports() {
                     <td className="py-2 text-slate-600" dir="ltr">{tk.createdAt?.toDate ? format(tk.createdAt.toDate(), 'yyyy-MM-dd') : '—'}</td>
                     <td className="py-2 text-slate-600">{branchName(tk.branch)}</td>
                     <td className="py-2 text-slate-600">{problemTypeName(tk.problemType)}</td>
+                    <td className="py-2 text-slate-600">{t(`reports.channels.short.${ticketChannel(tk)}`)}</td>
                     <td className="py-2 text-slate-600">{tk.assignedToNames?.join(listSep) || '—'}</td>
                     <td className="py-2 text-slate-600">{t(`statuses.techSupport.${tk.status}`, tk.status)}</td>
                     <td className="py-2 text-slate-600">{tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(elapsedMs(tk.createdAt, tk.resolutionMessageSentAt, sla), t) : '—'}</td>

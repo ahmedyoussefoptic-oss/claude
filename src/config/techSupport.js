@@ -64,6 +64,11 @@ export const isTicketOverdue = (ticket) => Boolean(ticket.isOverdue) && !RESOLVE
 // Tickets escalate by bumping `escalation` (manual or SLA) and/or isOverdue.
 export const isTicketEscalatedResolved = (ticket) => Boolean(ticket.escalation > 0 || ticket.isOverdue) && RESOLVED_TICKET_STATUSES.includes(ticket.status);
 
+// How a ticket gets solved: sent straight from «حسابات الطلاب»
+// (sendStudentAccounts) or handled by the people it was assigned to.
+export const TICKET_CHANNELS = ['ACCOUNTS', 'ASSIGNED'];
+export const ticketChannel = (ticket) => (ticket.source === 'ACCOUNTS_TOOL' ? 'ACCOUNTS' : 'ASSIGNED');
+
 export function generateTicketId() {
   const year = new Date().getFullYear();
   const randomId = Math.floor(1000 + Math.random() * 9000);
