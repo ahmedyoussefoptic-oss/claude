@@ -57,9 +57,11 @@ export default function ComplaintsReport({
   const timing = timingRows(complaints, includeTech ? tickets : [], sla);
   const timingOf = new Map(timing.map((r) => [r.rec.id, r]));
   const allM = includeTech ? {
-    measuredCount: m.measuredCount + tm.measuredCount, onTimeCount: m.onTimeCount + tm.onTimeCount, delayedCount: m.delayedCount + tm.delayedCount, openDelayed: m.openDelayed + tm.openDelayed,
+    measuredCount: m.measuredCount + tm.measuredCount, onTimeCount: m.onTimeCount + tm.onTimeCount, onTimeBase: m.onTimeBase + tm.onTimeBase, inProgressCount: m.inProgressCount + tm.inProgressCount, delayedCount: m.delayedCount + tm.delayedCount, openDelayed: m.openDelayed + tm.openDelayed,
     delayBuckets: Object.fromEntries(Object.keys(m.delayBuckets).map((k) => [k, m.delayBuckets[k] + tm.delayBuckets[k]])),
   } : m;
+  const delaySegments = [['onTime', allM.onTimeCount, 'bg-emerald-500'], ['inProgress', allM.inProgressCount, 'bg-sky-500'], ['lt1d', allM.delayBuckets.lt1d, 'bg-amber-400'], ['d1to3', allM.delayBuckets.d1to3, 'bg-orange-500'], ['gt3d', allM.delayBuckets.gt3d, 'bg-red-600']];
+  const delaySegmentsTotal = delaySegments.reduce((s, [, n]) => s + n, 0);
   const lateList = timing.filter((r) => r.delayMs > 0);
   const allAvgDelay = lateList.length ? lateList.reduce((s, r) => s + r.delayMs, 0) / lateList.length : null;
   const allMaxDelay = lateList.length ? Math.max(...lateList.map((r) => r.delayMs)) : null;
@@ -186,7 +188,7 @@ export default function ComplaintsReport({
         <SectionTitle sub={t('reports.timing.sub')}>{t('reports.timing.title')}</SectionTitle>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 print:grid-cols-4">
           <Box title={t('reports.avgResolutionTime')} value={dur(m.avgResolutionMs)} sub={m.medianResolutionMs != null ? t('reports.timing.medianSub', { v: dur(m.medianResolutionMs) }) : undefined} icon={Clock} gradient="from-cyan-500 to-sky-600" />
-          <Box title={t('reports.timing.onTime')} value={allM.onTimeCount} sub={allM.measuredCount ? t('reports.timing.onTimeSub', { pct: `${Math.round((allM.onTimeCount / allM.measuredCount) * 100)}%` }) : undefined} icon={CalendarCheck2} gradient="from-emerald-500 to-teal-600" />
+          <Box title={t('reports.timing.onTime')} value={allM.onTimeCount} sub={allM.onTimeBase ? t('reports.timing.onTimeSub', { pct: `${Math.round((allM.onTimeCount / allM.onTimeBase) * 100)}%` }) : undefined} icon={CalendarCheck2} gradient="from-emerald-500 to-teal-600" />
           <Box title={t('reports.timing.delayed')} value={allM.delayedCount} sub={t('reports.timing.delayedSub', { open: allM.openDelayed })} icon={Hourglass} gradient="from-red-500 to-rose-600" />
           <Box title={t('reports.timing.avgDelay')} value={dur(allAvgDelay)} sub={allMaxDelay != null ? t('reports.timing.maxDelaySub', { v: dur(allMaxDelay) }) : undefined} icon={Timer} gradient="from-orange-500 to-red-500" />
         </div>
@@ -194,16 +196,16 @@ export default function ComplaintsReport({
           <p className="text-[11px] text-slate-500 mt-2">{t('dashboard.categories.techSupport')} — {t('reports.avgResolutionTime')}: <b>{dur(tm.avgResolutionMs)}</b> · {t('reports.timing.avgDelay')}: <b>{dur(tm.avgDelayMs)}</b></p>
         )}
 
-        {allM.measuredCount > 0 && (
+        {delaySegmentsTotal > 0 && (
           <div className="mt-4">
             <p className="text-xs font-bold text-slate-400 mb-2">{t('reports.timing.distribution')}</p>
             <div className="h-6 rounded-lg overflow-hidden flex text-[11px] text-white font-medium">
-              {[['onTime', allM.onTimeCount, 'bg-emerald-500'], ['lt1d', allM.delayBuckets.lt1d, 'bg-amber-400'], ['d1to3', allM.delayBuckets.d1to3, 'bg-orange-500'], ['gt3d', allM.delayBuckets.gt3d, 'bg-red-600']].filter(([, n]) => n > 0).map(([k, n, c]) => (
-                <div key={k} className={`${c} h-full flex items-center justify-center`} style={{ width: `${(n / allM.measuredCount) * 100}%` }}>{n}</div>
+              {delaySegments.filter(([, n]) => n > 0).map(([k, n, c]) => (
+                <div key={k} className={`${c} h-full flex items-center justify-center`} style={{ width: `${(n / delaySegmentsTotal) * 100}%` }}>{n}</div>
               ))}
             </div>
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500 pt-1.5">
-              {[['onTime', allM.onTimeCount, 'bg-emerald-500'], ['lt1d', allM.delayBuckets.lt1d, 'bg-amber-400'], ['d1to3', allM.delayBuckets.d1to3, 'bg-orange-500'], ['gt3d', allM.delayBuckets.gt3d, 'bg-red-600']].map(([k, n, c]) => (
+              {delaySegments.map(([k, n, c]) => (
                 <span key={k} className="flex items-center gap-1"><span className={`w-3 h-3 rounded-sm ${c}`} />{t(`reports.timing.buckets.${k}`)}: <b className="text-slate-700">{n}</b></span>
               ))}
             </div>

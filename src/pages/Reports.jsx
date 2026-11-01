@@ -478,6 +478,7 @@ export default function Reports() {
         [t('dashboard.avgResolution'), formatDuration(m.avgResolutionMs, t)],
         [t('reports.timing.medianResolution'), formatDuration(m.medianResolutionMs, t)],
         [t('reports.timing.onTime'), m.onTimeCount],
+        [t('reports.timing.buckets.inProgress'), m.inProgressCount],
         [t('reports.timing.delayed'), m.delayedCount],
         [t('reports.timing.openDelayedCol'), m.openDelayed],
         [t('reports.timing.avgDelay'), formatDuration(m.avgDelayMs, t)],

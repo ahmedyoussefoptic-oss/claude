@@ -37,12 +37,17 @@ const median = (list) => {
   return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
 };
 // Shared timing indicators for a list of resolution times and delays.
-function timingStats(resolutions, delays) {
+// `open` holds the delays of the records not solved yet: until they run late
+// they are in progress, not "on time" (null = no deadline).
+function timingStats(resolutions, delays, open = []) {
   const late = delays.filter((d) => d > 0);
+  const openInTime = open.filter((d) => d === 0).length;
   return {
     medianResolutionMs: median(resolutions),
     measuredCount: delays.length,
-    onTimeCount: delays.length - late.length,
+    onTimeCount: delays.length - late.length - openInTime,
+    onTimeBase: delays.length - openInTime,
+    inProgressCount: open.filter((d) => !(d > 0)).length,
     delayedCount: late.length,
     avgDelayMs: late.length ? late.reduce((s, d) => s + d, 0) / late.length : null,
     maxDelayMs: late.length ? Math.max(...late) : null,
@@ -114,7 +119,7 @@ export function complaintMetrics(list, cfg) {
     satisfaction: rated.length ? rated.reduce((s, c) => s + c.satisfactionRate, 0) / rated.length : null,
     satisfactionCount: rated.length,
     openDelayed: list.filter((c) => !isResolved(c) && complaintDelayMs(c, cfg) > 0).length,
-    ...timingStats(solvedDocs.map((c) => complaintResolutionMs(c, cfg)), list.map((c) => complaintDelayMs(c, cfg)).filter((d) => d != null)),
+    ...timingStats(solvedDocs.map((c) => complaintResolutionMs(c, cfg)), list.map((c) => complaintDelayMs(c, cfg)).filter((d) => d != null), list.filter((c) => !isResolved(c) && c.status !== 'REJECTED').map((c) => complaintDelayMs(c, cfg))),
   };
 }
 
@@ -140,7 +145,7 @@ export function ticketMetrics(list, cfg) {
     satisfaction: null,
     satisfactionCount: 0,
     openDelayed: list.filter((tk) => !RESOLVED_TICKET_STATUSES.includes(tk.status) && ticketDelayMs(tk, cfg) > 0).length,
-    ...timingStats(done.map((tk) => ticketResolutionMs(tk, cfg)), list.map((tk) => ticketDelayMs(tk, cfg)).filter((d) => d != null)),
+    ...timingStats(done.map((tk) => ticketResolutionMs(tk, cfg)), list.map((tk) => ticketDelayMs(tk, cfg)).filter((d) => d != null), list.filter((tk) => !RESOLVED_TICKET_STATUSES.includes(tk.status)).map((tk) => ticketDelayMs(tk, cfg))),
   };
 }
 

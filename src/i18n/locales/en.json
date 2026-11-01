@@ -1190,6 +1190,7 @@
       "distribution": "Delay distribution",
       "buckets": {
         "onTime": "Within deadline",
+        "inProgress": "In progress",
         "lt1d": "Late < 1 day",
         "d1to3": "Late 1–3 days",
         "gt3d": "Late > 3 days"
