@@ -3327,7 +3327,7 @@ exports.tripAction = onCall({ secrets: WA_SECRETS, timeoutSeconds: 300 }, async 
   const title = `رحلة ${trip.title}`;
   if (action === "complete") {
     const settings = await waTripSettings();
-    if (settings && settings.autoSend !== false) await sendTripSurveys(ref, { ...trip, status: "COMPLETED" }, settings, null);
+    if (tripAutoOn(settings)) await sendTripSurveys(ref, { ...trip, status: "COMPLETED" }, settings, null);
   }
   if (action === "submit") {
     await notifyUsers(await tripApprovers(trip.branches || []), { title: "رحلة بانتظار الاعتماد", body: `${title} — ${formatTripDay(trip.date)} (${caller.name || ""})`, complaintId: id, type: "TRIP_APPROVAL_REQUESTED" });
@@ -3363,6 +3363,11 @@ async function waTripSettings() {
   if (!settings.enabled || !(settings.templates || {}).tripNotice) return null;
   return settings;
 }
+
+// The messages nobody presses a button for: reminders, the survey on
+// completion and the payment notices. Off unless switched on in the WhatsApp
+// settings; the general auto-send switch stops them too.
+const tripAutoOn = (settings) => !!settings && settings.autoSend !== false && settings.tripAutoSend === true;
 
 async function sendTripNotice({ settings, trip, phone, studentName, branch, section, line, image }) {
   const to = toIntlNumber(phone);
@@ -3716,7 +3721,7 @@ exports.reviewTripPayment = onCall({ secrets: WA_SECRETS }, async (request) => {
 
   let messageSent = false;
   const settings = await waTripSettings();
-  if (settings && settings.autoSend !== false && e.parentPhone) {
+  if (tripAutoOn(settings) && e.parentPhone) {
     try {
       const line = action === "reject" ? TRIP_LINES.rejected(trip, note) : action === "collect" ? TRIP_LINES.cash() : TRIP_LINES.paid();
       await sendTripNotice({ settings, trip, phone: e.parentPhone, studentName: e.studentName, branch: e.branch, section: e.section, line });
@@ -3820,12 +3825,12 @@ exports.onTripEnrollmentWritten = onDocumentWritten("trips/{tripId}/enrollments/
   await ref.update({ stats });
 });
 
-// Daily reminders (when auto-send is on): two days before the deadline to
+// Daily reminders (tripAutoOn): two days before the deadline to
 // parents who haven't answered or paid, and the evening before the trip to
 // the confirmed ones.
 exports.tripReminders = onSchedule({ schedule: "0 16 * * *", timeZone: "Asia/Riyadh", secrets: WA_SECRETS, timeoutSeconds: 540 }, async () => {
   const settings = await waTripSettings();
-  if (!settings || settings.autoSend === false) return;
+  if (!tripAutoOn(settings)) return;
   const inTwoDays = riyadhDay(2);
   const tomorrow = riyadhDay(1);
   const open = await db.collection("trips").where("status", "in", ["OPEN", "CLOSED"]).get();
@@ -3895,7 +3900,7 @@ exports.addTripIncident = onCall(async (request) => {
 });
 
 // --- Parent survey after the trip ------------------------------------------
-// Sent (automatically on completion when auto-send is on, or manually) to
+// Sent (automatically on completion when tripAutoOn, or manually) to
 // the parents of the students who took part and haven't answered yet; the
 // survey itself is on the trip page.
 async function sendTripSurveys(ref, trip, settings, actor) {

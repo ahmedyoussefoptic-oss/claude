@@ -86,6 +86,7 @@ export default function WhatsAppApiSettings() {
       await setDoc(doc(db, 'settings', 'whatsappApi'), {
         enabled: !!draft.enabled,
         autoSend: draft.autoSend !== false,
+        tripAutoSend: draft.tripAutoSend === true,
         language: (draft.language || 'ar').trim(),
         templates: Object.fromEntries(TEMPLATE_KEYS.map((k) => [k, (draft.templates[k] || '').trim()])),
       });
@@ -137,6 +138,13 @@ export default function WhatsAppApiSettings() {
         <span>
           {t('waApi.autoSend')}
           <span className="block text-xs text-slate-500 mt-0.5">{t('waApi.autoSendHint')}</span>
+        </span>
+      </label>
+      <label className="flex items-start gap-2 text-sm text-slate-800">
+        <input type="checkbox" className="mt-1" disabled={draft.autoSend === false} checked={draft.autoSend !== false && draft.tripAutoSend === true} onChange={(e) => setDraft((d) => ({ ...d, tripAutoSend: e.target.checked }))} />
+        <span>
+          {t('waApi.tripAutoSend')}
+          <span className="block text-xs text-slate-500 mt-0.5">{t('waApi.tripAutoSendHint')}</span>
         </span>
       </label>
 

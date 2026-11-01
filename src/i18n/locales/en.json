@@ -1597,6 +1597,8 @@
     "sendReturnedApi": "Send handover (WhatsApp API)",
     "autoSend": "Automatic sending",
     "autoSendHint": "Receipt as soon as a feedback / tech ticket / lost-item report is logged, resolution as soon as it's written (closing the tech ticket), thank-you once a branch meeting is confirmed, and handover once an item is returned. If sending fails, the reason is logged on the record and the manual send buttons remain available.",
+    "tripAutoSend": "Automatic trip messages",
+    "tripAutoSendHint": "The reminder before the consent and payment deadline, the reminder the evening before the trip, the survey after it, and the messages when a receipt is accepted or rejected or a fee is collected. While this is off parents don't get these messages, and the manual send buttons on the trip page remain available.",
     "visitAutoNote": "The parent will automatically get a WhatsApp thank-you after confirming.",
     "appointmentVars": "{{3}} student name — {{4}} time and branch. Sent when the principal confirms or sets another time.",
     "tripVars": "{{1}} student — {{2}} trip name — {{3}} date and time — {{4}} message (announcement, reminder, receipt accepted/rejected) — {{5}} trip page link. Same “contact the branch” button /contact/{{1}}.",

@@ -5,6 +5,7 @@ import { db } from '../config/firebase';
 export const DEFAULT_WA_API = {
   enabled: false,
   autoSend: true,
+  tripAutoSend: false,
   language: 'ar',
   templates: {
     complaintReceipt: 'complaint_receipt',
