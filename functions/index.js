@@ -5837,14 +5837,17 @@ exports.createBevatelWebhookKey = onCall(async (request) => {
   return { key, url: BEVATEL_WEBHOOK_URL, header: BEVATEL_WEBHOOK_HEADER };
 });
 
+// Seconds, or the "HH:MM:SS" the reports API uses.
 const secHms = (v) => {
-  const s = Math.max(0, Math.round(Number(v) || 0));
+  const parts = String(v ?? "").split(":").map(Number);
+  const s = Math.max(0, Math.round(parts.length > 1 ? parts.reduce((sum, x) => sum * 60 + x, 0) : Number(v)) || 0);
   return `${Math.floor(s / 3600)}:${String(Math.floor(s / 60) % 60).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 };
 function bevatelTimeMs(v) {
-  if (typeof v === "number") return v;
+  if (typeof v === "number") return v < 1e12 ? v * 1000 : v;
   const s = String(v || "");
   if (!s) return null;
+  if (/^\d+$/.test(s)) return bevatelTimeMs(Number(s));
   const ms = Date.parse(/(Z|[+-]\d{2}:?\d{2})$/i.test(s) ? s : `${s.replace(" ", "T")}+03:00`);
   return Number.isNaN(ms) ? null : ms;
 }
@@ -5852,7 +5855,7 @@ function bevatelEventKind(body) {
   const d = body.data || {};
   const type = String(body.event_type || "");
   if (/abandon/i.test(type)) return "ABANDON";
-  if (/time.?out/i.test(type)) return "EXITWITHTIMEOUT";
+  if (/tim.*out/i.test(type)) return "EXITWITHTIMEOUT";
   if (/transfer/i.test(type)) return "TRANSFER";
   if (/start/i.test(type)) return "STARTED";
   if (/end/i.test(type)) return "ENDED";
@@ -5869,15 +5872,22 @@ function bevatelWebhookRow(body) {
   const kind = bevatelEventKind(body);
   const id = d.id || d.call_id;
   if (!id || !kind || kind === "STARTED" || /internal/i.test(d.direction || "")) return null;
-  const ms = bevatelTimeMs(d.start_ringing_at) || bevatelTimeMs(d.answered_at) || bevatelTimeMs(d.ended_at) || bevatelTimeMs(d.transferred_at) || bevatelTimeMs(body.timestamp);
+  const ringing = bevatelTimeMs(d.start_ringing_at);
+  const answeredAt = bevatelTimeMs(d.answered_at);
+  const endedAt = bevatelTimeMs(d.ended_at);
+  const ms = ringing || answeredAt || endedAt || bevatelTimeMs(d.transferred_at) || bevatelTimeMs(body.timestamp);
   if (!ms) return null;
+  // The times are measured the same way for every call, so they decide the
+  // talk time; the timers fill in when an event has no times.
+  const talk = answeredAt && endedAt ? Math.max(0, endedAt - answeredAt) / 1000 : d.talk_time;
+  const untilAnswer = ringing && answeredAt ? Math.max(0, answeredAt - ringing) / 1000 : 0;
   return {
     dir: /out/i.test(d.direction || "") ? "out" : "in",
     answered: !!d.answered_at,
     row: {
       id, date: new Date(ms + 3 * 3600000).toISOString().slice(0, 19).replace("T", " "), number: d.connected_line_num || d.caller_number || "",
       queue_number: d.queue_number || "", queue_name: d.queue_name || "", agent: d.agent_name || d.transferred_from_agent || "", agent_number: d.extension || "",
-      event: kind === "ENDED" ? d.dial_status || "" : kind, talk_time: secHms(d.talk_time), ring_time: secHms(d.ring_time), wait_time: secHms(d.wait_time), did: d.did || "",
+      event: kind === "ENDED" ? d.dial_status || "" : kind, talk_time: secHms(talk), ring_time: secHms(hmsSec(secHms(d.ring_time)) || untilAnswer), wait_time: secHms(hmsSec(secHms(d.wait_time)) || untilAnswer), did: d.did || "",
     },
   };
 }
@@ -5888,6 +5898,7 @@ async function saveBevatelEvent(body) {
   const d = body.data || {};
   const now = Timestamp.now();
   const parsed = bevatelWebhookRow(body);
+  if ("dial_status" in d) console.log("bevatel timers", JSON.stringify({ id: d.id, talk: d.talk_time, wait: d.wait_time, ring: d.ring_time, answered: d.answered_at, ended: d.ended_at }));
   const queue = str(d.queue_number, 40);
   const newQueue = queue && !(cfg.queues || []).some((q) => q.number === queue);
   if (parsed) {

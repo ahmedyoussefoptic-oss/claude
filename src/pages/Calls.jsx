@@ -2,18 +2,23 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collection, doc, getDocs, onSnapshot, query, where } from 'firebase/firestore';
 import { format, subDays } from 'date-fns';
-import { PhoneCall, PhoneIncoming, PhoneMissed, PhoneOutgoing, Clock, Timer, Loader2, AlertTriangle, PhoneForwarded, Repeat } from 'lucide-react';
+import { PhoneCall, PhoneIncoming, PhoneMissed, PhoneOutgoing, Clock, Timer, Loader2, AlertTriangle, PhoneForwarded, Repeat, FileSpreadsheet, Printer } from 'lucide-react';
 import { db } from '../config/firebase';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
 import StatCard from '../components/dashboard/StatCard';
 import { userBranches } from '../utils/scope';
+import logo from '../assets/logo.png';
 
 const inputCls = 'px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
 const mmss = (sec) => (sec == null || Number.isNaN(sec) ? '—' : `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`);
 const avg = (list) => (list.length ? list.reduce((s, v) => s + v, 0) / list.length : null);
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 const atMs = (c) => c.at?.toMillis?.() || 0;
+// Only calls with a recorded talk time count in the averages: a call that
+// wasn't connected has none, and neither do calls saved before talk times
+// were read from Bevatel's webhook.
+const timedOf = (list) => list.filter((c) => c.talkSec > 0);
 
 // Call analytics from Bevatel (bevatelSync → calls): volume and answer rate
 // per branch and agent, busy hours, and the missed calls nobody returned.
@@ -70,12 +75,21 @@ export default function Calls() {
     const branchRows = Object.entries(group(calls, (c) => c.branch)).map(([b, list]) => {
       const inb = list.filter((c) => c.dir === 'in');
       const ans = inb.filter((c) => c.answered);
-      return { branch: b, inbound: inb.length, answered: ans.length, missed: inb.length - ans.length, rate: pct(ans.length, inb.length), wait: avg(ans.map((c) => c.waitSec || 0)), outbound: list.length - inb.length, notReturned: notReturned.filter((c) => (c.branch || '') === b).length };
+      return { branch: b, inbound: inb.length, answered: ans.length, missed: inb.length - ans.length, rate: pct(ans.length, inb.length), wait: avg(timedOf(ans).map((c) => c.waitSec || 0)), outbound: list.length - inb.length, notReturned: notReturned.filter((c) => (c.branch || '') === b).length };
     }).sort((x, y) => y.inbound - x.inbound);
     const agentRows = Object.entries(group(calls.filter((c) => c.agent && (c.dir === 'out' || c.answered)), (c) => c.agent)).map(([agent, list]) => {
       const ans = list.filter((c) => c.dir === 'in');
-      return { agent, answered: ans.length, outbound: list.length - ans.length, talk: avg(list.map((c) => c.talkSec || 0)) };
+      return { agent, answered: ans.length, outbound: list.length - ans.length, talk: avg(timedOf(list).map((c) => c.talkSec)) };
     }).sort((x, y) => (y.answered + y.outbound) - (x.answered + x.outbound));
+    const queueRows = Object.entries(group(inbound, (c) => c.queueName || c.queue)).map(([queue, list]) => {
+      const ans = list.filter((c) => c.answered);
+      return { queue, inbound: list.length, answered: ans.length, missed: list.length - ans.length, rate: pct(ans.length, list.length), wait: avg(timedOf(ans).map((c) => c.waitSec || 0)), talk: avg(timedOf(ans).map((c) => c.talkSec)) };
+    }).sort((x, y) => y.inbound - x.inbound);
+    const dayRows = Object.entries(group(calls, (c) => c.day)).map(([day, list]) => {
+      const inb = list.filter((c) => c.dir === 'in');
+      const ans = inb.filter((c) => c.answered);
+      return { day, inbound: inb.length, answered: ans.length, missed: inb.length - ans.length, rate: pct(ans.length, inb.length), outbound: list.length - inb.length };
+    }).sort((x, y) => (x.day < y.day ? 1 : -1));
 
     const hours = inbound.map((c) => c.hour).filter((h) => Number.isInteger(h));
     const minH = Math.min(7, ...hours);
@@ -91,8 +105,9 @@ export default function Calls() {
 
     return {
       inbound: inbound.length, answered: answered.length, missed: missed.length, outbound: outbound.length,
-      rate: pct(answered.length, inbound.length), wait: avg(answered.map((c) => c.waitSec || 0)), talk: avg(answered.map((c) => c.talkSec || 0)),
-      notReturned, branchRows, agentRows, heat, heatMax, minH, repeat,
+      rate: pct(answered.length, inbound.length), wait: avg(timedOf(answered).map((c) => c.waitSec || 0)), talk: avg(timedOf(answered).map((c) => c.talkSec)),
+      untimed: calls.filter((c) => c.answered && !(c.talkSec > 0)).length,
+      notReturned, branchRows, agentRows, queueRows, dayRows, heat, heatMax, minH, repeat,
     };
   }, [calls]);
 
@@ -113,11 +128,42 @@ export default function Calls() {
 
   const who = (phone) => (students[phone]?.length ? students[phone].join('، ') : '');
   const days = [t('calls.days.0'), t('calls.days.1'), t('calls.days.2'), t('calls.days.3'), t('calls.days.4'), t('calls.days.5'), t('calls.days.6')];
-  const card = 'bg-white rounded-2xl border border-slate-200 shadow-sm p-5';
+  const card = 'bg-white rounded-2xl border border-slate-200 shadow-sm p-5 break-inside-avoid';
+  const periodLabel = t('calls.period', { from, to });
+  const scopeLabel = branch === 'ALL' ? t('common.allBranches') : branchName(branch);
+
+  const exportExcel = async () => {
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+    wb.Workbook = { Views: [{ RTL: true }] };
+    const add = (rows, name) => XLSX.utils.book_append_sheet(wb, Array.isArray(rows[0]) ? XLSX.utils.aoa_to_sheet(rows) : XLSX.utils.json_to_sheet(rows), name.slice(0, 31));
+    const c = (key) => t(`calls.col.${key}`);
+    const rateText = (r) => (r.inbound ? `${r.rate}%` : '—');
+    add([
+      [t('calls.title'), periodLabel], [t('calls.col.branch'), scopeLabel], [],
+      [t('calls.inbound'), a.inbound], [c('answered'), a.answered], [t('calls.missed'), a.missed], [t('calls.answerRate'), `${a.rate}%`],
+      [t('calls.notReturned'), a.notReturned.length], [t('calls.outbound'), a.outbound], [t('calls.avgWait'), mmss(a.wait)], [t('calls.avgTalk'), mmss(a.talk)], [t('calls.repeatCallers'), a.repeat.length],
+    ], t('calls.summary'));
+    if (a.dayRows.length) add(a.dayRows.map((r) => ({ [c('date')]: r.day, [t('calls.inbound')]: r.inbound, [c('answered')]: r.answered, [t('calls.missed')]: r.missed, [t('calls.answerRate')]: rateText(r), [t('calls.outbound')]: r.outbound })), t('calls.byDay'));
+    if (a.branchRows.length) add(a.branchRows.map((r) => ({ [c('branch')]: branchName(r.branch), [t('calls.inbound')]: r.inbound, [c('answered')]: r.answered, [t('calls.answerRate')]: rateText(r), [t('calls.missed')]: r.missed, [t('calls.notReturned')]: r.notReturned, [t('calls.avgWait')]: mmss(r.wait), [t('calls.outbound')]: r.outbound })), t('calls.byBranch'));
+    if (a.queueRows.length) add(a.queueRows.map((r) => ({ [c('queue')]: r.queue || '—', [t('calls.inbound')]: r.inbound, [c('answered')]: r.answered, [t('calls.answerRate')]: rateText(r), [t('calls.missed')]: r.missed, [t('calls.avgWait')]: mmss(r.wait), [t('calls.avgTalk')]: mmss(r.talk) })), t('calls.byQueue'));
+    if (a.agentRows.length) add(a.agentRows.map((r) => ({ [c('agent')]: r.agent, [c('answered')]: r.answered, [t('calls.outbound')]: r.outbound, [t('calls.avgTalk')]: mmss(r.talk) })), t('calls.byAgent'));
+    add([[c('day'), ...a.heat[0].map((_, i) => a.minH + i)], ...a.heat.map((row, d) => [days[d], ...row])], t('calls.peakSheet'));
+    if (a.notReturned.length) add(a.notReturned.map((x) => ({ [c('time')]: format(x.at.toDate(), 'yyyy-MM-dd HH:mm'), [c('number')]: x.phone, [c('parentOf')]: who(x.phone), [c('branch')]: branchName(x.branch), [c('queue')]: x.queueName || '', [c('attempts')]: x.attempts })), t('calls.notReturned'));
+    if (a.repeat.length) add(a.repeat.map((r) => ({ [c('number')]: r.phone, [c('parentOf')]: who(r.phone), [c('branch')]: branchName(r.branch), [t('calls.inbound')]: r.count, [t('calls.missed')]: r.missed })), t('calls.repeatCallers'));
+    if (calls.length) {
+      add([...calls].sort((x, y) => atMs(y) - atMs(x)).map((x) => ({
+        [c('time')]: x.at?.toDate ? format(x.at.toDate(), 'yyyy-MM-dd HH:mm') : '', [c('direction')]: t(x.dir === 'in' ? 'calls.inbound' : 'calls.outbound'), [c('number')]: x.phone || x.number || '',
+        [c('branch')]: branchName(x.branch), [c('queue')]: x.queueName || x.queue || '', [c('agent')]: x.agent || '', [c('result')]: t(x.answered ? 'calls.resultAnswered' : 'calls.resultMissed'),
+        [t('calls.avgWaitShort')]: x.talkSec > 0 ? mmss(x.waitSec || 0) : '', [c('talk')]: x.talkSec > 0 ? mmss(x.talkSec) : '',
+      })), t('calls.callLog'));
+    }
+    XLSX.writeFile(wb, `${t('calls.title')} ${from} - ${to}.xlsx`);
+  };
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-3">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 no-print">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><PhoneCall className="w-6 h-6 text-primary" />{t('calls.title')}</h1>
           <p className="text-slate-500 mt-1">{t('calls.subtitle')}</p>
@@ -130,6 +176,8 @@ export default function Calls() {
             <option value="ALL">{t('common.allBranches')}</option>
             {branches.filter((b) => !myBranches || myBranches.includes(b.id)).map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
+          <button type="button" disabled={!a} onClick={exportExcel} className="px-4 py-2 flex items-center gap-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium text-sm disabled:opacity-50"><FileSpreadsheet className="w-4 h-4" />{t('reports.exportExcel')}</button>
+          <button type="button" disabled={!a} onClick={() => window.print()} className="px-4 py-2 flex items-center gap-2 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm disabled:opacity-50"><Printer className="w-4 h-4" />{t('reports.printSavePdf')}</button>
         </div>
       </div>
 
@@ -141,8 +189,23 @@ export default function Calls() {
       {!a && !error && <div className="py-20 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}
 
       {a && (
-        <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div id="report-print-area" className="space-y-6">
+          <div className="hidden print:flex items-center justify-between border-b border-slate-200 pb-4">
+            <div className="flex items-center gap-4">
+              <img src={logo} alt={t('reports.schoolFullName')} className="h-12 w-auto" />
+              <div>
+                <p className="text-lg font-bold text-slate-900">{t('reports.schoolFullName')}</p>
+                <p className="text-sm text-slate-500">{t('calls.title')} — {scopeLabel}</p>
+                <p className="text-xs text-slate-500">{periodLabel}</p>
+              </div>
+            </div>
+            <div className="text-left">
+              <p className="text-xs text-slate-400">{t('reports.issueDate')}</p>
+              <p className="text-sm font-medium text-slate-700" dir="ltr">{format(new Date(), 'yyyy-MM-dd HH:mm')}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 print:grid-cols-4 gap-4">
             <StatCard title={t('calls.inbound')} value={String(a.inbound)} icon={PhoneIncoming} gradient="from-sky-500 to-blue-600" />
             <StatCard title={t('calls.answerRate')} value={`${a.rate}%`} icon={PhoneCall} gradient="from-emerald-500 to-teal-600" />
             <StatCard title={t('calls.missed')} value={String(a.missed)} icon={PhoneMissed} gradient="from-rose-500 to-pink-600" />
@@ -152,6 +215,7 @@ export default function Calls() {
             <StatCard title={t('calls.avgTalk')} value={mmss(a.talk)} icon={Timer} gradient="from-cyan-500 to-teal-600" />
             <StatCard title={t('calls.repeatCallers')} value={String(a.repeat.length)} icon={Repeat} gradient="from-fuchsia-500 to-purple-600" />
           </div>
+          {a.untimed > 0 && <p className="text-xs text-slate-500">{t('calls.untimedNote', { count: a.untimed })}</p>}
 
           <div className={card}>
             <h2 className="font-bold text-slate-900 flex items-center gap-2 mb-1"><PhoneForwarded className="w-5 h-5 text-amber-500" />{t('calls.notReturnedTitle')}</h2>
@@ -201,12 +265,42 @@ export default function Calls() {
 
             <div className={card}>
               <h2 className="font-bold text-slate-900 mb-3">{t('calls.byAgent')}</h2>
-              <div className="overflow-x-auto max-h-80">
+              <div className="overflow-x-auto max-h-80 print:max-h-none">
                 <table className="w-full text-sm">
                   <thead><tr className="text-slate-500 text-xs border-b border-slate-100"><th className="text-start py-2">{t('calls.col.agent')}</th><th>{t('calls.col.answered')}</th><th>{t('calls.outbound')}</th><th>{t('calls.avgTalk')}</th></tr></thead>
                   <tbody>
                     {a.agentRows.map((r) => (
                       <tr key={r.agent} className="border-b border-slate-50 text-center"><td className="py-2 text-start text-slate-800">{r.agent}</td><td>{r.answered}</td><td>{r.outbound}</td><td dir="ltr">{mmss(r.talk)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className={card}>
+              <h2 className="font-bold text-slate-900 mb-3">{t('calls.byQueue')}</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead><tr className="text-slate-500 text-xs border-b border-slate-100"><th className="text-start py-2">{t('calls.col.queue')}</th><th>{t('calls.inbound')}</th><th>{t('calls.answerRate')}</th><th>{t('calls.missed')}</th><th>{t('calls.avgTalk')}</th></tr></thead>
+                  <tbody>
+                    {a.queueRows.map((r) => (
+                      <tr key={r.queue} className="border-b border-slate-50 text-center"><td className="py-2 text-start text-slate-800" dir="ltr">{r.queue || '—'}</td><td>{r.inbound}</td><td>{r.rate}%</td><td>{r.missed}</td><td dir="ltr">{mmss(r.talk)}</td></tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className={card}>
+              <h2 className="font-bold text-slate-900 mb-3">{t('calls.byDay')}</h2>
+              <div className="overflow-x-auto max-h-80 print:max-h-none">
+                <table className="w-full text-sm">
+                  <thead><tr className="text-slate-500 text-xs border-b border-slate-100"><th className="text-start py-2">{t('calls.col.date')}</th><th>{t('calls.inbound')}</th><th>{t('calls.answerRate')}</th><th>{t('calls.missed')}</th><th>{t('calls.outbound')}</th></tr></thead>
+                  <tbody>
+                    {a.dayRows.map((r) => (
+                      <tr key={r.day} className="border-b border-slate-50 text-center"><td className="py-2 text-start text-slate-800" dir="ltr">{r.day}</td><td>{r.inbound}</td><td>{r.inbound ? `${r.rate}%` : '—'}</td><td>{r.missed}</td><td>{r.outbound}</td></tr>
                     ))}
                   </tbody>
                 </table>
@@ -250,7 +344,7 @@ export default function Calls() {
               </ul>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );

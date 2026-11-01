@@ -3258,7 +3258,13 @@
       "branch": "Branch",
       "attempts": "Attempts",
       "agent": "Agent",
-      "answered": "Answered"
+      "answered": "Answered",
+      "date": "Date",
+      "day": "Day",
+      "direction": "Direction",
+      "queue": "Queue",
+      "result": "Result",
+      "talk": "Talk time"
     },
     "days": {
       "0": "Sun",
@@ -3268,7 +3274,17 @@
       "4": "Thu",
       "5": "Fri",
       "6": "Sat"
-    }
+    },
+    "period": "Period: {{from}} to {{to}}",
+    "summary": "Summary",
+    "byDay": "By day",
+    "byQueue": "By queue",
+    "peakSheet": "Peak times",
+    "callLog": "Call log",
+    "resultAnswered": "Answered",
+    "resultMissed": "Not answered",
+    "avgWaitShort": "Wait",
+    "untimedNote": "{{count}} answered calls have no recorded duration (saved before the duration fix) and aren't in the averages."
   },
   "assistant": {
     "title": "AI assistant",
