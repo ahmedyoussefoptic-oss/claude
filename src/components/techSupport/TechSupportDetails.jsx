@@ -74,15 +74,17 @@ function TechSupportDetailsInner({ ticket, onClose }) {
   const canEdit = isAdmin || (inScope && userData?.perms?.edit === true);
   const canDelete = isAdmin ? adminCan(userData, adminCaps, 'delete') : (inScope && userData?.perms?.delete === true);
   // Converting moves the record into the complaints module, so that section
-  // must be open to the employee too (see convertTechTicketToComplaint).
-  const canConvert = canEdit && canSeeModule(userData, 'complaints') && !['SOLVED', 'WAITING_CONFIRMATION', 'CLOSED'].includes(ticket.status);
+  // must be open to the employee too — except the IT team, who hand tickets
+  // over without seeing complaints (see convertTechTicketToComplaint).
+  const seesComplaints = canSeeModule(userData, 'complaints');
+  const canConvert = canEdit && (seesComplaints || userData?.department === 'IT') && !['SOLVED', 'WAITING_CONFIRMATION', 'CLOSED'].includes(ticket.status);
   const [showConvert, setShowConvert] = useState(false);
   const navigate = useNavigate();
   const handleConverted = ({ complaintId, complaintDocId }) => {
     setShowConvert(false);
     alert(t('ticketConvert.successAlert', { id: complaintId }));
     onClose();
-    navigate(`/complaints?openId=${complaintDocId}`);
+    if (seesComplaints) navigate(`/complaints?openId=${complaintDocId}`);
   };
 
   useEffect(() => {

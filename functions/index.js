@@ -1790,13 +1790,14 @@ exports.convertTechTicketToComplaint = onCall(async (request) => {
   const ticket = ticketSnap.data();
 
   // Mirrors firestore.rules: canEditRecord(branch) on the ticket plus
-  // canAccessTechSupport(), and the complaints section must be open to them.
+  // canAccessTechSupport(), and the complaints section must be open to them
+  // (the IT team hand tickets over without seeing complaints).
   const isAdminCaller = caller.role === "ADMIN";
   const inScope = caller.access === "all" || (caller.branches || []).includes(ticket.branch) || caller.branch === ticket.branch;
   const canEdit = isAdminCaller || (caller.perms?.edit === true && inScope);
   const techMod = caller.modules ? caller.modules.techSupport : undefined;
   const canAccessTech = isAdminCaller || (caller.tripsAccess !== "tripsOnly" && (techMod === true || (techMod === undefined && (caller.department === "IT" || caller.role === "CUSTOMER_SERVICE" || caller.isPrincipal === true || caller.isQuality === true))));
-  if (!canEdit || !canAccessTech || moduleOff(caller, "complaints")) {
+  if (!canEdit || !canAccessTech || (moduleOff(caller, "complaints") && caller.department !== "IT")) {
     throw new HttpsError("permission-denied", "لا تملك صلاحية تحويل هذا البلاغ.");
   }
   if (["SOLVED", "WAITING_CONFIRMATION", "CLOSED"].includes(ticket.status)) {
