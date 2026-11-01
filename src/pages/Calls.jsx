@@ -131,6 +131,8 @@ export default function Calls() {
   const card = 'bg-white rounded-2xl border border-slate-200 shadow-sm p-5 break-inside-avoid';
   const periodLabel = t('calls.period', { from, to });
   const scopeLabel = branch === 'ALL' ? t('common.allBranches') : branchName(branch);
+  // Without the reports API, calls only exist from the day the webhook started.
+  const firstDay = cfg?.webhookFirstAt && !cfg.connected ? format(cfg.webhookFirstAt.toDate(), 'yyyy-MM-dd') : null;
 
   const exportExcel = async () => {
     const XLSX = await import('xlsx');
@@ -184,6 +186,7 @@ export default function Calls() {
       {cfg && cfg.connected !== true && !cfg.webhookLastAt && (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3 flex gap-2"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />{t('calls.notConnected')}</div>
       )}
+      {firstDay && from < firstDay && <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3 flex gap-2 no-print"><AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />{t('calls.dataSince', { day: firstDay })}</div>}
       {cfg?.lastSyncError && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl p-3">{t('calls.syncError', { error: cfg.lastSyncError })}</div>}
       {error && <div className="bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl p-3">{error}</div>}
       {!a && !error && <div className="py-20 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>}
@@ -215,6 +218,7 @@ export default function Calls() {
             <StatCard title={t('calls.avgTalk')} value={mmss(a.talk)} icon={Timer} gradient="from-cyan-500 to-teal-600" />
             <StatCard title={t('calls.repeatCallers')} value={String(a.repeat.length)} icon={Repeat} gradient="from-fuchsia-500 to-purple-600" />
           </div>
+          <p className="text-xs text-slate-500">{t('calls.criteria')}</p>
           {a.untimed > 0 && <p className="text-xs text-slate-500">{t('calls.untimedNote', { count: a.untimed })}</p>}
 
           <div className={card}>

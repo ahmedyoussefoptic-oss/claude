@@ -3298,6 +3298,8 @@
     "resultAnswered": "Answered",
     "resultMissed": "Not answered",
     "avgWaitShort": "Wait",
+    "dataSince": "Calls reach the system live only since {{day}}: earlier days are in Bevatel, not here. To compare, pick a period starting on this date.",
+    "criteria": "Each call counts once, however many agents or queues it rang. Missed: inbound calls that ended unanswered. Outbound: answered calls only, as no unanswered outbound attempts arrive from Bevatel.",
     "untimedNote": "{{count}} answered calls have no recorded duration (saved before the duration fix) and aren't in the averages."
   },
   "assistant": {

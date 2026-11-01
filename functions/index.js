@@ -5663,6 +5663,8 @@ const hmsSec = (v) => {
 function callPhone(v) {
   let d = normalizeDigits(v).replace(/\D/g, "");
   if (d.startsWith("00")) d = d.slice(2);
+  // Outbound calls keep the exchange's dial prefix: 2 + 05xxxxxxxx.
+  if (/^20\d{9}$/.test(d)) d = d.slice(1);
   if (/^9665\d{8}$/.test(d)) return `0${d.slice(3)}`;
   if (/^5\d{8}$/.test(d)) return `0${d}`;
   return d;
@@ -5791,11 +5793,15 @@ exports.saveBevatelQueues = onCall(async (request) => {
   const map = request.data?.queueBranch || {};
   const clean = Object.fromEntries(Object.entries(map).filter(([q, b]) => q && typeof b === "string" && b).map(([q, b]) => [String(q).slice(0, 40), b.slice(0, 60)]));
   await db.collection("settings").doc("bevatel").set({ queueBranch: clean, updatedAt: Timestamp.now() }, { merge: true });
-  // Calls that came by webhook before their queue had a branch.
+  // Calls that came by webhook before their queue had a branch, and
+  // outbound calls saved before callPhone dropped the dial prefix.
   const unmapped = await db.collection("calls").where("branch", "==", "").limit(5000).get();
+  const outbound = await db.collection("calls").where("dir", "==", "out").limit(5000).get();
   const writer = db.bulkWriter();
   unmapped.docs.forEach((d) => { if (clean[d.data().queue]) writer.update(d.ref, { branch: clean[d.data().queue] }); });
+  outbound.docs.forEach((d) => { const phone = callPhone(d.data().number); if (phone !== d.data().phone) writer.update(d.ref, { phone }); });
   await writer.close();
+  await recheckCallTasks();
   return { ok: true };
 });
 
@@ -5898,7 +5904,6 @@ async function saveBevatelEvent(body) {
   const d = body.data || {};
   const now = Timestamp.now();
   const parsed = bevatelWebhookRow(body);
-  if ("dial_status" in d) console.log("bevatel timers", JSON.stringify({ id: d.id, talk: d.talk_time, wait: d.wait_time, ring: d.ring_time, answered: d.answered_at, ended: d.ended_at }));
   const queue = str(d.queue_number, 40);
   const newQueue = queue && !(cfg.queues || []).some((q) => q.number === queue);
   if (parsed) {
@@ -5917,7 +5922,7 @@ async function saveBevatelEvent(body) {
     }
   }
   await cfgRef.set({
-    webhookLastAt: now, webhookCount: FieldValue.increment(1),
+    webhookLastAt: now, webhookFirstAt: cfg.webhookFirstAt || cfg.webhookKeyAt || now, webhookCount: FieldValue.increment(1),
     webhookEvents: { [str(body.event_type, 40).replace(/[.~*/[\]`]/g, "_") || "unknown"]: FieldValue.increment(1) },
     ...(parsed ? { lastSyncAt: now } : {}),
     ...(d.direction ? { webhookDirections: FieldValue.arrayUnion(str(d.direction, 30)) } : {}),
@@ -6711,6 +6716,16 @@ async function verifyPendingCallTasks(lastSyncMs) {
   const snap = await db.collection("callTasks").where("verifyPending", "==", true).limit(500).get();
   for (const x of snap.docs) await verifyCallTask(x.ref, lastSyncMs);
   return snap.size;
+}
+// Checks the recent attempts marked unverified again, after their calls' numbers changed.
+async function recheckCallTasks() {
+  const snap = await db.collection("callTasks").where("lastAttemptAt", ">=", Timestamp.fromMillis(Date.now() - 3 * 86400e3)).get();
+  for (const x of snap.docs) {
+    const history = x.data().history || [];
+    if (history.some((h) => h.verified === false)) await x.ref.update({ history: history.map((h) => (h.verified === false ? { ...h, verified: null } : h)), verifyPending: true });
+  }
+  const cfg = (await db.collection("settings").doc("bevatel").get()).data() || {};
+  await verifyPendingCallTasks(cfg.lastSyncAt?.toMillis?.() || 0);
 }
 
 exports.recordCallResult = onCall(async (request) => {
