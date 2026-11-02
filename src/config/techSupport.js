@@ -67,7 +67,9 @@ export const isTicketEscalatedResolved = (ticket) => Boolean(ticket.escalation >
 // How a ticket gets solved: sent straight from «حسابات الطلاب»
 // (sendStudentAccounts) or handled by the people it was assigned to.
 export const TICKET_CHANNELS = ['ACCOUNTS', 'ASSIGNED'];
-export const ticketChannel = (ticket) => (ticket.source === 'ACCOUNTS_TOOL' ? 'ACCOUNTS' : 'ASSIGNED');
+// A ticket from elsewhere (e.g. the parent link) that was resolved by sending
+// the logins from Student Accounts counts as solved there too.
+export const ticketChannel = (ticket) => (ticket.source === 'ACCOUNTS_TOOL' || ticket.solvedVia === 'ACCOUNTS_TOOL' ? 'ACCOUNTS' : 'ASSIGNED');
 
 export function generateTicketId() {
   const year = new Date().getFullYear();

@@ -173,6 +173,7 @@ export function ticketChannelRows(tickets, cfg) {
 function ticketSolvers(tk, itIds) {
   const names = tk.assignedToNames || [];
   const it = ticketChannel(tk) === 'ASSIGNED' ? names.filter((_, i) => itIds.has(tk.assignedTo?.[i])) : [];
+  if (!it.length && tk.solvedByName) return [tk.solvedByName];
   return (it.length ? it : names.slice(0, 1)).filter(Boolean);
 }
 

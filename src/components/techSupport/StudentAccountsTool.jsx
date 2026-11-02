@@ -6,7 +6,7 @@ import { httpsCallable } from 'firebase/functions';
 import { KeyRound, Search, Loader2, X, Eye, EyeOff, Copy, Check, Send, MessageCircle, CheckCircle2, AlertTriangle, Phone } from 'lucide-react';
 import { format } from 'date-fns';
 import { functions } from '../../config/firebase';
-import { useBranches } from '../../hooks/useOrgData';
+import { useBranches, useProblemTypes } from '../../hooks/useOrgData';
 import { waLink } from '../../utils/whatsapp';
 import { searchStudents, studentDisplayName } from '../../utils/students';
 
@@ -19,6 +19,8 @@ export default function StudentAccountsTool({ onClose }) {
   const navigate = useNavigate();
   const branches = useBranches();
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id || '—';
+  const problemTypes = useProblemTypes();
+  const problemName = (id) => problemTypes.find((p) => p.id === id)?.name || id;
   const [term, setTerm] = useState('');
   const [matches, setMatches] = useState([]);
   const [busy, setBusy] = useState('');
@@ -29,6 +31,7 @@ export default function StudentAccountsTool({ onClose }) {
   const [systems, setSystems] = useState({ classera: true, portal: true });
   const [sent, setSent] = useState(null);
   const [target, setTarget] = useState({ mode: 'registered', phone: '', reason: '' });
+  const [linkTo, setLinkTo] = useState(''); // open ticket the send resolves ('' = a new ticket)
 
   const load = async (id) => {
     setBusy('load'); setError(null); setData(null); setSent(null); setMatches([]); setShow({});
@@ -37,6 +40,7 @@ export default function StudentAccountsTool({ onClose }) {
       setData(res);
       setSystems({ classera: !!res.classera, portal: !!res.portal });
       setTarget({ mode: res.student?.mobile ? 'registered' : 'other', phone: '', reason: '' });
+      setLinkTo(res.openTickets?.[0]?.id || '');
     } catch (err) {
       setError(err.message);
     } finally {
@@ -62,7 +66,7 @@ export default function StudentAccountsTool({ onClose }) {
     setBusy('send'); setError(null); setSent(null);
     try {
       const alt = target.mode === 'other' ? { altPhone: target.phone, altReason: target.reason } : {};
-      const { data: res } = await httpsCallable(functions, 'sendStudentAccounts')({ nationalId: data.student.nationalId, systems: Object.keys(systems).filter((k) => systems[k]), ...alt });
+      const { data: res } = await httpsCallable(functions, 'sendStudentAccounts')({ nationalId: data.student.nationalId, systems: Object.keys(systems).filter((k) => systems[k]), ...alt, ...(linkTo ? { ticketDocId: linkTo } : {}) });
       setSent(res);
     } catch (err) {
       setError(err.message);
@@ -149,7 +153,7 @@ export default function StudentAccountsTool({ onClose }) {
 
               {sent ? (
                 <div className={`rounded-xl p-4 text-sm space-y-2 ${sent.ok ? 'bg-emerald-50 text-emerald-800' : 'bg-amber-50 text-amber-800'}`}>
-                  <p className="font-bold flex items-center gap-1.5">{sent.ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}{sent.ok ? t('studentAccounts.sentOk', { phone: sent.phone, ticket: sent.ticketId }) : t('studentAccounts.sentFailed', { ticket: sent.ticketId })}</p>
+                  <p className="font-bold flex items-center gap-1.5">{sent.ok ? <CheckCircle2 className="w-4 h-4" /> : <AlertTriangle className="w-4 h-4" />}{sent.ok ? t(sent.linked ? 'studentAccounts.sentLinked' : 'studentAccounts.sentOk', { phone: sent.phone, ticket: sent.ticketId }) : t(sent.linked ? 'studentAccounts.sentFailedLinked' : 'studentAccounts.sentFailed', { ticket: sent.ticketId })}</p>
                   {!sent.ok && <p className="text-xs">{sent.error}</p>}
                   <div className="flex flex-wrap gap-2">
                     {!sent.ok && sent.phone && <a href={waLink(sent.phone, sent.message)} target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-medium flex items-center gap-1"><MessageCircle className="w-3.5 h-3.5" />{t('studentAccounts.sendManual')}</a>}
@@ -158,6 +162,22 @@ export default function StudentAccountsTool({ onClose }) {
                 </div>
               ) : data.hasAccounts && (
                 <div className="space-y-3">
+                {data.openTickets?.length > 0 && (
+                  <div className="border border-amber-200 bg-amber-50/60 rounded-2xl p-3 space-y-2 text-sm">
+                    <p className="text-xs font-bold text-amber-800">{t('studentAccounts.openTickets', { count: data.openTickets.length })}</p>
+                    {data.openTickets.map((tk) => (
+                      <label key={tk.id} className="flex items-center gap-2">
+                        <input type="radio" checked={linkTo === tk.id} onChange={() => setLinkTo(tk.id)} />
+                        <span>{t('studentAccounts.resolveTicket', { ticket: tk.ticketId })}</span>
+                        <span className="text-xs text-slate-500">{[problemName(tk.problemType), tk.source === 'PARENT_PORTAL' ? t('studentAccounts.fromParentLink') : '', tk.createdAt ? format(new Date(tk.createdAt), 'yyyy-MM-dd HH:mm') : ''].filter(Boolean).join(' · ')}</span>
+                      </label>
+                    ))}
+                    <label className="flex items-center gap-2">
+                      <input type="radio" checked={!linkTo} onChange={() => setLinkTo('')} />
+                      {t('studentAccounts.newTicket')}
+                    </label>
+                  </div>
+                )}
                 <div className="border border-slate-200 rounded-2xl p-3 space-y-2 text-sm">
                   <p className="text-xs font-bold text-slate-600">{t('studentAccounts.sendTo')}</p>
                   <label className={`flex items-center gap-2 ${s.mobile ? '' : 'opacity-50'}`}>

@@ -1918,6 +1918,14 @@ async function loadStudentAccounts(caller, rawId) {
   if (!inScope) throw new HttpsError("permission-denied", "هذا الطالب في فرع خارج نطاق صلاحيتك.");
   return { nationalId, acc, student, branch, hasAccounts: accSnap.exists };
 }
+// The student's open tickets (e.g. from the parent link): sending the logins
+// for one of them resolves it instead of opening a second ticket. Parents
+// may type the ID in Arabic digits, so both spellings are looked up.
+async function openTicketsOf(nationalId) {
+  const arabic = nationalId.replace(/\d/g, (d) => String.fromCharCode(0x660 + Number(d)));
+  const snap = await db.collection("techSupportTickets").where("nationalId", "in", [...new Set([nationalId, arabic])]).get();
+  return snap.docs.filter((d) => !TICKET_DONE.includes(d.data().status) && d.data().source !== "ACCOUNTS_TOOL");
+}
 const accountLog = (caller, studentId, action, extra = {}) => db.collection("accountAccessLog").add({
   studentId, action, byId: caller.uid, byName: caller.name || "", at: Timestamp.now(), ...extra,
 });
@@ -1927,6 +1935,7 @@ exports.getStudentAccounts = onCall(async (request) => {
   const { nationalId, acc, student, branch, hasAccounts } = await loadStudentAccounts(caller, request.data?.nationalId);
   await accountLog(caller, nationalId, "VIEW");
   const mobile = student.mobile || acc.mobile || "";
+  const open = await openTicketsOf(nationalId);
   return {
     student: {
       nationalId, name: student.nameAr || student.name || acc.name || "", nameEn: student.name || "",
@@ -1939,6 +1948,8 @@ exports.getStudentAccounts = onCall(async (request) => {
     portal: acc.portal || null,
     lastSentAt: acc.lastSentAt ? acc.lastSentAt.toMillis() : null,
     lastSentByName: acc.lastSentByName || "",
+    openTickets: open.map((d) => ({ id: d.id, ticketId: d.data().ticketId || "", status: d.data().status, problemType: d.data().problemType || "", source: d.data().source || "", createdAt: d.data().createdAt?.toMillis?.() || null }))
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
   };
 });
 
@@ -1970,11 +1981,14 @@ exports.sendStudentAccounts = onCall({ secrets: WA_SECRETS }, async (request) =>
   }
   if (!toIntlNumber(phone)) throw new HttpsError("failed-precondition", "لا يوجد جوال مسجل لولي الأمر في سجل الطلاب — أدخل رقماً آخر لولي الأمر.");
 
+  const now = Timestamp.now();
+  const studentName = student.nameAr || student.name || acc.name || "";
+  const linkId = String(request.data?.ticketDocId || "");
+  if (linkId) return resolveTicketWithAccounts({ caller, linkId, nationalId, parts, phone, registeredPhone, altRaw, altReason, systems, now });
+
   const problemRef = db.collection("problemTypes").doc("ACCOUNT_CREDENTIALS");
   if (!(await problemRef.get()).exists) await problemRef.set({ name: "طلب بيانات الدخول (كلاسيرا وبوابة الطالب)", order: 99, active: true });
 
-  const now = Timestamp.now();
-  const studentName = student.nameAr || student.name || acc.name || "";
   const ticketId = await nextRecordNumber("IT");
   const ref = db.collection("techSupportTickets").doc();
   const record = {
@@ -2013,6 +2027,52 @@ exports.sendStudentAccounts = onCall({ secrets: WA_SECRETS }, async (request) =>
   await accountLog(caller, nationalId, "SEND", { ok: sent, ticketId, systems, ...(altRaw ? { toAlternate: record.parentPhone, alternateReason: altReason } : {}), ...(error ? { error: String(error).slice(0, 200) } : {}) });
   return { ok: sent, error, ticketId, ticketDocId: ref.id, phone: record.parentPhone, message: `${record.parentName}،\nبيانات الدخول للطالب/ة ${studentName}:\n${parts.join("\n")}\n${SCHOOL_NAME}` };
 });
+
+// sendStudentAccounts for a ticket the student already has: the logins become
+// its resolution and are sent with the same template. It is closed straight
+// away (not SOLVED, which would send the resolution a second time), and
+// solvedVia credits the customer-service sender in the reports. The logins go
+// to the registered mobile (or the alternate one), never to whatever number
+// was typed on the ticket, which keeps its own parentPhone. If the send
+// fails it is left SOLVED, like a tool ticket, for the manual send.
+async function resolveTicketWithAccounts({ caller, linkId, nationalId, parts, phone, registeredPhone, altRaw, altReason, systems, now }) {
+  const ref = db.collection("techSupportTickets").doc(linkId);
+  if (!(await openTicketsOf(nationalId)).some((d) => d.id === linkId)) throw new HttpsError("failed-precondition", "هذا البلاغ ليس مفتوحاً لهذا الطالب.");
+  const current = (await ref.get()).data();
+  const note = parts.join(" | ");
+  const fields = {
+    resolutionNote: note, credentialsSentTo: normalizeDigits(phone), solvedVia: "ACCOUNTS_TOOL", solvedBy: caller.uid, solvedByName: caller.name || "", updatedAt: now,
+    ...(altRaw ? { sentToAlternate: true, alternateReason: altReason, registeredPhone: normalizeDigits(registeredPhone) } : {}),
+  };
+  await ref.collection("activityLog").add({ action: "ACCOUNTS_SENT_FOR_TICKET", actorId: caller.uid, actorName: caller.name || "", metadata: { note: "حُلّ البلاغ بإرسال بيانات الدخول من أداة حسابات الطلاب", systems, ...(current.resolutionNote && current.resolutionNote !== note ? { previousNote: String(current.resolutionNote).slice(0, 500) } : {}) }, createdAt: now });
+
+  const settingsSnap = await db.collection("settings").doc("whatsappApi").get();
+  const settings = settingsSnap.exists ? settingsSnap.data() : {};
+  let sent = false;
+  let error = null;
+  if (WA_API_ENABLED && settings.enabled) {
+    try {
+      await sendWaTemplate({ kind: "techSupport", ref, record: { ...current, ...fields, parentPhone: fields.credentialsSentTo }, event: "resolution", actorId: caller.uid, actorName: caller.name || "", settings });
+      sent = true;
+    } catch (err) {
+      error = err.message;
+      await ref.collection("activityLog").add({ action: "WHATSAPP_API_FAILED", actorId: caller.uid, actorName: caller.name || "", metadata: { event: "resolution", reason: err.message }, createdAt: Timestamp.now() });
+    }
+  } else {
+    error = "الإرسال عبر واتساب API غير مفعّل.";
+  }
+  const t2 = Timestamp.now();
+  await ref.update(sent
+    ? { ...fields, status: "CLOSED", solvedAt: current.solvedAt || t2, closedAt: t2, isOverdue: false, resolutionMessageSentAt: t2, resolutionMessageSentBy: caller.uid, resolutionMessageSentByName: caller.name || "" }
+    : { ...fields, status: "SOLVED", solvedAt: t2 });
+  if (sent) {
+    await ref.collection("activityLog").add({ action: "CREDENTIALS_SENT", actorId: caller.uid, actorName: caller.name || "", metadata: { sentToPhone: fields.credentialsSentTo, viaApi: true, systems }, createdAt: t2 });
+    await db.collection("studentAccounts").doc(nationalId).set({ lastSentAt: t2, lastSentByName: caller.name || "", sendCount: FieldValue.increment(1) }, { merge: true });
+  }
+  await accountLog(caller, nationalId, "SEND", { ok: sent, ticketId: current.ticketId || "", linked: true, systems, ...(altRaw ? { toAlternate: fields.credentialsSentTo, alternateReason: altReason } : {}), ...(error ? { error: String(error).slice(0, 200) } : {}) });
+  const parentName = current.parentName || "ولي الأمر";
+  return { ok: sent, error, ticketId: current.ticketId || "", ticketDocId: linkId, linked: true, phone: fields.credentialsSentTo, message: `${parentName}،\nبيانات الدخول للطالب/ة ${current.studentName || ""}:\n${parts.join("\n")}\n${SCHOOL_NAME}` };
+}
 
 // Staff forms (complaint / tech ticket / lost & found) get their number here.
 exports.reserveRecordNumber = onCall(async (request) => {
