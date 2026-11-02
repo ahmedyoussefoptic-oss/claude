@@ -1891,6 +1891,11 @@ exports.convertTechTicketToComplaint = onCall(async (request) => {
 // and send is written to accountAccessLog.
 // The MIS student portal's login page, included with its account.
 const STUDENT_PORTAL_URL = process.env.STUDENT_PORTAL_URL || "https://misedu.net";
+// Video on signing in to the portal and Teams, linked in every message. Kept
+// out of git (it shows a real student): it is deployed from the owner's machine,
+// and a deploy from a copy without public/files/student-portal-guide.mp4
+// takes it off the site.
+const ACCOUNTS_GUIDE_VIDEO = "/files/student-portal-guide.mp4";
 async function accountsCaller(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   const snap = await db.collection("users").doc(request.auth.uid).get();
@@ -1950,6 +1955,7 @@ exports.sendStudentAccounts = onCall({ secrets: WA_SECRETS }, async (request) =>
   if (systems.includes("classera") && acc.classera && acc.classera.username) parts.push(`كلاسيرا: اسم المستخدم ${acc.classera.username} — كلمة المرور ${acc.classera.password || "(غير مسجلة)"}`);
   if (systems.includes("portal") && acc.portal && acc.portal.username) parts.push(`بوابة الطالب (الرابط: ${STUDENT_PORTAL_URL}): اسم المستخدم ${acc.portal.username} — كلمة المرور ${acc.portal.password || "(غير مسجلة)"}`);
   if (!parts.length) throw new HttpsError("failed-precondition", "لا توجد بيانات دخول للنظام المختار.");
+  parts.push(`شرح الدخول بالفيديو: ${PUBLIC_APP_URL}${ACCOUNTS_GUIDE_VIDEO}`);
   // Another mobile of the parent (e.g. the mother's): Saudi mobile only,
   // with a reason, and both are logged on the ticket and the access log.
   const registeredPhone = student.mobile || acc.mobile || "";

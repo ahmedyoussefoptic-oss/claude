@@ -13,6 +13,11 @@ dist-ssr
 *.local
 .firebase
 
+# Shows a real student's details, so it stays out of the repository. It lives
+# only on the machine that deploys; deploying from a copy without it removes
+# it from the site (see ACCOUNTS_GUIDE_VIDEO in functions/index.js).
+public/files/student-portal-guide.mp4
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

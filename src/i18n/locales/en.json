@@ -3178,7 +3178,7 @@
     "noAccount": "No account in this system.",
     "noAccounts": "No accounts on file for this student — import the accounts file in Settings.",
     "lastSent": "Last sent to the parent: {{when}} ({{name}})",
-    "sendHint": "The selected logins are sent on WhatsApp and recorded as a solved tech ticket.",
+    "sendHint": "The selected logins are sent on WhatsApp with a link to the sign-in video, and recorded as a solved tech ticket.",
     "send": "Send to parent",
     "sentOk": "Logins sent to {{phone}} — ticket {{ticket}}",
     "sentFailed": "Not sent automatically — ticket {{ticket}} recorded; you can send it manually",
