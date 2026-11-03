@@ -457,7 +457,8 @@
       "TECH_SUPPORT": {
         "name": "Tech Issue",
         "tabHint": "Platform login problem",
-        "includes": "Covers: being unable to log in to the learning platforms (misedu, Classera) — such as a forgotten password, a wrong username, a suspended or missing account, or a changed phone number.",
+        "platforms": "misedu - Classera - Microsoft Teams",
+        "includes": "Covers: being unable to log in to the learning platforms (misedu, Classera, Microsoft Teams) — such as a forgotten password, a wrong username, a suspended or missing account, or a changed phone number.",
         "pageTitle": "Report a Technical Issue",
         "pageSubtitle": "Issues accessing learning platforms (unable to log in).",
         "idLabel": "Ticket #",

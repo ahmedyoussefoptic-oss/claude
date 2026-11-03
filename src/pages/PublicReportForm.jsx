@@ -129,6 +129,11 @@ export default function PublicReportForm() {
                     <span className={`text-[11px] font-normal leading-tight text-center ${kind === id ? 'text-white/85' : 'text-slate-400'}`}>
                       {t(`publicReport.kinds.${id}.tabHint`)}
                     </span>
+                    {id === 'TECH_SUPPORT' && (
+                      <span dir="ltr" className={`text-xs font-bold leading-snug text-center ${kind === id ? 'text-white' : 'text-primary'}`}>
+                        {t('publicReport.kinds.TECH_SUPPORT.platforms')}
+                      </span>
+                    )}
                   </button>
                 );
               })}
