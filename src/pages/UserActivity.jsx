@@ -32,6 +32,7 @@ export default function UserActivity() {
   const [now, setNow] = useState(Date.now());
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState('ALL');
+  const [branch, setBranch] = useState('');
   const [view, setView] = useState('now');
 
   useEffect(() => {
@@ -48,13 +49,14 @@ export default function UserActivity() {
   const ago = (ms) => (ms ? formatDistanceToNowStrict(ms, { locale, addSuffix: true }) : '—');
   const branchLabel = (list) => (list.includes('*') ? t('common.allBranches') : list.map((id) => branches.find((b) => b.id === id)?.name || id).join('، ') || '—');
 
-  const rows = useMemo(() => (accounts || []).map((u) => {
+  // A branch shows its own users and those with every branch, as in the report tab.
+  const rows = useMemo(() => (accounts || []).filter((u) => !branch || u.branches.includes('*') || u.branches.includes(branch)).map((u) => {
     const p = presence[u.id] || {};
     const seen = p.lastSeenAt?.toMillis?.() || null;
     const online = Boolean(seen && p.online !== false && now - seen < ONLINE_MS);
     const lastActive = Math.max(seen || 0, u.lastRefresh || 0) || null;
     return { ...u, online, seen, lastActive, page: p.page || '', device: p.device || '' };
-  }).sort((a, b) => (b.online - a.online) || ((b.lastActive || 0) - (a.lastActive || 0))), [accounts, presence, now]);
+  }).sort((a, b) => (b.online - a.online) || ((b.lastActive || 0) - (a.lastActive || 0))), [accounts, presence, now, branch]);
 
   const dayStart = new Date(); dayStart.setHours(0, 0, 0, 0);
   const stats = {
@@ -91,6 +93,10 @@ export default function UserActivity() {
         <div className="p-4 border-b border-slate-100 flex flex-wrap items-center gap-2">
           {['ALL', 'ONLINE', 'TODAY', 'IDLE'].map(chip)}
           <div className="flex-1" />
+          <select value={branch} onChange={(e) => setBranch(e.target.value)} aria-label={t('activity.col.branches')} className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary">
+            <option value="">{t('common.allBranches')}</option>
+            {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
           <div className="relative"><Search className="w-4 h-4 absolute top-2.5 right-3 text-slate-400" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('activity.search')} className="pr-9 pl-3 py-2 border border-slate-200 rounded-xl text-sm" /></div>
         </div>
         {!accounts ? <div className="py-16 flex justify-center"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div> : (
