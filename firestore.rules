@@ -252,9 +252,10 @@ service cloud.firestore {
     // staff need to read them to build outgoing messages, only an admin may
     // edit the wording.
     match /settings/{docId} {
-      allow read: if isAuthenticated();
+      // teamsAttendance (Teams connection, sync state): Cloud Functions only.
+      allow read: if isAuthenticated() && docId != 'teamsAttendance';
       // adminPermissions: owner only; security: Cloud Functions only.
-      allow write: if docId == 'adminPermissions' ? isOwner() : (docId != 'security' && canWriteSettings());
+      allow write: if docId == 'adminPermissions' ? isOwner() : (!(docId in ['security', 'teamsAttendance']) && canWriteSettings());
     }
     // Settings password: unlocks are written by unlockSettings, the hash
     // (secureConfig) is never readable by clients.
@@ -582,6 +583,7 @@ service cloud.firestore {
         'itemCategories', 'settings', 'settingsUnlocks', 'secureConfig', 'complaints', 'trips', 'tripVerify',
         'appointments', 'deletedComplaints', 'deletedLostFoundItems', 'deletedTechSupportTickets', 'lostFoundItems',
         'techSupportTickets', 'students', 'notifications',
+        'vcSessions', 'vcAttendance', 'vcMeetings', 'vcSeriesClass',
         'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage', 'waDailyReports', 'presence', 'tripAccounts', 'usage', 'deletedLeaveRequests', 'callCampaigns', 'callTasks', 'spedForms', 'spedSubmissions'
       ]);
     }

@@ -32,6 +32,9 @@ export const canSeeLeaves = (userData) => LEAVE_ROLES.some((r) => leaveRoleOf(us
 // roles given on the Users page (calling agent / call supervisor).
 export const callRoleOf = (userData, role) => userData?.active !== false && (isOwner(userData) || userData?.role === 'ADMIN' || userData?.callRoles?.[role] === true);
 export const canSeeCallTasks = (userData) => callRoleOf(userData, 'agent') || callRoleOf(userData, 'supervisor');
+// «الحضور الافتراضي»: admins and the owner (every branch); other staff when
+// given it on the Users page (their own branches). Mirrored in vcCaller.
+export const canSeeAttendance = (userData) => userData?.active !== false && (isOwner(userData) || userData?.role === 'ADMIN' || userData?.attendanceAccess === true);
 
 export function adminCan(userData, caps, cap) {
   if (isOwner(userData)) return true;

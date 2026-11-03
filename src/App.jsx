@@ -24,7 +24,8 @@ import TripConsent from './pages/TripConsent';
 import Settings from './pages/Settings';
 import DeletedComplaints from './pages/DeletedComplaints';
 import { ROLES } from './config/roles';
-import { isOwner, canSeePlatform, canSeeActivity, canSeeLeaves, canSeeCallTasks } from './config/adminPermissions';
+import { isOwner, canSeePlatform, canSeeActivity, canSeeLeaves, canSeeCallTasks, canSeeAttendance } from './config/adminPermissions';
+import VirtualAttendance from './pages/VirtualAttendance';
 import CallTasks from './pages/CallTasks';
 import UserActivity from './pages/UserActivity';
 import Calls from './pages/Calls';
@@ -56,6 +57,11 @@ function CallTasksOnly({ children }) {
   const { userData } = useAuthStore();
   if (!userData) return null;
   return canSeeCallTasks(userData) ? children : <Navigate to="/dashboard" replace />;
+}
+function AttendanceOnly({ children }) {
+  const { userData } = useAuthStore();
+  if (!userData) return null;
+  return canSeeAttendance(userData) ? children : <Navigate to="/dashboard" replace />;
 }
 function LeavesOnly({ children }) {
   const { userData } = useAuthStore();
@@ -113,6 +119,7 @@ function App() {
           <Route path="wa-reports" element={<WaReports />} />
           <Route path="activity" element={<ActivityOnly><UserActivity /></ActivityOnly>} />
           <Route path="call-tasks" element={<CallTasksOnly><CallTasks /></CallTasksOnly>} />
+          <Route path="attendance" element={<AttendanceOnly><VirtualAttendance /></AttendanceOnly>} />
           <Route path="platform" element={<Navigate to="/platform/home" replace />} />
           <Route path="platform/home" element={<PlatformOnly><PlatformHome /></PlatformOnly>} />
           <Route path="platform/leaves" element={<LeavesOnly><Leaves /></LeavesOnly>} />

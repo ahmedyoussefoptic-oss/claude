@@ -192,7 +192,7 @@ exports.createStaffUser = onCall(async (request) => {
     throw new HttpsError("permission-denied", "هذا الإجراء متاح لمدير النظام فقط.");
   }
 
-  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, isCounselor, stages, curricula, notificationPrefs, notificationChannels, tripsAccess, modules, recordScope, platformAccess, activityAccess, leaveRoles, callRoles } = request.data || {};
+  const { name, email, password, role, branches, access, perms, phone, jobTitle, department, active, isPrincipal, isQuality, isCounselor, stages, curricula, notificationPrefs, notificationChannels, tripsAccess, modules, recordScope, platformAccess, activityAccess, leaveRoles, callRoles, attendanceAccess } = request.data || {};
   if (!name || !email || !password || !role) {
     throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
   }
@@ -252,6 +252,8 @@ exports.createStaffUser = onCall(async (request) => {
     leaveRoles: Object.fromEntries(["approve", "call", "exit"].map((k) => [k, leaveRoles?.[k] === true])),
     // «مهام الاتصال»: calling agent / call supervisor.
     callRoles: { agent: callRoles?.agent === true, supervisor: callRoles?.supervisor === true },
+    // «الحضور الافتراضي» for the user's branches (admins always have it).
+    attendanceAccess: attendanceAccess === true,
     ...(role !== "ADMIN" ? cleanUserModules(modules, recordScope) : {}),
     active: active !== false,
     createdAt: Timestamp.now(),
@@ -7060,4 +7062,613 @@ exports.submitSpedEntry = onCall(async (request) => {
     createdAt: prev?.createdAt || now, updatedAt: now, editCount: prev ? (prev.editCount || 0) + 1 : 0,
   });
   return { updated: !!prev };
+});
+
+// ===========================================================================
+// الحضور الافتراضي — virtual-class attendance from Microsoft Teams. The
+// school's IT registers an app with read-only Graph access limited to the
+// teachers group (the setup sheet): OnlineMeetings.Read.All and
+// OnlineMeetingArtifact.Read.All through a Teams application access policy,
+// GroupMember.Read.All, and Calendars.Read scoped in Exchange. Every 30
+// minutes on school days vcSync reads each teacher's calendar for the day
+// and, for every online class that has ended, its Teams attendance report.
+// Students are matched by their school account (<national ID>@<domain>).
+// The expected list comes from the invite (a class team's members, or
+// students invited one by one), else from the class a reviewer linked the
+// series to. One vcSessions doc per class and one vcAttendance doc per
+// student and class. Absences go to parents once a day after the review
+// window (autoNotify, off until it is turned on). Clients never read these
+// collections; the callables below scope everything to the caller's branches.
+// ===========================================================================
+const GRAPH = "https://graph.microsoft.com/v1.0";
+const VC_STATUSES = ["PRESENT", "LATE", "PARTIAL", "ABSENT", "EXCUSED"];
+const VC_DEFAULTS = { connected: false, presentPct: 50, lateMin: 10, autoNotify: false, notifyTime: "13:00", template: "", studentDomain: "misedu.edu.sa", teacherGroup: "" };
+const VC_READY_MS = 10 * 60e3; // Teams issues the report a few minutes after a class ends
+const VC_GIVE_UP_MS = 6 * 3600e3; // no report by then: the class is marked NO_REPORT for good
+const vcCfgRef = () => db.collection("settings").doc("teamsAttendance");
+const vcKey = (s) => crypto.createHash("sha1").update(String(s)).digest("hex").slice(0, 24);
+// calendarView times come in UTC (Prefer header) without a zone suffix.
+const vcUtcMs = (v) => Date.parse(`${String(v || "").slice(0, 19)}Z`);
+
+async function vcConfig() {
+  const snap = await vcCfgRef().get();
+  return { ...VC_DEFAULTS, ...(snap.exists ? snap.data() : {}) };
+}
+async function vcSecret() {
+  const snap = await db.collection("secureConfig").doc("teams").get();
+  return snap.exists ? snap.data() : null;
+}
+
+let graphTokenCache = null;
+async function graphToken(sec) {
+  const key = `${sec.tenantId}/${sec.clientId}/${vcKey(sec.clientSecret)}`;
+  if (graphTokenCache && graphTokenCache.key === key && graphTokenCache.exp > Date.now() + 60e3) return graphTokenCache.value;
+  const res = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(sec.tenantId)}/oauth2/v2.0/token`, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ client_id: sec.clientId, client_secret: sec.clientSecret, scope: "https://graph.microsoft.com/.default", grant_type: "client_credentials" }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok || !body.access_token) throw new Error(`Microsoft ${res.status}: ${String(body.error_description || body.error || res.statusText).split("\r\n")[0]}`);
+  graphTokenCache = { key, value: body.access_token, exp: Date.now() + (body.expires_in || 3600) * 1000 };
+  return body.access_token;
+}
+async function graphGet(token, pathOrUrl, params = {}) {
+  let url = pathOrUrl.startsWith("https://") ? pathOrUrl : `${GRAPH}${pathOrUrl}`;
+  const query = Object.entries(params).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
+  if (query) url += `${url.includes("?") ? "&" : "?"}${query}`;
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json", Prefer: 'outlook.timezone="UTC"' } });
+    if ((res.status === 429 || res.status === 503) && attempt < 2) {
+      await new Promise((r) => setTimeout(r, Math.min(10, Number(res.headers.get("retry-after")) || 2) * 1000));
+      continue;
+    }
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const err = new Error(`Graph ${res.status}: ${body.error?.message || res.statusText}`);
+      err.status = res.status;
+      throw err;
+    }
+    return body;
+  }
+}
+async function graphAll(token, path, params = {}, maxPages = 20) {
+  const out = [];
+  let body = await graphGet(token, path, params);
+  for (let page = 1; ; page++) {
+    out.push(...(body.value || []));
+    if (!body["@odata.nextLink"] || page >= maxPages) return out;
+    body = await graphGet(token, body["@odata.nextLink"]);
+  }
+}
+const odataText = (v) => String(v).replace(/'/g, "''");
+
+// The teachers whose classes are read: the members of the group the access
+// policies were granted to.
+async function vcTeacherGroup(token, name) {
+  const groups = await graphAll(token, "/groups", { $filter: `displayName eq '${odataText(name)}'`, $select: "id,displayName" }, 1);
+  if (!groups.length) throw new Error(`لم يتم العثور على مجموعة باسم «${name}» في حساب Microsoft للمدرسة.`);
+  const members = await graphAll(token, `/groups/${groups[0].id}/members`, { $select: "id,displayName,userPrincipalName,mail", $top: 999 });
+  return { id: groups[0].id, teachers: members.filter((m) => m["@odata.type"] === "#microsoft.graph.user") };
+}
+
+// A student's school account is <national ID>@<domain>.
+function vcStudentIdOf(address, domain) {
+  const m = /^([^@\s]+)@(\S+)$/.exec(String(address || "").trim().toLowerCase());
+  if (!m || (domain && m[2] !== String(domain).toLowerCase())) return "";
+  const id = normalizeDigits(m[1]);
+  return /^\d{10}$/.test(id) ? id : "";
+}
+
+async function vcRoster() {
+  const [branchOf, snap] = await Promise.all([branchResolver(), db.collection("students").get()]);
+  const map = new Map();
+  snap.docs.forEach((d) => {
+    const s = d.data();
+    if (s.active === false) return;
+    const id = String(s.nationalId || d.id);
+    map.set(id, { id, name: s.nameAr || s.name || "", branch: branchOf(s), grade: studentGrade(s) || s.grade || "", className: s.className || "", mobile: s.mobile || "" });
+  });
+  return map;
+}
+
+// Students of a class team (or any group) invited by its address.
+async function vcGroupStudents(ctx, address) {
+  if (ctx.groups.has(address)) return ctx.groups.get(address);
+  const list = [];
+  try {
+    const found = await graphAll(ctx.token, "/groups", { $filter: `mail eq '${odataText(address)}'`, $select: "id" }, 1);
+    if (found.length) {
+      const members = await graphAll(ctx.token, `/groups/${found[0].id}/members`, { $select: "id,userPrincipalName,mail", $top: 999 });
+      members.forEach((m) => {
+        const sid = vcStudentIdOf(m.userPrincipalName, ctx.cfg.studentDomain) || vcStudentIdOf(m.mail, ctx.cfg.studentDomain);
+        if (sid) { list.push(sid); ctx.idByAad.set(m.id, sid); }
+      });
+    }
+  } catch (err) {
+    ctx.errors.push(`group ${address}: ${err.message}`);
+  }
+  ctx.groups.set(address, list);
+  return list;
+}
+
+async function vcExpected(ctx, ev) {
+  const ids = new Set();
+  for (const a of ev.attendees || []) {
+    const address = String(a.emailAddress?.address || "").toLowerCase();
+    if (!address || ctx.teacherMails.has(address)) continue;
+    const sid = vcStudentIdOf(address, ctx.cfg.studentDomain);
+    if (sid) ids.add(sid);
+    else (await vcGroupStudents(ctx, address)).forEach((x) => ids.add(x));
+  }
+  return ids;
+}
+
+async function vcMeetingId(ctx, userId, joinUrl) {
+  const ref = db.collection("vcMeetings").doc(vcKey(joinUrl));
+  const snap = await ref.get();
+  if (snap.exists && snap.data().meetingId) return snap.data().meetingId;
+  const found = await graphAll(ctx.token, `/users/${userId}/onlineMeetings`, { $filter: `JoinWebUrl eq '${odataText(joinUrl)}'` }, 1);
+  if (!found.length) return null;
+  await ref.set({ userId, meetingId: found[0].id, createdAt: Timestamp.now() });
+  return found[0].id;
+}
+
+// Present, late (joined more than lateMin after the start), partial (in the
+// class for less than presentPct of it) or absent (not in the report).
+function vcStatusOf(rec, startMs, endMs, cfg) {
+  if (!rec) return { status: "ABSENT", minutes: 0, pct: 0, lateMin: 0, joinedAt: null };
+  const pct = Math.min(100, Math.round((100 * rec.seconds) / Math.max(60, (endMs - startMs) / 1000)));
+  const lateMin = rec.first ? Math.max(0, Math.round((rec.first - startMs) / 60e3)) : 0;
+  const status = pct < cfg.presentPct ? "PARTIAL" : lateMin > cfg.lateMin ? "LATE" : "PRESENT";
+  return { status, minutes: Math.round(rec.seconds / 60), pct, lateMin, joinedAt: rec.first ? Timestamp.fromMillis(rec.first) : null };
+}
+const vcCounts = (docs) => Object.fromEntries(VC_STATUSES.map((s) => [s, docs.filter((d) => d.status === s).length]));
+// The class a session belongs to: the most common one among its students.
+function vcMajority(students) {
+  const tally = new Map();
+  students.forEach((s) => { const k = `${s.branch}|${s.grade}|${s.className}`; tally.set(k, (tally.get(k) || 0) + 1); });
+  const [top] = [...tally.entries()].sort((a, b) => b[1] - a[1]);
+  const [branch = "", grade = "", className = ""] = top ? top[0].split("|") : [];
+  return { branch, grade, className };
+}
+
+async function vcClassStudents(roster, link) {
+  return [...roster.values()].filter((s) => s.branch === link.branch && s.className === link.className).map((s) => s.id);
+}
+
+async function vcProcessEvent(ctx, teacher, ev, { id, startMs, endMs, joinUrl, prev, now, stats }) {
+  const meetingId = await vcMeetingId(ctx, teacher.id, joinUrl);
+  const reports = meetingId
+    ? (await graphAll(ctx.token, `/users/${teacher.id}/onlineMeetings/${meetingId}/attendanceReports`, {}, 1))
+      .filter((r) => { const s = Date.parse(r.meetingStartDateTime); return s >= startMs - 45 * 60e3 && s <= endMs + 30 * 60e3; })
+    : [];
+  const seriesKey = ev.seriesMasterId || ev.iCalUId || vcKey(joinUrl);
+  const base = {
+    day: ctx.day, teacherId: teacher.id, teacherName: teacher.displayName || "", teacherEmail: (teacher.userPrincipalName || "").toLowerCase(),
+    subject: String(ev.subject || "").slice(0, 160), startAt: Timestamp.fromMillis(startMs), endAt: Timestamp.fromMillis(endMs), seriesKey, joinKey: vcKey(joinUrl),
+  };
+  if (!reports.length) {
+    if (now - endMs > 2 * 3600e3 && !prev) {
+      await db.collection("vcSessions").doc(id).set({ ...base, status: "NO_REPORT", branch: "", grade: "", className: "", counts: vcCounts([]), expected: 0, processedAt: Timestamp.now() });
+      stats.noReport++;
+    } else stats.waiting++;
+    return;
+  }
+
+  // The invite first: a class team's members also map account ids that a
+  // report row may carry without an email.
+  ctx.roster = ctx.roster || await vcRoster();
+  let expected = [...await vcExpected(ctx, ev)].filter((sid) => ctx.roster.has(sid));
+  let rosterSource = expected.length ? "INVITE" : "NONE";
+  if (!expected.length) {
+    const link = (await db.collection("vcSeriesClass").doc(vcKey(seriesKey)).get()).data();
+    if (link) { expected = await vcClassStudents(ctx.roster, link); rosterSource = "LINKED"; }
+  }
+
+  // One class may have several reports (the meeting ended and was rejoined).
+  const records = new Map();
+  const unmatched = new Map();
+  for (const r of reports) {
+    const list = await graphAll(ctx.token, `/users/${teacher.id}/onlineMeetings/${meetingId}/attendanceReports/${r.id}/attendanceRecords`, {}, 10);
+    list.forEach((rec) => {
+      const email = String(rec.emailAddress || "").toLowerCase();
+      const sid = vcStudentIdOf(email, ctx.cfg.studentDomain) || ctx.idByAad.get(rec.identity?.id) || "";
+      const joins = (rec.attendanceIntervals || []).map((i) => Date.parse(i.joinDateTime)).filter(Number.isFinite);
+      const first = joins.length ? Math.min(...joins) : null;
+      const seconds = Number(rec.totalAttendanceInSeconds) || 0;
+      if (sid) {
+        const cur = records.get(sid) || { seconds: 0, first: null, name: rec.identity?.displayName || "" };
+        cur.seconds += seconds;
+        if (first && (!cur.first || first < cur.first)) cur.first = first;
+        records.set(sid, cur);
+      } else if (rec.role !== "Organizer" && !ctx.teacherMails.has(email)) {
+        const key = email || rec.identity?.id || rec.identity?.displayName || "?";
+        const cur = unmatched.get(key) || { name: rec.identity?.displayName || "", email, minutes: 0 };
+        cur.minutes += Math.round(seconds / 60);
+        unmatched.set(key, cur);
+      }
+    });
+  }
+
+  await vcWriteSession(id, { ...base, reportIds: reports.map((r) => r.id).slice(0, 10), unmatched: [...unmatched.values()].slice(0, 60), rosterSource }, expected, records, ctx.roster, ctx.cfg);
+  stats.saved++;
+}
+
+// Writes a session and its students. Statuses a reviewer changed, and the
+// notice already sent, are kept when a class is read again.
+async function vcWriteSession(id, session, expected, records, roster, cfg) {
+  const startMs = session.startAt.toMillis();
+  const endMs = session.endAt.toMillis();
+  const existing = new Map((await db.collection("vcAttendance").where("sessionId", "==", id).get()).docs.map((d) => [d.data().nationalId, d.data()]));
+  const ids = [...new Set([...expected, ...records.keys(), ...existing.keys()])];
+  const expectedSet = new Set(expected);
+  const people = ids.map((sid) => roster.get(sid) || { id: sid, name: records.get(sid)?.name || existing.get(sid)?.studentName || "", branch: existing.get(sid)?.branch || "", grade: "", className: "" });
+  const cls = vcMajority(people.filter((p) => expectedSet.has(p.id) || records.has(p.id)));
+  const docs = people.map((p) => {
+    const prev = existing.get(p.id) || {};
+    const auto = vcStatusOf(records.get(p.id), startMs, endMs, cfg);
+    return {
+      sessionId: id, day: session.day, nationalId: p.id, studentName: p.name, branch: p.branch, grade: p.grade, className: p.className,
+      subject: session.subject, teacherName: session.teacherName, startAt: session.startAt, expected: expectedSet.has(p.id),
+      ...auto, autoStatus: auto.status,
+      ...(prev.editedBy ? { status: prev.status, note: prev.note || "", editedBy: prev.editedBy, editedByName: prev.editedByName || "", editedAt: prev.editedAt } : {}),
+      ...(prev.notifiedAt ? { notifiedAt: prev.notifiedAt, notifyMessageId: prev.notifyMessageId || null } : {}),
+    };
+  });
+  const writer = db.bulkWriter();
+  docs.forEach((d) => writer.set(db.collection("vcAttendance").doc(`${id}_${d.nationalId}`), d));
+  writer.set(db.collection("vcSessions").doc(id), {
+    ...session, status: "DONE", ...cls, expected: expected.length, counts: vcCounts(docs), processedAt: Timestamp.now(),
+  });
+  await writer.close();
+}
+
+async function vcRecount(sessionId) {
+  const docs = (await db.collection("vcAttendance").where("sessionId", "==", sessionId).get()).docs.map((d) => d.data());
+  await db.collection("vcSessions").doc(sessionId).update({ counts: vcCounts(docs), expected: docs.filter((d) => d.expected).length });
+}
+
+async function vcSync(day, { force = false } = {}) {
+  const cfg = await vcConfig();
+  const sec = await vcSecret();
+  if (!sec || !cfg.connected || !cfg.teacherGroup) return { skipped: true };
+  const token = await graphToken(sec);
+  const { id: groupId, teachers } = await vcTeacherGroup(token, cfg.teacherGroup);
+  const ctx = {
+    day, cfg, token, groups: new Map(), idByAad: new Map(), errors: [], roster: null,
+    teacherMails: new Set(teachers.flatMap((t) => [t.userPrincipalName, t.mail]).filter(Boolean).map((m) => m.toLowerCase())),
+  };
+  const dayStart = Date.parse(`${day}T00:00:00+03:00`);
+  const now = Date.now();
+  const stats = { teachers: teachers.length, classes: 0, ended: 0, saved: 0, waiting: 0, noReport: 0, errors: 0 };
+  const existing = new Map((await db.collection("vcSessions").where("day", "==", day).get()).docs.map((d) => [d.id, d.data()]));
+  const teacherDay = async (t) => {
+    const events = await graphAll(token, `/users/${t.id}/calendarView`, {
+      startDateTime: new Date(dayStart).toISOString(), endDateTime: new Date(dayStart + 86400e3).toISOString(),
+      $select: "id,subject,start,end,isOnlineMeeting,onlineMeeting,attendees,seriesMasterId,iCalUId,isCancelled", $top: 100,
+    }, 5);
+    for (const ev of events) {
+      const joinUrl = ev.onlineMeeting?.joinUrl;
+      if (!ev.isOnlineMeeting || !joinUrl || ev.isCancelled) continue;
+      stats.classes++;
+      const startMs = vcUtcMs(ev.start?.dateTime);
+      const endMs = vcUtcMs(ev.end?.dateTime);
+      if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs > now - VC_READY_MS) continue;
+      stats.ended++;
+      const id = vcKey(`${t.id}|${ev.id}|${startMs}`);
+      const prev = existing.get(id);
+      if (prev && !force && (prev.status === "DONE" || now - endMs > VC_GIVE_UP_MS)) continue;
+      try {
+        await vcProcessEvent(ctx, t, ev, { id, startMs, endMs, joinUrl, prev, now, stats });
+      } catch (err) {
+        stats.errors++;
+        ctx.errors.push(`${t.displayName || t.id} — ${ev.subject || ""}: ${err.message}`);
+      }
+    }
+  };
+  const queue = [...teachers];
+  const worker = async () => {
+    for (let t = queue.shift(); t; t = queue.shift()) {
+      try {
+        await teacherDay(t);
+      } catch (err) {
+        stats.errors++;
+        ctx.errors.push(`${t.displayName || t.id}: ${err.message}`);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 5 }, worker));
+  await vcCfgRef().set({
+    lastSyncAt: Timestamp.now(), lastSyncDay: day, lastSyncStats: stats, lastSyncErrors: ctx.errors.slice(0, 15),
+    lastSyncError: "", teacherGroupId: groupId, teacherCount: teachers.length,
+  }, { merge: true });
+  return { ...stats, errorList: ctx.errors.slice(0, 15) };
+}
+
+// Day label for the parent message: «الثلاثاء 3 نوفمبر».
+const vcDayLabel = (day) => new Intl.DateTimeFormat("ar-SA-u-ca-gregory-nu-latn", { weekday: "long", day: "numeric", month: "long", timeZone: "Asia/Riyadh" }).format(new Date(`${day}T12:00:00+03:00`));
+const vcTime = (ts) => new Intl.DateTimeFormat("ar-SA-u-nu-latn", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Riyadh" }).format(ts.toDate());
+
+// One message per student for the day's absences that were not sent yet:
+// {{1}} student, {{2}} day, {{3}} the classes missed.
+async function vcSendAbsences(day, branches, actor) {
+  const cfg = await vcConfig();
+  if (!WA_API_ENABLED) throw new HttpsError("failed-precondition", "الإرسال عبر واتساب API غير مفعّل في النظام.");
+  const wa = (await db.collection("settings").doc("whatsappApi").get()).data() || {};
+  if (!wa.enabled) throw new HttpsError("failed-precondition", "واتساب API متوقف من الإعدادات.");
+  if (!cfg.template) throw new HttpsError("failed-precondition", "أدخل اسم قالب رسالة الغياب في إعدادات الحضور الافتراضي.");
+  const snap = await db.collection("vcAttendance").where("day", "==", day).where("status", "==", "ABSENT").get();
+  const byStudent = new Map();
+  snap.docs.forEach((d) => {
+    const a = d.data();
+    if (a.notifiedAt || !a.expected || (branches && !branches.includes(a.branch))) return;
+    byStudent.set(a.nationalId, [...(byStudent.get(a.nationalId) || []), { ref: d.ref, ...a }]);
+  });
+  let sent = 0;
+  let failed = 0;
+  let noPhone = 0;
+  const queue = [...byStudent.entries()];
+  const worker = async () => {
+    for (let item = queue.shift(); item; item = queue.shift()) {
+      const [sid, list] = item;
+      const student = (await db.collection("students").doc(sid).get()).data() || {};
+      const to = toIntlNumber(student.mobile || "");
+      if (!to) { noPhone++; continue; }
+      list.sort((a, b) => a.startAt.toMillis() - b.startAt.toMillis());
+      const classes = list.map((a) => `${a.subject || "حصة"} (${vcTime(a.startAt)})`).join("، ");
+      try {
+        const messageId = await taqnyatSend({
+          to, type: "template",
+          template: { name: cfg.template, language: { code: wa.language || "ar" } },
+          components: [{ type: "body", parameters: [list[0].studentName || student.nameAr || student.name || "", vcDayLabel(day), classes].map((v) => ({ type: "text", text: waParam(v) })) }],
+        }, { kind: "vcAbsence", nationalId: sid, day });
+        const at = Timestamp.now();
+        const writer = db.bulkWriter();
+        list.forEach((a) => writer.update(a.ref, { notifiedAt: at, notifyMessageId: messageId || null, notifiedBy: actor.uid || null, notifiedByName: actor.name || "", notifyError: FieldValue.delete() }));
+        await writer.close();
+        sent++;
+      } catch (err) {
+        failed++;
+        await Promise.all(list.map((a) => a.ref.update({ notifyError: String(err.message).slice(0, 300) })));
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, worker));
+  return { sent, failed, noPhone, students: byStudent.size };
+}
+
+exports.vcSyncSchedule = onSchedule({ schedule: "*/30 6-17 * * 0-4", timeZone: "Asia/Riyadh", secrets: WA_SECRETS, timeoutSeconds: 540, memory: "512MiB" }, async () => {
+  const cfg = await vcConfig();
+  if (!cfg.connected) return;
+  const day = riyadhDay();
+  try {
+    await vcSync(day);
+  } catch (err) {
+    console.error("vcSync", err.message);
+    await vcCfgRef().set({ lastSyncError: err.message, lastSyncErrorAt: Timestamp.now() }, { merge: true });
+  }
+  // The day's absence notices, once, after the review window. The general
+  // auto-send switch of the WhatsApp settings stops them too.
+  const hm = new Date(Date.now() + APPT_TZ_MS).toISOString().slice(11, 16);
+  if (!cfg.autoNotify || !cfg.template || hm < cfg.notifyTime || cfg.lastAutoNotifyDay === day || !WA_API_ENABLED) return;
+  const wa = (await db.collection("settings").doc("whatsappApi").get()).data() || {};
+  if (!wa.enabled || wa.autoSend === false) return;
+  await vcCfgRef().set({ lastAutoNotifyDay: day }, { merge: true });
+  try {
+    const result = await vcSendAbsences(day, null, { uid: null, name: AUTO_ACTOR });
+    await vcCfgRef().set({ lastAutoNotify: { day, ...result, at: Timestamp.now() } }, { merge: true });
+  } catch (err) {
+    await vcCfgRef().set({ lastAutoNotify: { day, error: err.message, at: Timestamp.now() } }, { merge: true });
+  }
+});
+
+// The owner and system admins see every branch; staff given «الحضور
+// الافتراضي» on the Users page see their own branches.
+async function vcCaller(request, { manage = false } = {}) {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const snap = await db.collection("users").doc(request.auth.uid).get();
+  const u = snap.data();
+  const admin = !!u && (u.isOwner === true || u.role === "ADMIN");
+  if (!snap.exists || u.active === false || (!admin && u.attendanceAccess !== true) || (manage && !admin)) {
+    throw new HttpsError("permission-denied", manage ? "إعدادات الحضور الافتراضي متاحة لمدير النظام فقط." : "لا تملك صلاحية الحضور الافتراضي.");
+  }
+  const branches = admin || (u.branches || []).includes("*") ? null : (u.branches || []);
+  return { uid: request.auth.uid, ...u, admin, branches };
+}
+const vcSees = (caller, branch) => !caller.branches || caller.branches.includes(branch);
+const vcDayArg = (v) => {
+  const day = String(v || riyadhDay());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > riyadhDay()) throw new HttpsError("invalid-argument", "تاريخ غير صحيح.");
+  return day;
+};
+const msOfTs = (ts) => (ts?.toMillis ? ts.toMillis() : null);
+
+exports.vcGetConfig = onCall(async (request) => {
+  const caller = await vcCaller(request);
+  const cfg = await vcConfig();
+  const wa = (await db.collection("settings").doc("whatsappApi").get()).data() || {};
+  const out = {
+    connected: !!cfg.connected, presentPct: cfg.presentPct, lateMin: cfg.lateMin, autoNotify: !!cfg.autoNotify, notifyTime: cfg.notifyTime,
+    template: cfg.template, studentDomain: cfg.studentDomain, canManage: caller.admin, isOwner: caller.isOwner === true,
+    waReady: WA_API_ENABLED && !!wa.enabled, waAutoSend: wa.autoSend !== false,
+    lastSyncAt: msOfTs(cfg.lastSyncAt), lastSyncStats: cfg.lastSyncStats || null, lastSyncError: cfg.lastSyncError || "",
+    lastAutoNotify: cfg.lastAutoNotify ? { ...cfg.lastAutoNotify, at: msOfTs(cfg.lastAutoNotify.at) } : null,
+  };
+  if (caller.admin) Object.assign(out, { teacherGroup: cfg.teacherGroup, teacherCount: cfg.teacherCount || 0, lastSyncErrors: cfg.lastSyncErrors || [] });
+  if (caller.isOwner === true) Object.assign(out, { tenantId: cfg.tenantId || "", clientId: cfg.clientId || "", secretExpires: cfg.secretExpires || "", hasSecret: !!(await vcSecret())?.clientSecret });
+  return out;
+});
+
+// Owner only: the IT connection details, checked against Microsoft before
+// they are kept. A blank secret keeps the saved one; disconnect removes it.
+exports.vcSaveConnection = onCall({ timeoutSeconds: 60 }, async (request) => {
+  const caller = await vcCaller(request, { manage: true });
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "ربط Microsoft Teams متاح لمنشئ النظام فقط.");
+  const d = request.data || {};
+  if (d.disconnect === true) {
+    await db.collection("secureConfig").doc("teams").delete();
+    await vcCfgRef().set({ connected: false, updatedAt: Timestamp.now() }, { merge: true });
+    return { connected: false };
+  }
+  const guid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const tenantId = String(d.tenantId || "").trim();
+  const clientId = String(d.clientId || "").trim();
+  const teacherGroup = String(d.teacherGroup || "").trim().slice(0, 120);
+  const secretExpires = /^\d{4}-\d{2}-\d{2}$/.test(String(d.secretExpires || "")) ? d.secretExpires : "";
+  if (!guid.test(tenantId) || !guid.test(clientId)) throw new HttpsError("invalid-argument", "معرّف الحساب (Tenant ID) ومعرّف التطبيق (Client ID) يجب أن يكونا بصيغة GUID كما في صفحة التطبيق.");
+  if (!teacherGroup) throw new HttpsError("invalid-argument", "أدخل اسم مجموعة المعلمين.");
+  const clientSecret = String(d.clientSecret || "").trim() || (await vcSecret())?.clientSecret || "";
+  if (!clientSecret) throw new HttpsError("invalid-argument", "أدخل قيمة السر (Client secret).");
+  const sec = { tenantId, clientId, clientSecret };
+  let group;
+  try {
+    group = await vcTeacherGroup(await graphToken(sec), teacherGroup);
+  } catch (err) {
+    throw new HttpsError("invalid-argument", /^Microsoft 40[01]/.test(err.message)
+      ? `رفضت Microsoft بيانات الربط: ${err.message}. تأكد من المعرّفين وقيمة السر (Value وليس Secret ID).`
+      : /^Graph 403/.test(err.message) ? `الربط صحيح لكن لا توجد صلاحية قراءة المجموعات: ${err.message}. تأكد من GroupMember.Read.All ومن Grant admin consent.` : err.message);
+  }
+  await db.collection("secureConfig").doc("teams").set({ ...sec, savedAt: Timestamp.now(), savedBy: caller.uid });
+  await vcCfgRef().set({ connected: true, tenantId, clientId, teacherGroup, teacherGroupId: group.id, teacherCount: group.teachers.length, secretExpires, updatedAt: Timestamp.now() }, { merge: true });
+  return { connected: true, teacherCount: group.teachers.length };
+});
+
+exports.vcSaveSettings = onCall(async (request) => {
+  const caller = await vcCaller(request, { manage: true });
+  const d = request.data || {};
+  const clamp = (v, min, max, def) => (Number.isFinite(Number(v)) ? Math.min(max, Math.max(min, Math.round(Number(v)))) : def);
+  const update = {
+    presentPct: clamp(d.presentPct, 10, 100, VC_DEFAULTS.presentPct),
+    lateMin: clamp(d.lateMin, 0, 60, VC_DEFAULTS.lateMin),
+    autoNotify: d.autoNotify === true,
+    notifyTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(String(d.notifyTime || "")) ? d.notifyTime : VC_DEFAULTS.notifyTime,
+    template: String(d.template || "").trim().slice(0, 120),
+    studentDomain: String(d.studentDomain || VC_DEFAULTS.studentDomain).trim().toLowerCase().replace(/^@/, "").slice(0, 80),
+    updatedAt: Timestamp.now(), updatedBy: caller.uid,
+  };
+  await vcCfgRef().set(update, { merge: true });
+  return { ok: true };
+});
+
+exports.vcSyncNow = onCall({ timeoutSeconds: 540, memory: "512MiB" }, async (request) => {
+  await vcCaller(request, { manage: true });
+  const day = vcDayArg(request.data?.day);
+  try {
+    const result = await vcSync(day, { force: request.data?.force === true });
+    if (result.skipped) throw new HttpsError("failed-precondition", "ربط Microsoft Teams غير مكتمل.");
+    return result;
+  } catch (err) {
+    if (err instanceof HttpsError) throw err;
+    await vcCfgRef().set({ lastSyncError: err.message, lastSyncErrorAt: Timestamp.now() }, { merge: true });
+    throw new HttpsError("internal", err.message);
+  }
+});
+
+const vcSessionOut = (id, s) => ({
+  id, day: s.day, subject: s.subject, teacherName: s.teacherName, startAt: msOfTs(s.startAt), endAt: msOfTs(s.endAt), status: s.status,
+  branch: s.branch, grade: s.grade, className: s.className, counts: s.counts || {}, expected: s.expected || 0, rosterSource: s.rosterSource || "NONE",
+  unmatched: s.unmatched || [],
+});
+const vcAttendanceOut = (a) => ({
+  nationalId: a.nationalId, studentName: a.studentName, branch: a.branch, grade: a.grade, className: a.className, status: a.status, autoStatus: a.autoStatus,
+  minutes: a.minutes || 0, pct: a.pct || 0, lateMin: a.lateMin || 0, joinedAt: msOfTs(a.joinedAt), expected: !!a.expected, note: a.note || "",
+  editedByName: a.editedByName || "", notifiedAt: msOfTs(a.notifiedAt), notifyError: a.notifyError || "", sessionId: a.sessionId, subject: a.subject,
+  teacherName: a.teacherName, startAt: msOfTs(a.startAt), day: a.day,
+});
+
+// A day's classes, and its absences grouped by student.
+exports.vcDay = onCall(async (request) => {
+  const caller = await vcCaller(request);
+  const day = vcDayArg(request.data?.day);
+  const [sSnap, aSnap] = await Promise.all([
+    db.collection("vcSessions").where("day", "==", day).get(),
+    db.collection("vcAttendance").where("day", "==", day).where("status", "==", "ABSENT").get(),
+  ]);
+  const sessions = sSnap.docs.filter((d) => (caller.branches ? d.data().branch && vcSees(caller, d.data().branch) : true)).map((d) => vcSessionOut(d.id, d.data()))
+    .sort((a, b) => a.startAt - b.startAt);
+  const absences = aSnap.docs.map((d) => d.data()).filter((a) => a.expected && vcSees(caller, a.branch)).map(vcAttendanceOut);
+  return { day, sessions, absences };
+});
+
+exports.vcSession = onCall(async (request) => {
+  const caller = await vcCaller(request);
+  const id = String(request.data?.id || "");
+  const snap = await db.collection("vcSessions").doc(id).get();
+  if (!snap.exists || (caller.branches && !vcSees(caller, snap.data().branch))) throw new HttpsError("not-found", "الحصة غير موجودة.");
+  const rows = (await db.collection("vcAttendance").where("sessionId", "==", id).get()).docs.map((d) => vcAttendanceOut(d.data()));
+  return { session: vcSessionOut(id, snap.data()), rows };
+});
+
+exports.vcSetStatus = onCall(async (request) => {
+  const caller = await vcCaller(request);
+  const { sessionId, nationalId, status } = request.data || {};
+  if (!VC_STATUSES.includes(status)) throw new HttpsError("invalid-argument", "حالة غير صحيحة.");
+  const ref = db.collection("vcAttendance").doc(`${sessionId}_${nationalId}`);
+  const snap = await ref.get();
+  if (!snap.exists || !vcSees(caller, snap.data().branch)) throw new HttpsError("not-found", "السجل غير موجود.");
+  const note = String(request.data?.note || "").trim().slice(0, 300);
+  if (status === "EXCUSED" && !note) throw new HttpsError("invalid-argument", "اكتب سبب العذر.");
+  await ref.update({ status, note, editedBy: caller.uid, editedByName: caller.name || "", editedAt: Timestamp.now() });
+  await ref.collection("log").add({ from: snap.data().status, to: status, note, by: caller.uid, byName: caller.name || "", at: Timestamp.now() });
+  await vcRecount(String(sessionId));
+  return { ok: true };
+});
+
+// Classes of the roster a reviewer can link a session to.
+exports.vcClasses = onCall(async (request) => {
+  const caller = await vcCaller(request);
+  const roster = await vcRoster();
+  const map = new Map();
+  roster.forEach((s) => {
+    if (!s.className || !s.branch || !vcSees(caller, s.branch)) return;
+    const k = `${s.branch}|${s.className}`;
+    map.set(k, { branch: s.branch, className: s.className, grade: s.grade, count: (map.get(k)?.count || 0) + 1 });
+  });
+  return { classes: [...map.values()].sort((a, b) => a.branch.localeCompare(b.branch) || a.className.localeCompare(b.className, "ar", { numeric: true })) };
+});
+
+// The class a session (and the rest of its series) belongs to, when the
+// invite does not say: its students who did not attend become absent.
+exports.vcSetSessionClass = onCall({ timeoutSeconds: 120 }, async (request) => {
+  const caller = await vcCaller(request);
+  const id = String(request.data?.sessionId || "");
+  const branch = String(request.data?.branch || "");
+  const className = String(request.data?.className || "");
+  if (!vcSees(caller, branch)) throw new HttpsError("permission-denied", "هذا الفصل خارج فروعك.");
+  const snap = await db.collection("vcSessions").doc(id).get();
+  if (!snap.exists || snap.data().status !== "DONE") throw new HttpsError("not-found", "الحصة غير موجودة.");
+  const s = snap.data();
+  if (caller.branches && s.branch && !vcSees(caller, s.branch)) throw new HttpsError("permission-denied", "هذه الحصة خارج فروعك.");
+  const roster = await vcRoster();
+  const expected = await vcClassStudents(roster, { branch, className });
+  if (!expected.length) throw new HttpsError("invalid-argument", "لا يوجد طلاب في هذا الفصل في سجل الطلاب.");
+  await db.collection("vcSeriesClass").doc(vcKey(s.seriesKey)).set({ seriesKey: s.seriesKey, branch, className, subject: s.subject, teacherName: s.teacherName, by: caller.uid, byName: caller.name || "", at: Timestamp.now() });
+  // Rebuild from the saved minutes: the report is not read again.
+  const records = new Map();
+  (await db.collection("vcAttendance").where("sessionId", "==", id).get()).docs.forEach((d) => {
+    const a = d.data();
+    if (a.autoStatus !== "ABSENT") records.set(a.nationalId, { seconds: (a.minutes || 0) * 60, first: msOfTs(a.joinedAt), name: a.studentName });
+  });
+  const cfg = await vcConfig();
+  await vcWriteSession(id, { ...s, rosterSource: "LINKED" }, expected, records, roster, cfg);
+  return { ok: true, expected: expected.length };
+});
+
+exports.vcSendNotices = onCall({ secrets: WA_SECRETS, timeoutSeconds: 540 }, async (request) => {
+  const caller = await vcCaller(request);
+  const day = vcDayArg(request.data?.day);
+  return vcSendAbsences(day, caller.branches, { uid: caller.uid, name: caller.name || "" });
+});
+
+// A student's classes this school year, for the student record.
+exports.vcStudent = onCall(async (request) => {
+  const caller = await vcCaller(request);
+  const nationalId = normalizeDigits(request.data?.nationalId);
+  if (!/^\d{5,20}$/.test(nationalId)) throw new HttpsError("invalid-argument", "رقم هوية غير صحيح.");
+  const now = new Date(Date.now() + APPT_TZ_MS);
+  const yearStart = `${now.getUTCMonth() >= 7 ? now.getUTCFullYear() : now.getUTCFullYear() - 1}-08-01`;
+  const rows = (await db.collection("vcAttendance").where("nationalId", "==", nationalId).get()).docs.map((d) => d.data())
+    .filter((a) => a.day >= yearStart && vcSees(caller, a.branch)).map(vcAttendanceOut).sort((a, b) => b.startAt - a.startAt).slice(0, 400);
+  return { rows };
 });

@@ -50,6 +50,7 @@ const emptyForm = {
   activityAccess: false,
   leaveRoles: { approve: false, call: false, exit: false },
   callRoles: { agent: false, supervisor: false },
+  attendanceAccess: false,
   tripsAccess: 'all',
   modules: {},
   recordScope: 'branch',
@@ -140,6 +141,7 @@ export default function Users() {
       activityAccess: u.activityAccess === true,
       leaveRoles: { approve: u.leaveRoles?.approve === true, call: u.leaveRoles?.call === true, exit: u.leaveRoles?.exit === true },
       callRoles: { agent: u.callRoles?.agent === true, supervisor: u.callRoles?.supervisor === true },
+      attendanceAccess: u.attendanceAccess === true,
       tripsAccess: ['tripsOnly', 'none'].includes(u.tripsAccess) ? u.tripsAccess : 'all',
       modules: u.modules && typeof u.modules === 'object' ? u.modules : {},
       recordScope: u.recordScope === 'assigned' ? 'assigned' : 'branch',
@@ -194,6 +196,7 @@ export default function Users() {
           perms: form.perms,
           leaveRoles: form.leaveRoles,
           callRoles: form.callRoles,
+          attendanceAccess: form.attendanceAccess,
           isPrincipal: form.isPrincipal,
           isQuality: form.isQuality,
           isCounselor: form.isCounselor,
@@ -223,6 +226,7 @@ export default function Users() {
           perms: form.perms,
           leaveRoles: form.leaveRoles,
           callRoles: form.callRoles,
+          attendanceAccess: form.attendanceAccess,
           isPrincipal: form.isPrincipal,
           isQuality: form.isQuality,
           isCounselor: form.isCounselor,
@@ -598,6 +602,12 @@ export default function Users() {
                     </label>
                   ))}
                 </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-slate-200">
+                <label className="flex items-start gap-2 text-sm text-slate-700">
+                  <input type="checkbox" className="mt-1" checked={isAdminRole || form.attendanceAccess} disabled={isAdminRole} onChange={(e) => setForm((p) => ({ ...p, attendanceAccess: e.target.checked }))} />
+                  <span>🎥 {t('users.attendanceAccess')}<span className="block text-xs text-slate-500">{t('users.attendanceAccessHint')}</span></span>
+                </label>
               </div>
               <p className="text-xs text-slate-500 mt-2">
                 {t('users.accessPermsHint')}
