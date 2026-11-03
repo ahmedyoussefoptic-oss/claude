@@ -921,50 +921,41 @@ export default function Reports() {
           <div className="break-inside-avoid">
             <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-1">{t('reports.branchSummary.title')}</h3>
             <p className="text-xs text-slate-400 mb-3">{t('reports.branchSummary.hint')}</p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-slate-200 text-slate-500 text-xs">
-                    <th className="text-right py-2 font-medium">{t('common.branch')}</th>
-                    <th className="text-right py-2 px-2 font-medium">{t('reports.countLabel')}</th>
-                    <th className="text-right py-2 px-2 font-medium">{t('reports.branchSummary.share')}</th>
-                    <th className="text-right py-2 px-2 font-medium">{t('reports.resolvedCount')}</th>
-                    <th className="text-right py-2 px-2 font-medium">{t('statuses.techSupport.IN_PROGRESS')}</th>
-                    <th className="text-right py-2 px-2 font-medium">{t('dashboard.overdueTechTickets')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {ticketsByBranch.map((b) => {
-                    const share = pctOf(b.count, ticketSummary.total);
-                    const cell = (n, cls) => <td className={`py-2 px-2 tabular-nums whitespace-nowrap ${cls}`}><b>{pctOf(n, b.count)}%</b> <span className="text-slate-400 text-xs">({n})</span></td>;
-                    return (
-                      <tr key={b.name} className="border-b border-slate-100">
-                        <td className="py-2 text-slate-800 font-medium whitespace-nowrap">{b.name}</td>
-                        <td className="py-2 px-2 text-slate-800 tabular-nums">{b.count}</td>
-                        <td className="py-2 px-2 min-w-32">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden print:border print:border-slate-200"><div className="h-full rounded-full bg-primary" style={{ width: `${share}%` }} /></div>
-                            <span className="tabular-nums font-bold text-slate-800 w-10 text-left">{share}%</span>
-                          </div>
-                        </td>
-                        {cell(b.resolved, 'text-emerald-700')}
-                        {cell(b.inProgress, 'text-amber-700')}
-                        {cell(b.overdue, 'text-orange-700')}
-                      </tr>
-                    );
-                  })}
-                  {ticketsByBranch.length > 1 && (
-                    <tr className="bg-slate-50 font-bold">
-                      <td className="py-2 text-slate-900">{t('reports.full.totalRow')}</td>
-                      <td className="py-2 px-2 tabular-nums">{ticketSummary.total}</td>
-                      <td className="py-2 px-2 tabular-nums">100%</td>
-                      <td className="py-2 px-2 tabular-nums text-emerald-700">{pctOf(ticketSummary.resolved, ticketSummary.total)}%</td>
-                      <td className="py-2 px-2 tabular-nums text-amber-700">{pctOf(ticketSummary.inProgress, ticketSummary.total)}%</td>
-                      <td className="py-2 px-2 tabular-nums text-orange-700">{pctOf(ticketSummary.overdue, ticketSummary.total)}%</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 print:grid-cols-3">
+              {ticketsByBranch.map((b) => {
+                const share = pctOf(b.count, ticketSummary.total);
+                const parts = [
+                  ['resolved', t('reports.resolvedCount'), b.resolved, 'bg-emerald-500', 'text-emerald-700'],
+                  ['inProgress', t('statuses.techSupport.IN_PROGRESS'), b.inProgress, 'bg-amber-400', 'text-amber-700'],
+                  ['overdue', t('dashboard.overdueTechTickets'), b.overdue, 'bg-orange-500', 'text-orange-700'],
+                ];
+                return (
+                  <div key={b.name} className="rounded-xl border border-slate-200 p-4 break-inside-avoid">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-bold text-slate-900 truncate">{b.name}</p>
+                        <p className="text-xs text-slate-500 mt-0.5">{t('reports.branchSummary.tickets', { count: b.count })}</p>
+                      </div>
+                      <div className="text-left shrink-0">
+                        <p className="text-2xl font-bold text-primary tabular-nums leading-none">{share}%</p>
+                        <p className="text-[11px] text-slate-500 mt-1">{t('reports.branchSummary.share')}</p>
+                      </div>
+                    </div>
+                    <div className="h-2 rounded-full bg-slate-100 overflow-hidden flex mt-3 print:border print:border-slate-200">
+                      {parts.filter(([, , n]) => n > 0).map(([k, , n, bar]) => <div key={k} className={`h-full ${bar}`} style={{ width: `${pctOf(n, b.count)}%` }} />)}
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+                      {parts.map(([k, label, n, , text]) => (
+                        <div key={k} className="rounded-lg bg-slate-50 py-2">
+                          <p className={`text-lg font-bold tabular-nums ${text}`}>{pctOf(n, b.count)}%</p>
+                          <p className="text-[11px] text-slate-500 leading-tight">{label}</p>
+                          <p className="text-[11px] text-slate-400 tabular-nums">({n})</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
