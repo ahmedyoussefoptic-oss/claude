@@ -1896,6 +1896,18 @@ const STUDENT_PORTAL_URL = process.env.STUDENT_PORTAL_URL || "https://misedu.net
 // and a deploy from a copy without public/files/student-portal-guide.mp4
 // takes it off the site.
 const ACCOUNTS_GUIDE_VIDEO = "/files/student-portal-guide.mp4";
+
+// A login is Latin text inside an Arabic message, so a symbol at its end
+// (tY8@W%Qo#_) or start (#ab12) takes the Arabic direction and the phone
+// shows it on the wrong side. A left-to-right mark on that side keeps it in
+// place. Logins that start and end with a letter or digit are sent untouched,
+// with nothing invisible to copy.
+const LRM = "‎";
+const ltrLogin = (value) => {
+  const s = String(value);
+  const edge = (c) => (/[A-Za-z0-9]/.test(c) ? "" : LRM);
+  return edge(s.charAt(0)) + s + edge(s.charAt(s.length - 1));
+};
 async function accountsCaller(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   const snap = await db.collection("users").doc(request.auth.uid).get();
@@ -1963,8 +1975,8 @@ exports.sendStudentAccounts = onCall({ secrets: WA_SECRETS }, async (request) =>
   if (!hasAccounts) throw new HttpsError("not-found", "لا توجد حسابات مسجّلة لهذا الطالب.");
   const systems = Array.isArray(request.data?.systems) && request.data.systems.length ? request.data.systems : ["classera", "portal"];
   const parts = [];
-  if (systems.includes("classera") && acc.classera && acc.classera.username) parts.push(`كلاسيرا: اسم المستخدم ${acc.classera.username} — كلمة المرور ${acc.classera.password || "(غير مسجلة)"}`);
-  if (systems.includes("portal") && acc.portal && acc.portal.username) parts.push(`بوابة الطالب (الرابط: ${STUDENT_PORTAL_URL}): اسم المستخدم ${acc.portal.username} — كلمة المرور ${acc.portal.password || "(غير مسجلة)"}`);
+  if (systems.includes("classera") && acc.classera && acc.classera.username) parts.push(`كلاسيرا: اسم المستخدم ${ltrLogin(acc.classera.username)} — كلمة المرور ${acc.classera.password ? ltrLogin(acc.classera.password) : "(غير مسجلة)"}`);
+  if (systems.includes("portal") && acc.portal && acc.portal.username) parts.push(`بوابة الطالب (الرابط: ${STUDENT_PORTAL_URL}): اسم المستخدم ${ltrLogin(acc.portal.username)} — كلمة المرور ${acc.portal.password ? ltrLogin(acc.portal.password) : "(غير مسجلة)"}`);
   if (!parts.length) throw new HttpsError("failed-precondition", "لا توجد بيانات دخول للنظام المختار.");
   parts.push(`شرح الدخول بالفيديو: ${PUBLIC_APP_URL}${ACCOUNTS_GUIDE_VIDEO}`);
   // Another mobile of the parent (e.g. the mother's): Saudi mobile only,
@@ -2512,8 +2524,8 @@ async function sendWaTemplate({ kind, ref, record, event, actorId, actorName, se
     fourth = [
       creds && platformName ? `المنصة: ${platformName}` : "",
       creds && record.platformLink ? `الرابط: ${record.platformLink}` : "",
-      creds ? `اسم المستخدم: ${creds.username}` : "",
-      creds ? `الرمز السري المؤقت: ${creds.tempPassword}` : "",
+      creds ? `اسم المستخدم: ${ltrLogin(creds.username)}` : "",
+      creds ? `الرمز السري المؤقت: ${ltrLogin(creds.tempPassword)}` : "",
       record.resolutionNote || "",
       ...(Array.isArray(record.resolutionLinks) ? record.resolutionLinks.filter((l) => l && l.url).map((l) => (l.label ? `${l.label}: ${l.url}` : l.url)) : []),
     ].filter(Boolean).join(" | ") + attachmentLinks(record.resolutionAttachments);
