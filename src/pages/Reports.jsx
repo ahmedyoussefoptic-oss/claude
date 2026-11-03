@@ -256,12 +256,19 @@ export default function Reports() {
     [ticketResults, problemTypes]
   );
 
+  // Per branch, with the same three buckets as the general summary.
   const ticketsByBranch = useMemo(() => {
     return branches
-      .map((b) => ({ name: b.name, count: ticketResults.filter((tk) => tk.branch === b.id).length }))
+      .map((b) => {
+        const list = ticketResults.filter((tk) => tk.branch === b.id);
+        const resolved = list.filter((tk) => RESOLVED_TICKET_STATUSES.includes(tk.status)).length;
+        const overdue = list.filter(isTicketOverdue).length;
+        return { name: b.name, count: list.length, resolved, overdue, inProgress: list.length - resolved - overdue };
+      })
       .filter((b) => b.count > 0)
       .sort((a, b) => b.count - a.count);
   }, [ticketResults, branches]);
+  const pctOf = (n, of) => (of ? Math.round((n / of) * 100) : 0);
 
   // Survey report data — anything rated, or reopened by a parent who left
   // feedback without a star rating (still worth surfacing as a signal).
@@ -638,6 +645,21 @@ export default function Reports() {
         [t('reports.avgResolutionTime'), formatDuration(ticketSummary.avgResolutionMs, t)],
       ]);
       XLSX.utils.book_append_sheet(wb, summarySheet, sheetName(t('reports.generalSummary')));
+
+      if (ticketsByBranch.length) {
+        const branchSheet = XLSX.utils.json_to_sheet(ticketsByBranch.map((b) => ({
+          [t('common.branch')]: b.name,
+          [t('reports.countLabel')]: b.count,
+          [t('reports.branchSummary.share')]: `${pctOf(b.count, ticketSummary.total)}%`,
+          [t('reports.resolvedCount')]: b.resolved,
+          [`${t('reports.resolvedCount')} %`]: `${pctOf(b.resolved, b.count)}%`,
+          [t('statuses.techSupport.IN_PROGRESS')]: b.inProgress,
+          [`${t('statuses.techSupport.IN_PROGRESS')} %`]: `${pctOf(b.inProgress, b.count)}%`,
+          [t('dashboard.overdueTechTickets')]: b.overdue,
+          [`${t('dashboard.overdueTechTickets')} %`]: `${pctOf(b.overdue, b.count)}%`,
+        })));
+        XLSX.utils.book_append_sheet(wb, branchSheet, sheetName(t('reports.branchSummary.title')));
+      }
       addChannelSheets();
 
       if (byProblemType.length) {
@@ -647,14 +669,6 @@ export default function Reports() {
           [t('reports.percentLabel')]: ticketSummary.total ? Math.round((pt.count / ticketSummary.total) * 100) : 0,
         })));
         XLSX.utils.book_append_sheet(wb, typeSheet, sheetName(t('reports.byProblemType')));
-      }
-
-      if (ticketsByBranch.length) {
-        const branchSheet = XLSX.utils.json_to_sheet(ticketsByBranch.map((b) => ({
-          [t('common.branch')]: b.name,
-          [t('reports.countLabel')]: b.count,
-        })));
-        XLSX.utils.book_append_sheet(wb, branchSheet, sheetName(t('reports.byBranch')));
       }
 
       const detailSheet = XLSX.utils.json_to_sheet(ticketResults.map((tk) => ({
@@ -902,6 +916,59 @@ export default function Reports() {
           </div>
         </div>
 
+        {/* Branch summary: each branch's share of the tickets and how its own tickets stand */}
+        {ticketsByBranch.length > 0 && (
+          <div className="break-inside-avoid">
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-1">{t('reports.branchSummary.title')}</h3>
+            <p className="text-xs text-slate-400 mb-3">{t('reports.branchSummary.hint')}</p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-slate-200 text-slate-500 text-xs">
+                    <th className="text-right py-2 font-medium">{t('common.branch')}</th>
+                    <th className="text-right py-2 px-2 font-medium">{t('reports.countLabel')}</th>
+                    <th className="text-right py-2 px-2 font-medium">{t('reports.branchSummary.share')}</th>
+                    <th className="text-right py-2 px-2 font-medium">{t('reports.resolvedCount')}</th>
+                    <th className="text-right py-2 px-2 font-medium">{t('statuses.techSupport.IN_PROGRESS')}</th>
+                    <th className="text-right py-2 px-2 font-medium">{t('dashboard.overdueTechTickets')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ticketsByBranch.map((b) => {
+                    const share = pctOf(b.count, ticketSummary.total);
+                    const cell = (n, cls) => <td className={`py-2 px-2 tabular-nums whitespace-nowrap ${cls}`}><b>{pctOf(n, b.count)}%</b> <span className="text-slate-400 text-xs">({n})</span></td>;
+                    return (
+                      <tr key={b.name} className="border-b border-slate-100">
+                        <td className="py-2 text-slate-800 font-medium whitespace-nowrap">{b.name}</td>
+                        <td className="py-2 px-2 text-slate-800 tabular-nums">{b.count}</td>
+                        <td className="py-2 px-2 min-w-32">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden print:border print:border-slate-200"><div className="h-full rounded-full bg-primary" style={{ width: `${share}%` }} /></div>
+                            <span className="tabular-nums font-bold text-slate-800 w-10 text-left">{share}%</span>
+                          </div>
+                        </td>
+                        {cell(b.resolved, 'text-emerald-700')}
+                        {cell(b.inProgress, 'text-amber-700')}
+                        {cell(b.overdue, 'text-orange-700')}
+                      </tr>
+                    );
+                  })}
+                  {ticketsByBranch.length > 1 && (
+                    <tr className="bg-slate-50 font-bold">
+                      <td className="py-2 text-slate-900">{t('reports.full.totalRow')}</td>
+                      <td className="py-2 px-2 tabular-nums">{ticketSummary.total}</td>
+                      <td className="py-2 px-2 tabular-nums">100%</td>
+                      <td className="py-2 px-2 tabular-nums text-emerald-700">{pctOf(ticketSummary.resolved, ticketSummary.total)}%</td>
+                      <td className="py-2 px-2 tabular-nums text-amber-700">{pctOf(ticketSummary.inProgress, ticketSummary.total)}%</td>
+                      <td className="py-2 px-2 tabular-nums text-orange-700">{pctOf(ticketSummary.overdue, ticketSummary.total)}%</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
         <TechResolutionReport tickets={ticketResults} itIds={itIds} sla={sla} />
 
         {/* By problem type */}
@@ -922,29 +989,6 @@ export default function Reports() {
                     <td className="py-2 text-slate-800">{pt.name}</td>
                     <td className="py-2 text-slate-800 tabular-nums">{pt.count}</td>
                     <td className="py-2 text-slate-500 tabular-nums">{ticketSummary.total ? Math.round((pt.count / ticketSummary.total) * 100) : 0}%</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* By branch */}
-        {!filters.branch && ticketsByBranch.length > 0 && (
-          <div>
-            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-wide mb-3">{t('reports.byBranch')}</h3>
-            <table className="w-full text-sm border-collapse">
-              <thead>
-                <tr className="border-b border-slate-200 text-slate-500">
-                  <th className="text-right py-2 font-medium">{t('common.branch')}</th>
-                  <th className="text-right py-2 font-medium">{t('reports.countLabel')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {ticketsByBranch.map((b) => (
-                  <tr key={b.name} className="border-b border-slate-100">
-                    <td className="py-2 text-slate-800">{b.name}</td>
-                    <td className="py-2 text-slate-800 tabular-nums">{b.count}</td>
                   </tr>
                 ))}
               </tbody>

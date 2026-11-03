@@ -1116,6 +1116,11 @@
     "byProblemType": "By problem type",
     "countLabel": "Count",
     "percentLabel": "Percentage",
+    "branchSummary": {
+      "title": "Branch summary",
+      "hint": "Each branch's share of all tickets, and the status of its tickets as a share of that branch's own tickets (count in brackets).",
+      "share": "Share of all tickets"
+    },
     "bySubType": "By sub-type",
     "byBranch": "By branch",
     "detailsLabel": "Details",
