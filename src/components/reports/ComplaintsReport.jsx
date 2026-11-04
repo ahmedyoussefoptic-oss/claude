@@ -1,4 +1,7 @@
+import { Fragment } from 'react';
 import { useTranslation } from 'react-i18next';
+import RecordContentRow from './RecordContentRow';
+import { complaintContent, ticketContent } from '../../utils/reportContent';
 import { FileText, Clock, AlertTriangle, CheckCircle2, Star, Gauge, Repeat, TrendingUp, ShieldCheck, Ban, Percent, Wrench, ShieldAlert, GraduationCap, Briefcase, AlertOctagon, Building2, Timer, Hourglass, CalendarCheck2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { formatDuration } from '../../utils/duration';
@@ -41,7 +44,7 @@ const pct = (v) => (v == null ? '—' : `${v}%`);
 const num = (v) => (v ? v : <span className="text-slate-300">0</span>);
 
 export default function ComplaintsReport({
-  complaints, tickets, includeTech, showDetails, branches, complaintTypes, singleBranch,
+  complaints, tickets, includeTech, showDetails, showContent, branches, complaintTypes, singleBranch,
   onOpenComplaint, onOpenTicket, problemTypeName,
 }) {
   const { t } = useTranslation();
@@ -551,7 +554,8 @@ export default function ComplaintsReport({
             </thead>
             <tbody>
               {complaints.map((c) => (
-                <tr key={c.id} onClick={() => onOpenComplaint(c)} className="border-b border-slate-100 cursor-pointer hover:bg-slate-50">
+                <Fragment key={c.id}>
+                <tr onClick={() => onOpenComplaint(c)} className={`${showContent ? '' : 'border-b border-slate-100 '}cursor-pointer hover:bg-slate-50`}>
                   <td className="py-1.5 px-2 text-slate-800" dir="ltr">{c.complaintId}</td>
                   <td className="py-1.5 px-2 text-slate-600" dir="ltr">{c.createdAt?.toDate ? format(c.createdAt.toDate(), 'yyyy-MM-dd') : '—'}</td>
                   <td className="py-1.5 px-2 text-slate-600">{branchName(c.branch)}</td>
@@ -564,9 +568,12 @@ export default function ComplaintsReport({
                   <td className="py-1.5 px-2 text-slate-600">{c.studentName || '—'}</td>
                   <td className="py-1.5 px-2 text-slate-600">{c.stage || '—'}</td>
                 </tr>
+                {showContent && <RecordContentRow colSpan={11} {...complaintContent(c)} />}
+                </Fragment>
               ))}
               {includeTech && tickets.map((tk) => (
-                <tr key={tk.id} onClick={() => onOpenTicket(tk)} className="border-b border-slate-100 cursor-pointer hover:bg-slate-50">
+                <Fragment key={tk.id}>
+                <tr onClick={() => onOpenTicket(tk)} className={`${showContent ? '' : 'border-b border-slate-100 '}cursor-pointer hover:bg-slate-50`}>
                   <td className="py-1.5 px-2 text-slate-800" dir="ltr">{tk.ticketId}</td>
                   <td className="py-1.5 px-2 text-slate-600" dir="ltr">{tk.createdAt?.toDate ? format(tk.createdAt.toDate(), 'yyyy-MM-dd') : '—'}</td>
                   <td className="py-1.5 px-2 text-slate-600">{branchName(tk.branch)}</td>
@@ -581,6 +588,8 @@ export default function ComplaintsReport({
                   <td className="py-1.5 px-2 text-slate-600">{tk.studentName || '—'}</td>
                   <td className="py-1.5 px-2 text-slate-600">{tk.stage || '—'}</td>
                 </tr>
+                {showContent && <RecordContentRow colSpan={11} {...ticketContent(tk)} />}
+                </Fragment>
               ))}
             </tbody>
           </table>

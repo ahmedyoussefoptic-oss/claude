@@ -1183,7 +1183,9 @@
       "optIncludeSurvey": "Merge the parent satisfaction survey report into the general report",
       "optIncludeLost": "Merge the lost & found report into the general report",
       "surveyTag": "Survey",
-      "lostTag": "Lost & found"
+      "lostTag": "Lost & found",
+      "optShowContent": "Show the complaint text and the solution reply in the detailed list",
+      "optShowContentTech": "Show the ticket text and the solution reply in the detailed list"
     },
     "timing": {
       "title": "Resolution & delay time",
@@ -1246,6 +1248,11 @@
       "assignees": "Assigned to",
       "details": "Details",
       "sheet": "Late unresolved"
+    },
+    "content": {
+      "complaint": "Content",
+      "reply": "Solution reply",
+      "noReply": "No solution reply recorded"
     }
   },
   "techSupportDetails": {

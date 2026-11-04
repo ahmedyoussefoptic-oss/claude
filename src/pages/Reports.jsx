@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { Fragment, useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
@@ -20,10 +20,12 @@ import { Printer, FileSpreadsheet, RotateCcw, Star } from 'lucide-react';
 import VisitsReport, { reportVisits } from '../components/reports/VisitsReport';
 import ComplaintsReport from '../components/reports/ComplaintsReport';
 import TechResolutionReport from '../components/reports/TechResolutionReport';
+import RecordContentRow from '../components/reports/RecordContentRow';
 import { complaintMetrics, ticketMetrics, timingRows, timingByBranch, ticketChannelRows, ticketChannelByEmployee } from '../utils/reportMetrics';
 import { useSlaSettings, elapsedMs, businessMs } from '../utils/businessTime';
 import { canAccessTechSupport, canSeeModule } from '../utils/scope';
 import { complaintStatusLabel, complaintHasType, complaintTypesLabel } from '../config/complaintTypes';
+import { complaintContent, ticketContent } from '../utils/reportContent';
 
 // Excel sheet names are capped at 31 chars and can't contain \ / ? * [ ] : —
 // our translated labels are short enough in practice, but trim defensively.
@@ -78,6 +80,9 @@ export default function Reports() {
   const canSeeTech = canAccessTechSupport(userData);
   const [includeTech, setIncludeTech] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
+  // The complaint's text and the solution reply under each detailed row.
+  const [showContent, setShowContent] = useState(false);
+  const listDetails = showDetails || showContent;
   const [includeVisits, setIncludeVisits] = useState(false);
   const [includeSurvey, setIncludeSurvey] = useState(false);
   const [includeLost, setIncludeLost] = useState(false);
@@ -598,7 +603,7 @@ export default function Reports() {
         }))), sheetName(t('reports.bySubType')));
       }
 
-      if (showDetails) {
+      if (listDetails) {
         const detailSheet = XLSX.utils.json_to_sheet([
           ...results.map((c) => ({
             [t('reports.full.recordNumber')]: c.complaintId,
@@ -613,6 +618,7 @@ export default function Reports() {
             [t('reports.timing.delay')]: delayText(timingOf.get(c.id)),
             [t('reports.studentNameColumn')]: c.studentName || '',
             [t('reports.stageColumn')]: c.stage || '',
+            ...(showContent ? { [t('reports.content.complaint')]: complaintContent(c).content, [t('reports.content.reply')]: complaintContent(c).reply } : {}),
           })),
           ...(mergeTech ? ticketResults.map((tk) => ({
             [t('reports.full.recordNumber')]: tk.ticketId,
@@ -628,6 +634,7 @@ export default function Reports() {
             [t('reports.timing.delay')]: delayText(timingOf.get(tk.id)),
             [t('reports.studentNameColumn')]: tk.studentName || '',
             [t('reports.stageColumn')]: tk.stage || '',
+            ...(showContent ? { [t('reports.content.complaint')]: ticketContent(tk).content, [t('reports.content.reply')]: ticketContent(tk).reply } : {}),
           })) : []),
         ]);
         XLSX.utils.book_append_sheet(wb, detailSheet, sheetName(t('reports.detailsLabel')));
@@ -682,6 +689,7 @@ export default function Reports() {
         [t('reports.resolutionTime')]: tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(elapsedMs(tk.createdAt, tk.resolutionMessageSentAt, sla), t) : '',
         [t('techSupportDetails.student')]: tk.studentName || '',
         [t('reports.stageColumn')]: tk.stage || '',
+        ...(showContent ? { [t('reports.content.complaint')]: ticketContent(tk).content, [t('reports.content.reply')]: ticketContent(tk).reply } : {}),
       })));
       XLSX.utils.book_append_sheet(wb, detailSheet, sheetName(t('reports.detailsLabel')));
     } else if (reportType === 'SURVEY') {
@@ -821,8 +829,20 @@ export default function Reports() {
               </label>
             )}
             <label className="flex items-center gap-2 text-sm text-slate-700">
-              <input type="checkbox" checked={showDetails} onChange={(e) => setShowDetails(e.target.checked)} />
+              <input type="checkbox" checked={showDetails || showContent} onChange={(e) => { setShowDetails(e.target.checked); if (!e.target.checked) setShowContent(false); }} />
               {t('reports.full.optShowDetails')}
+            </label>
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={showContent} onChange={(e) => setShowContent(e.target.checked)} />
+              {t('reports.full.optShowContent')}
+            </label>
+          </div>
+        )}
+        {reportType === 'TECH_SUPPORT' && (
+          <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-4 border-t border-slate-100">
+            <label className="flex items-center gap-2 text-sm text-slate-700">
+              <input type="checkbox" checked={showContent} onChange={(e) => setShowContent(e.target.checked)} />
+              {t('reports.full.optShowContentTech')}
             </label>
           </div>
         )}
@@ -863,7 +883,8 @@ export default function Reports() {
             complaints={results}
             tickets={ticketResults}
             includeTech={mergeTech}
-            showDetails={showDetails}
+            showDetails={listDetails}
+            showContent={showContent}
             branches={branches}
             complaintTypes={complaintTypes}
             singleBranch={filters.branch}
@@ -1010,7 +1031,8 @@ export default function Reports() {
               </thead>
               <tbody>
                 {ticketResults.map((tk) => (
-                  <tr key={tk.id} onClick={() => setSelectedTicket(tk)} className="border-b border-slate-100 cursor-pointer hover:bg-slate-50 transition-colors">
+                  <Fragment key={tk.id}>
+                  <tr onClick={() => setSelectedTicket(tk)} className={`${showContent ? '' : 'border-b border-slate-100 '}cursor-pointer hover:bg-slate-50 transition-colors`}>
                     <td className="py-2 text-slate-800" dir="ltr">{tk.ticketId}</td>
                     <td className="py-2 text-slate-600" dir="ltr">{tk.createdAt?.toDate ? format(tk.createdAt.toDate(), 'yyyy-MM-dd') : '—'}</td>
                     <td className="py-2 text-slate-600">{branchName(tk.branch)}</td>
@@ -1022,6 +1044,8 @@ export default function Reports() {
                     <td className="py-2 text-slate-600">{tk.studentName || '—'}</td>
                     <td className="py-2 text-slate-600">{tk.stage || '—'}</td>
                   </tr>
+                  {showContent && <RecordContentRow colSpan={10} {...ticketContent(tk)} />}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
