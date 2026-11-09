@@ -31,7 +31,9 @@ const SOURCES = [
   { id: 'MOBILE_APP', name: 'Mobile App' },
 ];
 
-export default function ComplaintForm({ onClose, prefill }) {
+// `defaultType` pre-selects the category (the finance section opens it on
+// the financial one).
+export default function ComplaintForm({ onClose, prefill, defaultType = '' }) {
   const { t } = useTranslation();
   const { user, userData } = useAuthStore();
   const fileInputRef = useRef(null);
@@ -52,7 +54,7 @@ export default function ComplaintForm({ onClose, prefill }) {
     department: '',
     stage: '',
     grade: '',
-    complaintType: '',
+    complaintType: defaultType,
     subType: '',
     extraTypes: [],
     appointmentSlot: null,

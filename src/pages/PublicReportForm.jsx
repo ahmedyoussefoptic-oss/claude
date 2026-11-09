@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { CheckCircle2, Copy, Check, FileText, PackageSearch, Wrench } from 'lucide-react';
+import { CheckCircle2, Copy, Check, FileText, PackageSearch, Wrench, Wallet } from 'lucide-react';
 import { trackingLink } from '../utils/whatsapp';
 import logo from '../assets/logo.png';
 import Watermark from '../components/common/Watermark';
@@ -11,8 +11,10 @@ import PublicComplaintFields from '../components/publicReport/PublicComplaintFie
 import PublicLostFoundFields from '../components/publicReport/PublicLostFoundFields';
 import PublicTechSupportFields from '../components/publicReport/PublicTechSupportFields';
 
-const KIND_ICONS = { COMPLAINT: FileText, LOST_FOUND: PackageSearch, TECH_SUPPORT: Wrench };
-const KIND_IDS = ['COMPLAINT', 'LOST_FOUND', 'TECH_SUPPORT'];
+// FINANCE = financial feedback (fees, invoices, refunds...): a complaint
+// with the financial category, routed to the finance department.
+const KIND_ICONS = { COMPLAINT: FileText, FINANCE: Wallet, LOST_FOUND: PackageSearch, TECH_SUPPORT: Wrench };
+const KIND_IDS = ['COMPLAINT', 'FINANCE', 'LOST_FOUND', 'TECH_SUPPORT'];
 
 export default function PublicReportForm() {
   const { t, i18n } = useTranslation();
@@ -67,7 +69,7 @@ export default function PublicReportForm() {
               <CheckCircle2 className="w-7 h-7" />
             </div>
             <h2 className="text-xl font-bold text-slate-900 mb-1">
-              {multiple ? t(activeKind === 'COMPLAINT' ? 'publicReport.multiSuccessTitle' : 'publicReport.multiSuccessTitleReport', { count: items.length }) : t(`publicReport.kinds.${activeKind}.successTitle`)}
+              {multiple ? t(['COMPLAINT', 'FINANCE'].includes(activeKind) ? 'publicReport.multiSuccessTitle' : 'publicReport.multiSuccessTitleReport', { count: items.length }) : t(`publicReport.kinds.${activeKind}.successTitle`)}
             </h2>
             <p className="text-sm text-slate-500 mb-6">{t('publicReport.reviewSoon')}</p>
 
@@ -112,7 +114,7 @@ export default function PublicReportForm() {
             </div>
 
             <p className="w-full max-w-xl text-sm font-medium text-slate-700 mb-2">{t('publicReport.chooseKind')}</p>
-            <div className="w-full max-w-xl grid grid-cols-3 gap-2 mb-3">
+            <div className="w-full max-w-xl grid grid-cols-2 sm:grid-cols-4 gap-2 mb-3">
               {KIND_IDS.map((id) => {
                 const Icon = KIND_ICONS[id];
                 return (
@@ -143,6 +145,7 @@ export default function PublicReportForm() {
             </div>
 
             {kind === 'COMPLAINT' && <PublicComplaintFields initialBranch={initialBranch} onSuccess={(sentItems) => setSaved({ items: sentItems, kind: 'COMPLAINT' })} />}
+            {kind === 'FINANCE' && <PublicComplaintFields key="finance" finance initialBranch={initialBranch} onSuccess={(sentItems) => setSaved({ items: sentItems, kind: 'FINANCE' })} />}
             {kind === 'LOST_FOUND' && <PublicLostFoundFields initialBranch={initialBranch} onSuccess={(id) => setSaved({ items: [{ id }], kind: 'LOST_FOUND' })} />}
             {kind === 'TECH_SUPPORT' && <PublicTechSupportFields initialBranch={initialBranch} onSuccess={(sentItems) => setSaved({ items: sentItems, kind: 'TECH_SUPPORT' })} />}
           </>

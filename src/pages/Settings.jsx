@@ -363,6 +363,8 @@ function EditableList({ title, icon: Icon, items, collectionName, flags = [] }) 
   const saveEdit = async (id) => {
     if (!draftName.trim()) return;
     try {
+      // A built-in entry (e.g. the financial category) may not be saved yet.
+      await ensureSeeded(collectionName);
       await updateDoc(doc(db, collectionName, id), { name: draftName.trim() });
       setEditingId(null);
     } catch (err) {
@@ -409,6 +411,7 @@ function EditableList({ title, icon: Icon, items, collectionName, flags = [] }) 
   const handleDeactivate = async (item) => {
     if (!confirm(t('settings.hideConfirm', { name: item.name }))) return;
     try {
+      await ensureSeeded(collectionName);
       await updateDoc(doc(db, collectionName, item.id), { active: false });
     } catch (err) {
       setError(err.message);
@@ -526,6 +529,7 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
   const saveEdit = async (id) => {
     if (!draftName.trim()) return;
     try {
+      await ensureSeeded('complaintSubTypes');
       await updateDoc(doc(db, 'complaintSubTypes', id), { name: draftName.trim() });
       setEditingId(null);
     } catch (err) {
@@ -571,6 +575,7 @@ function SubTypesEditor({ complaintTypes, subTypes }) {
   const handleDeactivate = async (item) => {
     if (!confirm(t('settings.hideConfirm', { name: item.name }))) return;
     try {
+      await ensureSeeded('complaintSubTypes');
       await updateDoc(doc(db, 'complaintSubTypes', item.id), { active: false });
     } catch (err) {
       setError(err.message);

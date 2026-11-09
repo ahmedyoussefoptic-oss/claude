@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Copy, Check, ExternalLink, MessageCircle, FileText, PackageSearch, Wrench, Link2, Languages } from 'lucide-react';
+import { X, Copy, Check, ExternalLink, MessageCircle, FileText, PackageSearch, Wrench, Link2, Languages, Wallet } from 'lucide-react';
 import { useBranches } from '../../hooks/useOrgData';
 
-const TYPE_IDS = ['COMPLAINT', 'LOST_FOUND', 'TECH_SUPPORT'];
-const TYPE_ICONS = { COMPLAINT: FileText, LOST_FOUND: PackageSearch, TECH_SUPPORT: Wrench };
+const TYPE_IDS = ['COMPLAINT', 'FINANCE', 'LOST_FOUND', 'TECH_SUPPORT'];
+const TYPE_ICONS = { COMPLAINT: FileText, FINANCE: Wallet, LOST_FOUND: PackageSearch, TECH_SUPPORT: Wrench };
 const LANGUAGES = [
   { id: 'ar', name: 'العربية' },
   { id: 'en', name: 'English' },
@@ -27,7 +27,7 @@ export default function PublicLinkModal({ onClose }) {
   const typeName = t(`publicReport.kinds.${type}.name`);
   const shareMessage = [
     t('app.brand'),
-    t('publicLinkModal.shareMessageLead', { item: type === 'COMPLAINT' ? t('publicLinkModal.yourComplaint') : t('publicLinkModal.yourReport') }),
+    t('publicLinkModal.shareMessageLead', { item: ['COMPLAINT', 'FINANCE'].includes(type) ? t('publicLinkModal.yourComplaint') : t('publicLinkModal.yourReport') }),
     link,
   ].join('\n');
 
@@ -61,7 +61,7 @@ export default function PublicLinkModal({ onClose }) {
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('publicLinkModal.reportTypeLabel')}</label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {TYPE_IDS.map((id) => {
                 const Icon = TYPE_ICONS[id];
                 return (

@@ -1,21 +1,21 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useLocation, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Search, Plus, ChevronLeft, Download, Loader2, SlidersHorizontal, RotateCcw, Link2, MessageSquare, Repeat, Armchair } from 'lucide-react';
+import { Search, Plus, ChevronLeft, Download, Loader2, SlidersHorizontal, RotateCcw, Link2, MessageSquare, Repeat, Armchair, Wallet } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import ComplaintForm from '../components/complaints/ComplaintForm';
 import useAuthStore from '../stores/useAuthStore';
-import { useBranches, useComplaintTypes, useDepartments } from '../hooks/useOrgData';
+import { useBranches, useComplaintTypes, useDepartments, useSubTypes } from '../hooks/useOrgData';
 import ReminderButton from '../components/common/ReminderButton';
 import MessageStatusIndicators from '../components/common/MessageStatusIndicators';
 import { normalizeAssignees } from '../utils/assignees';
-import { scopeConstraints } from '../utils/scope';
+import { scopeConstraints, canSeeModule } from '../utils/scope';
 import { formatDuration } from '../utils/duration';
 import { useSlaSettings, elapsedMs } from '../utils/businessTime';
 import { studentKey } from '../utils/studentKey';
-import { isComplaintOverdue, complaintStatusLabel, complaintHasType, complaintTypesOf } from '../config/complaintTypes';
+import { isComplaintOverdue, complaintStatusLabel, complaintHasType, complaintTypesOf, FINANCE_TYPE, isFinanceComplaint, isFinancePrimary } from '../config/complaintTypes';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 
@@ -45,14 +45,21 @@ const QUICK_MATCH = {
   REOPENED: (c) => Boolean(c.reopened),
 };
 
-export default function ComplaintsList() {
+// `finance` = the financial feedback section (/finance): only feedback
+// with the financial category, which the general list leaves out (it still
+// shows one assigned to an employee who doesn't see that section).
+export default function ComplaintsList({ finance = false }) {
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
-  const { userData } = useAuthStore();
+  const { user, userData } = useAuthStore();
   const branches = useBranches();
   const sla = useSlaSettings();
   const departments = useDepartments();
   const complaintTypes = useComplaintTypes();
+  const subTypes = useSubTypes();
+  const financeSubTypes = subTypes.filter((s) => s.parentType === FINANCE_TYPE);
+  const seesFinance = canSeeModule(userData, 'finance');
+  const myUid = user?.uid;
   const location = useLocation();
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [showNewForm, setShowNewForm] = useState(false);
@@ -61,6 +68,8 @@ export default function ComplaintsList() {
   const [search, setSearch] = useState('');
   const [quickFilter, setQuickFilter] = useState('ALL');
   const [typeFilter, setTypeFilter] = useState('');
+  // Finance section: its sub-category instead of the category.
+  const [subTypeFilter, setSubTypeFilter] = useState('');
   const [branchFilter, setBranchFilter] = useState('');
   // Curriculum/section (the record's `department`); '__NONE__' = not set.
   const [departmentFilter, setDepartmentFilter] = useState('');
@@ -152,6 +161,8 @@ export default function ComplaintsList() {
   // so their numbers follow the search / branch / type / date filters.
   const baseComplaints = useMemo(() => {
     return complaints.filter((c) => {
+      if (finance ? !isFinanceComplaint(c) : isFinancePrimary(c) && (seesFinance || !(c.assignedTo || []).includes(myUid))) return false;
+      if (subTypeFilter && c.subType !== subTypeFilter && !(c.extraTypes || []).some((x) => x?.type === FINANCE_TYPE && x.subType === subTypeFilter)) return false;
       if (typeFilter && !complaintHasType(c, typeFilter)) return false;
       if (branchFilter && c.branch !== branchFilter) return false;
       if (departmentFilter && (c.department || '__NONE__') !== departmentFilter) return false;
@@ -173,7 +184,7 @@ export default function ComplaintsList() {
       }
       return true;
     });
-  }, [complaints, search, typeFilter, branchFilter, departmentFilter, dateFrom, dateTo, publicLinkOnly]);
+  }, [complaints, search, typeFilter, subTypeFilter, branchFilter, departmentFilter, dateFrom, dateTo, publicLinkOnly, finance, seesFinance, myUid]);
 
   const quickCounts = useMemo(
     () => Object.fromEntries(QUICK_FILTER_IDS.map((id) => [id, baseComplaints.filter(QUICK_MATCH[id]).length])),
@@ -195,9 +206,10 @@ export default function ComplaintsList() {
     return counts;
   }, [complaints]);
 
-  const advancedFiltersActive = typeFilter || branchFilter || departmentFilter || dateFrom || dateTo || publicLinkOnly;
+  const advancedFiltersActive = typeFilter || subTypeFilter || branchFilter || departmentFilter || dateFrom || dateTo || publicLinkOnly;
   const resetAdvancedFilters = () => {
     setTypeFilter('');
+    setSubTypeFilter('');
     setBranchFilter('');
     setDepartmentFilter('');
     setDateFrom('');
@@ -216,7 +228,7 @@ export default function ComplaintsList() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `complaints_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute("download", `${finance ? 'finance_' : ''}complaints_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -226,8 +238,11 @@ export default function ComplaintsList() {
     <div className="max-w-7xl mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('complaintsList.title')}</h1>
-          <p className="text-slate-500 mt-1">{t('complaintsList.subtitle')}</p>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            {finance && <Wallet className="w-6 h-6 text-primary" />}
+            {t(finance ? 'financeList.title' : 'complaintsList.title')}
+          </h1>
+          <p className="text-slate-500 mt-1">{t(finance ? 'financeList.subtitle' : 'complaintsList.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
           <button onClick={handleExportCSV} disabled={filteredComplaints.length === 0} className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50">
@@ -239,7 +254,7 @@ export default function ComplaintsList() {
             className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2"
           >
             <Plus className="w-4 h-4" />
-            {t('complaintsList.newComplaint')}
+            {t(finance ? 'financeList.newComplaint' : 'complaintsList.newComplaint')}
           </button>
         </div>
       </div>
@@ -312,17 +327,31 @@ export default function ComplaintsList() {
               <option value="__NONE__">{t('common.noDepartment')}</option>
             </select>
           </div>
-          <div className="w-full sm:w-44">
-            <label className="block text-xs text-slate-500 mb-1">{t('common.type')}</label>
-            <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
-            >
-              <option value="">{t('common.allTypes')}</option>
-              {complaintTypes.map((ct) => <option key={ct.id} value={ct.id}>{ct.name}</option>)}
-            </select>
-          </div>
+          {finance ? (
+            <div className="w-full sm:w-44">
+              <label className="block text-xs text-slate-500 mb-1">{t('complaintForm.subTypeLabel')}</label>
+              <select
+                value={subTypeFilter}
+                onChange={(e) => setSubTypeFilter(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+              >
+                <option value="">{t('common.allTypes')}</option>
+                {financeSubTypes.map((s) => <option key={s.id} value={s.name}>{s.name}</option>)}
+              </select>
+            </div>
+          ) : (
+            <div className="w-full sm:w-44">
+              <label className="block text-xs text-slate-500 mb-1">{t('common.type')}</label>
+              <select
+                value={typeFilter}
+                onChange={(e) => setTypeFilter(e.target.value)}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white"
+              >
+                <option value="">{t('common.allTypes')}</option>
+                {complaintTypes.filter((ct) => ct.id !== FINANCE_TYPE).map((ct) => <option key={ct.id} value={ct.id}>{ct.name}</option>)}
+              </select>
+            </div>
+          )}
           <div className="w-full sm:w-40">
             <label className="block text-xs text-slate-500 mb-1">{t('common.fromDate')}</label>
             <input
@@ -428,7 +457,10 @@ export default function ComplaintsList() {
                       </div>
                       <div className="text-slate-500 text-xs mt-0.5">{c.parentName}</div>
                     </td>
-                    <td className="px-6 py-4 text-slate-600">{complaintTypesOf(c).map(typeName).join(' + ')}</td>
+                    <td className="px-6 py-4 text-slate-600">
+                      {complaintTypesOf(c).map(typeName).join(' + ')}
+                      {finance && c.subType && <div className="text-xs text-slate-400 mt-0.5">{c.subType}</div>}
+                    </td>
                     <td className="px-6 py-4 text-slate-600">
                       {branchName(c.branch)}
                       {c.department && <div className="text-xs text-slate-400 mt-0.5">{departmentName(c.department)}</div>}
@@ -483,7 +515,7 @@ export default function ComplaintsList() {
       )}
 
       {showNewForm && (
-        <ComplaintForm onClose={() => setShowNewForm(false)} />
+        <ComplaintForm onClose={() => setShowNewForm(false)} defaultType={finance ? FINANCE_TYPE : ''} />
       )}
     </div>
   );

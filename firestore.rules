@@ -63,9 +63,19 @@ service cloud.firestore {
     function modAllowed(key) {
       return myDoc() != null && myDoc().get('modules', {}).get(key, true) != false;
     }
+    // The financial feedback section — off unless given, or by default for
+    // the roles in src/utils/scope.js financeByRole() (the key is only
+    // stored when it differs from that default).
+    function financeAllowed() {
+      let me = myDoc();
+      let m = me != null ? me.get('modules', {}) : {};
+      return me != null && (m.get('finance', false) == true || (!('finance' in m) && (
+        me.get('department', '') == 'FINANCE' || me.get('isQuality', false) == true || me.get('isPrincipal', false) == true ||
+        me.get('role', '') in ['UPPER_MANAGEMENT', 'CUSTOMER_SERVICE'] || me.get('perms', {}).get('tripFinance', false) == true)));
+    }
     // Complaint records feed every one of these sections.
     function complaintsData() {
-      return modAllowed('complaints') || modAllowed('dashboard') || modAllowed('reports') ||
+      return modAllowed('complaints') || financeAllowed() || modAllowed('dashboard') || modAllowed('reports') ||
         modAllowed('search') || modAllowed('flowMap') || modAllowed('students');
     }
     // users.recordScope == 'assigned': the employee only sees the records

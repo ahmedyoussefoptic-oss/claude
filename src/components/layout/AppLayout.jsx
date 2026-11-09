@@ -1,7 +1,7 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
-import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText, Activity, PhoneOutgoing, HeartHandshake, Video } from 'lucide-react';
+import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText, Activity, PhoneOutgoing, HeartHandshake, Video, Wallet } from 'lucide-react';
 import AssistantPanel from '../assistant/AssistantPanel';
 import { useEffect, useState, useRef } from 'react';
 import { httpsCallable } from 'firebase/functions';
@@ -63,6 +63,7 @@ export default function AppLayout() {
   const moduleNav = [
     ['dashboard', '/dashboard', LayoutDashboard, 'nav.dashboard'],
     ['complaints', '/complaints', FileText, 'nav.complaints'],
+    ['finance', '/finance', Wallet, 'nav.finance'],
     ['lostFound', '/lost-found', PackageSearch, 'nav.lostFound'],
     ['techSupport', '/tech-support', Wrench, 'nav.techSupport'],
     ['flowMap', '/flow-map', Map, 'nav.flowMap'],

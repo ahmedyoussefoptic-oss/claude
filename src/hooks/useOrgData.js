@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { collection, doc, getDocs, onSnapshot, writeBatch } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import { BRANCHES, DEPARTMENTS } from '../config/orgData';
-import { COMPLAINT_TYPES, SUB_TYPES } from '../config/complaintTypes';
+import { COMPLAINT_TYPES, SUB_TYPES, FINANCE_TYPE } from '../config/complaintTypes';
 import { PROBLEM_TYPES, PLATFORMS } from '../config/techSupport';
 import { ITEM_CATEGORIES } from '../config/lostFound';
 
@@ -70,6 +70,16 @@ export async function ensureSeeded(collectionName) {
   if (queued > 0) await batch.commit();
 }
 
+// Built-in entries that must be listed even when the collection already has
+// documents but not these yet (the financial category was added after the
+// lists were seeded). ensureSeeded() writes them for real on the next edit
+// in Settings; an entry with a document (active or not) follows that one.
+const subTypeKey = (item) => `${item.parentType}::${item.name}`;
+const BUILT_INS = {
+  complaintTypes: { items: COMPLAINT_TYPES.filter((ct) => ct.id === FINANCE_TYPE).map((ct) => ({ ...ct, order: 900 })), key: (item) => item.id },
+  complaintSubTypes: { items: SUB_TYPES_FALLBACK.filter((s) => s.parentType === FINANCE_TYPE), key: subTypeKey },
+};
+
 function useOrgCollection(collectionName, fallback) {
   const [items, setItems] = useState(fallback);
 
@@ -87,9 +97,12 @@ function useOrgCollection(collectionName, fallback) {
           setItems(fallback);
           return;
         }
+        const docs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        const builtIn = BUILT_INS[collectionName];
+        const known = builtIn ? new Set(docs.map(builtIn.key)) : null;
+        const missing = builtIn ? builtIn.items.filter((item) => !known.has(builtIn.key(item))) : [];
         setItems(
-          snapshot.docs
-            .map((d) => ({ id: d.id, ...d.data() }))
+          [...docs, ...missing]
             .filter((item) => item.active !== false)
             .sort((a, b) => (a.order ?? Infinity) - (b.order ?? Infinity))
         );

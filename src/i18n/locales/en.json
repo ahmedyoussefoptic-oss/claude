@@ -66,7 +66,8 @@
     "trips": "School Trips",
     "noAccess": "No sections are enabled for your account yet. Ask the system admin to choose the sections you can see.",
     "calls": "Call analytics",
-    "waReports": "Branch WhatsApp"
+    "waReports": "Branch WhatsApp",
+    "finance": "Financial Feedback"
   },
   "app": {
     "brand": "Al Moktashef International",
@@ -435,13 +436,24 @@
       "COMPLAINT": {
         "name": "Feedback",
         "tabHint": "Complaint or suggestion",
-        "includes": "Covers: academic matters (grades, homework, teachers), administrative matters (fees, transport, uniform, certificates), behavioural matters (student conduct, bullying), and any general complaint or suggestion.",
+        "includes": "Covers: academic matters (grades, homework, teachers), administrative matters (transport, uniform, certificates), behavioural matters (student conduct, bullying), and any general complaint or suggestion. For fees and payments, choose \"Financial\".",
         "pageTitle": "Submit Feedback",
         "pageSubtitle": "Please fill in the details below accurately, and we'll be in touch as soon as possible.",
         "idLabel": "Feedback #",
         "successTitle": "Your feedback was submitted successfully",
         "trackCta": "Track Feedback Status Now",
         "anotherCta": "Submit Another Feedback"
+      },
+      "FINANCE": {
+        "name": "Financial",
+        "tabHint": "Fees & payments",
+        "includes": "Covers: tuition fees, invoices and payments, instalments and payment plans, refunds, discounts and scholarships, and transport fees. Sent straight to the finance department.",
+        "pageTitle": "Submit Financial Feedback",
+        "pageSubtitle": "Your feedback and complaints about fees and payments — the finance department will contact you soon.",
+        "idLabel": "Feedback #",
+        "successTitle": "Your financial feedback was sent",
+        "trackCta": "Track this feedback now",
+        "anotherCta": "Submit more financial feedback"
       },
       "LOST_FOUND": {
         "name": "Lost & Found",
@@ -499,7 +511,9 @@
     "submitReportMulti": "Submit reports ({{count}})",
     "multiSuccessTitleReport": "{{count}} reports submitted successfully",
     "partialSendErrorReport": "The report for {{names}} was submitted, but the rest could not be sent. Please press submit again.",
-    "extraTypesLabel": "Does this feedback cover another area too? (optional)"
+    "extraTypesLabel": "Does this feedback cover another area too? (optional)",
+    "financeSubType": "Financial feedback type",
+    "submitFinance": "Submit Financial Feedback"
   },
   "techSupportForm": {
     "studentSection": "Student Information",
@@ -695,7 +709,8 @@
     "complaintTypes": {
       "ACADEMIC": "Academic",
       "ADMINISTRATIVE": "Administrative",
-      "BEHAVIORAL": "Behavioral"
+      "BEHAVIORAL": "Behavioral",
+      "FINANCE": "Financial"
     },
     "subTypes": {
       "ACADEMIC": {
@@ -724,6 +739,15 @@
         "انضباط داخل الصف": "In-class discipline",
         "الغياب والتأخر": "Absence and tardiness",
         "السلامة والإشراف": "Safety and supervision",
+        "أخرى": "Other"
+      },
+      "FINANCE": {
+        "الرسوم الدراسية": "Tuition fees",
+        "الفواتير والسداد": "Invoices and payments",
+        "الأقساط وخطط السداد": "Instalments and payment plans",
+        "استرداد المبالغ": "Refunds",
+        "الخصومات والمنح": "Discounts and scholarships",
+        "رسوم النقل": "Transport fees",
         "أخرى": "Other"
       }
     },
@@ -821,7 +845,7 @@
       "IT": "IT",
       "FINANCE": "Finance"
     },
-    "departmentHint": "For administrative/academic/behavioral complaints, this determines which complaint types they handle. Choose \"IT\" for the tech support team — without a staff member in this department, tech support tickets won't be auto-assigned to anyone.",
+    "departmentHint": "For administrative/academic/behavioral complaints, this determines which complaint types they handle. Choose \"IT\" for the tech support team — without a staff member in this department, tech support tickets won't be auto-assigned to anyone. Choose \"Finance\" for finance staff — financial feedback is assigned to them automatically.",
     "multiBranchHint": "More than one branch can be selected — the staff member will only see data for the branches checked here. Leave empty if they shouldn't see any branch.",
     "activeStatus": "Active",
     "suspendedStatus": "Suspended",
@@ -899,7 +923,8 @@
         "complaintsOnly": "Complaints only",
         "lostFoundOnly": "Lost & found only",
         "visitsOnly": "Branch visits only",
-        "tripsOnly": "Trips only"
+        "tripsOnly": "Trips only",
+        "financeOnly": "Finance only"
       },
       "keys": {
         "dashboard": "Dashboard",
@@ -914,7 +939,8 @@
         "reports": "Reports",
         "calls": "Call analytics",
         "assistant": "AI assistant",
-        "waReports": "Branch WhatsApp"
+        "waReports": "Branch WhatsApp",
+        "finance": "Financial feedback"
       },
       "noneWarning": "No section selected — the employee will see nothing after signing in.",
       "scopeTitle": "Record scope",
@@ -3871,5 +3897,10 @@
       "syncDone": "Read complete.",
       "syncStats": "{{teachers}} teachers · {{classes}} classes · {{ended}} ended · {{saved}} saved · {{waiting}} waiting for report · {{noReport}} no report · {{errors}} errors"
     }
+  },
+  "financeList": {
+    "title": "Financial Feedback & Complaints",
+    "subtitle": "Parent feedback about fees, invoices and payments — assigned to the finance department automatically",
+    "newComplaint": "New Financial Feedback"
   }
 }

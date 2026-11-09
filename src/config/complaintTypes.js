@@ -4,7 +4,19 @@ export const COMPLAINT_TYPES = [
   { id: 'ACADEMIC', name: 'أكاديمية' },
   { id: 'ADMINISTRATIVE', name: 'إدارية' },
   { id: 'BEHAVIORAL', name: 'سلوكية' },
+  { id: 'FINANCE', name: 'مالية' },
 ];
+
+// Financial feedback (fees, invoices, refunds...) — a built-in category
+// routed to the finance department (users.department FINANCE) and shown in
+// its own section (/finance) instead of the general feedback list, with its
+// own tab on the parent link. useOrgData keeps it listed even before it is
+// saved in Settings.
+export const FINANCE_TYPE = 'FINANCE';
+export const isFinanceComplaint = (c) => complaintTypesOf(c).includes(FINANCE_TYPE);
+// Belongs to the finance section rather than the general list: its main
+// category is the financial one.
+export const isFinancePrimary = (c) => c?.complaintType === FINANCE_TYPE;
 
 // Sub-classifications shown once a top-level complaint type is chosen —
 // mirrors the department each type routes to (see src/pages/Users.jsx).
@@ -12,6 +24,7 @@ export const SUB_TYPES = {
   ACADEMIC: ['مستوى التحصيل الدراسي', 'الاختبارات والدرجات', 'الواجبات والمنصات', 'أداء معلم', 'الخطة الدراسية', 'صعوبات التعلم', 'أخرى'],
   ADMINISTRATIVE: ['الرسوم والمدفوعات', 'النقل والحافلات', 'الشهادات والوثائق', 'التسجيل والقبول', 'الزي المدرسي', 'المقصف والتغذية', 'المرافق والصيانة', 'غياب خطأ', 'أخرى'],
   BEHAVIORAL: ['تنمّر', 'مشاجرة بين طلاب', 'انضباط داخل الصف', 'الغياب والتأخر', 'السلامة والإشراف', 'أخرى'],
+  FINANCE: ['الرسوم الدراسية', 'الفواتير والسداد', 'الأقساط وخطط السداد', 'استرداد المبالغ', 'الخصومات والمنح', 'رسوم النقل', 'أخرى'],
 };
 
 // A complaint is resolved once solved/closed (or rejected) — at that point

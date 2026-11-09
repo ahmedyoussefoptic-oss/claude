@@ -4,7 +4,7 @@ import { Loader2, Plus, X } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../../config/firebase';
 import { useBranches, useDepartments, useComplaintTypes, useSubTypes } from '../../hooks/useOrgData';
-import { STAGES } from '../../config/complaintTypes';
+import { STAGES, FINANCE_TYPE } from '../../config/complaintTypes';
 import { classOptionsForStage } from '../../config/techSupport';
 import { MAX_PUBLIC_FILES, MAX_PUBLIC_FILE_BYTES, fileToBase64 } from '../../utils/publicSubmission';
 import AttachmentUploader from './AttachmentUploader';
@@ -16,14 +16,14 @@ const MAX_ENTRIES = 5;
 
 const emptyParent = { parentName: '', parentPhone: '', parentEmail: '' };
 
-const emptyEntry = (branch) => ({
+const emptyEntry = (branch, complaintType = '') => ({
   studentName: '',
   studentId: '',
   branch,
   department: '',
   stage: '',
   grade: '',
-  complaintType: '',
+  complaintType,
   subType: '',
   extraTypes: [],
   appointmentSlot: null,
@@ -44,16 +44,21 @@ const selectCls = `${inputCls} bg-white`;
 // `bookAppointment` = booking a visit from the branch QR page: the visit
 // slot picker always shows and the category starts on the "visit
 // appointment" one (the parent can still change it).
-export default function PublicComplaintFields({ initialBranch, onSuccess, visit = false, lockBranch = false, bookAppointment = false }) {
+// `finance` = the parent link's financial tab: the category is fixed to the
+// financial one (routed to the finance department) and only its
+// sub-category is asked for; the other tabs don't offer it.
+export default function PublicComplaintFields({ initialBranch, onSuccess, visit = false, lockBranch = false, bookAppointment = false, finance = false }) {
   const { t } = useTranslation();
   const branches = useBranches();
   const departments = useDepartments();
-  const complaintTypes = useComplaintTypes();
+  const allComplaintTypes = useComplaintTypes();
+  const complaintTypes = allComplaintTypes.filter((ct) => ct.id !== FINANCE_TYPE);
   const subTypes = useSubTypes();
+  const fixedType = finance ? FINANCE_TYPE : '';
 
   const nextKey = useRef(2);
   const [parent, setParent] = useState(emptyParent);
-  const [entries, setEntries] = useState(() => [{ ...emptyEntry(initialBranch || ''), key: 1 }]);
+  const [entries, setEntries] = useState(() => [{ ...emptyEntry(initialBranch || '', fixedType), key: 1 }]);
   const [sent, setSent] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -85,7 +90,7 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
   // Siblings usually attend the same branch, so it's carried over as a
   // starting point — still editable (e.g. separate boys/girls branches).
   const addEntry = () => {
-    setEntries((list) => [...list, { ...emptyEntry(list[list.length - 1]?.branch || initialBranch || ''), key: nextKey.current++ }]);
+    setEntries((list) => [...list, { ...emptyEntry(list[list.length - 1]?.branch || initialBranch || '', fixedType), key: nextKey.current++ }]);
   };
 
   const removeEntry = (key) => setEntries((list) => list.filter((en) => en.key !== key));
@@ -109,7 +114,7 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
     setEntries((list) => list.map((en) => (en.key === key ? { ...en, files: en.files.filter((_, i) => i !== index) } : en)));
   };
 
-  const wantsAppointment = (en) => !visit && (bookAppointment || isAppointmentCategory(en.complaintType, en.subType, complaintTypes, subTypes));
+  const wantsAppointment = (en) => !visit && !finance && (bookAppointment || isAppointmentCategory(en.complaintType, en.subType, complaintTypes, subTypes));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -132,7 +137,7 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
           }))
         );
         const { appointmentSlot, ...plain } = fields;
-        const result = await submitPublicComplaint({ ...parent, ...plain, extraTypes: cleanExtraTypes(fields.extraTypes, fields.complaintType), attachments, ...(visit ? { visit: true } : {}), ...(wantsAppointment(entry) && appointmentSlot ? { appointmentSlot } : {}) });
+        const result = await submitPublicComplaint({ ...parent, ...plain, ...(finance ? { complaintType: FINANCE_TYPE } : {}), extraTypes: finance ? [] : cleanExtraTypes(fields.extraTypes, fields.complaintType), attachments, ...(visit ? { visit: true } : {}), ...(wantsAppointment(entry) && appointmentSlot ? { appointmentSlot } : {}) });
         done.push({ id: result.data.complaintId, studentName: entry.studentName });
       }
       onSuccess(done);
@@ -240,6 +245,17 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
 
             <div className="space-y-4">
               <h3 className="text-sm font-bold text-slate-700">{t('complaintForm.detailsSection')}</h3>
+              {finance ? (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('publicReport.financeSubType')} <span className="text-red-500">*</span></label>
+                  <select name="subType" value={entry.subType} onChange={onChange} required className={selectCls}>
+                    <option value="">{t('common.select')}</option>
+                    {subTypes.filter((s) => s.parentType === FINANCE_TYPE).map((s) => (
+                      <option key={s.id} value={s.name}>{t(`businessData.subTypes.${s.parentType}.${s.name}`, s.name)}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (<>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.type')} <span className="text-red-500">*</span></label>
@@ -274,6 +290,7 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
                   selectCls={selectCls}
                 />
               </div>
+              </>)}
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1.5">{t(visit || bookAppointment ? 'branchVisit.reasonLabel' : 'complaintForm.subjectLabel')} <span className="text-red-500">*</span></label>
                 <input type="text" name="subject" value={entry.subject} onChange={onChange} required placeholder={t(visit || bookAppointment ? 'branchVisit.reasonPlaceholder' : 'complaintForm.subjectPlaceholder')} className={inputCls} />
@@ -305,7 +322,7 @@ export default function PublicComplaintFields({ initialBranch, onSuccess, visit 
         className="w-full px-4 py-3 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2 disabled:opacity-70"
       >
         {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-        {loading ? t('publicReport.sending') : visit ? t('branchVisit.submit') : bookAppointment ? t('branchVisit.bookSubmit') : multiple ? t('publicReport.submitComplaintMulti', { count: entries.length }) : t('publicReport.submitComplaint')}
+        {loading ? t('publicReport.sending') : visit ? t('branchVisit.submit') : bookAppointment ? t('branchVisit.bookSubmit') : multiple ? t('publicReport.submitComplaintMulti', { count: entries.length }) : t(finance ? 'publicReport.submitFinance' : 'publicReport.submitComplaint')}
       </button>
     </form>
   );

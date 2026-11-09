@@ -33,15 +33,23 @@ function techSupportByRole(userData) {
   return userData?.role === 'ADMIN' || userData?.role === 'CUSTOMER_SERVICE' || userData?.department === 'IT' || userData?.isPrincipal === true || userData?.isQuality === true;
 }
 
+// The financial feedback section (/finance): by default the finance
+// department, those who review trip payments, upper management, customer
+// service, principals and quality officers.
+function financeByRole(userData) {
+  return userData?.department === 'FINANCE' || userData?.perms?.tripFinance === true || ['ADMIN', 'UPPER_MANAGEMENT', 'CUSTOMER_SERVICE'].includes(userData?.role) || userData?.isPrincipal === true || userData?.isQuality === true;
+}
+
 // Per-employee sections (Users page → «الأقسام التي يطّلع عليها»), stored as
 // `modules: { key: true|false }`. A missing key keeps the role's default,
 // so accounts created before this existed see exactly what they saw.
 // Admins see everything, reception only the branch visits, and
 // tripsAccess 'tripsOnly' / 'none' still apply. Mirrored in firestore.rules
 // (modAllowed / canAccessTechSupport) and functions (cleanUserModules).
-export const MODULE_KEYS = ['dashboard', 'complaints', 'techSupport', 'lostFound', 'visits', 'trips', 'students', 'search', 'flowMap', 'reports', 'calls', 'waReports', 'assistant'];
+export const MODULE_KEYS = ['dashboard', 'complaints', 'finance', 'techSupport', 'lostFound', 'visits', 'trips', 'students', 'search', 'flowMap', 'reports', 'calls', 'waReports', 'assistant'];
 export function moduleDefault(userData, key) {
   if (key === 'techSupport') return techSupportByRole(userData);
+  if (key === 'finance') return financeByRole(userData);
   if (key === 'trips') return tripsAccessOf(userData) !== 'none';
   // Call analytics (Bevatel) is given per employee.
   if (key === 'calls' || key === 'waReports') return false;

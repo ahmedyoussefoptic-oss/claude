@@ -267,7 +267,7 @@ exports.createStaffUser = onCall(async (request) => {
 // (`modules`, missing key = the role's default) and whether they see every
 // record of their branches or only the ones assigned to them
 // (`recordScope`). Mirrored in src/utils/scope.js and firestore.rules.
-const USER_MODULE_KEYS = ["dashboard", "complaints", "techSupport", "lostFound", "visits", "trips", "students", "search", "flowMap", "reports"];
+const USER_MODULE_KEYS = ["dashboard", "complaints", "finance", "techSupport", "lostFound", "visits", "trips", "students", "search", "flowMap", "reports"];
 function cleanUserModules(modules, recordScope) {
   const out = {};
   if (modules && typeof modules === "object") {
@@ -783,6 +783,10 @@ exports.handleSlaStatusChanges = onDocumentUpdated({ document: "complaints/{comp
   // own it — route it to the new branch's staff instead.
   if (before.branch && after.branch && before.branch !== after.branch) {
     await reassignAutomatically("complaint", event.data.after.ref, after, { replace: true, reason: "BRANCH_CHANGED" });
+  } else if (!complaintTypesOf(before).includes(FINANCE_TYPE) && complaintTypesOf(after).includes(FINANCE_TYPE)) {
+    // Re-categorized as financial: the finance department is added to
+    // whoever already has it.
+    await reassignAutomatically("complaint", event.data.after.ref, after, { replace: false, reason: "FINANCE_TYPE" });
   }
 
   // Automatic WhatsApp messages: the solution once it's written, and the
@@ -1259,7 +1263,8 @@ async function findAutoAssignees({ branch, departments, stage, curriculum, users
   // Staff limited to the trips section (tripsAccess "tripsOnly") never get
   // complaints or tickets.
   // Nor do staff whose complaints / tech-support section is turned off.
-  const section = departments.includes("IT") ? "techSupport" : "complaints";
+  // Financial feedback has its own section (modules.finance).
+  const section = departments.includes("IT") ? "techSupport" : isFinanceOnly(departments.filter(Boolean)) ? "finance" : "complaints";
   const users = (preloaded || await loadActiveUsers()).filter((u) => u.tripsAccess !== "tripsOnly" && !moduleOff(u, section));
   // Categories flagged «للإداريين والجودة» route to the administrative
   // specialists; when every category is such, principals and counselors
@@ -1267,29 +1272,43 @@ async function findAutoAssignees({ branch, departments, stage, curriculum, users
   const aq = section === "complaints" ? await adminQualityTypes() : new Set();
   const types = departments.filter(Boolean);
   const adminQualityOnly = types.length > 0 && types.every((d) => aq.has(d));
+  // Financial feedback goes to the finance department only (plus quality),
+  // not to principals and counselors.
+  const financeOnly = section === "finance";
   departments = types.map((d) => (aq.has(d) ? "ADMINISTRATIVE" : d));
   const inBranch = (u) => (u.branches || []).includes(branch) || u.branch === branch;
   const covers = (u) => coversStage(u, stage) && coversCurriculum(u, curriculum);
   const specialists = [];
   for (const department of [...new Set(departments.filter(Boolean))]) {
-    const deptSpecialists = users.filter((u) => u.role === "SPECIALIST" && u.department === department);
+    // The finance department's manager handles its feedback too.
+    const deptSpecialists = users.filter((u) => (u.role === "SPECIALIST" || (department === FINANCE_TYPE && u.role === "DEPARTMENT_MANAGER")) && u.department === department
+      && !(department === FINANCE_TYPE && moduleOff(u, "finance")));
     const branchSpecialists = deptSpecialists.filter(inBranch);
     const allBranchSpecialists = deptSpecialists.filter((u) => u.access === "all");
+    // No one in the finance department yet: the staff who review trip
+    // payments (perms.tripFinance) in that branch.
+    const financeStaff = department === FINANCE_TYPE ? users.filter((u) => u.role !== "ADMIN" && u.perms?.tripFinance === true && !moduleOff(u, "finance") && (u.access === "all" || inBranch(u))) : [];
     specialists.push(...([
       branchSpecialists.filter(covers),
       allBranchSpecialists.filter(covers),
       branchSpecialists,
       allBranchSpecialists,
+      financeStaff,
     ].find((list) => list.length) || []));
   }
-  const principals = adminQualityOnly ? [] : users.filter((u) => u.isPrincipal === true && (u.access === "all" || inBranch(u)) && covers(u));
+  const principals = adminQualityOnly || financeOnly ? [] : users.filter((u) => u.isPrincipal === true && (u.access === "all" || inBranch(u)) && covers(u));
   const seen = new Set();
   // Complaints (not IT tickets) also go to the branch's student counselors.
-  const counselors = departments.includes("IT") || adminQualityOnly ? [] : complaintCounselors(users, branch, stage, curriculum);
+  const counselors = departments.includes("IT") || adminQualityOnly || financeOnly ? [] : complaintCounselors(users, branch, stage, curriculum);
   return [...specialists, ...principals, ...qualityOfficers(users, branch), ...counselors]
     .filter((u) => !seen.has(u.id) && seen.add(u.id))
     .map((u) => ({ id: u.id, name: u.name || "" }));
 }
+
+// The financial category (src/config/complaintTypes.js FINANCE_TYPE): its
+// feedback is routed to users.department FINANCE.
+const FINANCE_TYPE = "FINANCE";
+const isFinanceOnly = (types) => types.length > 0 && types.every((d) => d === FINANCE_TYPE);
 
 // Complaint categories set «للإداريين والجودة» in Settings (adminQuality).
 async function adminQualityTypes() {
@@ -1344,7 +1363,8 @@ async function ensureQualityAssigned(ref, data, { counselors = false } = {}) {
   const types = counselors ? complaintTypesOf(data) : [];
   const aq = types.length ? await adminQualityTypes() : new Set();
   const adminQualityOnly = types.length > 0 && types.every((d) => aq.has(d));
-  const auto = adminQualityOnly
+  // Financial feedback recorded by staff is routed to finance the same way.
+  const auto = adminQualityOnly || isFinanceOnly(types)
     ? await autoAssigneesFor("complaint", data, users)
     : [...qualityOfficers(users, data.branch), ...(counselors ? complaintCounselors(users, data.branch, data.stage, data.department) : [])];
   const missing = auto.filter((u, i) => !current.includes(u.id) && auto.findIndex((x) => x.id === u.id) === i);

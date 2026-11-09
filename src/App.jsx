@@ -102,6 +102,7 @@ function App() {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="complaints" element={<ComplaintsList />} />
+          <Route path="finance" element={<ComplaintsList finance key="finance" />} />
           <Route path="lost-found" element={<LostFound />} />
           <Route path="tech-support" element={<TechSupport />} />
           <Route path="flow-map" element={<FlowMap />} />
