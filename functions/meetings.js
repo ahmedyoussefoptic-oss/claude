@@ -1081,7 +1081,7 @@ module.exports = function meetingsModule(d) {
     const batch = db.batch();
     entries.forEach(([branch, list]) => {
       const teachers = (Array.isArray(list) ? list : []).slice(0, 400).map((t) => ({
-        name: str(t?.name, 80), subject: str(t?.subject, 80), room: str(t?.room, 60), classes: str(t?.classes, 300),
+        name: str(t?.name, 80), subject: str(t?.subject, 80), classes: str(t?.classes, 300),
       })).filter((t) => t.name);
       saved[branch] = teachers.length;
       batch.set(db.collection("meetingTeacherDirectory").doc(branch), { teachers, updatedAt: now, updatedBy: caller.uid, updatedByName: caller.name || "" });

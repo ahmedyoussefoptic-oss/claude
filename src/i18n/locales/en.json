@@ -4002,7 +4002,7 @@
       "notifyChange": "Tell the invited parents on WhatsApp if the time or place changes or booked slots are cancelled",
       "importTeachers": "Import teachers from Excel",
       "teachersTemplate": "Download template",
-      "importHint": "Columns: teacher name, subject, classes (e.g. 4-1, 4-2 or G4 4-2), room. Pick the branches and grades first so classes can be linked.",
+      "importHint": "Columns: teacher name, subject, classes (e.g. 4-1, 4-2 or G4 4-2). Rooms are added manually. Pick the branches and grades first so classes can be linked.",
       "imported": "{{added}} teachers added, {{updated}} updated",
       "importSkipped": "{{count}} rows without a name skipped",
       "importUnmatched": "Classes not in the audience: {{list}}",
@@ -4013,7 +4013,11 @@
       "fromDirectory": "Add from teacher directory",
       "directoryPickFirst": "Pick the branches and grades first, then add teachers from the directory.",
       "directoryEmpty": "No teachers in the directory for these branches — upload the «teacher directory» file from the meetings page.",
-      "directoryOthers": "{{count}} teachers not teaching this meeting's classes were left out"
+      "directoryOthers": "{{count}} teachers not teaching this meeting's classes were left out",
+      "roomsToggle": "Set a room for each teacher in this meeting",
+      "roomForAll": "One room for everyone (optional)",
+      "applyRoom": "Apply to all teachers",
+      "roomsHint": "Rooms are typed per meeting and shown to parents next to their appointment and at reception. Leave off if the meeting is in one place."
     },
     "tabs": {
       "overview": "Overview",

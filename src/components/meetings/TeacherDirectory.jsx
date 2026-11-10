@@ -95,8 +95,8 @@ export default function TeacherDirectory({ onClose }) {
                   {open === b.branch && (
                     <div className="border-t border-slate-100 p-2 overflow-x-auto">
                       <table className="w-full text-xs">
-                        <thead><tr className="text-slate-500">{['teacherName', 'subject', 'classes', 'room'].map((k) => <th key={k} className="p-1.5 text-start font-medium">{t(`meetings.form.${k}`)}</th>)}</tr></thead>
-                        <tbody>{b.teachers.map((x, i) => <tr key={i} className="border-t border-slate-50"><td className="p-1.5">{x.name}</td><td className="p-1.5">{x.subject}</td><td className="p-1.5" dir="ltr">{x.classes}</td><td className="p-1.5">{x.room}</td></tr>)}</tbody>
+                        <thead><tr className="text-slate-500">{['teacherName', 'subject', 'classes'].map((k) => <th key={k} className="p-1.5 text-start font-medium">{t(`meetings.form.${k}`)}</th>)}</tr></thead>
+                        <tbody>{b.teachers.map((x, i) => <tr key={i} className="border-t border-slate-50"><td className="p-1.5">{x.name}</td><td className="p-1.5">{x.subject}</td><td className="p-1.5" dir="ltr">{x.classes}</td></tr>)}</tbody>
                       </table>
                     </div>
                   )}

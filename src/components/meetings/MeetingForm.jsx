@@ -91,6 +91,10 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
   const teacherClassOptions = form.classes.length ? form.classes.map((k) => [k, classLabel(k)]) : (preview?.classes || []).map((c) => [c.key, classLabel(c.key)]);
 
   const setTeacher = (i, k, v) => setForm((f) => ({ ...f, teachers: f.teachers.map((x, j) => (j === i ? { ...x, [k]: v } : x)) }));
+  // Rooms change from one meeting to the next, so they are typed here (not
+  // taken from the Excel files), only when the meeting needs them.
+  const [showRooms, setShowRooms] = useState(() => (meeting?.teachers || []).some((x) => x.room));
+  const [allRooms, setAllRooms] = useState('');
   const addTeacher = () => setForm((f) => ({ ...f, teachers: [...f.teachers, { name: '', subject: '', room: '', classes: [] }] }));
 
   // Teachers from an Excel file: a teacher already in the list (same name)
@@ -105,7 +109,7 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
     teachers.forEach((x) => {
       const i = list.findIndex((y) => key(y.name) === key(x.name));
       if (i >= 0) {
-        list[i] = { ...list[i], subject: x.subject || list[i].subject, room: x.room || list[i].room, classes: x.classes.length ? x.classes : list[i].classes || [] };
+        list[i] = { ...list[i], subject: x.subject || list[i].subject, classes: x.classes.length ? x.classes : list[i].classes || [] };
         updated++;
       } else { list.push(x); added++; }
     });
@@ -151,7 +155,7 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
     setBusy(true);
     try {
       const payload = Object.fromEntries(Object.keys(EMPTY).map((k) => [k, form[k]]));
-      payload.teachers = form.teachers.map((x) => ({ id: x.id, name: x.name, subject: x.subject, room: x.room, classes: x.classes || [] }));
+      payload.teachers = form.teachers.map((x) => ({ id: x.id, name: x.name, subject: x.subject, room: showRooms ? (x.room || '').trim() : '', classes: x.classes || [] }));
       const r = await callMeeting('saveMeeting', { id: meeting?.id || null, meeting: payload, notifyChange: editing && notifyChange });
       onSaved(r);
     } catch (err) {
@@ -228,15 +232,31 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
           )}
 
           <Section title={t('meetings.form.teachers')} hint={t('meetings.form.teachersHint')}>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" checked={showRooms} onChange={(e) => setShowRooms(e.target.checked)} />
+                {t('meetings.form.roomsToggle')}
+              </label>
+              {showRooms && form.teachers.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <input value={allRooms} onChange={(e) => setAllRooms(e.target.value)} placeholder={t('meetings.form.roomForAll')} className={`${inputCls} max-w-xs`} />
+                  <button type="button" disabled={!allRooms.trim()} onClick={() => set('teachers', form.teachers.map((x) => ({ ...x, room: allRooms.trim() })))} className="px-3 py-2 text-sm border border-slate-200 bg-white rounded-xl disabled:opacity-50">{t('meetings.form.applyRoom')}</button>
+                </div>
+              )}
+              <p className="text-[11px] text-slate-400">{t('meetings.form.roomsHint')}</p>
+            </div>
             {form.teachers.map((tc, i) => (
               <div key={tc.id || i} className="border border-slate-200 rounded-xl p-3 space-y-2">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div className={`grid grid-cols-1 gap-2 ${showRooms ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
                   <input required placeholder={t('meetings.form.teacherName')} value={tc.name} onChange={(e) => setTeacher(i, 'name', e.target.value)} className={inputCls} />
-                  <input placeholder={t('meetings.form.subject')} value={tc.subject} onChange={(e) => setTeacher(i, 'subject', e.target.value)} className={inputCls} />
                   <div className="flex gap-2">
-                    <input placeholder={t('meetings.form.room')} value={tc.room} onChange={(e) => setTeacher(i, 'room', e.target.value)} className={inputCls} />
-                    <button type="button" onClick={() => setForm((f) => ({ ...f, teachers: f.teachers.filter((_, j) => j !== i) }))} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg shrink-0" aria-label={t('common.delete')}><Trash2 className="w-4 h-4" /></button>
+                    <input placeholder={t('meetings.form.subject')} value={tc.subject} onChange={(e) => setTeacher(i, 'subject', e.target.value)} className={inputCls} />
+                    {!showRooms && <button type="button" onClick={() => setForm((f) => ({ ...f, teachers: f.teachers.filter((_, j) => j !== i) }))} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg shrink-0" aria-label={t('common.delete')}><Trash2 className="w-4 h-4" /></button>}
                   </div>
+                  {showRooms && <div className="flex gap-2">
+                    <input placeholder={t('meetings.form.room')} value={tc.room || ''} onChange={(e) => setTeacher(i, 'room', e.target.value)} className={inputCls} />
+                    <button type="button" onClick={() => setForm((f) => ({ ...f, teachers: f.teachers.filter((_, j) => j !== i) }))} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg shrink-0" aria-label={t('common.delete')}><Trash2 className="w-4 h-4" /></button>
+                  </div>}
                 </div>
                 {teacherClassOptions.length > 0 && (
                   <div>
