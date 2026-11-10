@@ -136,7 +136,6 @@ module.exports = function meetingsModule(d) {
       return {
         id: prev ? prev.id : `t${crypto.randomBytes(4).toString("hex")}`,
         name: str(t?.name, 80),
-        phone: str(t?.phone, 20),
         subject: str(t?.subject, 80),
         room: str(t?.room, 60),
         classes: list(t?.classes, null, 100).map((c) => str(c, 40)),
@@ -299,7 +298,7 @@ module.exports = function meetingsModule(d) {
       sections: m.sections || [], gender: m.gender || "ALL", date: m.date, startTime: m.startTime, endTime: m.endTime, location: m.location || "",
       teamsLink: m.teamsLink || "", agenda: m.agenda || "", slotsStart: m.slotsStart || "", slotsEnd: m.slotsEnd || "", slotMinutes: m.slotMinutes || 10,
       breakStart: m.breakStart || "", breakEnd: m.breakEnd || "", regDeadline: m.regDeadline, autoReminders: m.autoReminders !== false,
-      teachers: (m.teachers || []).map((t) => ({ id: t.id, name: t.name, phone: t.phone, subject: t.subject, room: t.room, classes: t.classes || [], ...(secrets ? { link: `${PUBLIC_APP_URL}/meeting-teacher/${t.token}`, pin: t.pin } : {}) })),
+      teachers: (m.teachers || []).map((t) => ({ id: t.id, name: t.name, subject: t.subject, room: t.room, classes: t.classes || [], ...(secrets ? { link: `${PUBLIC_APP_URL}/meeting-teacher/${t.token}`, pin: t.pin } : {}) })),
       ...(secrets ? { deskLink: `${PUBLIC_APP_URL}/meeting-desk/${m.deskToken}`, deskPin: m.deskPin } : {}),
       stats: m.stats || {}, createdByName: m.createdByName || "", createdAt: ms(m.createdAt), invitedAt: ms(m.invitedAt), completedAt: ms(m.completedAt),
       cancelReason: m.cancelReason || "", summary: m.summary || "", callCampaignId: m.callCampaignId || null,
@@ -1082,7 +1081,7 @@ module.exports = function meetingsModule(d) {
     const batch = db.batch();
     entries.forEach(([branch, list]) => {
       const teachers = (Array.isArray(list) ? list : []).slice(0, 400).map((t) => ({
-        name: str(t?.name, 80), subject: str(t?.subject, 80), room: str(t?.room, 60), phone: str(t?.phone, 20), classes: str(t?.classes, 300),
+        name: str(t?.name, 80), subject: str(t?.subject, 80), room: str(t?.room, 60), classes: str(t?.classes, 300),
       })).filter((t) => t.name);
       saved[branch] = teachers.length;
       batch.set(db.collection("meetingTeacherDirectory").doc(branch), { teachers, updatedAt: now, updatedBy: caller.uid, updatedByName: caller.name || "" });

@@ -4002,7 +4002,7 @@
       "notifyChange": "Tell the invited parents on WhatsApp if the time or place changes or booked slots are cancelled",
       "importTeachers": "Import teachers from Excel",
       "teachersTemplate": "Download template",
-      "importHint": "Columns: teacher name, subject, room, mobile, classes (e.g. 4-1, 4-2 or G4 4-2). Pick the branches and grades first so classes can be linked.",
+      "importHint": "Columns: teacher name, subject, classes (e.g. 4-1, 4-2 or G4 4-2), room. Pick the branches and grades first so classes can be linked.",
       "imported": "{{added}} teachers added, {{updated}} updated",
       "importSkipped": "{{count}} rows without a name skipped",
       "importUnmatched": "Classes not in the audience: {{list}}",

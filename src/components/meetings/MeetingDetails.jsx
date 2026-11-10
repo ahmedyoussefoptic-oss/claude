@@ -245,7 +245,6 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
                   </div>
                   <div className="flex gap-2">
                     <CopyBtn text={msg} label={t('meetings.links.copy')} />
-                    {tc.phone && <a href={waLink(tc.phone, msg)} target="_blank" rel="noreferrer" className="px-2 py-1 text-xs border border-emerald-200 text-emerald-700 rounded-lg flex items-center gap-1"><MessageCircle className="w-3.5 h-3.5" />{t('meetings.links.whatsapp')}</a>}
                   </div>
                 </div>
               );

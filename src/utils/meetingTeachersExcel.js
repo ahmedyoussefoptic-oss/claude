@@ -12,7 +12,6 @@ const COLUMNS = {
   name: ['اسم المعلم', 'الاسم', 'المعلم', 'name', 'teacher', 'teacher name'],
   subject: ['المادة', 'subject'],
   room: ['القاعة', 'room'],
-  phone: ['الجوال', 'رقم الجوال', 'الهاتف', 'phone', 'mobile'],
   classes: ['الفصول', 'فصول المعلم', 'classes', 'class'],
 };
 const norm = (s) => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
@@ -25,21 +24,15 @@ export const DIRECTORY_TEMPLATE_URL = '/files/meeting-teachers-template.xlsx';
 export async function downloadTeachersTemplate() {
   const XLSX = await import('xlsx');
   const ws = XLSX.utils.aoa_to_sheet([
-    ['اسم المعلم', 'المادة', 'الفصول', 'القاعة', 'الجوال'],
-    ['أ. منى أحمد', 'الرياضيات', '4-1، 4-2', 'قاعة 101', '0500000000'],
+    ['اسم المعلم', 'المادة', 'الفصول', 'القاعة'],
+    ['أ. منى أحمد', 'الرياضيات', '4-1، 4-2', 'قاعة 101'],
   ]);
-  ws['!cols'] = [{ wch: 24 }, { wch: 18 }, { wch: 24 }, { wch: 14 }, { wch: 14 }];
+  ws['!cols'] = [{ wch: 24 }, { wch: 18 }, { wch: 24 }, { wch: 14 }];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'المعلمون');
   XLSX.writeFile(wb, 'نموذج المعلمين.xlsx');
 }
 
-export function cleanPhone(v) {
-  let d = latinDigits(v).replace(/\D/g, '');
-  if (/^5\d{8}$/.test(d)) d = `0${d}`;
-  if (/^9665\d{8}$/.test(d)) d = `0${d.slice(3)}`;
-  return d;
-}
 
 // One class as written → the meeting's class keys ("G4|4-2"). "4-2" alone
 // matches that class in any grade; with a grade it must match it.
@@ -71,7 +64,7 @@ export function teacherForMeeting(t, keys) {
     if (found.length) found.forEach((k) => classes.add(k));
     else unmatched.push(tok);
   });
-  return { teacher: { name: t.name, subject: t.subject || '', room: t.room || '', phone: t.phone || '', classes: [...classes] }, teaches: !tokens.length || classes.size > 0, unmatched };
+  return { teacher: { name: t.name, subject: t.subject || '', room: t.room || '', classes: [...classes] }, teaches: !tokens.length || classes.size > 0, unmatched };
 }
 
 async function readRows(file, required = []) {
@@ -87,7 +80,7 @@ async function readRows(file, required = []) {
     if (required.some((k) => col[k] < 0)) continue;
     const get = (r, k) => (col[k] >= 0 ? String(r[col[k]] ?? '').trim() : '');
     return rows.slice(headerAt + 1).filter((r) => r.some((c) => String(c).trim())).map((r) => ({
-      branch: get(r, 'branch'), name: get(r, 'name'), subject: get(r, 'subject'), room: get(r, 'room'), phone: cleanPhone(get(r, 'phone')), classes: get(r, 'classes'),
+      branch: get(r, 'branch'), name: get(r, 'name'), subject: get(r, 'subject'), room: get(r, 'room'), classes: get(r, 'classes'),
     }));
   }
   throw new Error(required.includes('branch') ? 'branchHeader' : 'header');
@@ -129,10 +122,10 @@ export async function readTeacherDirectoryFile(file, branches) {
     const dup = seen.get(`${id}|${key(r.name)}`);
     if (dup) {
       dup.classes = [...new Set([...splitClasses(dup.classes), ...splitClasses(r.classes)])].join('، ');
-      ['subject', 'room', 'phone'].forEach((k) => { if (!dup[k]) dup[k] = r[k]; });
+      ['subject', 'room'].forEach((k) => { if (!dup[k]) dup[k] = r[k]; });
       return;
     }
-    const tch = { name: r.name, subject: r.subject, room: r.room, phone: r.phone, classes: splitClasses(r.classes).join('، ') };
+    const tch = { name: r.name, subject: r.subject, room: r.room, classes: splitClasses(r.classes).join('، ') };
     seen.set(`${id}|${key(r.name)}`, tch);
     (byBranch[id] = byBranch[id] || []).push(tch);
   });
