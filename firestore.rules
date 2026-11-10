@@ -596,7 +596,7 @@ service cloud.firestore {
         'vcSessions', 'vcAttendance', 'vcMeetings', 'vcSeriesClass',
         'leaveRequests', 'authorizedPickups', 'leads', 'leadVisits', 'reenrollments', 'platformSettings', 'studentAccounts', 'accountAccessLog', 'apiKeys', 'calls', 'assistantChats', 'assistantUsage', 'waDailyReports', 'presence', 'tripAccounts', 'usage', 'deletedLeaveRequests', 'callCampaigns', 'callTasks', 'spedForms', 'spedSubmissions',
         // Parent meetings: read and written only by functions/meetings.js.
-        'meetings', 'meetingTokens', 'meetingMinutes', 'meetingVerify'
+        'meetings', 'meetingTokens', 'meetingMinutes', 'meetingVerify', 'meetingTeacherDirectory'
       ]);
     }
   }

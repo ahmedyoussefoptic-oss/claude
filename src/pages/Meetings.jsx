@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
-import { Presentation, Plus, Loader2, CalendarDays, Clock, MapPin, Users as UsersIcon, Star } from 'lucide-react';
+import { Presentation, Plus, Loader2, CalendarDays, Clock, MapPin, Users as UsersIcon, Star, BookUser } from 'lucide-react';
+import TeacherDirectory from '../components/meetings/TeacherDirectory';
 import { useBranches } from '../hooks/useOrgData';
 import MeetingForm from '../components/meetings/MeetingForm';
 import MeetingDetails from '../components/meetings/MeetingDetails';
@@ -19,6 +20,7 @@ export default function Meetings() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
+  const [directory, setDirectory] = useState(false);
   const [status, setStatus] = useState('ACTIVE');
 
   const load = useCallback(async () => {
@@ -41,7 +43,10 @@ export default function Meetings() {
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><Presentation className="w-6 h-6 text-primary" />{t('meetings.title')}</h1>
           <p className="text-sm text-slate-500">{t('meetings.subtitle')}</p>
         </div>
-        <button type="button" onClick={() => setCreating(true)} className="px-4 py-2 bg-primary text-white rounded-xl text-sm flex items-center gap-2"><Plus className="w-4 h-4" />{t('meetings.new')}</button>
+        <div className="flex gap-2">
+          <button type="button" onClick={() => setDirectory(true)} className="px-4 py-2 border border-slate-200 bg-white text-slate-700 rounded-xl text-sm flex items-center gap-2"><BookUser className="w-4 h-4" />{t('meetings.directory.title')}</button>
+          <button type="button" onClick={() => setCreating(true)} className="px-4 py-2 bg-primary text-white rounded-xl text-sm flex items-center gap-2"><Plus className="w-4 h-4" />{t('meetings.new')}</button>
+        </div>
       </div>
 
       <div className="flex gap-1 overflow-x-auto">
@@ -86,6 +91,7 @@ export default function Meetings() {
               </div>
             )}
 
+      {directory && <TeacherDirectory onClose={() => setDirectory(false)} />}
       {creating && <MeetingForm onClose={() => setCreating(false)} onSaved={(r) => { setCreating(false); load(); setSearchParams({ openId: r.id }); }} />}
     </div>
   );

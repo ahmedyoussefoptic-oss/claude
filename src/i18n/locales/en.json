@@ -4009,7 +4009,11 @@
       "importNoClasses": "Classes were not linked — pick the branches and grades, then import the file again",
       "importEmpty": "No teacher names in the file.",
       "importHeader": "No «teacher name» column found. Use the template.",
-      "importFailed": "Could not read the file."
+      "importFailed": "Could not read the file.",
+      "fromDirectory": "Add from teacher directory",
+      "directoryPickFirst": "Pick the branches and grades first, then add teachers from the directory.",
+      "directoryEmpty": "No teachers in the directory for these branches — upload the «teacher directory» file from the meetings page.",
+      "directoryOthers": "{{count}} teachers not teaching this meeting's classes were left out"
     },
     "tabs": {
       "overview": "Overview",
@@ -4292,6 +4296,22 @@
       "title": "Parent meetings",
       "minutes": "Teachers' minutes",
       "none": "No meetings."
+    },
+    "directory": {
+      "title": "Teacher directory",
+      "hint": "Fill the Excel form with the teachers of every branch (branch from a drop-down) and upload it once. When creating a meeting press «Add from teacher directory» to add the chosen branches' teachers who teach the meeting's classes. A new file replaces only the branches it contains.",
+      "template": "Download form",
+      "upload": "Upload file",
+      "review": "Review the lists, then save:",
+      "unknownBranches": "Unknown branches (rows not saved): {{list}}",
+      "noBranch": "{{count}} rows without a branch not saved",
+      "save": "Save to directory",
+      "saved": "{{count}} teachers saved in {{branches}} branches",
+      "none": "The directory is empty — download the form, fill it and upload it.",
+      "count": "{{count}} teachers",
+      "notSaved": "Not saved yet",
+      "empty": "No rows with teacher names and branches in the file.",
+      "noBranchColumn": "No «branch» and «teacher name» columns found. Use the form."
     }
   }
 }

@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { X, Save, Loader2, AlertTriangle, Plus, Trash2, Users as UsersIcon, FileSpreadsheet, Download } from 'lucide-react';
-import { readTeachersFile, downloadTeachersTemplate } from '../../utils/meetingTeachersExcel';
+import { X, Save, Loader2, AlertTriangle, Plus, Trash2, Users as UsersIcon, FileSpreadsheet, Download, BookUser } from 'lucide-react';
+import { readTeachersFile, downloadTeachersTemplate, teacherForMeeting } from '../../utils/meetingTeachersExcel';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches, useDepartments } from '../../hooks/useOrgData';
 import { userBranches } from '../../utils/scope';
@@ -97,6 +97,37 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
   // is updated, the others are added.
   const [importMsg, setImportMsg] = useState(null);
   const [importing, setImporting] = useState(false);
+  const mergeTeachers = (teachers) => {
+    const key = (n) => String(n || '').replace(/\s+/g, ' ').trim();
+    let added = 0;
+    let updated = 0;
+    const list = [...form.teachers];
+    teachers.forEach((x) => {
+      const i = list.findIndex((y) => key(y.name) === key(x.name));
+      if (i >= 0) {
+        list[i] = { ...list[i], subject: x.subject || list[i].subject, room: x.room || list[i].room, phone: x.phone || list[i].phone, classes: x.classes.length ? x.classes : list[i].classes || [] };
+        updated++;
+      } else { list.push(x); added++; }
+    });
+    set('teachers', list);
+    return { added, updated };
+  };
+  // From «دليل المعلمين»: the teachers of the chosen branches who teach one
+  // of the meeting's classes (or list no classes).
+  const fromDirectory = async () => {
+    if (!form.branches.length || !teacherClassOptions.length) { setImportMsg({ ok: false, text: t('meetings.form.directoryPickFirst') }); return; }
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const r = await callMeeting('getMeetingTeacherDirectory', { branches: form.branches });
+      const keys = teacherClassOptions.map(([k]) => k);
+      const all = r.branches.flatMap((b) => b.teachers);
+      if (!all.length) { setImportMsg({ ok: false, text: t('meetings.form.directoryEmpty') }); return; }
+      const picked = all.map((x) => teacherForMeeting(x, keys)).filter((x) => x.teaches).map((x) => x.teacher);
+      const { added, updated } = mergeTeachers(picked);
+      setImportMsg({ ok: true, text: `${t('meetings.form.imported', { added, updated })} · ${t('meetings.form.directoryOthers', { count: all.length - picked.length })}` });
+    } catch (err) { setImportMsg({ ok: false, text: err.message }); } finally { setImporting(false); }
+  };
   const importTeachers = async (file) => {
     if (!file) return;
     setImporting(true);
@@ -104,18 +135,7 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
     try {
       const { teachers, unmatched, skipped } = await readTeachersFile(file, teacherClassOptions.map(([k]) => k));
       if (!teachers.length) { setImportMsg({ ok: false, text: t('meetings.form.importEmpty') }); return; }
-      const key = (n) => String(n || '').replace(/\s+/g, ' ').trim();
-      let added = 0;
-      let updated = 0;
-      const list = [...form.teachers];
-      teachers.forEach((x) => {
-        const i = list.findIndex((y) => key(y.name) === key(x.name));
-        if (i >= 0) {
-          list[i] = { ...list[i], subject: x.subject || list[i].subject, room: x.room || list[i].room, phone: x.phone || list[i].phone, classes: x.classes.length ? x.classes : list[i].classes || [] };
-          updated++;
-        } else { list.push(x); added++; }
-      });
-      set('teachers', list);
+      const { added, updated } = mergeTeachers(teachers);
       const parts = [t('meetings.form.imported', { added, updated })];
       if (skipped) parts.push(t('meetings.form.importSkipped', { count: skipped }));
       if (unmatched.length) parts.push(teacherClassOptions.length ? t('meetings.form.importUnmatched', { list: unmatched.join('، ') }) : t('meetings.form.importNoClasses'));
@@ -229,6 +249,7 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
             ))}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
               <button type="button" onClick={addTeacher} className="text-sm text-primary flex items-center gap-1 hover:underline"><Plus className="w-4 h-4" />{t('meetings.form.addTeacher')}</button>
+              <button type="button" disabled={importing} onClick={fromDirectory} className="text-sm text-indigo-700 flex items-center gap-1 hover:underline"><BookUser className="w-4 h-4" />{t('meetings.form.fromDirectory')}</button>
               <label className="text-sm text-emerald-700 flex items-center gap-1 hover:underline cursor-pointer">
                 {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}{t('meetings.form.importTeachers')}
                 <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { importTeachers(e.target.files?.[0]); e.target.value = ''; }} />

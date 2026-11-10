@@ -1053,6 +1053,44 @@ module.exports = function meetingsModule(d) {
     };
   });
 
+  // --- «دليل المعلمين»: one Excel file for every branch ---------------------
+  // meetingTeacherDirectory/{branch} = { teachers: [{name, subject, room,
+  // phone, classes (as written, e.g. "4-1، 4-2")}] }. Uploading replaces the
+  // lists of the branches in the file; a meeting picks its teachers from the
+  // lists of its branches (MeetingForm → «إضافة من دليل المعلمين»).
+  out.getMeetingTeacherDirectory = onCall(async (request) => {
+    const caller = await meetingCaller(request);
+    const want = Array.isArray(request.data?.branches) ? request.data.branches.map(String) : null;
+    const snap = await db.collection("meetingTeacherDirectory").get();
+    return {
+      branches: snap.docs.filter((x) => callerHasBranch(caller, x.id) && (!want || want.includes(x.id))).map((x) => ({
+        branch: x.id, teachers: x.data().teachers || [], updatedAt: ms(x.data().updatedAt), updatedByName: x.data().updatedByName || "",
+      })),
+    };
+  });
+
+  out.saveMeetingTeacherDirectory = onCall(async (request) => {
+    const caller = await meetingCaller(request);
+    const input = request.data?.branches && typeof request.data.branches === "object" ? request.data.branches : {};
+    const known = new Set((await db.collection("branches").get()).docs.map((x) => x.id));
+    const entries = Object.entries(input).slice(0, 40);
+    if (!entries.length) throw new HttpsError("invalid-argument", "لا توجد بيانات معلمين.");
+    const outside = entries.map(([b]) => b).filter((b) => !known.has(b) || !callerHasBranch(caller, b));
+    if (outside.length) throw new HttpsError("permission-denied", "الملف فيه فروع خارج صلاحيتك أو غير معروفة.");
+    const now = Timestamp.now();
+    const saved = {};
+    const batch = db.batch();
+    entries.forEach(([branch, list]) => {
+      const teachers = (Array.isArray(list) ? list : []).slice(0, 400).map((t) => ({
+        name: str(t?.name, 80), subject: str(t?.subject, 80), room: str(t?.room, 60), phone: str(t?.phone, 20), classes: str(t?.classes, 300),
+      })).filter((t) => t.name);
+      saved[branch] = teachers.length;
+      batch.set(db.collection("meetingTeacherDirectory").doc(branch), { teachers, updatedAt: now, updatedBy: caller.uid, updatedByName: caller.name || "" });
+    });
+    await batch.commit();
+    return { saved };
+  });
+
   // --- student record: the meetings a student was invited to + minutes ----
   out.getStudentMeetings = onCall(async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
