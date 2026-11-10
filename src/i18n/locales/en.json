@@ -3999,7 +3999,17 @@
       "teacherClasses": "Teacher's classes (none = all classes)",
       "addTeacher": "Add teacher",
       "autoReminders": "Automatic reminders the evening before and the morning of the meeting, and to those who haven't replied before registration closes",
-      "notifyChange": "Tell the invited parents on WhatsApp if the time or place changes or booked slots are cancelled"
+      "notifyChange": "Tell the invited parents on WhatsApp if the time or place changes or booked slots are cancelled",
+      "importTeachers": "Import teachers from Excel",
+      "teachersTemplate": "Download template",
+      "importHint": "Columns: teacher name, subject, room, mobile, classes (e.g. 4-1, 4-2 or G4 4-2). Pick the branches and grades first so classes can be linked.",
+      "imported": "{{added}} teachers added, {{updated}} updated",
+      "importSkipped": "{{count}} rows without a name skipped",
+      "importUnmatched": "Classes not in the audience: {{list}}",
+      "importNoClasses": "Classes were not linked — pick the branches and grades, then import the file again",
+      "importEmpty": "No teacher names in the file.",
+      "importHeader": "No «teacher name» column found. Use the template.",
+      "importFailed": "Could not read the file."
     },
     "tabs": {
       "overview": "Overview",

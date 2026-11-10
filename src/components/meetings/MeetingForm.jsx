@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { X, Save, Loader2, AlertTriangle, Plus, Trash2, Users as UsersIcon } from 'lucide-react';
+import { X, Save, Loader2, AlertTriangle, Plus, Trash2, Users as UsersIcon, FileSpreadsheet, Download } from 'lucide-react';
+import { readTeachersFile, downloadTeachersTemplate } from '../../utils/meetingTeachersExcel';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches, useDepartments } from '../../hooks/useOrgData';
 import { userBranches } from '../../utils/scope';
@@ -91,6 +92,38 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
 
   const setTeacher = (i, k, v) => setForm((f) => ({ ...f, teachers: f.teachers.map((x, j) => (j === i ? { ...x, [k]: v } : x)) }));
   const addTeacher = () => setForm((f) => ({ ...f, teachers: [...f.teachers, { name: '', phone: '', subject: '', room: '', classes: [] }] }));
+
+  // Teachers from an Excel file: a teacher already in the list (same name)
+  // is updated, the others are added.
+  const [importMsg, setImportMsg] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const importTeachers = async (file) => {
+    if (!file) return;
+    setImporting(true);
+    setImportMsg(null);
+    try {
+      const { teachers, unmatched, skipped } = await readTeachersFile(file, teacherClassOptions.map(([k]) => k));
+      if (!teachers.length) { setImportMsg({ ok: false, text: t('meetings.form.importEmpty') }); return; }
+      const key = (n) => String(n || '').replace(/\s+/g, ' ').trim();
+      let added = 0;
+      let updated = 0;
+      const list = [...form.teachers];
+      teachers.forEach((x) => {
+        const i = list.findIndex((y) => key(y.name) === key(x.name));
+        if (i >= 0) {
+          list[i] = { ...list[i], subject: x.subject || list[i].subject, room: x.room || list[i].room, phone: x.phone || list[i].phone, classes: x.classes.length ? x.classes : list[i].classes || [] };
+          updated++;
+        } else { list.push(x); added++; }
+      });
+      set('teachers', list);
+      const parts = [t('meetings.form.imported', { added, updated })];
+      if (skipped) parts.push(t('meetings.form.importSkipped', { count: skipped }));
+      if (unmatched.length) parts.push(teacherClassOptions.length ? t('meetings.form.importUnmatched', { list: unmatched.join('، ') }) : t('meetings.form.importNoClasses'));
+      setImportMsg({ ok: !unmatched.length, text: parts.join(' · ') });
+    } catch (err) {
+      setImportMsg({ ok: false, text: err.message === 'header' ? t('meetings.form.importHeader') : t('meetings.form.importFailed') });
+    } finally { setImporting(false); }
+  };
 
   const save = async (e) => {
     e.preventDefault();
@@ -194,7 +227,16 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
                 )}
               </div>
             ))}
-            <button type="button" onClick={addTeacher} className="text-sm text-primary flex items-center gap-1 hover:underline"><Plus className="w-4 h-4" />{t('meetings.form.addTeacher')}</button>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+              <button type="button" onClick={addTeacher} className="text-sm text-primary flex items-center gap-1 hover:underline"><Plus className="w-4 h-4" />{t('meetings.form.addTeacher')}</button>
+              <label className="text-sm text-emerald-700 flex items-center gap-1 hover:underline cursor-pointer">
+                {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}{t('meetings.form.importTeachers')}
+                <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { importTeachers(e.target.files?.[0]); e.target.value = ''; }} />
+              </label>
+              <button type="button" onClick={() => downloadTeachersTemplate()} className="text-sm text-slate-500 flex items-center gap-1 hover:underline"><Download className="w-4 h-4" />{t('meetings.form.teachersTemplate')}</button>
+            </div>
+            <p className="text-[11px] text-slate-400">{t('meetings.form.importHint')}</p>
+            {importMsg && <p className={`text-xs rounded-lg p-2 ${importMsg.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>{importMsg.text}</p>}
           </Section>
 
           <label className="flex items-center gap-2 text-sm text-slate-700">
