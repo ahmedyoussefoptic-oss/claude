@@ -1,5 +1,6 @@
 import { doc, getDoc, collection, query, where, orderBy, limit, getDocs, writeBatch } from 'firebase/firestore';
 import { db } from '../config/firebase';
+import { classFromClassName } from './classFilter';
 
 const STUDENTS_COLLECTION = 'students';
 
@@ -51,18 +52,8 @@ export function stageFromGradeName(g) {
   return '';
 }
 
-// Roster class_name ("MA5-1", "SM-B5-A", "DK3-A", "SM-K2-B") → the forms'
-// class ("5-1", "5-A", "KG3-A"). The letters before the grade are the
-// branch/section code. Anything else (e.g. SEN "A6 (SURFERS)") is kept as is.
-export function classFromClassName(className, stage) {
-  const c = String(className ?? '').trim();
-  const m = /(\d{1,2})-([A-Z0-9]{1,3})$/i.exec(c);
-  if (m && stage && stage !== 'SEN') {
-    const prefix = stage.startsWith('KG') ? stage : String(Number(m[1]));
-    return `${prefix}-${m[2].toUpperCase()}`;
-  }
-  return c;
-}
+// classFromClassName (roster class → form class) lives in ./classFilter.
+export { classFromClassName };
 
 // Branch names as written in the roster file → branch code. Exact name
 // first (with or without "فرع "), then known spellings of this school's file.

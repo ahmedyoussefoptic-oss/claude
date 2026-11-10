@@ -1,5 +1,6 @@
 import { httpsCallable } from 'firebase/functions';
 import { functions } from './firebase';
+import { rosterClassCode } from '../utils/classFilter';
 
 // «اجتماعات أولياء الأمور» — shared constants (see functions/meetings.js).
 export const MEETING_TYPES = ['BOTH', 'INDIVIDUAL', 'GENERAL'];
@@ -34,8 +35,11 @@ export function meetingTime(hhmm, lang = 'ar') {
   const pm = h >= 12;
   return `${h % 12 || 12}:${m[2]} ${lang === 'ar' ? (pm ? 'م' : 'ص') : (pm ? 'PM' : 'AM')}`;
 }
-// "G4|4-2" → "G4 · 4-2".
-export const classLabel = (key) => String(key || '').split('|').filter(Boolean).join(' · ');
+// "G4|MA4-2" → "G4 · 4-2" (the roster's branch code dropped, as staff write it).
+export const classLabel = (key) => {
+  const [g, c] = String(key || '').split('|');
+  return [g, c && rosterClassCode(c, g)].filter(Boolean).join(' · ');
+};
 export const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
 
 // Codes for the teacher / reception links, kept in this browser.

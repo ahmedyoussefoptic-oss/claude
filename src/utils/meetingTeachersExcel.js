@@ -1,4 +1,4 @@
-import { normClass } from './classFilter';
+import { normClass, rosterClassCode } from './classFilter';
 
 // Meeting teachers from Excel. Two uses:
 //  - «دليل المعلمين» (one file for every branch, with a «الفرع» column),
@@ -45,9 +45,11 @@ export function matchClass(token, keys) {
   // "Grade 4 - 1" / "G4/1": the part after the grade is the section → 4-1.
   const rest = gradeMatch ? normClass(gradeMatch[2]) : '';
   const cls = gradeMatch ? (rest.includes('-') ? rest : `${Number(gradeMatch[1])}-${rest}`) : normClass(raw);
+  // The roster writes classes with a branch code ("MA5-1", "MA-B5-1",
+  // "DK3-A"); they are compared as staff write them ("5-1", "B5-1", "KG3-A").
   return keys.filter((k) => {
     const [g, c] = k.split('|');
-    return normClass(c) === cls && (!grade || g === grade);
+    return (normClass(c) === cls || normClass(rosterClassCode(c, g)) === cls) && (!grade || g === grade);
   });
 }
 export const splitClasses = (text) => String(text || '').split(/[,،;\n]+/).map((x) => x.trim()).filter(Boolean);

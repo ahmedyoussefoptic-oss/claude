@@ -43,3 +43,30 @@ export function classOptions(stage, records, standard) {
 
 // "G4 — 4-2" for tables and Excel.
 export const stageClassLabel = (rec) => [rec.stage, rec.grade].filter(Boolean).join(' — ');
+
+// Roster class_name ("MA5-1", "SM-B5-A", "DK3-A", "SM-K2-B") → the forms'
+// class ("5-1", "5-A", "KG3-A"). The letters before the grade are the
+// branch/section code. Anything else (e.g. SEN "A6 (SURFERS)") is kept as is.
+export function classFromClassName(className, stage) {
+  const c = String(className ?? '').trim();
+  const m = /(\d{1,2})-([A-Z0-9]{1,3})$/i.exec(c);
+  if (m && stage && stage !== 'SEN') {
+    const prefix = stage.startsWith('KG') ? stage : String(Number(m[1]));
+    return `${prefix}-${m[2].toUpperCase()}`;
+  }
+  return c;
+}
+
+// Roster class_name → the class as staff write it, keeping a section letter
+// that stands on its own: "MA5-1" → "5-1", "MA-B5-1" / "B5-1" → "B5-1",
+// "DK3-A" (KG3) → "KG3-A". The branch code in front is dropped; unlike
+// classFromClassName, British "B5-1" and American "5-1" stay apart.
+export function rosterClassCode(className, stage) {
+  const c = String(className ?? '').trim();
+  if (!stage || stage === 'SEN') return c;
+  if (stage.startsWith('KG')) return classFromClassName(c, stage);
+  const sec = /(?:^|-)([A-JL-Z])(\d{1,2})-([A-Z0-9]{1,3})$/i.exec(c);
+  if (sec) return `${sec[1].toUpperCase()}${Number(sec[2])}-${sec[3].toUpperCase()}`;
+  const m = /(\d{1,2})-([A-Z0-9]{1,3})$/i.exec(c);
+  return m ? `${Number(m[1])}-${m[2].toUpperCase()}` : c;
+}
