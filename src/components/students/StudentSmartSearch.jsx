@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
 import { collection, getDocs, query, where, limit } from 'firebase/firestore';
-import { Sparkles, Search, Loader2, FileSpreadsheet, UserPlus, Pencil, Plus, Trash2, Users, FileText, Bus, HeartHandshake, DoorOpen, ListPlus } from 'lucide-react';
+import { Sparkles, Search, Loader2, FileSpreadsheet, UserPlus, Pencil, Plus, Trash2, Users, FileText, Bus, HeartHandshake, DoorOpen, ListPlus, Presentation } from 'lucide-react';
 import { format } from 'date-fns';
 import { db, functions } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
@@ -149,6 +149,7 @@ function StudentFile({ student: s, records, branchName, canEdit, onEdit, onOpen,
   const tripsOk = canSeeTrips(userData);
   const [siblings, setSiblings] = useState(null);
   const [trips, setTrips] = useState(tripsOk ? null : []);
+  const [meetings, setMeetings] = useState(null);
   const [extra, setExtra] = useState(platform ? null : { leaves: [], sped: [] });
   const [exporting, setExporting] = useState(false);
 
@@ -160,6 +161,8 @@ function StudentFile({ student: s, records, branchName, canEdit, onEdit, onOpen,
       ? getDocs(query(collection(db, 'students'), where('parentNationalId', '==', s.parentNationalId), limit(20))).then((snap) => snap.docs.map((d) => d.data()))
       : Promise.resolve([]);
     byParent.then((list) => list.filter((x) => x.nationalId !== s.nationalId && x.active !== false)).catch(() => []).then(keep(setSiblings));
+    setMeetings(null);
+    httpsCallable(functions, 'getStudentMeetings')({ studentId: s.nationalId }).then((r) => r.data.meetings || []).catch(() => []).then(keep(setMeetings));
     if (tripsOk) {
       setTrips(null);
       httpsCallable(functions, 'getStudentTrips')({ studentId: s.nationalId, full: true }).then((r) => r.data.trips).catch(() => []).then(keep(setTrips));
@@ -203,6 +206,10 @@ function StudentFile({ student: s, records, branchName, canEdit, onEdit, onOpen,
       sheet(t('studentRecords.smart.siblings'), (siblings || []).map((x) => Object.fromEntries(rosterRows(x, t, branchName).slice(0, 8))));
       sheet(t('studentRecords.smart.records'), mine.map(recordRow));
       sheet(t('studentRecords.smart.trips'), (trips || []).map(tripRow));
+      sheet(t('studentRecords.smart.meetings'), (meetings || []).flatMap((mt) => (mt.minutes.length ? mt.minutes : [null]).map((mn) => ({
+        [t('meetings.report.meeting')]: mt.title, [t('common.date')]: mt.date, [t('meetings.report.response')]: t(`meetings.response.${mt.response || 'NONE'}`), [t('meetings.report.attended')]: mt.attended ? '✓' : '',
+        [t('meetings.report.teacher')]: mn?.teacherName || '', [t('meetings.teacher.points')]: mn?.points || '', [t('meetings.teacher.recommendations')]: mn?.recommendations || '', [t('meetings.teacher.agreements')]: mn?.agreements || '',
+      }))));
       sheet(t('studentRecords.smart.sped'), (extra?.sped || []).map(spedRow));
       sheet(t('studentRecords.smart.leaves'), (extra?.leaves || []).map(leaveRow));
       sheet(t('studentRecords.smart.pickups'), (extra?.pickups || []).map((p) => ({ [t('studentRecords.smart.fields.nameAr')]: p.name, [t('platform.leaves.relation')]: t(`platform.relations.${p.relation}`, p.relation || ''), [t('studentRecords.smart.fields.nationalId')]: p.nationalId || '', [t('studentRecords.smart.fields.mobile')]: p.phone || '' })));
@@ -213,7 +220,7 @@ function StudentFile({ student: s, records, branchName, canEdit, onEdit, onOpen,
       setExporting(false);
     }
   };
-  const loading = siblings === null || trips === null || extra === null;
+  const loading = siblings === null || trips === null || extra === null || meetings === null;
 
   const section = (Icon, title, count, body) => (
     <section className="border border-slate-100 rounded-2xl p-4">
@@ -258,6 +265,17 @@ function StudentFile({ student: s, records, branchName, canEdit, onEdit, onOpen,
         {tripsOk && section(Bus, t('studentRecords.smart.trips'), trips?.length, list(trips, (tr) => (
           <li key={tr.tripId} className="py-1.5 flex justify-between gap-2">
             <span>{tr.title}</span><span className="text-xs text-slate-500 shrink-0">{t(`trips.enrollment.${tr.status}`, tr.status)} · {tr.date}</span>
+          </li>
+        )))}
+        {section(Presentation, t('studentRecords.smart.meetings'), meetings?.length, list(meetings, (mt) => (
+          <li key={mt.id} className="py-1.5">
+            <div className="flex justify-between gap-2"><span>{mt.title}</span><span className="text-xs text-slate-500 shrink-0">{mt.attended ? t('meetings.invites.came') : t(`meetings.response.${mt.response || 'NONE'}`)} · {mt.date}</span></div>
+            {mt.minutes.map((mn, i) => (
+              <div key={i} className="text-xs text-slate-600 bg-slate-50 rounded-lg p-2 mt-1">
+                <b>{mn.teacherName}</b>{mn.subject ? ` (${mn.subject})` : ''}: {[mn.points, mn.recommendations && `${t('meetings.teacher.recommendations')}: ${mn.recommendations}`, mn.agreements && `${t('meetings.teacher.agreements')}: ${mn.agreements}`].filter(Boolean).join(' — ')}
+                {mn.followUp?.complaintNo && <span className="text-amber-700"> · {t('meetings.teacher.followUpCreated', { number: mn.followUp.complaintNo })}</span>}
+              </div>
+            ))}
           </li>
         )))}
         {platform && section(HeartHandshake, t('studentRecords.smart.sped'), extra?.sped.length, list(extra && extra.sped, (e, i) => (

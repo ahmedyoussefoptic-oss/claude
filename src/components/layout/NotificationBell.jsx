@@ -40,6 +40,7 @@ const NOTIFICATION_TARGET_PATH = {
   TRIP_APPROVAL_REQUESTED: '/trips',
   TRIP_DECIDED: '/trips',
   TRIP_RECEIPT: '/trips',
+  MEETING_LOW_RATING: '/meetings',
   REMINDER: '/complaints',
   IT_REMINDER: '/tech-support',
   LF_REMINDER: '/lost-found',

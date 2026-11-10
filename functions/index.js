@@ -267,7 +267,7 @@ exports.createStaffUser = onCall(async (request) => {
 // (`modules`, missing key = the role's default) and whether they see every
 // record of their branches or only the ones assigned to them
 // (`recordScope`). Mirrored in src/utils/scope.js and firestore.rules.
-const USER_MODULE_KEYS = ["dashboard", "complaints", "finance", "techSupport", "lostFound", "visits", "trips", "students", "search", "flowMap", "reports"];
+const USER_MODULE_KEYS = ["dashboard", "complaints", "finance", "techSupport", "lostFound", "visits", "trips", "meetings", "students", "search", "flowMap", "reports"];
 function cleanUserModules(modules, recordScope) {
   const out = {};
   if (modules && typeof modules === "object") {
@@ -372,6 +372,7 @@ const NOTIFICATION_CATEGORIES = {
   viewed: ["VIEWED", "IT_VIEWED"],
   appointment: ["APPOINTMENT_REQUESTED", "APPOINTMENT_REMINDER", "VISIT_REQUESTED"],
   trips: ["TRIP_APPROVAL_REQUESTED", "TRIP_DECIDED", "TRIP_RECEIPT"],
+  meetings: ["MEETING_LOW_RATING"],
   reminder: ["REMINDER", "IT_REMINDER", "LF_REMINDER"],
   platform: ["LEAVE_REQUESTED", "LEAD_NEW"],
   callTasks: ["CALL_ASSIGNED", "CALL_DAILY", "CALL_SUMMARY", "CALL_WRONG_NUMBER"],
@@ -507,6 +508,8 @@ exports.notifyTechSupportInternalComment = onDocumentCreated("techSupportTickets
 // due dates count only working time — see ./businessTime.js.
 const { normalizeSla, businessMs, addBusinessMs } = require("./businessTime");
 const { cleanReportRows, mergeQueueHops, matchReportCalls, isShortNumber, phoneTail } = require("./bevatelImport");
+const meetingsModule = require("./meetings");
+const { meetingDeliveryUpdate } = meetingsModule;
 async function loadSla() {
   const snap = await db.collection("settings").doc("sla").get();
   return normalizeSla(snap.exists ? snap.data() : null);
@@ -2432,6 +2435,7 @@ exports.waDeliveryReport = onRequest(async (req, res) => {
         history: FieldValue.arrayUnion({ status: state, at: Number(st.timestamp) || now.toMillis() }),
       });
       const m = snap.data();
+      if (m.kind === "meeting") await meetingDeliveryUpdate(db, m, state).catch((err) => console.error("meeting delivery", err.message));
       if (WA_FAILED_STATES.includes(state) && m.collection && m.docId && !m.failureLogged) {
         await ref.update({ failureLogged: true });
         await db.collection(m.collection).doc(m.docId).collection("activityLog").add({
@@ -7692,3 +7696,12 @@ exports.vcStudent = onCall(async (request) => {
     .filter((a) => a.day >= yearStart && vcSees(caller, a.branch)).map(vcAttendanceOut).sort((a, b) => b.startAt - a.startAt).slice(0, 400);
   return { rows };
 });
+
+// «اجتماعات أولياء الأمور» — see ./meetings.js.
+Object.assign(exports, meetingsModule({
+  db, Timestamp, FieldValue, HttpsError, onCall, onSchedule, crypto,
+  WA_SECRETS, WA_API_ENABLED, toIntlNumber, waParam, taqnyatSend, PUBLIC_APP_URL, SCHOOL_NAME,
+  loadActiveUsers, notifyUsers, branchResolver, studentGrade, studentSection, studentGenderOf, normalizeDigits,
+  findAutoAssignees, nextRecordNumber, riyadhDay, formatTripDay, time12, str, callerHasBranch, callerAll, callPhone,
+  TRIP_STAGES,
+}));

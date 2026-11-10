@@ -1,0 +1,178 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { Loader2, Search, UserCheck, Undo2, QrCode, UserPlus, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { PublicShell } from './MeetingParent';
+import { PinGate } from './MeetingTeacher';
+import { callMeeting, meetingTime, savedPin, savePin, savedDesks } from '../config/meetings';
+
+const inputCls = 'w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
+const card = 'w-full max-w-2xl bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100';
+
+function InviteRow({ inv, teachers, onCheckin, onUndo, busy, lang, readOnly = false }) {
+  const { t } = useTranslation();
+  const tName = (id) => teachers.find((x) => x.id === id);
+  return (
+    <div className={`border rounded-xl p-3 ${inv.attended ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200'}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          {inv.students.map((s, i) => <p key={i} className="text-sm font-medium text-slate-900">{s.name} <span className="text-xs text-slate-500" dir="ltr">{s.grade} {s.className}</span></p>)}
+          <p className="text-xs text-slate-500">{t(`meetings.response.${inv.response || 'NONE'}`)}{inv.attendees > 1 ? ` · ×${inv.attendees}` : ''} · <span dir="ltr">{inv.code}</span></p>
+        </div>
+        {readOnly ? null : inv.attended
+          ? <button type="button" disabled={busy} onClick={onUndo} className="px-2.5 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg flex items-center gap-1 shrink-0"><Undo2 className="w-3.5 h-3.5" />{t('meetings.desk.undo')}</button>
+          : <button type="button" disabled={busy} onClick={onCheckin} className="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded-lg flex items-center gap-1 shrink-0"><UserCheck className="w-4 h-4" />{t('meetings.desk.checkin')}</button>}
+      </div>
+      {inv.slots.length > 0 && (
+        <div className="mt-2 text-xs text-slate-600 space-y-0.5">
+          {[...inv.slots].sort((a, b) => a.time.localeCompare(b.time)).map((s) => <p key={s.teacherId}>{meetingTime(s.time, lang)} — {tName(s.teacherId)?.name} {tName(s.teacherId)?.room ? `(${tName(s.teacherId).room})` : ''}</p>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Reception (/meeting-desk/<token>): check parents in by their QR (the
+// phone camera opens /meeting-in/…, which uses this browser's desk code), by
+// search or by entry code; register a parent who wasn't invited.
+export default function MeetingDesk() {
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language;
+  const { token } = useParams();
+  const [pin, setPin] = useState(() => savedPin('desk', token));
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [q, setQ] = useState('');
+  const [results, setResults] = useState([]);
+  const [walkId, setWalkId] = useState('');
+  const [flash, setFlash] = useState(null);
+
+  const load = useCallback(async (p = pin) => {
+    if (!p) return;
+    setBusy(true);
+    try {
+      setData(await callMeeting('meetingDesk', { token, pin: p }));
+      savePin('desk', token, p);
+      setError(null);
+    } catch (err) {
+      setError(err.message);
+      if (/رمز الدخول|code/i.test(err.message)) { setPin(''); setData(null); }
+    } finally { setBusy(false); }
+  }, [token, pin]);
+  useEffect(() => { if (pin) load(pin); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const act = async (payload) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await callMeeting('meetingDeskAction', { token, pin, ...payload });
+      return r;
+    } catch (err) { setError(err.message); return null; } finally { setBusy(false); }
+  };
+  const search = async (e) => {
+    e?.preventDefault();
+    const r = await act({ action: 'search', q });
+    if (r) setResults(r.results);
+  };
+  const checkin = async (inv, action = 'checkin') => {
+    const r = await act({ action, inviteId: inv.id });
+    if (!r) return;
+    setResults((list) => list.map((x) => (x.id === inv.id ? r.invite : x)));
+    setData((d) => ({ ...d, stats: r.stats }));
+    if (action === 'checkin') setFlash(r.invite);
+  };
+  const walkIn = async (e) => {
+    e.preventDefault();
+    const r = await act({ action: 'walkIn', studentId: walkId });
+    if (!r) return;
+    setWalkId('');
+    setFlash(r.invite);
+    setData((d) => ({ ...d, stats: r.stats }));
+  };
+
+  if (!data) return <PublicShell><PinGate title={t('meetings.staff.deskTitle')} busy={busy} error={error} onSubmit={(p) => { setPin(p); load(p); }} /></PublicShell>;
+  const s = data.stats || {};
+  return (
+    <PublicShell>
+      <div className={card}>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <p className="text-xs text-slate-500">{t('meetings.staff.deskTitle')}</p>
+            <h1 className="text-lg font-bold text-slate-900">{data.meeting.title}</h1>
+            <p className="text-sm text-slate-500">{data.meeting.date} · {meetingTime(data.meeting.startTime, lang)}</p>
+          </div>
+          <button type="button" onClick={() => load()} className="p-2 text-slate-500" aria-label={t('common.refresh')}>{busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}</button>
+        </div>
+        <div className="grid grid-cols-3 gap-2 mt-3 text-center">
+          {[[t('meetings.live.confirmed'), s.attend || 0], [t('meetings.live.arrived'), s.attended || 0], [t('meetings.live.notYet'), Math.max(0, (s.attend || 0) - (s.attended || 0))]].map(([k, v]) => (
+            <div key={k} className="bg-slate-50 rounded-xl py-2"><p className="text-xl font-bold text-slate-900">{v}</p><p className="text-[11px] text-slate-500">{k}</p></div>
+          ))}
+        </div>
+        <p className="text-xs text-slate-500 mt-3 flex gap-1.5"><QrCode className="w-4 h-4 shrink-0 text-primary" />{t('meetings.desk.qrHint')}</p>
+      </div>
+
+      {flash && (
+        <div className={`${card} border-emerald-200 bg-emerald-50 flex items-center gap-3`}>
+          <CheckCircle2 className="w-8 h-8 text-emerald-600 shrink-0" />
+          <div><p className="font-bold text-emerald-800">{t('meetings.desk.welcome')}</p><p className="text-sm text-emerald-700">{flash.students.map((x) => x.name).join('، ')}</p></div>
+        </div>
+      )}
+
+      <form onSubmit={search} className={`${card} space-y-3`}>
+        <div className="flex gap-2">
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('meetings.desk.search')} className={inputCls} />
+          <button disabled={busy || q.trim().length < 2} className="px-4 bg-primary text-white rounded-xl disabled:opacity-60"><Search className="w-4 h-4" /></button>
+        </div>
+        {results.map((inv) => <InviteRow key={inv.id} inv={inv} teachers={data.teachers} lang={lang} busy={busy} onCheckin={() => checkin(inv)} onUndo={() => checkin(inv, 'undo')} />)}
+        {results.length === 0 && q && !busy && <p className="text-xs text-slate-400">{t('meetings.desk.noResults')}</p>}
+      </form>
+
+      <form onSubmit={walkIn} className={`${card} space-y-2`}>
+        <p className="text-sm font-medium text-slate-800 flex items-center gap-1.5"><UserPlus className="w-4 h-4 text-primary" />{t('meetings.desk.walkIn')}</p>
+        <p className="text-xs text-slate-500">{t('meetings.desk.walkInHint')}</p>
+        <div className="flex gap-2">
+          <input required inputMode="numeric" dir="ltr" value={walkId} onChange={(e) => setWalkId(e.target.value)} placeholder={t('tripConsent.studentId')} className={inputCls} />
+          <button disabled={busy} className="px-4 bg-slate-800 text-white rounded-xl text-sm disabled:opacity-60">{t('meetings.desk.register')}</button>
+        </div>
+      </form>
+      {error && <p className="text-sm text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" />{error}</p>}
+    </PublicShell>
+  );
+}
+
+// The parent's QR (/meeting-in/<token>).
+export function MeetingCheckin() {
+  const { t, i18n } = useTranslation();
+  const { token } = useParams();
+  const [r, setR] = useState(null);
+  const [error, setError] = useState(null);
+  // Once per page load (a second call would report "already checked in").
+  const started = useRef('');
+  useEffect(() => {
+    if (started.current === token) return;
+    started.current = token;
+    callMeeting('meetingCheckinScan', { token, desks: savedDesks() }).then(setR).catch((err) => setError(err.message));
+  }, [token]);
+  return (
+    <PublicShell>
+      <div className={`${card} max-w-md mt-8 text-center space-y-3`}>
+        {error ? <p className="text-slate-600">{error}</p> : !r ? <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto" /> : r.desk ? (
+          <>
+            <CheckCircle2 className="w-14 h-14 text-emerald-600 mx-auto" />
+            <h1 className="text-xl font-bold text-slate-900">{r.already ? t('meetings.desk.already') : t('meetings.desk.welcome')}</h1>
+            <p className="text-sm text-slate-600">{r.title}</p>
+            <InviteRow inv={r.invite} teachers={r.teachers} lang={i18n.language} readOnly />
+          </>
+        ) : (
+          <>
+            <QrCode className="w-10 h-10 text-primary mx-auto" />
+            <h1 className="text-lg font-bold text-slate-900">{r.title}</h1>
+            <p className="text-sm text-slate-600">{t('meetings.desk.showCode', { names: r.names })}</p>
+            <p className="text-3xl font-bold tracking-widest text-slate-900" dir="ltr">{r.code}</p>
+          </>
+        )}
+      </div>
+    </PublicShell>
+  );
+}

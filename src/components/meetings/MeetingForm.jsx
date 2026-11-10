@@ -1,0 +1,222 @@
+import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
+import { X, Save, Loader2, AlertTriangle, Plus, Trash2, Users as UsersIcon } from 'lucide-react';
+import useAuthStore from '../../stores/useAuthStore';
+import { useBranches, useDepartments } from '../../hooks/useOrgData';
+import { userBranches } from '../../utils/scope';
+import { STAGES } from '../../config/complaintTypes';
+import { MEETING_TYPES, isIndividual, callMeeting, classLabel } from '../../config/meetings';
+
+const EMPTY = {
+  title: '', type: 'BOTH', branches: [], stages: [], classes: [], sections: [], gender: 'ALL',
+  date: '', startTime: '16:00', endTime: '19:00', location: '', teamsLink: '', agenda: '',
+  slotsStart: '16:30', slotsEnd: '19:00', slotMinutes: 10, breakStart: '', breakEnd: '', regDeadline: '', autoReminders: true, teachers: [],
+};
+const inputCls = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
+
+function Section({ title, children, hint }) {
+  return (
+    <section className="border border-slate-100 rounded-2xl p-4 space-y-3">
+      <div>
+        <h3 className="text-sm font-bold text-slate-800">{title}</h3>
+        {hint && <p className="text-xs text-slate-500 mt-0.5">{hint}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+function Field({ label, children, hint, className = '' }) {
+  return (
+    <div className={className}>
+      <label className="block text-xs font-medium text-slate-600 mb-1">{label}</label>
+      {children}
+      {hint && <p className="text-[11px] text-slate-400 mt-1">{hint}</p>}
+    </div>
+  );
+}
+function Chips({ options, value, onChange, ltr }) {
+  const toggle = (id) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {options.map(([id, label]) => (
+        <button key={id} type="button" onClick={() => toggle(id)} dir={ltr ? 'ltr' : undefined}
+          className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${value.includes(id) ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200 hover:border-primary/40'}`}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// Create / edit a parent meeting.
+export default function MeetingForm({ meeting, onClose, onSaved }) {
+  const { t } = useTranslation();
+  const { userData } = useAuthStore();
+  const allBranches = useBranches();
+  const departments = useDepartments();
+  const editing = !!meeting?.id;
+  const [form, setForm] = useState(() => ({ ...EMPTY, ...(meeting || {}), teachers: (meeting?.teachers || []).map((x) => ({ ...x })) }));
+  const [preview, setPreview] = useState(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [notifyChange, setNotifyChange] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const myBranches = useMemo(() => {
+    if (userData?.role === 'ADMIN' || userData?.access === 'all') return allBranches;
+    const mine = userBranches(userData);
+    return allBranches.filter((b) => mine.includes(b.id));
+  }, [allBranches, userData]);
+
+  // Audience size and the classes of the chosen branches / grades.
+  const audienceKey = JSON.stringify([form.branches, form.stages, form.classes, form.sections, form.gender]);
+  useEffect(() => {
+    if (!form.branches.length) { setPreview(null); return undefined; }
+    let alive = true;
+    setPreviewing(true);
+    const timer = setTimeout(() => {
+      callMeeting('previewMeetingAudience', { meeting: { branches: form.branches, stages: form.stages, classes: form.classes, sections: form.sections, gender: form.gender } })
+        .then((r) => { if (alive) setPreview(r); })
+        .catch(() => { if (alive) setPreview(null); })
+        .finally(() => { if (alive) setPreviewing(false); });
+    }, 500);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [audienceKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const classOptions = (preview?.classes || []).map((c) => [c.key, `${classLabel(c.key)} (${c.count})`]);
+  // Teachers pick among the meeting's classes (or all of the audience's).
+  const teacherClassOptions = form.classes.length ? form.classes.map((k) => [k, classLabel(k)]) : (preview?.classes || []).map((c) => [c.key, classLabel(c.key)]);
+
+  const setTeacher = (i, k, v) => setForm((f) => ({ ...f, teachers: f.teachers.map((x, j) => (j === i ? { ...x, [k]: v } : x)) }));
+  const addTeacher = () => setForm((f) => ({ ...f, teachers: [...f.teachers, { name: '', phone: '', subject: '', room: '', classes: [] }] }));
+
+  const save = async (e) => {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      const payload = Object.fromEntries(Object.keys(EMPTY).map((k) => [k, form[k]]));
+      payload.teachers = form.teachers.map((x) => ({ id: x.id, name: x.name, phone: x.phone, subject: x.subject, room: x.room, classes: x.classes || [] }));
+      const r = await callMeeting('saveMeeting', { id: meeting?.id || null, meeting: payload, notifyChange: editing && notifyChange });
+      onSaved(r);
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+
+  const live = editing && ['OPEN', 'CLOSED'].includes(meeting.status);
+
+  return createPortal(
+    <div className="fixed inset-0 bg-slate-900/50 z-[130] flex items-center justify-center p-2 sm:p-4">
+      <form onSubmit={save} className="bg-white rounded-2xl w-full max-w-3xl max-h-[94vh] flex flex-col shadow-2xl">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100">
+          <h2 className="font-bold text-slate-900">{editing ? t('meetings.form.editTitle') : t('meetings.form.newTitle')}</h2>
+          <button type="button" onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-4 overflow-y-auto space-y-4">
+          <Section title={t('meetings.form.basics')}>
+            <Field label={t('meetings.form.title')}><input required value={form.title} onChange={(e) => set('title', e.target.value)} placeholder={t('meetings.form.titlePh')} className={inputCls} /></Field>
+            <Field label={t('meetings.form.type')}>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {MEETING_TYPES.map((ty) => (
+                  <button type="button" key={ty} onClick={() => set('type', ty)} className={`p-2.5 rounded-xl border text-start ${form.type === ty ? 'border-primary bg-primary/5' : 'border-slate-200'}`}>
+                    <p className="text-sm font-medium text-slate-800">{t(`meetings.type.${ty}`)}</p>
+                    <p className="text-[11px] text-slate-500">{t(`meetings.typeHint.${ty}`)}</p>
+                  </button>
+                ))}
+              </div>
+            </Field>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <Field label={t('common.date')}><input type="date" required value={form.date} onChange={(e) => set('date', e.target.value)} className={inputCls} /></Field>
+              <Field label={t('meetings.form.start')}><input type="time" required value={form.startTime} onChange={(e) => set('startTime', e.target.value)} className={inputCls} /></Field>
+              <Field label={t('meetings.form.end')}><input type="time" required value={form.endTime} onChange={(e) => set('endTime', e.target.value)} className={inputCls} /></Field>
+              <Field label={t('meetings.form.regDeadline')}><input type="date" value={form.regDeadline} max={form.date || undefined} onChange={(e) => set('regDeadline', e.target.value)} className={inputCls} /></Field>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label={t('meetings.form.location')}><input value={form.location} onChange={(e) => set('location', e.target.value)} placeholder={t('meetings.form.locationPh')} className={inputCls} /></Field>
+              <Field label={t('meetings.form.teamsLink')} hint={t('meetings.form.teamsHint')}><input dir="ltr" value={form.teamsLink} onChange={(e) => set('teamsLink', e.target.value)} placeholder="https://teams.microsoft.com/..." className={inputCls} /></Field>
+            </div>
+            <Field label={t('meetings.form.agenda')} hint={t('meetings.form.agendaHint')}><textarea rows={3} value={form.agenda} onChange={(e) => set('agenda', e.target.value)} className={inputCls} /></Field>
+          </Section>
+
+          <Section title={t('meetings.form.audience')} hint={t('meetings.form.audienceHint')}>
+            <Field label={t('meetings.form.branches')}><Chips options={myBranches.map((b) => [b.id, b.name])} value={form.branches} onChange={(v) => set('branches', v)} /></Field>
+            <Field label={t('meetings.form.stages')} hint={t('meetings.form.allIfEmpty')}><Chips ltr options={STAGES.map((s) => [s, s])} value={form.stages} onChange={(v) => set('stages', v)} /></Field>
+            {classOptions.length > 0 && <Field label={t('meetings.form.classes')} hint={t('meetings.form.allIfEmpty')}><Chips ltr options={classOptions} value={form.classes} onChange={(v) => set('classes', v)} /></Field>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Field label={t('meetings.form.sections')} hint={t('meetings.form.allIfEmpty')}><Chips options={departments.map((d) => [d.id, d.name])} value={form.sections} onChange={(v) => set('sections', v)} /></Field>
+              <Field label={t('meetings.form.gender')}>
+                <select value={form.gender} onChange={(e) => set('gender', e.target.value)} className={inputCls}>
+                  {['ALL', 'BOYS', 'GIRLS'].map((g) => <option key={g} value={g}>{t(`trips.gender.${g}`)}</option>)}
+                </select>
+              </Field>
+            </div>
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm text-slate-700 flex items-center gap-2">
+              <UsersIcon className="w-4 h-4 text-primary shrink-0" />
+              {previewing ? <Loader2 className="w-4 h-4 animate-spin" /> : preview
+                ? t('meetings.form.audienceCount', { families: preview.families, students: preview.students, noPhone: preview.noPhone })
+                : t('meetings.form.pickBranches')}
+            </div>
+          </Section>
+
+          {isIndividual(form) && (
+            <Section title={t('meetings.form.slots')} hint={t('meetings.form.slotsHint')}>
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                <Field label={t('meetings.form.slotsStart')}><input type="time" value={form.slotsStart} onChange={(e) => set('slotsStart', e.target.value)} className={inputCls} /></Field>
+                <Field label={t('meetings.form.slotsEnd')}><input type="time" value={form.slotsEnd} onChange={(e) => set('slotsEnd', e.target.value)} className={inputCls} /></Field>
+                <Field label={t('meetings.form.slotMinutes')}><input type="number" min={5} max={60} value={form.slotMinutes} onChange={(e) => set('slotMinutes', e.target.value)} className={inputCls} /></Field>
+                <Field label={t('meetings.form.breakStart')}><input type="time" value={form.breakStart} onChange={(e) => set('breakStart', e.target.value)} className={inputCls} /></Field>
+                <Field label={t('meetings.form.breakEnd')}><input type="time" value={form.breakEnd} onChange={(e) => set('breakEnd', e.target.value)} className={inputCls} /></Field>
+              </div>
+            </Section>
+          )}
+
+          <Section title={t('meetings.form.teachers')} hint={t('meetings.form.teachersHint')}>
+            {form.teachers.map((tc, i) => (
+              <div key={tc.id || i} className="border border-slate-200 rounded-xl p-3 space-y-2">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <input required placeholder={t('meetings.form.teacherName')} value={tc.name} onChange={(e) => setTeacher(i, 'name', e.target.value)} className={inputCls} />
+                  <input placeholder={t('meetings.form.subject')} value={tc.subject} onChange={(e) => setTeacher(i, 'subject', e.target.value)} className={inputCls} />
+                  <input placeholder={t('meetings.form.room')} value={tc.room} onChange={(e) => setTeacher(i, 'room', e.target.value)} className={inputCls} />
+                  <div className="flex gap-2">
+                    <input dir="ltr" inputMode="tel" placeholder="05xxxxxxxx" value={tc.phone} onChange={(e) => setTeacher(i, 'phone', e.target.value)} className={inputCls} />
+                    <button type="button" onClick={() => setForm((f) => ({ ...f, teachers: f.teachers.filter((_, j) => j !== i) }))} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg shrink-0" aria-label={t('common.delete')}><Trash2 className="w-4 h-4" /></button>
+                  </div>
+                </div>
+                {teacherClassOptions.length > 0 && (
+                  <div>
+                    <p className="text-[11px] text-slate-500 mb-1">{t('meetings.form.teacherClasses')}</p>
+                    <Chips ltr options={teacherClassOptions} value={tc.classes || []} onChange={(v) => setTeacher(i, 'classes', v)} />
+                  </div>
+                )}
+              </div>
+            ))}
+            <button type="button" onClick={addTeacher} className="text-sm text-primary flex items-center gap-1 hover:underline"><Plus className="w-4 h-4" />{t('meetings.form.addTeacher')}</button>
+          </Section>
+
+          <label className="flex items-center gap-2 text-sm text-slate-700">
+            <input type="checkbox" checked={form.autoReminders} onChange={(e) => set('autoReminders', e.target.checked)} />
+            {t('meetings.form.autoReminders')}
+          </label>
+          {live && (
+            <label className="flex items-center gap-2 text-sm text-slate-700 bg-amber-50 border border-amber-100 rounded-xl p-3">
+              <input type="checkbox" checked={notifyChange} onChange={(e) => setNotifyChange(e.target.checked)} />
+              {t('meetings.form.notifyChange')}
+            </label>
+          )}
+          {error && <p className="text-sm text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" />{error}</p>}
+        </div>
+        <div className="p-4 border-t border-slate-100 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-xl">{t('common.cancel')}</button>
+          <button disabled={busy} className="px-4 py-2 text-sm bg-primary text-white rounded-xl flex items-center gap-2 disabled:opacity-60">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}{t('common.save')}
+          </button>
+        </div>
+      </form>
+    </div>,
+    document.body,
+  );
+}

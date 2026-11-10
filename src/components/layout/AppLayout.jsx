@@ -1,7 +1,7 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
-import { LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText, Activity, PhoneOutgoing, HeartHandshake, Video, Wallet } from 'lucide-react';
+import { Presentation, LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText, Activity, PhoneOutgoing, HeartHandshake, Video, Wallet } from 'lucide-react';
 import AssistantPanel from '../assistant/AssistantPanel';
 import { useEffect, useState, useRef } from 'react';
 import { httpsCallable } from 'firebase/functions';
@@ -72,6 +72,7 @@ export default function AppLayout() {
     ['reports', '/reports', FileBarChart, 'nav.reports'],
     ['visits', '/visits', Armchair, 'nav.branchVisits'],
     ['trips', '/trips', Bus, 'nav.trips'],
+    ['meetings', '/meetings', Presentation, 'nav.meetings'],
     ['calls', '/calls', PhoneCall, 'nav.calls'],
     ['waReports', '/wa-reports', MessageSquareText, 'nav.waReports'],
   ];

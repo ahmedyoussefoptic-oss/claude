@@ -14,6 +14,7 @@ export const NOTIFICATION_CATEGORIES = [
   { id: 'viewed', types: ['VIEWED', 'IT_VIEWED'] },
   { id: 'appointment', types: ['APPOINTMENT_REQUESTED', 'APPOINTMENT_REMINDER', 'VISIT_REQUESTED'] },
   { id: 'trips', types: ['TRIP_APPROVAL_REQUESTED', 'TRIP_DECIDED', 'TRIP_RECEIPT'] },
+  { id: 'meetings', types: ['MEETING_LOW_RATING'] },
   { id: 'reminder', types: ['REMINDER', 'IT_REMINDER', 'LF_REMINDER'] },
   { id: 'platform', types: ['LEAVE_REQUESTED', 'LEAD_NEW'] },
   { id: 'callTasks', types: ['CALL_ASSIGNED', 'CALL_DAILY', 'CALL_SUMMARY', 'CALL_WRONG_NUMBER'] },

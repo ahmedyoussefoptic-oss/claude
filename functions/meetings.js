@@ -1,0 +1,1098 @@
+// «اجتماعات أولياء الأمور» — parent meetings, from the invitation to the
+// final report (see «آلية إدارة اجتماعات أولياء الأمور»):
+//   1. staff create the meeting (general session, one-to-one slots with the
+//      teachers, or both) for branches / grades / classes;
+//   2. each family gets its own link on WhatsApp (siblings share one);
+//   3. the parent confirms, books the teachers and writes the topics;
+//   4. reminders the evening before and on the morning of the meeting;
+//   5. on the day: reception checks parents in (QR or search), each teacher
+//      has their schedule and writes a short minute per student, and a
+//      follow-up becomes a complaint for the right department;
+//   6. thanks + survey to those who came, a message and follow-up calls
+//      for those who didn't;
+//   7. the report.
+// Teachers and reception use a private link + 4-digit code (no accounts).
+// Everything is read and written here; the client never touches these
+// collections directly (firestore.rules deny them by default).
+//
+//   meetings/{id}                 the meeting (teachers, desk code, stats)
+//   meetings/{id}/invites/{key}   one family (key = parent mobile, or S<id>)
+//   meetings/{id}/slots/{t_HHMM}  one booked teacher slot (id = uniqueness)
+//   meetings/{id}/surveys/{key}   the family's rating
+//   meetings/{id}/activityLog
+//   meetingTokens/{token}         link → meeting (parent / teacher / desk / checkin)
+//   meetingMinutes/{m_t_student}  a teacher's minute (shown in the student record)
+module.exports = function meetingsModule(d) {
+  const {
+    db, Timestamp, FieldValue, HttpsError, onCall, onSchedule, crypto,
+    WA_SECRETS, WA_API_ENABLED, toIntlNumber, waParam, taqnyatSend, PUBLIC_APP_URL, SCHOOL_NAME,
+    loadActiveUsers, notifyUsers, branchResolver, studentGrade, studentSection, studentGenderOf, normalizeDigits,
+    findAutoAssignees, nextRecordNumber, riyadhDay, formatTripDay, time12, str, callerHasBranch, callerAll, callPhone,
+    TRIP_STAGES,
+  } = d;
+  const out = {};
+
+  const TYPES = ["GENERAL", "INDIVIDUAL", "BOTH"];
+  const RESPONSES = ["ATTEND", "REMOTE", "DECLINE"];
+  const FOLLOW_TYPES = ["ACADEMIC", "BEHAVIORAL", "ADMINISTRATIVE", "FINANCE"];
+  const LIVE = ["OPEN", "CLOSED"];
+  const MAX_SLOTS = 8;
+  const individual = (m) => m.type === "INDIVIDUAL" || m.type === "BOTH";
+
+  // --- time helpers (meetings are stored as YYYY-MM-DD + HH:MM, Riyadh) ---
+  const toMin = (hhmm) => { const x = /^(\d{2}):(\d{2})$/.exec(hhmm || ""); return x ? Number(x[1]) * 60 + Number(x[2]) : null; };
+  const toHHMM = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
+  const riyadhNow = () => { const n = new Date(Date.now() + 3 * 3600e3); return { day: n.toISOString().slice(0, 10), min: n.getUTCHours() * 60 + n.getUTCMinutes() }; };
+  const when = (m) => `${formatTripDay(m.date)}، ${time12(m.startTime)}${m.endTime ? ` – ${time12(m.endTime)}` : ""}`;
+  const token = () => crypto.randomBytes(12).toString("base64url");
+  const pin = () => String(crypto.randomInt(1000, 10000));
+  const classKey = (s) => `${studentGrade(s)}|${String(s.className || "").trim()}`;
+  const maskPhone = (p) => (p ? `•••${String(p).slice(-4)}` : "");
+
+  // The slot start times of a meeting (same grid for every teacher).
+  function slotTimes(m) {
+    if (!individual(m)) return [];
+    const a = toMin(m.slotsStart || m.startTime);
+    const b = toMin(m.slotsEnd || m.endTime);
+    const step = m.slotMinutes || 10;
+    const bs = toMin(m.breakStart);
+    const be = toMin(m.breakEnd);
+    const list = [];
+    if (a == null || b == null) return list;
+    for (let t = a; t + step <= b; t += step) {
+      if (bs != null && be != null && t < be && t + step > bs) continue;
+      list.push(toHHMM(t));
+    }
+    return list;
+  }
+
+  // --- permissions ---------------------------------------------------------
+  // Section «اجتماعات أولياء الأمور» (users.modules.meetings), on by default
+  // for principals, upper management and customer service. Mirrors
+  // src/utils/scope.js meetingsByRole().
+  const meetingsByRole = (u) => u.isPrincipal === true || ["UPPER_MANAGEMENT", "CUSTOMER_SERVICE"].includes(u.role);
+  const meetingsAllowed = (u) => !!u && u.active !== false && u.role !== "RECEPTIONIST" && u.tripsAccess !== "tripsOnly"
+    && (u.role === "ADMIN" || (typeof u.modules?.meetings === "boolean" ? u.modules.meetings : meetingsByRole(u)));
+  async function meetingCaller(request) {
+    if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+    const u = (await db.collection("users").doc(request.auth.uid).get()).data();
+    if (!meetingsAllowed(u)) throw new HttpsError("permission-denied", "لا تملك صلاحية «اجتماعات أولياء الأمور».");
+    return { uid: request.auth.uid, ...u };
+  }
+  const inScope = (u, m) => callerAll(u) || (m.branches || []).some((b) => callerHasBranch(u, b)) || m.createdBy === u.uid;
+  async function loadMeeting(id, caller) {
+    if (typeof id !== "string" || !id) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+    const ref = db.collection("meetings").doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsError("not-found", "لم يتم العثور على الاجتماع.");
+    const m = snap.data();
+    if (caller && !inScope(caller, m)) throw new HttpsError("permission-denied", "هذا الاجتماع خارج فروعك.");
+    return { ref, m };
+  }
+  const mlog = (ref, action, actor, metadata = {}) => ref.collection("activityLog").add({ action, actorId: actor?.uid || null, actorName: actor?.name || "النظام", metadata, createdAt: Timestamp.now() });
+
+  // --- validation ----------------------------------------------------------
+  function cleanMeeting(input, current) {
+    const x = input || {};
+    const time = (v) => (/^\d{2}:\d{2}$/.test(v || "") ? v : "");
+    const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(v || "") ? v : "");
+    const list = (v, allowed, max = 60) => (Array.isArray(v) ? [...new Set(v.map((y) => String(y)))].filter((y) => !allowed || allowed.includes(y)).slice(0, max) : []);
+    const m = {
+      title: str(x.title, 120),
+      type: TYPES.includes(x.type) ? x.type : "BOTH",
+      branches: list(x.branches, null, 30),
+      stages: list(x.stages, TRIP_STAGES),
+      classes: list(x.classes, null, 300).map((c) => str(c, 40)),
+      sections: list(x.sections, null, 10),
+      gender: ["BOYS", "GIRLS"].includes(x.gender) ? x.gender : "ALL",
+      date: day(x.date),
+      startTime: time(x.startTime),
+      endTime: time(x.endTime),
+      location: str(x.location, 200),
+      teamsLink: /^https:\/\/\S+$/.test(String(x.teamsLink || "").trim()) ? String(x.teamsLink).trim().slice(0, 500) : "",
+      agenda: str(x.agenda, 2000),
+      slotsStart: time(x.slotsStart),
+      slotsEnd: time(x.slotsEnd),
+      slotMinutes: Math.min(60, Math.max(5, Math.floor(Number(x.slotMinutes) || 10))),
+      breakStart: time(x.breakStart),
+      breakEnd: time(x.breakEnd),
+      regDeadline: day(x.regDeadline),
+      autoReminders: x.autoReminders !== false,
+    };
+    if (!m.title || !m.date || !m.startTime || !m.endTime || !m.branches.length) throw new HttpsError("invalid-argument", "أكمل اسم الاجتماع والتاريخ والوقت والفروع.");
+    if (toMin(m.endTime) <= toMin(m.startTime)) throw new HttpsError("invalid-argument", "وقت النهاية يجب أن يكون بعد وقت البداية.");
+    if (!m.regDeadline || m.regDeadline > m.date) m.regDeadline = m.date;
+    if (!individual(m)) Object.assign(m, { slotsStart: "", slotsEnd: "", breakStart: "", breakEnd: "" });
+    else {
+      if (!m.slotsStart) m.slotsStart = m.startTime;
+      if (!m.slotsEnd) m.slotsEnd = m.endTime;
+      if (toMin(m.slotsEnd) <= toMin(m.slotsStart)) throw new HttpsError("invalid-argument", "وقت نهاية اللقاءات الفردية يجب أن يكون بعد بدايتها.");
+      if ((m.breakStart || m.breakEnd) && !(m.breakStart && m.breakEnd && toMin(m.breakEnd) > toMin(m.breakStart))) throw new HttpsError("invalid-argument", "حدد بداية الاستراحة ونهايتها بشكل صحيح.");
+    }
+    // Teachers keep their id, link and code across edits.
+    const old = new Map((current?.teachers || []).map((t) => [t.id, t]));
+    m.teachers = (Array.isArray(x.teachers) ? x.teachers : []).slice(0, 80).map((t) => {
+      const prev = old.get(String(t?.id || ""));
+      return {
+        id: prev ? prev.id : `t${crypto.randomBytes(4).toString("hex")}`,
+        name: str(t?.name, 80),
+        phone: str(t?.phone, 20),
+        subject: str(t?.subject, 80),
+        room: str(t?.room, 60),
+        classes: list(t?.classes, null, 100).map((c) => str(c, 40)),
+        token: prev?.token || token(),
+        pin: prev?.pin || pin(),
+      };
+    }).filter((t) => t.name);
+    if (individual(m) && !m.teachers.length) throw new HttpsError("invalid-argument", "أضف معلماً واحداً على الأقل للقاءات الفردية.");
+    return m;
+  }
+
+  // --- audience ------------------------------------------------------------
+  function targets(m, s, branchOf) {
+    if (!s.nationalId || s.active === false) return false;
+    if (!(m.branches || []).includes(branchOf(s))) return false;
+    const g = studentGenderOf(s);
+    if (g && ((m.gender === "BOYS" && g === "F") || (m.gender === "GIRLS" && g === "M"))) return false;
+    if ((m.stages || []).length && !m.stages.includes(studentGrade(s))) return false;
+    const sec = studentSection(s);
+    if ((m.sections || []).length && sec && !m.sections.includes(sec)) return false;
+    if ((m.classes || []).length && !m.classes.includes(classKey(s))) return false;
+    return true;
+  }
+  const kid = (s, branchOf) => ({ id: String(s.nationalId), name: s.nameAr || s.name || "", grade: studentGrade(s), className: String(s.className || "").trim(), branch: branchOf(s), section: studentSection(s) });
+  const familyKey = (s) => { const p = toIntlNumber(s.mobile); return /^\d{10,15}$/.test(p) ? p : `S${s.nationalId}`; };
+
+  async function audience(m) {
+    const branchOf = await branchResolver();
+    const snap = await db.collection("students").get();
+    const all = snap.docs.map((x) => x.data());
+    const byKey = new Map();
+    all.filter((s) => targets(m, s, branchOf)).forEach((s) => {
+      const key = familyKey(s);
+      if (!byKey.has(key)) byKey.set(key, { key, phone: key.startsWith("S") ? "" : key, students: [] });
+      byKey.get(key).students.push(kid(s, branchOf));
+    });
+    return { families: [...byKey.values()], all, branchOf };
+  }
+
+  // Grades + classes of the chosen branches (for the form), and the size.
+  out.previewMeetingAudience = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+    const caller = await meetingCaller(request);
+    const x = request.data?.meeting || {};
+    const m = { branches: Array.isArray(x.branches) ? x.branches.filter((b) => callerHasBranch(caller, b)) : [], stages: x.stages || [], classes: x.classes || [], sections: x.sections || [], gender: x.gender || "ALL" };
+    const { families, all, branchOf } = await audience(m);
+    const classes = new Map();
+    all.filter((s) => s.active !== false && s.nationalId && m.branches.includes(branchOf(s)) && (!m.stages.length || m.stages.includes(studentGrade(s))) && String(s.className || "").trim())
+      .forEach((s) => { const k = classKey(s); classes.set(k, (classes.get(k) || 0) + 1); });
+    return {
+      families: families.length,
+      students: families.reduce((n, f) => n + f.students.length, 0),
+      noPhone: families.filter((f) => !f.phone).length,
+      classes: [...classes.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => a.key.localeCompare(b.key, "en", { numeric: true })),
+    };
+  });
+
+  // --- WhatsApp (one "meetingNotice" template for every meeting message) ---
+  // {{1}} student(s), {{2}} meeting, {{3}} date and time, {{4}} the message,
+  // {{5}} the family's link — plus the "contact the branch" button.
+  async function waSettings() {
+    if (!WA_API_ENABLED) return null;
+    const s = (await db.collection("settings").doc("whatsappApi").get()).data() || {};
+    return s.enabled && (s.templates || {}).meetingNotice ? s : null;
+  }
+  const autoOn = (settings, m) => !!settings && settings.autoSend !== false && m.autoReminders !== false;
+  const link = (inv) => `${PUBLIC_APP_URL}/meeting/${inv.token}`;
+  const names = (inv) => (inv.students || []).map((s) => s.name).join("، ");
+  const teacherName = (m, id) => (m.teachers || []).find((t) => t.id === id)?.name || "";
+  const slotsText = (m, inv) => ((inv.slots || []).length
+    ? `مواعيدكم: ${[...inv.slots].sort((a, b) => a.time.localeCompare(b.time)).map((s) => `${teacherName(m, s.teacherId)} ${time12(s.time)}`).join("، ")}.`
+    : "");
+  const LINES = {
+    invite: (m) => `يسعد ${SCHOOL_NAME} دعوتكم لحضور الاجتماع${m.location ? ` في ${m.location}` : ""}. يرجى تأكيد حضوركم${individual(m) ? " وحجز مواعيدكم مع المعلمين" : ""} قبل ${formatTripDay(m.regDeadline)} من الرابط.`,
+    confirm: (m, inv) => (inv.response === "REMOTE"
+      ? "تم تسجيل حضوركم عن بعد، وتجدون رابط الاجتماع في الصفحة."
+      : `تم تأكيد حضوركم. ${slotsText(m, inv)} يرجى إبراز رمز الدخول من الرابط عند الاستقبال.`),
+    eve: (m, inv) => `نذكّركم بموعد الاجتماع غداً${m.location ? ` في ${m.location}` : ""}. ${slotsText(m, inv)}`,
+    morning: (m, inv) => `نذكّركم بموعد الاجتماع اليوم${m.location ? ` في ${m.location}` : ""}. ${slotsText(m, inv)}`,
+    deadline: (m) => `نذكّركم بتأكيد حضوركم قبل إغلاق التسجيل ${formatTripDay(m.regDeadline)}.`,
+    changed: () => "تم تحديث موعد الاجتماع أو مكانه، وتجدون التفاصيل المحدّثة في الرابط.",
+    slotCancelled: (m, inv, extra) => `نعتذر عن إلغاء موعدكم مع ${extra.teacher} (${time12(extra.time)}). يمكنكم حجز موعد آخر من الرابط.`,
+    cancelled: (m, inv, extra) => `نعتذر عن إلغاء الاجتماع${extra?.reason ? `: ${extra.reason}` : ""}.`,
+    thanks: () => "شكراً لحضوركم. يسعدنا تقييمكم للقاء في أقل من دقيقة من الرابط.",
+    absent: (m, inv, extra) => `افتقدنا حضوركم الاجتماع.${extra?.summary ? ` ${extra.summary}` : ""} لطلب موعد بديل يرجى التواصل مع الفرع.`,
+    invitePlain: (m) => `ندعوكم لحضور الاجتماع، يرجى تأكيد الحضور من الرابط.`,
+  };
+
+  async function sendOne(settings, meetingId, m, inv, line) {
+    if (!inv.phone) throw new Error("لا يوجد رقم جوال لولي الأمر.");
+    const first = (inv.students || [])[0] || {};
+    await taqnyatSend({
+      to: inv.phone,
+      type: "template",
+      template: { name: settings.templates.meetingNotice, language: { code: settings.language || "ar" } },
+      components: [
+        { type: "body", parameters: [names(inv), m.title, when(m), line, link(inv)].map((v) => ({ type: "text", text: waParam(v) })) },
+        { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: `BR-${first.branch || (m.branches || [])[0] || ""}${first.section ? `-${first.section}` : ""}` }] },
+      ],
+    }, { kind: "meeting", meetingId, inviteId: inv.id, meetingCode: m.code });
+  }
+
+  // Sends to many families a few at a time; never throws. `event` is kept on
+  // the invite (wa.{event}) so automatic messages go out once.
+  async function sendMany(settings, ref, m, invites, event, extra) {
+    let sent = 0;
+    let failed = 0;
+    const queue = [...invites];
+    const worker = async () => {
+      for (let inv = queue.shift(); inv; inv = queue.shift()) {
+        const invRef = ref.collection("invites").doc(inv.id);
+        try {
+          await sendOne(settings, ref.id, m, inv, LINES[event](m, inv, extra));
+          sent++;
+          await invRef.update({ [`waEvents.${event}`]: Timestamp.now(), "wa.status": "sent", "wa.at": Timestamp.now(), "wa.error": FieldValue.delete(), "wa.count": FieldValue.increment(1) });
+        } catch (err) {
+          failed++;
+          await invRef.update({ "wa.status": event === "invite" ? "failed" : (inv.wa?.status || "failed"), "wa.error": String(err.message).slice(0, 300), "wa.at": Timestamp.now() }).catch(() => {});
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: 4 }, worker));
+    return { sent, failed, total: invites.length };
+  }
+
+  // --- stats (kept on the meeting for the list and the comparisons) --------
+  async function refreshStats(ref) {
+    const [inv, slots, surveys] = await Promise.all([ref.collection("invites").get(), ref.collection("slots").get(), ref.collection("surveys").get()]);
+    const list = inv.docs.map((x) => x.data());
+    const count = (f) => list.filter(f).length;
+    const overall = surveys.docs.map((x) => x.data().overall).filter((v) => v >= 1);
+    const stats = {
+      families: list.length,
+      students: list.reduce((n, i) => n + (i.students || []).length, 0),
+      noPhone: count((i) => !i.phone),
+      sent: count((i) => i.waEvents?.invite || i.wa?.status === "manual"),
+      failed: count((i) => i.wa?.status === "failed"),
+      delivered: count((i) => ["delivered", "read"].includes(i.wa?.status)),
+      read: count((i) => i.wa?.status === "read"),
+      responded: count((i) => !!i.response),
+      attend: count((i) => i.response === "ATTEND"),
+      remote: count((i) => i.response === "REMOTE"),
+      decline: count((i) => i.response === "DECLINE"),
+      attendees: list.filter((i) => i.response === "ATTEND").reduce((n, i) => n + (i.attendees || 1), 0),
+      attended: count((i) => i.attended === true),
+      attendedStudents: list.filter((i) => i.attended === true).reduce((n, i) => n + (i.students || []).length, 0),
+      booked: slots.size,
+      done: slots.docs.filter((x) => x.data().doneAt).length,
+      surveys: surveys.size,
+      avgOverall: overall.length ? Math.round((overall.reduce((a, b) => a + b, 0) / overall.length) * 100) / 100 : 0,
+      low: surveys.docs.filter((x) => x.data().low).length,
+    };
+    await ref.update({ stats, statsAt: Timestamp.now() });
+    return stats;
+  }
+
+  const ms = (t) => t?.toMillis?.() || null;
+  function meetingOut(id, m, { secrets = false } = {}) {
+    return {
+      id, code: m.code, title: m.title, type: m.type, status: m.status, branches: m.branches || [], stages: m.stages || [], classes: m.classes || [],
+      sections: m.sections || [], gender: m.gender || "ALL", date: m.date, startTime: m.startTime, endTime: m.endTime, location: m.location || "",
+      teamsLink: m.teamsLink || "", agenda: m.agenda || "", slotsStart: m.slotsStart || "", slotsEnd: m.slotsEnd || "", slotMinutes: m.slotMinutes || 10,
+      breakStart: m.breakStart || "", breakEnd: m.breakEnd || "", regDeadline: m.regDeadline, autoReminders: m.autoReminders !== false,
+      teachers: (m.teachers || []).map((t) => ({ id: t.id, name: t.name, phone: t.phone, subject: t.subject, room: t.room, classes: t.classes || [], ...(secrets ? { link: `${PUBLIC_APP_URL}/meeting-teacher/${t.token}`, pin: t.pin } : {}) })),
+      ...(secrets ? { deskLink: `${PUBLIC_APP_URL}/meeting-desk/${m.deskToken}`, deskPin: m.deskPin } : {}),
+      stats: m.stats || {}, createdByName: m.createdByName || "", createdAt: ms(m.createdAt), invitedAt: ms(m.invitedAt), completedAt: ms(m.completedAt),
+      cancelReason: m.cancelReason || "", summary: m.summary || "", callCampaignId: m.callCampaignId || null,
+    };
+  }
+
+  async function newCode() {
+    const year = riyadhDay().slice(0, 4);
+    for (let i = 0; i < 8; i++) {
+      const code = `MTG-${year}-${crypto.randomInt(10000, 100000)}`;
+      if ((await db.collection("meetings").where("code", "==", code).limit(1).get()).empty) return code;
+    }
+    throw new HttpsError("internal", "تعذّر إنشاء رقم للاجتماع، حاول مرة أخرى.");
+  }
+  const setToken = (batch, tk, data) => batch.set(db.collection("meetingTokens").doc(tk), { ...data, createdAt: Timestamp.now() });
+
+  // --- staff: list / save -------------------------------------------------
+  out.listMeetings = onCall(async (request) => {
+    const caller = await meetingCaller(request);
+    const snap = await db.collection("meetings").orderBy("date", "desc").limit(300).get();
+    return { meetings: snap.docs.filter((x) => inScope(caller, x.data())).map((x) => meetingOut(x.id, x.data())) };
+  });
+
+  out.saveMeeting = onCall({ secrets: WA_SECRETS, timeoutSeconds: 300 }, async (request) => {
+    const caller = await meetingCaller(request);
+    const id = request.data?.id;
+    const current = id ? (await loadMeeting(id, caller)).m : null;
+    const m = cleanMeeting(request.data?.meeting, current);
+    if (m.branches.some((b) => !callerHasBranch(caller, b))) throw new HttpsError("permission-denied", "لا تملك صلاحية إنشاء اجتماعات لهذه الفروع.");
+    const now = Timestamp.now();
+    if (!id) {
+      const ref = db.collection("meetings").doc();
+      const code = await newCode();
+      const deskToken = token();
+      const batch = db.batch();
+      batch.set(ref, { ...m, code, status: "DRAFT", deskToken, deskPin: pin(), stats: {}, createdBy: caller.uid, createdByName: caller.name || "", createdAt: now, updatedAt: now });
+      setToken(batch, deskToken, { kind: "desk", meetingId: ref.id });
+      m.teachers.forEach((t) => setToken(batch, t.token, { kind: "teacher", meetingId: ref.id, teacherId: t.id }));
+      await batch.commit();
+      await mlog(ref, "MEETING_CREATED", caller);
+      return { id: ref.id, code };
+    }
+    if (["COMPLETED", "CANCELLED"].includes(current.status)) throw new HttpsError("failed-precondition", "لا يمكن تعديل اجتماع منتهٍ أو ملغى.");
+    const ref = db.collection("meetings").doc(id);
+    const batch = db.batch();
+    const known = new Set((current.teachers || []).map((t) => t.token));
+    m.teachers.filter((t) => !known.has(t.token)).forEach((t) => setToken(batch, t.token, { kind: "teacher", meetingId: id, teacherId: t.id }));
+    const kept = new Set(m.teachers.map((t) => t.token));
+    (current.teachers || []).filter((t) => !kept.has(t.token)).forEach((t) => batch.delete(db.collection("meetingTokens").doc(t.token)));
+    batch.update(ref, { ...m, updatedAt: now, updatedBy: caller.uid, updatedByName: caller.name || "" });
+    await batch.commit();
+
+    // Bookings that no longer fit (teacher removed, time off the grid).
+    const valid = new Set(slotTimes(m));
+    const teacherIds = new Set(m.teachers.map((t) => t.id));
+    const slots = await ref.collection("slots").get();
+    const dropped = slots.docs.filter((x) => !teacherIds.has(x.data().teacherId) || !valid.has(x.data().time)).map((x) => ({ ref: x.ref, ...x.data() }));
+    const droppedBy = new Map();
+    dropped.forEach((s) => droppedBy.set(s.inviteId, [...(droppedBy.get(s.inviteId) || []), s]));
+    for (const [inviteId, list] of droppedBy) {
+      const invRef = ref.collection("invites").doc(inviteId);
+      const cur = (await invRef.get()).data();
+      const gone = new Set(list.map((s) => `${s.teacherId}_${s.time}`));
+      await Promise.all(list.map((s) => s.ref.delete()));
+      if (cur) await invRef.update({ slots: (cur.slots || []).filter((s) => !gone.has(`${s.teacherId}_${s.time}`)) });
+    }
+    const changed = ["date", "startTime", "endTime", "location", "slotsStart"].some((k) => current[k] !== m[k]);
+    let notified = null;
+    if (request.data?.notifyChange && current.status !== "DRAFT" && (changed || dropped.length)) {
+      const settings = await waSettings();
+      if (settings) {
+        const inv = (await ref.collection("invites").get()).docs.map((x) => ({ id: x.id, ...x.data() })).filter((i) => i.phone && i.waEvents?.invite && i.response !== "DECLINE");
+        const full = { ...current, ...m };
+        if (changed) notified = await sendMany(settings, ref, full, inv, "changed");
+        else {
+          notified = { sent: 0, failed: 0, total: 0 };
+          for (const i of inv.filter((y) => droppedBy.has(y.id))) {
+            const s = droppedBy.get(i.id)[0];
+            const r = await sendMany(settings, ref, full, [i], "slotCancelled", { teacher: (current.teachers || []).find((t) => t.id === s.teacherId)?.name || "", time: s.time });
+            notified.sent += r.sent; notified.failed += r.failed; notified.total += 1;
+          }
+        }
+      }
+    }
+    await mlog(ref, "MEETING_UPDATED", caller, { dropped: dropped.length, notified });
+    await refreshStats(ref);
+    return { id, code: current.code, dropped: dropped.length, notified };
+  });
+
+  // Creates / tops up the family invites from the roster (existing replies
+  // are kept; new siblings or students are added to their family).
+  async function buildInvites(ref, m) {
+    const { families } = await audience(m);
+    const existing = new Map((await ref.collection("invites").get()).docs.map((x) => [x.id, x.data()]));
+    const codes = new Set([...existing.values()].map((i) => i.code));
+    const newCodeFor = () => { for (;;) { const c = String(crypto.randomInt(100000, 1000000)); if (!codes.has(c)) { codes.add(c); return c; } } };
+    let created = 0;
+    let updated = 0;
+    for (let i = 0; i < families.length; i += 200) {
+      const batch = db.batch();
+      families.slice(i, i + 200).forEach((f) => {
+        const invRef = ref.collection("invites").doc(f.key);
+        const cur = existing.get(f.key);
+        const studentIds = f.students.map((s) => s.id);
+        if (cur) {
+          const curIds = (cur.students || []).map((s) => s.id).sort().join();
+          if (curIds !== [...studentIds].sort().join()) { batch.update(invRef, { students: f.students, studentIds }); updated++; }
+          return;
+        }
+        const tk = token();
+        const ck = token();
+        batch.set(invRef, {
+          token: tk, checkinToken: ck, code: newCodeFor(), phone: f.phone, students: f.students, studentIds,
+          wa: { status: f.phone ? "pending" : "noPhone" }, waEvents: {}, response: "", slots: [], createdAt: Timestamp.now(),
+        });
+        setToken(batch, tk, { kind: "parent", meetingId: ref.id, inviteId: f.key });
+        setToken(batch, ck, { kind: "checkin", meetingId: ref.id, inviteId: f.key });
+        created++;
+      });
+      await batch.commit();
+    }
+    return { created, updated, total: families.length };
+  }
+
+  out.meetingAction = onCall({ secrets: WA_SECRETS, timeoutSeconds: 540, memory: "1GiB" }, async (request) => {
+    const caller = await meetingCaller(request);
+    const { ref, m } = await loadMeeting(request.data?.id, caller);
+    const action = request.data?.action;
+    const now = Timestamp.now();
+    const settings = await waSettings();
+    const invites = async () => (await ref.collection("invites").get()).docs.map((x) => ({ id: x.id, ...x.data() }));
+    let result = {};
+
+    if (action === "invite") {
+      if (!["DRAFT", "OPEN"].includes(m.status)) throw new HttpsError("failed-precondition", "إرسال الدعوات متاح قبل إغلاق التسجيل فقط.");
+      if (m.date < riyadhDay()) throw new HttpsError("failed-precondition", "موعد الاجتماع مضى.");
+      result.build = await buildInvites(ref, m);
+      await ref.update({ status: "OPEN", invitedAt: m.invitedAt || now, updatedAt: now });
+      if (settings) {
+        const pending = (await invites()).filter((i) => i.phone && !i.waEvents?.invite);
+        result.send = await sendMany(settings, ref, m, pending, "invite");
+      } else result.manual = true;
+    } else if (action === "resend") {
+      if (m.status !== "OPEN") throw new HttpsError("failed-precondition", "التسجيل مغلق.");
+      if (!settings) throw new HttpsError("failed-precondition", "فعّل واتساب API وأضف اسم قالب «إشعار اجتماع» في الإعدادات، أو أرسل الروابط يدوياً من قائمة المدعوين.");
+      if (m.lastResendAt && Date.now() - m.lastResendAt.toMillis() < 10 * 60e3) throw new HttpsError("resource-exhausted", "أُعيد الإرسال قبل أقل من 10 دقائق.");
+      const list = (await invites()).filter((i) => i.phone && !i.response);
+      result.send = await sendMany(settings, ref, m, list.filter((i) => i.waEvents?.invite), "deadline");
+      const fresh = await sendMany(settings, ref, m, list.filter((i) => !i.waEvents?.invite), "invite");
+      result.send.sent += fresh.sent; result.send.failed += fresh.failed; result.send.total += fresh.total;
+      await ref.update({ lastResendAt: now });
+    } else if (action === "close" || action === "reopen") {
+      if (!LIVE.includes(m.status)) throw new HttpsError("failed-precondition", "لا يمكن تنفيذ هذا الإجراء في حالة الاجتماع الحالية.");
+      await ref.update({ status: action === "close" ? "CLOSED" : "OPEN", updatedAt: now });
+    } else if (action === "complete") {
+      if (!LIVE.includes(m.status)) throw new HttpsError("failed-precondition", "لا يمكن إنهاء هذا الاجتماع.");
+      if (m.date > riyadhDay()) throw new HttpsError("failed-precondition", "يُسجَّل انتهاء الاجتماع في يومه أو بعده.");
+      const summary = str(request.data?.summary, 600);
+      await ref.update({ status: "COMPLETED", completedAt: now, completedByName: caller.name || "", summary, updatedAt: now });
+      const list = await invites();
+      const came = list.filter((i) => i.attended === true);
+      const absent = list.filter((i) => i.attended !== true);
+      const full = { ...m, status: "COMPLETED" };
+      if (settings && request.data?.survey !== false) result.survey = await sendMany(settings, ref, full, came.filter((i) => i.phone && !i.waEvents?.thanks), "thanks");
+      if (settings && request.data?.absentMessage !== false) result.absent = await sendMany(settings, ref, full, absent.filter((i) => i.phone && i.waEvents?.invite && !i.waEvents?.absent), "absent", { summary });
+      if (request.data?.callAbsent !== false && !m.callCampaignId) result.calls = await absentCalls(ref, m, absent, caller);
+    } else if (action === "survey") {
+      if (m.status !== "COMPLETED") throw new HttpsError("failed-precondition", "يُرسل الاستبيان بعد إنهاء الاجتماع.");
+      if (!settings) throw new HttpsError("failed-precondition", "فعّل واتساب API وأضف اسم قالب «إشعار اجتماع» في الإعدادات.");
+      const done = new Set((await ref.collection("surveys").get()).docs.map((x) => x.id));
+      result.survey = await sendMany(settings, ref, m, (await invites()).filter((i) => i.attended === true && i.phone && !done.has(i.id)), "thanks");
+    } else if (action === "cancel") {
+      if (["COMPLETED", "CANCELLED"].includes(m.status)) throw new HttpsError("failed-precondition", "لا يمكن إلغاء هذا الاجتماع.");
+      const reason = str(request.data?.reason, 300);
+      if (!reason) throw new HttpsError("invalid-argument", "اكتب سبب الإلغاء.");
+      await ref.update({ status: "CANCELLED", cancelReason: reason, cancelledByName: caller.name || "", updatedAt: now });
+      if (settings && request.data?.notify !== false) result.send = await sendMany(settings, ref, m, (await invites()).filter((i) => i.phone && i.waEvents?.invite), "cancelled", { reason });
+    } else throw new HttpsError("invalid-argument", "إجراء غير معروف.");
+
+    await mlog(ref, `MEETING_${String(action).toUpperCase()}`, caller, result);
+    await refreshStats(ref);
+    return result;
+  });
+
+  // Absentees → a call campaign in «مهام الاتصال» (distributed there by the
+  // call supervisors).
+  async function absentCalls(ref, m, absent, caller) {
+    const list = absent.map((i) => ({ ...i, callNo: callPhone(i.phone) })).filter((i) => /^05\d{8}$/.test(i.callNo));
+    if (!list.length) return { created: 0 };
+    const now = Timestamp.now();
+    const campRef = db.collection("callCampaigns").doc();
+    const title = `متابعة الغائبين عن ${m.title}`;
+    const branches = [...new Set(list.map((i) => i.students?.[0]?.branch).filter(Boolean))];
+    const day = riyadhDay();
+    await campRef.set({
+      title, goal: `التواصل مع أولياء الأمور الذين لم يحضروا اجتماع ${m.title} (${formatTripDay(m.date)})، وإبلاغهم بملخصه وتحديد موعد بديل عند الحاجة.`,
+      script: `السلام عليكم، معكم ${SCHOOL_NAME}. افتقدنا حضوركم اجتماع أولياء الأمور يوم ${formatTripDay(m.date)}.${m.summary ? ` ${m.summary}` : ""} هل تودون تحديد موعد بديل مع المعلمين؟`,
+      outcomes: ["تم تحديد موعد بديل", "أُبلغ بالملخص ولا يحتاج موعداً", "سيتواصل لاحقاً", "لديه ملاحظة"],
+      priority: "NORMAL", status: "ACTIVE", startDay: day, endDay: day, dailyQuota: 30, distribution: "MANUAL", agents: [], agentNames: {}, branches,
+      targetLabel: `${m.code} — الغائبون`, meetingId: ref.id, createdBy: caller.uid, createdByName: caller.name || "", createdAt: now, updatedAt: now,
+      counts: { total: list.length, pending: list.length, done: 0, answered: 0, noAnswer: 0, wrong: 0, failed: 0, unassigned: list.length }, outcomeCounts: {},
+    });
+    for (let i = 0; i < list.length; i += 400) {
+      const batch = db.batch();
+      list.slice(i, i + 400).forEach((inv) => batch.set(db.collection("callTasks").doc(), {
+        campaignId: campRef.id, campaignTitle: title, priority: "NORMAL", phone: inv.callNo, branch: inv.students?.[0]?.branch || "",
+        studentId: inv.students?.[0]?.id || "", studentIds: (inv.students || []).map((s) => s.id), studentName: names(inv),
+        grade: (inv.students || []).map((s) => [s.grade, s.className].filter(Boolean).join(" ")).join("، "),
+        status: "PENDING", assignedTo: null, assignedName: "", dueDay: day, dueAt: null, attempts: 0, noAnswerCount: 0, history: [], verifyPending: false,
+        meetingId: ref.id, meetingInviteId: inv.id, createdAt: now,
+      }));
+      await batch.commit();
+    }
+    await ref.update({ callCampaignId: campRef.id });
+    const sup = (await loadActiveUsers()).filter((u) => u.callRoles?.supervisor === true && (u.access === "all" || branches.some((b) => callerHasBranch(u, b)))).map((u) => u.id);
+    await notifyUsers(sup, { title: `حملة اتصال جديدة: ${title}`, body: `${list.length} ولي أمر بانتظار التوزيع على موظفي الاتصال.`, complaintId: campRef.id, type: "CALL_ASSIGNED" });
+    return { created: list.length, campaignId: campRef.id };
+  }
+
+  // --- staff: the meeting with its invites, bookings and minutes ----------
+  out.getMeeting = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+    const caller = await meetingCaller(request);
+    const { ref, m } = await loadMeeting(request.data?.id, caller);
+    const [inv, slots, minutes, surveys, settings] = await Promise.all([
+      ref.collection("invites").get(), ref.collection("slots").get(),
+      db.collection("meetingMinutes").where("meetingId", "==", ref.id).get(), ref.collection("surveys").get(), waSettings(),
+    ]);
+    const surveyed = new Set(surveys.docs.map((x) => x.id));
+    return {
+      meeting: meetingOut(ref.id, m, { secrets: true }),
+      waReady: !!settings,
+      slotTimes: slotTimes(m),
+      invites: inv.docs.map((x) => {
+        const i = x.data();
+        return {
+          id: x.id, students: i.students || [], phone: maskPhone(i.phone), hasPhone: !!i.phone, code: i.code, link: link(i),
+          wa: { status: i.wa?.status || "", at: ms(i.wa?.at), error: i.wa?.error || "", count: i.wa?.count || 0 },
+          invited: !!(i.waEvents?.invite || i.wa?.status === "manual"), response: i.response || "", attendees: i.attendees || 0, topics: i.topics || "",
+          respondedAt: ms(i.respondedAt), slots: i.slots || [], attended: i.attended === true, checkedInAt: ms(i.checkedInAt), checkedInBy: i.checkedInBy || "",
+          walkIn: i.walkIn === true, surveyed: surveyed.has(x.id), respondedBy: i.respondedBy || "",
+        };
+      }),
+      slots: slots.docs.map((x) => ({ id: x.id, teacherId: x.data().teacherId, time: x.data().time, inviteId: x.data().inviteId, startedAt: ms(x.data().startedAt), doneAt: ms(x.data().doneAt) })),
+      minutes: minutes.docs.map((x) => ({ id: x.id, teacherId: x.data().teacherId, studentId: x.data().studentId, studentName: x.data().studentName, followUp: x.data().followUp || null, updatedAt: ms(x.data().updatedAt) })),
+    };
+  });
+
+  // One family: send / resend its link (manual wa.me text without the API),
+  // record a reply taken by phone, check in, or cancel one of its bookings.
+  out.meetingInviteAction = onCall({ secrets: WA_SECRETS }, async (request) => {
+    const caller = await meetingCaller(request);
+    const { ref, m } = await loadMeeting(request.data?.id, caller);
+    const invRef = ref.collection("invites").doc(String(request.data?.inviteId || "_"));
+    const snap = await invRef.get();
+    if (!snap.exists) throw new HttpsError("not-found", "لم يتم العثور على الدعوة.");
+    const inv = { id: snap.id, ...snap.data() };
+    const action = request.data?.action;
+    const now = Timestamp.now();
+    let res = { ok: true };
+    if (action === "send") {
+      if (!inv.phone) throw new HttpsError("failed-precondition", "لا يوجد رقم جوال لولي الأمر.");
+      if (["CANCELLED"].includes(m.status)) throw new HttpsError("failed-precondition", "الاجتماع ملغى.");
+      const settings = await waSettings();
+      const event = m.status === "COMPLETED" ? (inv.attended ? "thanks" : "absent") : inv.response && inv.response !== "DECLINE" ? "confirm" : "invite";
+      const line = LINES[event](m, inv, { summary: m.summary });
+      if (!settings) {
+        await invRef.update({ "wa.status": inv.waEvents?.invite ? inv.wa?.status || "manual" : "manual", "wa.at": now, "wa.count": FieldValue.increment(1), [`waEvents.${event}`]: inv.waEvents?.[event] || now });
+        res = { sent: false, phone: inv.phone, text: `ولي أمر الطالب/ة ${names(inv)}،\n${m.title} — ${when(m)}\n${line}\n${link(inv)}\n${SCHOOL_NAME}` };
+      } else {
+        if (inv.wa?.at && Date.now() - inv.wa.at.toMillis() < 120e3 && inv.wa?.status === "sent") throw new HttpsError("resource-exhausted", "أُرسل الرابط قبل أقل من دقيقتين.");
+        const r = await sendMany(settings, ref, m, [inv], event, { summary: m.summary });
+        if (!r.sent) throw new HttpsError("internal", ((await invRef.get()).data()?.wa?.error) || "تعذّر الإرسال.");
+        res = { sent: true };
+      }
+    } else if (action === "respond") {
+      const response = RESPONSES.includes(request.data?.response) ? request.data.response : "";
+      await invRef.update({ response, attendees: response === "ATTEND" ? Math.min(4, Math.max(1, Number(request.data?.attendees) || 1)) : 0, respondedAt: now, respondedBy: caller.name || "" });
+      if (response === "DECLINE") await releaseSlots(ref, inv);
+    } else if (action === "checkin" || action === "undoCheckin") {
+      await invRef.update(action === "checkin"
+        ? { attended: true, checkedInAt: now, checkedInBy: caller.name || "" }
+        : { attended: false, checkedInAt: FieldValue.delete(), checkedInBy: FieldValue.delete() });
+    } else if (action === "cancelSlot") {
+      const slotId = String(request.data?.slotId || "");
+      const s = (await ref.collection("slots").doc(slotId).get()).data();
+      if (!s || s.inviteId !== inv.id) throw new HttpsError("not-found", "لم يتم العثور على الموعد.");
+      await ref.collection("slots").doc(slotId).delete();
+      await invRef.update({ slots: (inv.slots || []).filter((x) => !(x.teacherId === s.teacherId && x.time === s.time)) });
+      const settings = await waSettings();
+      if (settings && request.data?.notify !== false && inv.phone) await sendMany(settings, ref, m, [inv], "slotCancelled", { teacher: teacherName(m, s.teacherId), time: s.time });
+    } else throw new HttpsError("invalid-argument", "إجراء غير معروف.");
+    await mlog(ref, `INVITE_${String(action).toUpperCase()}`, caller, { inviteId: inv.id });
+    await refreshStats(ref);
+    return res;
+  });
+
+  async function releaseSlots(ref, inv) {
+    const batch = db.batch();
+    (inv.slots || []).forEach((s) => batch.delete(ref.collection("slots").doc(`${s.teacherId}_${s.time.replace(":", "")}`)));
+    batch.update(ref.collection("invites").doc(inv.id), { slots: [] });
+    await batch.commit();
+  }
+
+  // --- public: token links --------------------------------------------------
+  async function byToken(tk, kinds) {
+    const t = String(tk || "");
+    if (!/^[A-Za-z0-9_-]{10,40}$/.test(t)) throw new HttpsError("not-found", "الرابط غير صحيح.");
+    const snap = await db.collection("meetingTokens").doc(t).get();
+    if (!snap.exists || !kinds.includes(snap.data().kind)) throw new HttpsError("not-found", "الرابط غير صحيح أو انتهت صلاحيته.");
+    const x = snap.data();
+    const ref = db.collection("meetings").doc(x.meetingId);
+    const m = (await ref.get()).data();
+    if (!m) throw new HttpsError("not-found", "هذا الاجتماع غير متاح.");
+    return { ...x, ref, m };
+  }
+  // Wrong student ID / code: 8 tries an hour per link.
+  async function guard(key, ok) {
+    const g = db.collection("meetingVerify").doc(key.slice(0, 60));
+    const cur = (await g.get()).data() || {};
+    const recent = cur.lastAt && Date.now() - cur.lastAt.toMillis() < 3600e3;
+    if (recent && (cur.failures || 0) >= 8) throw new HttpsError("resource-exhausted", "محاولات كثيرة، حاول بعد ساعة أو تواصل مع الفرع.");
+    if (ok) { if (cur.failures) await g.delete(); return; }
+    await g.set({ failures: (recent ? cur.failures || 0 : 0) + 1, lastAt: Timestamp.now() });
+  }
+
+  async function publicView(m) {
+    const snaps = await db.getAll(...(m.branches || []).map((b) => db.collection("branches").doc(b)));
+    const { day } = riyadhNow();
+    return {
+      code: m.code, title: m.title, type: m.type, status: m.status, date: m.date, dateLabel: formatTripDay(m.date), startTime: m.startTime, endTime: m.endTime,
+      location: m.location || "", agenda: m.agenda || "", regDeadline: m.regDeadline, regDeadlineLabel: formatTripDay(m.regDeadline), remote: !!m.teamsLink,
+      slotMinutes: m.slotMinutes || 10, branches: m.branches || [], branchNames: snaps.map((s, i) => (s.exists ? s.data().name : m.branches[i])),
+      registrationOpen: m.status === "OPEN" && day <= m.regDeadline && day <= m.date, cancelReason: m.status === "CANCELLED" ? m.cancelReason || "" : "",
+    };
+  }
+  // Teachers a family can book: those teaching one of its children's classes
+  // (a teacher with no classes listed meets every family).
+  const teachesStudent = (t, s) => !(t.classes || []).length || t.classes.includes(`${s.grade}|${s.className}`);
+  const teachesFamily = (t, inv) => (inv.students || []).some((s) => teachesStudent(t, s));
+
+  async function parentState(ref, m, inv) {
+    const out2 = {
+      meeting: await publicView(m),
+      invite: {
+        students: (inv.students || []).map((s) => ({ id: s.id, name: s.name, grade: s.grade, className: s.className })),
+        response: inv.response || "", attendees: inv.attendees || 1, topics: inv.topics || "", slots: inv.slots || [],
+        attended: inv.attended === true, code: inv.code, checkinLink: `${PUBLIC_APP_URL}/meeting-in/${inv.checkinToken}`,
+      },
+      teamsLink: inv.response === "REMOTE" || !individual(m) ? m.teamsLink || "" : "",
+      teachers: [],
+      surveyOpen: m.status === "COMPLETED" && inv.attended === true,
+      surveyDone: false,
+      surveyTeachers: [],
+    };
+    if (individual(m) && LIVE.includes(m.status)) {
+      const taken = new Map((await ref.collection("slots").get()).docs.map((x) => [x.id, x.data().inviteId]));
+      const times = slotTimes(m);
+      out2.teachers = (m.teachers || []).filter((t) => teachesFamily(t, inv)).map((t) => ({
+        id: t.id, name: t.name, subject: t.subject, room: t.room,
+        slots: times.map((time) => { const who = taken.get(`${t.id}_${time.replace(":", "")}`); return { time, free: !who || who === inv.id }; }),
+      }));
+    }
+    if (out2.surveyOpen) {
+      out2.surveyDone = (await ref.collection("surveys").doc(inv.id).get()).exists;
+      const met = new Set((inv.slots || []).map((s) => s.teacherId));
+      (await db.collection("meetingMinutes").where("meetingId", "==", ref.id).where("inviteId", "==", inv.id).get()).docs.forEach((x) => met.add(x.data().teacherId));
+      out2.surveyTeachers = (m.teachers || []).filter((t) => met.has(t.id)).map((t) => ({ id: t.id, name: t.name, subject: t.subject }));
+    }
+    return out2;
+  }
+
+  out.meetingPublic = onCall(async (request) => {
+    const { m } = await byToken(request.data?.token, ["parent"]);
+    return { meeting: await publicView(m) };
+  });
+
+  async function verifiedParent(request) {
+    const x = await byToken(request.data?.token, ["parent"]);
+    const studentId = normalizeDigits(request.data?.studentId);
+    const invRef = x.ref.collection("invites").doc(x.inviteId);
+    const snap = await invRef.get();
+    if (!snap.exists) throw new HttpsError("not-found", "الدعوة غير متاحة.");
+    const inv = { id: snap.id, ...snap.data() };
+    const ok = (inv.studentIds || []).includes(studentId);
+    await guard(`p_${request.data.token}`, ok);
+    if (!ok) throw new HttpsError("permission-denied", "رقم الهوية لا يطابق أحد الطلاب في هذه الدعوة.");
+    return { ...x, invRef, inv };
+  }
+
+  out.meetingParentVerify = onCall(async (request) => {
+    const { ref, m, inv } = await verifiedParent(request);
+    return parentState(ref, m, inv);
+  });
+
+  out.meetingParentRespond = onCall({ secrets: WA_SECRETS }, async (request) => {
+    const { ref, m, inv, invRef } = await verifiedParent(request);
+    const { day } = riyadhNow();
+    if (!(m.status === "OPEN" && day <= m.regDeadline && day <= m.date)) throw new HttpsError("failed-precondition", "انتهى موعد التسجيل في هذا الاجتماع. للاستفسار تواصل مع الفرع.");
+    const response = RESPONSES.includes(request.data?.response) ? request.data.response : "";
+    if (!response) throw new HttpsError("invalid-argument", "اختر الرد.");
+    if (response === "REMOTE" && !m.teamsLink) throw new HttpsError("invalid-argument", "الحضور عن بعد غير متاح لهذا الاجتماع.");
+    const attendees = response === "ATTEND" ? Math.min(4, Math.max(1, Math.floor(Number(request.data?.attendees) || 1))) : 0;
+    const topics = str(request.data?.topics, 1000);
+    const times = new Set(slotTimes(m));
+    const teachers = new Map((m.teachers || []).filter((t) => teachesFamily(t, inv)).map((t) => [t.id, t]));
+    const seen = new Set();
+    const wanted = response !== "ATTEND" || !individual(m) ? [] : (Array.isArray(request.data?.slots) ? request.data.slots : []).map((s) => ({
+      teacherId: String(s?.teacherId || ""), time: String(s?.time || ""), topic: str(s?.topic, 300),
+    })).filter((s) => teachers.has(s.teacherId) && times.has(s.time) && !seen.has(s.teacherId) && seen.add(s.teacherId));
+    if (wanted.length > MAX_SLOTS) throw new HttpsError("invalid-argument", `يمكن حجز ${MAX_SLOTS} مواعيد كحد أقصى.`);
+    if (new Set(wanted.map((s) => s.time)).size !== wanted.length) throw new HttpsError("invalid-argument", "لا يمكن حجز موعدين في الوقت نفسه؛ اختر وقتاً مختلفاً لكل معلم.");
+    const sid = (s) => `${s.teacherId}_${s.time.replace(":", "")}`;
+    const now = Timestamp.now();
+    await db.runTransaction(async (tx) => {
+      const fresh = (await tx.get(invRef)).data();
+      const oldIds = (fresh.slots || []).map(sid);
+      const newIds = wanted.map(sid);
+      const snaps = newIds.length ? await tx.getAll(...newIds.map((id) => ref.collection("slots").doc(id))) : [];
+      snaps.forEach((s, i) => {
+        if (s.exists && s.data().inviteId !== inv.id) {
+          const w = wanted[i];
+          throw new HttpsError("already-exists", `موعد ${teachers.get(w.teacherId).name} الساعة ${time12(w.time)} حُجز للتو لولي أمر آخر، اختر وقتاً آخر.`);
+        }
+      });
+      oldIds.filter((id) => !newIds.includes(id)).forEach((id) => tx.delete(ref.collection("slots").doc(id)));
+      wanted.forEach((w, i) => {
+        const prev = snaps[i].exists ? snaps[i].data() : null;
+        tx.set(ref.collection("slots").doc(newIds[i]), {
+          teacherId: w.teacherId, time: w.time, inviteId: inv.id, topic: w.topic,
+          studentNames: names(inv), classes: (inv.students || []).map((s) => s.className).filter(Boolean),
+          bookedAt: prev?.bookedAt || now, ...(prev?.startedAt ? { startedAt: prev.startedAt } : {}), ...(prev?.doneAt ? { doneAt: prev.doneAt } : {}),
+        });
+      });
+      tx.update(invRef, { response, attendees, topics, slots: wanted, respondedAt: now, respondedBy: "ولي الأمر" });
+    });
+    const updated = { ...inv, response, attendees, topics, slots: wanted };
+    // Confirmation with the entry code (once per change of reply/bookings).
+    if (response !== "DECLINE" && inv.phone) {
+      const settings = await waSettings();
+      if (settings && settings.autoSend !== false) await sendMany(settings, ref, m, [updated], "confirm").catch(() => {});
+    }
+    await mlog(ref, "PARENT_RESPONDED", { name: "ولي الأمر" }, { inviteId: inv.id, response, slots: wanted.length });
+    await refreshStats(ref);
+    return parentState(ref, m, updated);
+  });
+
+  out.meetingParentSurvey = onCall(async (request) => {
+    const { ref, m, inv } = await verifiedParent(request);
+    if (m.status !== "COMPLETED" || inv.attended !== true) throw new HttpsError("failed-precondition", "الاستبيان متاح لمن حضر الاجتماع بعد انتهائه.");
+    const sRef = ref.collection("surveys").doc(inv.id);
+    if ((await sRef.get()).exists) throw new HttpsError("already-exists", "تم استلام تقييمكم مسبقاً، شكراً لكم.");
+    const r = (v) => { const n = Math.floor(Number(v)); return n >= 1 && n <= 5 ? n : 0; };
+    const d2 = request.data || {};
+    const survey = {
+      overall: r(d2.overall), organization: r(d2.organization), usefulness: r(d2.usefulness),
+      teachers: Object.fromEntries(Object.entries(d2.teachers || {}).filter(([k]) => (m.teachers || []).some((t) => t.id === k)).map(([k, v]) => [k, r(v)]).filter(([, v]) => v)),
+      answered: ["YES", "PARTLY", "NO"].includes(d2.answered) ? d2.answered : "",
+      comment: str(d2.comment, 1000),
+    };
+    if (!survey.overall || !survey.organization || !survey.usefulness || !survey.answered) throw new HttpsError("invalid-argument", "أكمل التقييم.");
+    survey.low = [survey.overall, survey.organization, survey.usefulness, ...Object.values(survey.teachers)].some((v) => v <= 2);
+    await sRef.set({ ...survey, inviteId: inv.id, studentNames: names(inv), branch: inv.students?.[0]?.branch || "", createdAt: Timestamp.now() });
+    if (survey.low) {
+      const branch = inv.students?.[0]?.branch || "";
+      const users = await loadActiveUsers();
+      const ids = [m.createdBy, ...users.filter((u) => meetingsAllowed(u) && u.isPrincipal === true && callerHasBranch(u, branch)).map((u) => u.id)];
+      await notifyUsers(ids, { title: "تقييم منخفض لاجتماع أولياء الأمور", body: `${m.title}: ولي أمر ${names(inv)} قيّم بـ ${survey.overall} من 5 — يُرجى التواصل معه.`, complaintId: ref.id, type: "MEETING_LOW_RATING" });
+    }
+    await refreshStats(ref);
+    return { ok: true };
+  });
+
+  // --- teachers and reception (link + 4-digit code) -----------------------
+  async function staffLink(request, kind) {
+    const x = await byToken(request.data?.token, [kind]);
+    const teacher = kind === "teacher" ? (x.m.teachers || []).find((t) => t.id === x.teacherId) : null;
+    if (kind === "teacher" && !teacher) throw new HttpsError("not-found", "هذا الرابط لم يعد مرتبطاً بالاجتماع.");
+    const ok = String(request.data?.pin || "") === (kind === "teacher" ? teacher.pin : x.m.deskPin);
+    await guard(`${kind}_${request.data.token}`, ok);
+    if (!ok) throw new HttpsError("permission-denied", "رمز الدخول غير صحيح.");
+    if (x.m.status === "CANCELLED") throw new HttpsError("failed-precondition", "الاجتماع ملغى.");
+    return { ...x, teacher };
+  }
+
+  async function teacherState(ref, m, teacher) {
+    const [slots, inv, minutes] = await Promise.all([
+      ref.collection("slots").where("teacherId", "==", teacher.id).get(),
+      ref.collection("invites").get(),
+      db.collection("meetingMinutes").where("meetingId", "==", ref.id).where("teacherId", "==", teacher.id).get(),
+    ]);
+    const invites = new Map(inv.docs.map((x) => [x.id, x.data()]));
+    // Only the children this teacher teaches.
+    const studentsOf = (i) => (i?.students || []).filter((s) => teachesStudent(teacher, s)).map((s) => ({ id: s.id, name: s.name, grade: s.grade, className: s.className }));
+    const mine = slots.docs.map((x) => {
+      const s = x.data();
+      const i = invites.get(s.inviteId);
+      return { id: x.id, time: s.time, inviteId: s.inviteId, topic: s.topic || "", generalTopics: i?.topics || "", students: studentsOf(i), arrived: i?.attended === true, startedAt: ms(s.startedAt), doneAt: ms(s.doneAt) };
+    }).sort((a, b) => a.time.localeCompare(b.time));
+    // Families who came and whose children this teacher teaches (general
+    // session or a parent who stops by without a booking).
+    const booked = new Set(mine.map((s) => s.inviteId));
+    const others = [...invites.entries()].filter(([id, i]) => !booked.has(id) && i.attended === true && teachesFamily(teacher, i))
+      .map(([id, i]) => ({ inviteId: id, students: studentsOf(i), topics: i.topics || "" }));
+    return {
+      meeting: { ...(await publicView(m)), teamsLink: m.teamsLink || "" },
+      teacher: { id: teacher.id, name: teacher.name, subject: teacher.subject, room: teacher.room },
+      slots: mine,
+      others,
+      minutes: minutes.docs.map((x) => ({ id: x.id, ...x.data(), createdAt: ms(x.data().createdAt), updatedAt: ms(x.data().updatedAt) })).map(({ meetingTitle, ...rest }) => rest),
+    };
+  }
+
+  out.meetingTeacher = onCall(async (request) => {
+    const { ref, m, teacher } = await staffLink(request, "teacher");
+    return teacherState(ref, m, teacher);
+  });
+
+  out.meetingTeacherAction = onCall({ timeoutSeconds: 120 }, async (request) => {
+    const { ref, m, teacher } = await staffLink(request, "teacher");
+    const action = request.data?.action;
+    const now = Timestamp.now();
+    if (action === "start") {
+      const sRef = ref.collection("slots").doc(String(request.data?.slotId || "_"));
+      const s = (await sRef.get()).data();
+      if (!s || s.teacherId !== teacher.id) throw new HttpsError("not-found", "لم يتم العثور على الموعد.");
+      if (!s.startedAt) await sRef.update({ startedAt: now });
+    } else if (action === "saveMinute") {
+      const studentId = normalizeDigits(request.data?.studentId);
+      const inviteId = String(request.data?.inviteId || "");
+      const invSnap = await ref.collection("invites").doc(inviteId || "_").get();
+      const inv = invSnap.data();
+      const student = (inv?.students || []).find((s) => s.id === studentId);
+      if (!student) throw new HttpsError("not-found", "الطالب غير موجود في دعوات هذا الاجتماع.");
+      const hasSlot = (inv.slots || []).some((s) => s.teacherId === teacher.id);
+      if (!teachesStudent(teacher, student)) throw new HttpsError("permission-denied", "هذا الطالب ليس ضمن فصولك أو مواعيدك.");
+      const mRef = db.collection("meetingMinutes").doc(`${ref.id}_${teacher.id}_${studentId}`);
+      const cur = (await mRef.get()).data();
+      const x = request.data?.minute || {};
+      const minute = {
+        meetingId: ref.id, meetingTitle: m.title, meetingCode: m.code, date: m.date, branch: student.branch || "",
+        teacherId: teacher.id, teacherName: teacher.name, subject: teacher.subject || "", inviteId, studentId, studentName: student.name,
+        grade: student.grade || "", className: student.className || "",
+        points: str(x.points, 2000), recommendations: str(x.recommendations, 2000), agreements: str(x.agreements, 2000),
+        updatedAt: now, createdAt: cur?.createdAt || now, followUp: cur?.followUp || null,
+      };
+      if (!minute.points && !minute.recommendations && !minute.agreements) throw new HttpsError("invalid-argument", "اكتب نقطة واحدة على الأقل في المحضر.");
+      const fType = FOLLOW_TYPES.includes(x.followUpType) ? x.followUpType : "";
+      const fText = str(x.followUpText, 1500);
+      if (fType && fText && !cur?.followUp?.complaintId) {
+        minute.followUp = await followUpComplaint(ref, m, teacher, inv, student, fType, fText);
+      }
+      await mRef.set(minute);
+      if (hasSlot) {
+        const slot = (inv.slots || []).find((s) => s.teacherId === teacher.id);
+        const sRef = ref.collection("slots").doc(`${teacher.id}_${slot.time.replace(":", "")}`);
+        const sd = (await sRef.get()).data();
+        if (sd && !sd.doneAt) await sRef.update({ doneAt: now, ...(sd.startedAt ? {} : { startedAt: now }) });
+      }
+      // A parent the teacher met counts as attended even if reception missed them.
+      if (inv.attended !== true) await invSnap.ref.update({ attended: true, checkedInAt: now, checkedInBy: `${teacher.name} (المعلم)` });
+      await refreshStats(ref);
+    } else throw new HttpsError("invalid-argument", "إجراء غير معروف.");
+    return teacherState(ref, (await ref.get()).data(), teacher);
+  });
+
+  async function followUpComplaint(ref, m, teacher, inv, student, type, text) {
+    const complaintId = await nextRecordNumber("COM");
+    const assignees = await findAutoAssignees({ branch: student.branch, departments: [type], stage: student.grade, curriculum: student.section || "" });
+    const now = Timestamp.now();
+    const docRef = db.collection("complaints").doc();
+    await docRef.set({
+      parentName: `ولي أمر ${student.name}`, parentPhone: inv.phone ? `0${String(inv.phone).slice(3)}` : "", parentEmail: "",
+      studentName: student.name, studentId: student.id, branch: student.branch || "", department: student.section || "", stage: student.grade || "",
+      grade: student.className || "", complaintType: type, subType: "", extraTypes: [],
+      subject: `متابعة من اجتماع أولياء الأمور: ${m.title}`,
+      details: `${text}\n\nمن لقاء ${teacher.name}${teacher.subject ? ` (${teacher.subject})` : ""} — ${m.title} (${m.code})، ${formatTripDay(m.date)}.`,
+      complaintId, priority: "NORMAL", source: "PARENT_MEETING", meetingId: ref.id, receiver: null, status: "RECEIVED", attachments: [],
+      assignedTo: assignees.map((a) => a.id), assignedToNames: assignees.map((a) => a.name), assignedAt: assignees.length ? now : null,
+      reopened: false, isOverdue: false, createdAt: now, updatedAt: now,
+    });
+    await docRef.collection("activityLog").add({ action: "COMPLAINT_CREATED", actorId: null, actorName: `${teacher.name} (اجتماع أولياء الأمور)`, createdAt: now });
+    if (assignees.length) {
+      await docRef.collection("activityLog").add({ action: "COMPLAINT_ASSIGNED", actorId: null, actorName: "النظام (إسناد تلقائي)", metadata: { toUserIds: assignees.map((a) => a.id), toUserNames: assignees.map((a) => a.name), addedNames: assignees.map((a) => a.name) }, createdAt: now });
+    }
+    return { type, text, complaintId: docRef.id, complaintNo: complaintId };
+  }
+
+  // Reception desk.
+  function deskInvite(id, i) {
+    return { id, students: (i.students || []).map((s) => ({ name: s.name, grade: s.grade, className: s.className })), code: i.code, response: i.response || "", attendees: i.attendees || 0, slots: i.slots || [], attended: i.attended === true, checkedInAt: ms(i.checkedInAt) };
+  }
+  async function deskState(ref, m) {
+    const stats = await refreshStats(ref);
+    return { meeting: await publicView(m), teachers: (m.teachers || []).map((t) => ({ id: t.id, name: t.name, room: t.room, subject: t.subject })), stats, meetingId: ref.id };
+  }
+  out.meetingDesk = onCall(async (request) => {
+    const { ref, m } = await staffLink(request, "desk");
+    return deskState(ref, m);
+  });
+
+  out.meetingDeskAction = onCall(async (request) => {
+    const { ref, m } = await staffLink(request, "desk");
+    const action = request.data?.action;
+    if (action === "search") {
+      const q = normalizeDigits(String(request.data?.q || "")).trim().toLowerCase();
+      if (q.length < 2) return { results: [] };
+      const inv = await ref.collection("invites").get();
+      const results = inv.docs.filter((x) => {
+        const i = x.data();
+        return i.code === q || (i.studentIds || []).includes(q) || (q.length >= 4 && /^\d+$/.test(q) && String(i.phone || "").endsWith(q))
+          || (i.students || []).some((s) => String(s.name || "").toLowerCase().includes(q));
+      }).slice(0, 20).map((x) => deskInvite(x.id, x.data()));
+      return { results };
+    }
+    if (action === "checkin" || action === "undo") {
+      const invRef = ref.collection("invites").doc(String(request.data?.inviteId || "_"));
+      const i = (await invRef.get()).data();
+      if (!i) throw new HttpsError("not-found", "لم يتم العثور على الدعوة.");
+      await invRef.update(action === "checkin"
+        ? { attended: true, checkedInAt: Timestamp.now(), checkedInBy: "الاستقبال" }
+        : { attended: false, checkedInAt: FieldValue.delete(), checkedInBy: FieldValue.delete() });
+      return { invite: deskInvite(invRef.id, { ...i, attended: action === "checkin", checkedInAt: action === "checkin" ? Timestamp.now() : null }), ...(await deskState(ref, m)) };
+    }
+    if (action === "walkIn") {
+      // A parent of a student outside the invited list.
+      const studentId = normalizeDigits(request.data?.studentId);
+      const s = (await db.collection("students").doc(studentId || "_").get()).data();
+      if (!s || s.active === false) throw new HttpsError("not-found", "لم يتم العثور على الطالب/ة.");
+      const branchOf = await branchResolver();
+      if (!(m.branches || []).includes(branchOf(s))) throw new HttpsError("failed-precondition", "الطالب/ة من فرع غير مشمول بهذا الاجتماع.");
+      const key = familyKey(s);
+      const invRef = ref.collection("invites").doc(key);
+      const cur = (await invRef.get()).data();
+      const now = Timestamp.now();
+      if (cur) {
+        const students = (cur.students || []).some((k) => k.id === studentId) ? cur.students : [...cur.students, kid(s, branchOf)];
+        await invRef.update({ students, studentIds: students.map((k) => k.id), attended: true, checkedInAt: now, checkedInBy: "الاستقبال" });
+      } else {
+        const codes = new Set((await ref.collection("invites").get()).docs.map((x) => x.data().code));
+        let code;
+        do { code = String(crypto.randomInt(100000, 1000000)); } while (codes.has(code));
+        const tk = token();
+        const ck = token();
+        const batch = db.batch();
+        batch.set(invRef, { token: tk, checkinToken: ck, code, phone: key.startsWith("S") ? "" : key, students: [kid(s, branchOf)], studentIds: [studentId], wa: { status: "walkIn" }, waEvents: {}, response: "", slots: [], walkIn: true, attended: true, checkedInAt: now, checkedInBy: "الاستقبال", createdAt: now });
+        setToken(batch, tk, { kind: "parent", meetingId: ref.id, inviteId: key });
+        setToken(batch, ck, { kind: "checkin", meetingId: ref.id, inviteId: key });
+        await batch.commit();
+      }
+      return { invite: deskInvite(key, (await invRef.get()).data()), ...(await deskState(ref, m)) };
+    }
+    throw new HttpsError("invalid-argument", "إجراء غير معروف.");
+  });
+
+  // The parent's QR (/meeting-in/<token>): on a reception phone that opened
+  // the desk link (its code is kept in that browser) it checks the family
+  // in; anywhere else it shows the entry code.
+  out.meetingCheckinScan = onCall(async (request) => {
+    const x = await byToken(request.data?.token, ["checkin"]);
+    const invRef = x.ref.collection("invites").doc(x.inviteId);
+    const i = (await invRef.get()).data();
+    if (!i) throw new HttpsError("not-found", "الدعوة غير متاحة.");
+    const desks = (Array.isArray(request.data?.desks) ? request.data.desks : []).slice(0, 6);
+    const desk = desks.find((dk) => dk && dk.token === x.m.deskToken && String(dk.pin) === x.m.deskPin);
+    const first = (i.students || []).map((s) => String(s.name || "").split(/\s+/)[0]).join("، ");
+    if (!desk) return { desk: false, title: x.m.title, code: i.code, names: first };
+    if (x.m.status === "CANCELLED") throw new HttpsError("failed-precondition", "الاجتماع ملغى.");
+    const already = i.attended === true;
+    if (!already) await invRef.update({ attended: true, checkedInAt: Timestamp.now(), checkedInBy: "الاستقبال (QR)" });
+    await refreshStats(x.ref);
+    return { desk: true, already, title: x.m.title, invite: deskInvite(invRef.id, { ...i, attended: true }), teachers: (x.m.teachers || []).map((t) => ({ id: t.id, name: t.name, room: t.room })) };
+  });
+
+  // --- reminders ------------------------------------------------------------
+  async function runReminders(when2) {
+    const settings = await waSettings();
+    if (!settings || settings.autoSend === false) return;
+    const today = riyadhDay();
+    const tomorrow = riyadhDay(1);
+    const day = when2 === "eve" ? tomorrow : today;
+    const event = when2 === "eve" ? "eve" : "morning";
+    const [onDay, deadline] = await Promise.all([
+      db.collection("meetings").where("date", "==", day).get(),
+      when2 === "eve" ? db.collection("meetings").where("regDeadline", "==", tomorrow).get() : Promise.resolve({ docs: [] }),
+    ]);
+    for (const x of onDay.docs) {
+      const m = x.data();
+      if (!LIVE.includes(m.status) || m.autoReminders === false) continue;
+      const list = (await x.ref.collection("invites").get()).docs.map((y) => ({ id: y.id, ...y.data() }))
+        .filter((i) => i.phone && ["ATTEND", "REMOTE"].includes(i.response) && !i.waEvents?.[event]);
+      const r = await sendMany(settings, x.ref, m, list, event);
+      await mlog(x.ref, `MEETING_REMINDER_${event.toUpperCase()}`, null, r);
+    }
+    for (const x of deadline.docs) {
+      const m = x.data();
+      if (m.status !== "OPEN" || m.autoReminders === false || m.date <= tomorrow) continue;
+      const list = (await x.ref.collection("invites").get()).docs.map((y) => ({ id: y.id, ...y.data() }))
+        .filter((i) => i.phone && !i.response && i.waEvents?.invite && !i.waEvents?.deadline);
+      const r = await sendMany(settings, x.ref, m, list, "deadline");
+      await mlog(x.ref, "MEETING_REMINDER_DEADLINE", null, r);
+    }
+  }
+  out.meetingRemindersEvening = onSchedule({ schedule: "30 17 * * *", timeZone: "Asia/Riyadh", secrets: WA_SECRETS, timeoutSeconds: 540 }, () => runReminders("eve"));
+  out.meetingRemindersMorning = onSchedule({ schedule: "0 7 * * *", timeZone: "Asia/Riyadh", secrets: WA_SECRETS, timeoutSeconds: 540 }, () => runReminders("morning"));
+
+  // --- report ---------------------------------------------------------------
+  out.getMeetingReport = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+    const caller = await meetingCaller(request);
+    const { ref, m } = await loadMeeting(request.data?.id, caller);
+    const [inv, slots, surveys, minutes, complaints, calls] = await Promise.all([
+      ref.collection("invites").get(), ref.collection("slots").get(), ref.collection("surveys").get(),
+      db.collection("meetingMinutes").where("meetingId", "==", ref.id).get(),
+      db.collection("complaints").where("meetingId", "==", ref.id).get(),
+      m.callCampaignId ? db.collection("callTasks").where("campaignId", "==", m.callCampaignId).get() : Promise.resolve({ docs: [] }),
+    ]);
+    const invites = inv.docs.map((x) => ({ id: x.id, ...x.data() }));
+    const tName = (id) => (m.teachers || []).find((t) => t.id === id);
+    const callByInvite = new Map(calls.docs.map((x) => [x.data().meetingInviteId, x.data()]));
+    const delays = slots.docs.map((x) => x.data()).filter((s) => s.startedAt).map((s) => {
+      const start = new Date(`${m.date}T${s.time}:00+03:00`).getTime();
+      return Math.round((s.startedAt.toMillis() - start) / 60e3);
+    });
+    return {
+      meeting: meetingOut(ref.id, m),
+      stats: await refreshStats(ref),
+      students: invites.flatMap((i) => (i.students || []).map((s) => ({
+        id: s.id, name: s.name, branch: s.branch, grade: s.grade, className: s.className,
+        invited: !!(i.waEvents?.invite || i.wa?.status === "manual" || i.walkIn), wa: i.wa?.status || "", response: i.response || "", attended: i.attended === true, walkIn: i.walkIn === true,
+      }))),
+      surveys: surveys.docs.map((x) => ({ ...x.data(), createdAt: ms(x.data().createdAt) })),
+      teachers: (m.teachers || []).map((t) => {
+        const mine = slots.docs.map((x) => x.data()).filter((s) => s.teacherId === t.id);
+        const rates = surveys.docs.map((x) => x.data().teachers?.[t.id]).filter((v) => v >= 1);
+        return {
+          id: t.id, name: t.name, subject: t.subject, booked: mine.length, done: mine.filter((s) => s.doneAt).length,
+          minutes: minutes.docs.filter((x) => x.data().teacherId === t.id).length,
+          rating: rates.length ? Math.round((rates.reduce((a, b) => a + b, 0) / rates.length) * 100) / 100 : 0, ratings: rates.length,
+        };
+      }),
+      topics: [
+        ...slots.docs.map((x) => x.data()).filter((s) => s.topic).map((s) => ({ topic: s.topic, teacher: tName(s.teacherId)?.name || "", subject: tName(s.teacherId)?.subject || "", students: s.studentNames || "" })),
+        ...invites.filter((i) => i.topics).map((i) => ({ topic: i.topics, teacher: "", subject: "", students: names(i) })),
+      ],
+      punctuality: { count: delays.length, avgDelay: delays.length ? Math.round(delays.reduce((a, b) => a + Math.max(0, b), 0) / delays.length) : 0 },
+      followUps: complaints.docs.map((x) => ({ id: x.id, number: x.data().complaintId, status: x.data().status, type: x.data().complaintType, studentName: x.data().studentName, details: x.data().details })),
+      absent: invites.filter((i) => i.attended !== true).map((i) => {
+        const c = callByInvite.get(i.id);
+        return { id: i.id, names: names(i), classes: (i.students || []).map((s) => [s.grade, s.className].filter(Boolean).join(" ")).join("، "), phone: maskPhone(i.phone), response: i.response || "", callStatus: c?.status || "", callResult: c?.outcome || c?.result || "" };
+      }),
+      minutesCount: minutes.size,
+    };
+  });
+
+  // --- student record: the meetings a student was invited to + minutes ----
+  out.getStudentMeetings = onCall(async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+    const u = { uid: request.auth.uid, ...(await db.collection("users").doc(request.auth.uid).get()).data() };
+    if (u.active === false || u.role === "RECEPTIONIST" || !(meetingsAllowed(u) || u.modules?.students !== false)) throw new HttpsError("permission-denied", "لا تملك صلاحية.");
+    const studentId = normalizeDigits(request.data?.studentId);
+    const s = (await db.collection("students").doc(studentId || "_").get()).data();
+    if (!s) return { meetings: [] };
+    const key = familyKey(s);
+    const since = riyadhDay(-400);
+    const [meets, minutes] = await Promise.all([
+      db.collection("meetings").where("date", ">=", since).get(),
+      db.collection("meetingMinutes").where("studentId", "==", studentId).get(),
+    ]);
+    const list = meets.docs.filter((x) => inScope(u, x.data()) && x.data().status !== "DRAFT");
+    const invSnaps = list.length ? await db.getAll(...list.map((x) => x.ref.collection("invites").doc(key))) : [];
+    const mins = minutes.docs.map((x) => x.data()).filter((x) => list.some((y) => y.id === x.meetingId));
+    return {
+      meetings: list.map((x, i) => {
+        const inv = invSnaps[i].exists ? invSnaps[i].data() : null;
+        if (!inv || !(inv.studentIds || []).includes(studentId)) return null;
+        return {
+          id: x.id, title: x.data().title, code: x.data().code, date: x.data().date, status: x.data().status, response: inv.response || "", attended: inv.attended === true,
+          minutes: mins.filter((y) => y.meetingId === x.id).map((y) => ({ teacherName: y.teacherName, subject: y.subject, points: y.points, recommendations: y.recommendations, agreements: y.agreements, followUp: y.followUp || null })),
+        };
+      }).filter(Boolean).sort((a, b) => b.date.localeCompare(a.date)),
+    };
+  });
+
+  return out;
+};
+
+// Delivery reports for meeting messages (called from waDeliveryReport).
+module.exports.meetingDeliveryUpdate = async (db, m, state) => {
+  if (m.kind !== "meeting" || !m.meetingId || !m.inviteId) return;
+  const rank = { sent: 1, delivered: 2, read: 3 };
+  const ref = db.collection("meetings").doc(m.meetingId).collection("invites").doc(m.inviteId);
+  const cur = (await ref.get()).data();
+  if (!cur) return;
+  const failed = ["failed", "no_opt_in", "no_capability", "deleted"].includes(state);
+  if (failed) await ref.update({ "wa.status": "failed", "wa.error": `لم تصل الرسالة (${state})` });
+  else if (rank[state] && (rank[state] || 0) > (rank[cur.wa?.status] || 0)) await ref.update({ "wa.status": state });
+};

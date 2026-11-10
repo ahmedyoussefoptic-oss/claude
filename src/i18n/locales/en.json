@@ -46,7 +46,8 @@
     "noDepartment": "No section",
     "back": "Back",
     "darkMode": "Dark mode",
-    "lightMode": "Light mode"
+    "lightMode": "Light mode",
+    "refresh": "Refresh"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -67,7 +68,8 @@
     "noAccess": "No sections are enabled for your account yet. Ask the system admin to choose the sections you can see.",
     "calls": "Call analytics",
     "waReports": "Branch WhatsApp",
-    "finance": "Financial Feedback"
+    "finance": "Financial Feedback",
+    "meetings": "Parent meetings"
   },
   "app": {
     "brand": "Al Moktashef International",
@@ -940,7 +942,8 @@
         "calls": "Call analytics",
         "assistant": "AI assistant",
         "waReports": "Branch WhatsApp",
-        "finance": "Financial feedback"
+        "finance": "Financial feedback",
+        "meetings": "Parent meetings"
       },
       "noneWarning": "No section selected — the employee will see nothing after signing in.",
       "scopeTitle": "Record scope",
@@ -1533,7 +1536,8 @@
         "status": "Status",
         "source": "Source",
         "updatedAt": "Last updated"
-      }
+      },
+      "meetings": "Parent meetings"
     }
   },
   "branchVisit": {
@@ -1618,7 +1622,8 @@
       "tripNotice": "School trip notice",
       "tripAnnouncementImage": "Trip announcement with image",
       "appointmentReminder": "Visit reminder",
-      "lostFoundFound": "Lost item found"
+      "lostFoundFound": "Lost item found",
+      "meetingNotice": "Parent meeting notice"
     },
     "guideTitle": "Suggested template texts to submit for approval",
     "guideIntro": "Create these four templates in the Taqnyat portal (Message Templates) with the names above, and wait for WhatsApp approval before enabling.",
@@ -1650,7 +1655,8 @@
     "appointmentVars": "{{3}} student name — {{4}} time and branch. Sent when the principal confirms or sets another time.",
     "tripVars": "{{1}} student — {{2}} trip name — {{3}} date and time — {{4}} message (announcement, reminder, receipt accepted/rejected) — {{5}} trip page link. Same “contact the branch” button /contact/{{1}}.",
     "tripImageVars": "Template with an image header (Header: Image) — same variables as the trip notice: {{1}} student, {{2}} trip, {{3}} date, {{4}} fee and deadline, {{5}} trip link, plus the contact button. Used to announce trips that have an image; leave empty to send text.",
-    "lostFoundVars": "{{1}} reporter — {{3}} item — {{4}} «found (place), collect it from the branch»"
+    "lostFoundVars": "{{1}} reporter — {{3}} item — {{4}} «found (place), collect it from the branch»",
+    "meetingVars": "{{1}} student (or siblings) — {{2}} meeting — {{3}} date and time — {{4}} the message (invitation, confirmation, reminder, thanks and survey, absence, cancellation) — {{5}} the family's own link. «Contact the branch» button as /contact/{{1}}. One template for every meeting message."
   },
   "contactBranch": {
     "loading": "Opening the branch chat...",
@@ -1760,7 +1766,8 @@
       "reminder": "Reminders",
       "platform": "MIS platform",
       "leaves": "Leave request steps",
-      "callTasks": "Call tasks"
+      "callTasks": "Call tasks",
+      "meetings": "Parent meetings"
     },
     "hints": {
       "assigned": "When feedback, a tech ticket or lost item is assigned to you",
@@ -1777,7 +1784,8 @@
       "reminder": "When a colleague sends you a reminder about a record assigned to you",
       "platform": "New leave requests and new customer inquiries",
       "leaves": "Approval, calling and handover, and the parent's notices (on the way, arrived, changed, cancelled)",
-      "callTasks": "New calls assigned, the morning reminder of today's calls, and the supervisor's daily summary"
+      "callTasks": "New calls assigned, the morning reminder of today's calls, and the supervisor's daily summary",
+      "meetings": "A low rating from a parent after a parent meeting"
     },
     "channelsTitle": "Delivery (in addition to the in-app bell)",
     "channels": {
@@ -3904,5 +3912,376 @@
     "title": "Financial Feedback & Complaints",
     "subtitle": "Parent feedback about fees, invoices and payments — assigned to the finance department automatically",
     "newComplaint": "New Financial Feedback"
+  },
+  "meetings": {
+    "title": "Parent meetings",
+    "subtitle": "From the invitation and bookings to the survey and the final report",
+    "new": "New meeting",
+    "empty": "No meetings.",
+    "filterActive": "Current",
+    "filterAll": "All",
+    "draftHint": "Draft — send the invitations from the meeting page",
+    "back": "All meetings",
+    "remoteOn": "Remote attendance available",
+    "waNotReady": "The approved «meeting notice» template is not set in the WhatsApp API settings yet, so messages are not sent automatically. Send the invitation links from the invitations list (a WhatsApp button per family) until it is approved.",
+    "cancelledReason": "Cancelled: {{reason}}",
+    "type": {
+      "BOTH": "General + one-to-one",
+      "INDIVIDUAL": "One-to-one with teachers",
+      "GENERAL": "General session"
+    },
+    "typeHint": {
+      "BOTH": "A hall session, then appointments with teachers",
+      "INDIVIDUAL": "Timed appointments with each teacher",
+      "GENERAL": "One session for all parents"
+    },
+    "status": {
+      "DRAFT": "Draft",
+      "OPEN": "Registration open",
+      "CLOSED": "Registration closed",
+      "COMPLETED": "Completed",
+      "CANCELLED": "Cancelled"
+    },
+    "response": {
+      "ATTEND": "Attending",
+      "REMOTE": "Remote",
+      "DECLINE": "Not attending",
+      "NONE": "No reply"
+    },
+    "wa": {
+      "pending": "Not sent",
+      "sent": "Sent",
+      "delivered": "Delivered",
+      "read": "Read",
+      "failed": "Failed",
+      "manual": "Sent manually",
+      "noPhone": "No number",
+      "walkIn": "Walk-in"
+    },
+    "form": {
+      "editTitle": "Edit meeting",
+      "newTitle": "New parent meeting",
+      "basics": "Meeting details",
+      "title": "Meeting name",
+      "titlePh": "e.g. Grade 4 parents' meeting — Term 1",
+      "type": "Meeting type",
+      "start": "Start",
+      "end": "End",
+      "regDeadline": "Registration deadline",
+      "location": "Place",
+      "locationPh": "e.g. School theatre",
+      "teamsLink": "Microsoft Teams link (optional)",
+      "teamsHint": "When set, parents can choose to attend remotely.",
+      "agenda": "Agenda",
+      "agendaHint": "Shown to parents on the invitation page.",
+      "audience": "Audience",
+      "audienceHint": "Parents from the student data; siblings get one message.",
+      "branches": "Branches",
+      "stages": "Grades",
+      "allIfEmpty": "None selected = all",
+      "classes": "Classes",
+      "sections": "Sections",
+      "gender": "Students",
+      "audienceCount": "{{families}} families ({{students}} students) — {{noPhone}} without a mobile number",
+      "pickBranches": "Pick branches to see how many are invited.",
+      "slots": "One-to-one appointments",
+      "slotsHint": "The same grid for every teacher; parents book one slot with each teacher they want.",
+      "slotsStart": "From",
+      "slotsEnd": "To",
+      "slotMinutes": "Slot length (min)",
+      "breakStart": "Break start",
+      "breakEnd": "Break end",
+      "teachers": "Participating teachers",
+      "teachersHint": "Each teacher gets a link and an access code for their schedule and minutes. The teacher's classes decide which parents can book them.",
+      "teacherName": "Teacher name",
+      "subject": "Subject",
+      "room": "Room",
+      "teacherClasses": "Teacher's classes (none = all classes)",
+      "addTeacher": "Add teacher",
+      "autoReminders": "Automatic reminders the evening before and the morning of the meeting, and to those who haven't replied before registration closes",
+      "notifyChange": "Tell the invited parents on WhatsApp if the time or place changes or booked slots are cancelled"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "invites": "Invited ({{count}})",
+      "schedule": "Schedule",
+      "live": "Meeting day",
+      "report": "Report"
+    },
+    "actions": {
+      "invite": "Send invitations",
+      "inviteNew": "Invite new",
+      "resend": "Resend to non-responders",
+      "close": "Close registration",
+      "reopen": "Reopen registration",
+      "complete": "End meeting",
+      "survey": "Send survey",
+      "cancel": "Cancel"
+    },
+    "notice": {
+      "built": "{{created}} new invitations of {{total}} families",
+      "sent": "Sent {{sent}} of {{total}} ({{failed}} failed)",
+      "manual": "Invitations created — send the links from the invitations list",
+      "survey": "Survey: {{sent}} of {{total}}",
+      "absent": "Absentee message: {{sent}} of {{total}}",
+      "calls": "{{count}} calls added to «Call tasks»",
+      "done": "Done",
+      "oneSent": "Link sent",
+      "saved": "Saved",
+      "dropped": "Saved — {{count}} bookings no longer on the grid were cancelled"
+    },
+    "stats": {
+      "families": "Invited",
+      "studentsN": "{{count}} students",
+      "sent": "Invitations sent",
+      "failedN": "{{failed}} failed · {{noPhone}} no number",
+      "responded": "Response rate",
+      "attend": "Confirmed",
+      "remoteDecline": "Remote {{remote}} · declined {{decline}}",
+      "attended": "Attended",
+      "ofConfirmed": "of confirmed",
+      "satisfaction": "Avg. satisfaction",
+      "surveysN": "{{count}} ratings · {{low}} low"
+    },
+    "links": {
+      "title": "Teacher and reception links",
+      "hint": "Each link opens with a 4-digit code, no account needed. Share it only with its owner.",
+      "desk": "Reception (check-in)",
+      "pin": "Access code",
+      "copy": "Copy",
+      "open": "Open",
+      "allClasses": "All classes",
+      "whatsapp": "WhatsApp",
+      "teacherMsg": "{{name}}, your schedule and minutes for «{{title}}» on {{date}}:\n{{link}}\nAccess code: {{pin}}"
+    },
+    "invites": {
+      "search": "Search by student name, ID, class or entry code",
+      "filter": {
+        "ALL": "All",
+        "NO_RESPONSE": "No reply",
+        "ATTEND": "Attending",
+        "REMOTE": "Remote",
+        "DECLINE": "Not attending",
+        "ATTENDED": "Attended",
+        "NOT_ATTENDED": "Did not attend",
+        "FAILED": "Failed / no number"
+      },
+      "none": "No invitations yet — press «Send invitations».",
+      "col": {
+        "students": "Students",
+        "phone": "Mobile",
+        "message": "Message",
+        "response": "Reply",
+        "slots": "Appointments",
+        "attendance": "Attendance"
+      },
+      "walkIn": "Walk-in",
+      "came": "Attended",
+      "send": "Send link",
+      "recordResponse": "Record the parent's reply",
+      "undoCheckin": "Undo check-in",
+      "checkin": "Check in",
+      "respondHint": "For a reply received by phone or the branch WhatsApp. Bookings are made from the parent's link."
+    },
+    "schedule": {
+      "time": "Time",
+      "done": "Met",
+      "arrived": "Arrived",
+      "booked": "Booked",
+      "cancel": "Cancel",
+      "cancelConfirm": "Cancel this appointment and tell the parent?"
+    },
+    "live": {
+      "confirmed": "Confirmed",
+      "persons": "{{count}} people",
+      "arrived": "Arrived",
+      "notYet": "Not arrived yet",
+      "meetingsDone": "Meetings done",
+      "auto": "Refreshes every 20 seconds",
+      "waiting": "Waiting now: {{count}}",
+      "next": "Next {{time}} — {{name}}",
+      "late": "Late ({{count}})",
+      "noLate": "Nobody is late.",
+      "notToday": "The late list shows on the meeting day."
+    },
+    "complete": {
+      "title": "End meeting",
+      "hint": "Attendees get a thank-you and the survey, absentees a message, and follow-up calls for absentees are added to «Call tasks».",
+      "summaryPh": "A short summary of what was discussed (sent to absentees, read on the calls)",
+      "survey": "Send the thank-you and survey to attendees",
+      "absentMessage": "Send absentees a message with the summary",
+      "calls": "Create a call campaign to follow up absentees",
+      "confirm": "End meeting"
+    },
+    "cancel": {
+      "title": "Cancel meeting",
+      "reason": "Reason",
+      "notify": "Tell the invited parents on WhatsApp",
+      "confirm": "Cancel meeting"
+    },
+    "parent": {
+      "brand": "Parent meeting",
+      "remoteAvailable": "Remote attendance available",
+      "deadline": "Confirm by: {{date}}",
+      "cancelled": "This meeting was cancelled",
+      "verifyTitle": "Parent verification",
+      "verifyHint": "Enter the national ID of one of your children invited to this meeting.",
+      "surveyThanks": "Thank you for your rating",
+      "ended": "The meeting has ended, thank you.",
+      "closed": "Registration for this meeting is closed. Please contact the branch.",
+      "students": "Students",
+      "responseLabel": "Will you attend the meeting?",
+      "response": {
+        "ATTEND": "I'll attend",
+        "REMOTE": "Remotely",
+        "DECLINE": "I can't attend"
+      },
+      "attendees": "Number attending",
+      "bookTitle": "Book your appointments with the teachers",
+      "bookHint": "Each appointment is {{minutes}} minutes. Pick a different time for each teacher; booked times are struck out.",
+      "teacherTopic": "What you'd like to discuss with the teacher (optional)",
+      "topics": "Topics you'd like to discuss (optional)",
+      "topicsPh": "e.g. reading level, homework...",
+      "pickResponse": "Choose whether you'll attend.",
+      "submit": "Confirm",
+      "done": {
+        "ATTEND": "Your attendance is confirmed",
+        "REMOTE": "You're registered to attend remotely",
+        "DECLINE": "Your apology is recorded, thank you"
+      },
+      "qrHint": "Show this code at reception on the meeting day, or tell them the number:",
+      "yourSlots": "Your appointments",
+      "joinTeams": "Join the meeting on Teams",
+      "edit": "Change reply or appointments",
+      "surveyIncomplete": "Please complete the rating.",
+      "surveyTitle": "Rate the meeting (under a minute)",
+      "surveySubmit": "Send rating"
+    },
+    "survey": {
+      "overall": "Overall rating of the meeting",
+      "organization": "Organization and punctuality",
+      "usefulness": "Usefulness of the information",
+      "teacher": "Teacher's manner and clarity: {{name}}",
+      "answered": "Were your questions answered?",
+      "answers": {
+        "YES": "Yes",
+        "PARTLY": "Partly",
+        "NO": "No",
+        "": "—"
+      },
+      "comment": "Comments and suggestions (optional)"
+    },
+    "report": {
+      "title": "Final meeting report",
+      "invited": "Invited",
+      "responded": "Replied",
+      "confirmed": "Confirmed",
+      "attended": "Attended",
+      "item": "Item",
+      "value": "Value",
+      "satisfaction": "Satisfied (4–5)",
+      "avgDelay": "Average start delay (min)",
+      "followUps": "Follow-up notes",
+      "student": "Student",
+      "grade": "Grade",
+      "class": "Class",
+      "response": "Reply",
+      "teacher": "Teacher",
+      "subject": "Subject",
+      "booked": "Booked",
+      "done": "Done",
+      "minutes": "Minutes",
+      "rating": "Rating",
+      "ratings": "Ratings",
+      "parent": "Parent",
+      "comment": "Comment",
+      "topic": "Topic",
+      "type": "Type",
+      "call": "Call",
+      "callResult": "Call result",
+      "sheetSummary": "Summary",
+      "sheetStudents": "Students",
+      "sheetTeachers": "Teachers",
+      "sheetSurveys": "Ratings",
+      "sheetTopics": "Topics",
+      "sheetFollowUps": "Follow-ups",
+      "sheetAbsent": "Absentees",
+      "funnel": "Participation funnel",
+      "kpis": "Response {{response}}% · attendance {{attendance}}% of invited and {{ofConfirmed}}% of confirmed · average start delay {{delay}} min ({{slots}} meetings)",
+      "satisfactionTitle": "Parent satisfaction",
+      "satisfied": "Satisfied (4 or 5): {{pct}}% of {{count}} ratings",
+      "noSurveys": "No ratings yet.",
+      "byGroup": "Participation by",
+      "group": {
+        "branch": "Branch",
+        "grade": "Grade",
+        "className": "Class"
+      },
+      "teachersTitle": "Teachers",
+      "topicsTitle": "Topics raised by parents ({{count}})",
+      "general": "General",
+      "followUpsTitle": "Follow-ups: {{count}} (open {{open}} · solved {{closed}})",
+      "noFollowUps": "No notes were opened from the meeting.",
+      "absentTitle": "Absentees ({{count}})",
+      "callStatus": {
+        "PENDING": "Awaiting call",
+        "DONE": "Called",
+        "FAILED": "Could not reach"
+      },
+      "comments": "Parents' comments and low ratings",
+      "compare": "Compared with earlier meetings",
+      "meeting": "Meeting",
+      "responseRate": "Response",
+      "attendanceRate": "Attendance",
+      "avgRating": "Satisfaction"
+    },
+    "staff": {
+      "pinHint": "Enter the 4-digit access code you received with the link.",
+      "enter": "Enter",
+      "teacherTitle": "My parent-meeting appointments",
+      "deskTitle": "Parent meeting reception"
+    },
+    "teacher": {
+      "minuteSaved": "Minute saved",
+      "writeMinute": "Minute",
+      "progress": "{{done}} of {{total}} meetings done",
+      "empty": "No appointments booked with you yet.",
+      "arrived": "Arrived",
+      "notArrived": "Not arrived",
+      "start": "Start",
+      "done": "Done",
+      "parentTopics": "What the parent wants to discuss",
+      "others": "Parents who came without an appointment with you",
+      "othersHint": "From your classes; write a minute if you met them.",
+      "minuteTitle": "Meeting minute",
+      "points": "Points discussed",
+      "recommendations": "Recommendations",
+      "agreements": "Agreed actions",
+      "followUpCreated": "Follow-up note {{number}} created",
+      "followUp": "Needs follow-up?",
+      "followUpHint": "A note is created and assigned to the right department automatically.",
+      "noFollowUp": "No follow-up needed",
+      "followUpPh": "What needs follow-up?",
+      "saveMinute": "Save minute",
+      "followUpTextRequired": "Write what needs follow-up."
+    },
+    "desk": {
+      "undo": "Undo",
+      "checkin": "Check in",
+      "qrHint": "Scan the parent's code with this phone's camera to check them in automatically, or search by name, ID or entry code.",
+      "welcome": "Checked in — welcome",
+      "search": "Student name, ID, entry code or last 4 digits of the mobile",
+      "noResults": "No results.",
+      "walkIn": "Parent without an invitation",
+      "walkInHint": "For a student from the meeting's branches who wasn't invited.",
+      "register": "Register",
+      "already": "Already checked in",
+      "showCode": "Entry code for {{names}} — show it to reception:"
+    },
+    "record": {
+      "title": "Parent meetings",
+      "minutes": "Teachers' minutes",
+      "none": "No meetings."
+    }
   }
 }
