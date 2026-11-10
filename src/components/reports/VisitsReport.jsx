@@ -4,6 +4,7 @@ import { ar, enUS } from 'date-fns/locale';
 import { Armchair, Handshake, Clock, Hourglass, CheckCircle2, CalendarCheck, CalendarX, Timer } from 'lucide-react';
 import { complaintTypesLabel, complaintStatusLabel } from '../../config/complaintTypes';
 import { formatMinutes } from '../../utils/duration';
+import { matchesClass } from '../../utils/classFilter';
 
 const DAY_MS = 86400000;
 const minutes = (a, b) => Math.max(0, Math.round((b - a) / 60000));
@@ -57,7 +58,7 @@ const rangeOf = (filters) => {
 export function reportVisits(complaints, filters) {
   const inRange = rangeOf(filters);
   return complaints
-    .filter((c) => c.viaVisitQr && (!filters.branch || c.branch === filters.branch) && inRange(c.visitArrivedAt?.toMillis?.()))
+    .filter((c) => c.viaVisitQr && (!filters.branch || c.branch === filters.branch) && matchesClass(c, filters) && inRange(c.visitArrivedAt?.toMillis?.()))
     .map((c) => {
       const arrived = c.visitArrivedAt.toMillis();
       const met = c.visitStatus === 'MET' && c.visitMetAt ? c.visitMetAt.toMillis() : null;
@@ -73,7 +74,7 @@ export default function VisitsReport({ complaints, filters, branches, complaintT
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
   const typeName = (id) => complaintTypes.find((ct) => ct.id === id)?.name || id;
   const inRange = rangeOf(filters);
-  const inBranch = (c) => !filters.branch || c.branch === filters.branch;
+  const inBranch = (c) => (!filters.branch || c.branch === filters.branch) && matchesClass(c, filters);
   const now = Date.now();
 
   const visits = reportVisits(complaints, filters);

@@ -1274,7 +1274,9 @@
       "complaint": "المحتوى",
       "reply": "رد الحل",
       "noReply": "لا يوجد رد حل مسجّل"
-    }
+    },
+    "allStages": "كل المراحل",
+    "allClasses": "كل الفصول"
   },
   "techSupportDetails": {
     "viaPublicLink": "عبر الرابط العام",

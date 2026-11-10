@@ -9,6 +9,7 @@ import { isEscalatedResolved, complaintStatusLabel, complaintHasType, complaintT
 import { isTicketEscalatedResolved } from '../../config/techSupport';
 import { complaintMetrics, ticketMetrics, timingRows, timingByBranch } from '../../utils/reportMetrics';
 import { useSlaSettings, elapsedMs } from '../../utils/businessTime';
+import { stageClassLabel } from '../../utils/classFilter';
 
 const TYPE_ICONS = { ACADEMIC: GraduationCap, ADMINISTRATIVE: Briefcase, BEHAVIORAL: AlertOctagon };
 const TYPE_GRADIENTS = { ACADEMIC: 'from-indigo-500 to-violet-600', ADMINISTRATIVE: 'from-cyan-500 to-teal-600', BEHAVIORAL: 'from-rose-500 to-pink-600' };
@@ -566,7 +567,7 @@ export default function ComplaintsReport({
                   <td className="py-1.5 px-2 text-slate-600">{c.solvedAt && c.createdAt ? dur(elapsedMs(c.createdAt, c.solvedAt, sla)) : '—'}</td>
                   <td className="py-1.5 px-2">{delayCell(timingOf.get(c.id))}</td>
                   <td className="py-1.5 px-2 text-slate-600">{c.studentName || '—'}</td>
-                  <td className="py-1.5 px-2 text-slate-600">{c.stage || '—'}</td>
+                  <td className="py-1.5 px-2 text-slate-600" dir="ltr">{stageClassLabel(c) || '—'}</td>
                 </tr>
                 {showContent && <RecordContentRow colSpan={11} {...complaintContent(c)} />}
                 </Fragment>
@@ -586,7 +587,7 @@ export default function ComplaintsReport({
                   <td className="py-1.5 px-2 text-slate-600">{tk.resolutionMessageSentAt && tk.createdAt ? dur(elapsedMs(tk.createdAt, tk.resolutionMessageSentAt, sla)) : '—'}</td>
                   <td className="py-1.5 px-2">{delayCell(timingOf.get(tk.id))}</td>
                   <td className="py-1.5 px-2 text-slate-600">{tk.studentName || '—'}</td>
-                  <td className="py-1.5 px-2 text-slate-600">{tk.stage || '—'}</td>
+                  <td className="py-1.5 px-2 text-slate-600" dir="ltr">{stageClassLabel(tk) || '—'}</td>
                 </tr>
                 {showContent && <RecordContentRow colSpan={11} {...ticketContent(tk)} />}
                 </Fragment>

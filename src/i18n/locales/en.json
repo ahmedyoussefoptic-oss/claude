@@ -1279,7 +1279,9 @@
       "complaint": "Content",
       "reply": "Solution reply",
       "noReply": "No solution reply recorded"
-    }
+    },
+    "allStages": "All grades",
+    "allClasses": "All classes"
   },
   "techSupportDetails": {
     "viaPublicLink": "Via public link",

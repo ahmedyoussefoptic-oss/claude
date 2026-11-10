@@ -26,6 +26,9 @@ import { useSlaSettings, elapsedMs, businessMs } from '../utils/businessTime';
 import { canAccessTechSupport, canSeeModule } from '../utils/scope';
 import { complaintStatusLabel, complaintHasType, complaintTypesLabel } from '../config/complaintTypes';
 import { complaintContent, ticketContent } from '../utils/reportContent';
+import { matchesClass, classOptions, stageClassLabel } from '../utils/classFilter';
+import { STAGES } from '../config/complaintTypes';
+import { classOptionsForStage } from '../config/techSupport';
 
 // Excel sheet names are capped at 31 chars and can't contain \ / ? * [ ] : —
 // our translated labels are short enough in practice, but trim defensively.
@@ -51,7 +54,7 @@ function Stars({ value }) {
   );
 }
 
-const emptyFilters = { from: '', to: '', complaintType: '', subType: '', branch: '', assignedTo: '', techChannel: '' };
+const emptyFilters = { from: '', to: '', complaintType: '', subType: '', branch: '', stage: '', grade: '', assignedTo: '', techChannel: '' };
 
 export default function Reports() {
   const { t, i18n } = useTranslation();
@@ -166,7 +169,7 @@ export default function Reports() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFilters((prev) => ({ ...prev, [name]: value, ...(name === 'complaintType' ? { subType: '' } : {}) }));
+    setFilters((prev) => ({ ...prev, [name]: value, ...(name === 'complaintType' ? { subType: '' } : {}), ...(name === 'stage' ? { grade: '' } : {}) }));
   };
 
   const resetFilters = () => setFilters(emptyFilters);
@@ -174,6 +177,7 @@ export default function Reports() {
   const results = useMemo(() => {
     return complaints.filter((c) => {
       if (filters.branch && c.branch !== filters.branch) return false;
+      if (!matchesClass(c, filters)) return false;
       if (filters.complaintType && !complaintHasType(c, filters.complaintType)) return false;
       if (filters.subType && c.subType !== filters.subType && !(c.extraTypes || []).some((x) => x.subType === filters.subType)) return false;
       if (filters.assignedTo && !c.assignedTo?.includes(filters.assignedTo)) return false;
@@ -194,6 +198,7 @@ export default function Reports() {
   // Lost & found report: date range, branch and assignee from the filters.
   const lostResults = useMemo(() => lostItems.filter((i) => {
     if (filters.branch && i.branch !== filters.branch) return false;
+    if (!matchesClass(i, filters)) return false;
     if (filters.assignedTo && !(i.assignedTo || []).includes(filters.assignedTo)) return false;
     const createdAt = i.createdAt?.toDate?.();
     if (filters.from && (!createdAt || createdAt < new Date(filters.from))) return false;
@@ -223,6 +228,7 @@ export default function Reports() {
   const ticketResults = useMemo(() => {
     return techTickets.filter((tk) => {
       if (filters.branch && tk.branch !== filters.branch) return false;
+      if (!matchesClass(tk, filters)) return false;
       if (filters.assignedTo && !tk.assignedTo?.includes(filters.assignedTo)) return false;
       if (filters.techChannel && ticketChannel(tk) !== filters.techChannel) return false;
       if (filters.from) {
@@ -330,12 +336,18 @@ export default function Reports() {
   const typeName = (id) => complaintTypes.find((ct) => ct.id === id)?.name || id;
   const problemTypeName = (id) => problemTypes.find((pt) => pt.id === id)?.name || id;
 
+  // Class choices for the chosen grade level, including any other spelling
+  // found in the loaded records.
+  const gradeChoices = classOptions(filters.stage, [...complaints, ...techTickets, ...lostItems], classOptionsForStage(filters.stage));
+
   const activeFilterLabels = [];
   if (filters.from) activeFilterLabels.push(`${t('reports.fromShort')} ${filters.from}`);
   if (filters.to) activeFilterLabels.push(`${t('reports.toShort')} ${filters.to}`);
   if (reportType !== 'TECH_SUPPORT' && filters.complaintType) activeFilterLabels.push(`${t('reports.typeShort')} ${typeName(filters.complaintType)}`);
   if (reportType !== 'TECH_SUPPORT' && filters.subType) activeFilterLabels.push(`${t('complaintForm.subTypeLabel')}: ${filters.subType}`);
   if (filters.branch) activeFilterLabels.push(`${t('reports.branchShort')} ${branchName(filters.branch)}`);
+  if (filters.stage) activeFilterLabels.push(`${t('complaintForm.stageLabel')}: ${filters.stage}`);
+  if (filters.grade) activeFilterLabels.push(`${t('complaintForm.gradeLabel')}: ${filters.grade}`);
   if (filters.assignedTo) activeFilterLabels.push(`${t('reports.employeeShort')} ${specialists.find((s) => s.id === filters.assignedTo)?.name || ''}`);
   if (showsTech && filters.techChannel) activeFilterLabels.push(`${t('reports.channels.method')}: ${t(`reports.channels.short.${filters.techChannel}`)}`);
 
@@ -390,7 +402,7 @@ export default function Reports() {
         [t('reports.studentNameColumn')]: c.studentName || '',
         [t('reports.studentIdColumn')]: c.studentId || '',
         [t('reports.studentPhoneColumn')]: c.parentPhone || '',
-        [t('reports.stageColumn')]: c.stage || '',
+        [t('reports.stageColumn')]: stageClassLabel(c),
       }))), label(t('reports.surveyDetailsLabel')));
 
       if (reopenedWithoutRating.length) {
@@ -617,7 +629,7 @@ export default function Reports() {
             [t('reports.resolutionTime')]: c.solvedAt && c.createdAt ? formatDuration(elapsedMs(c.createdAt, c.solvedAt, sla), t) : '',
             [t('reports.timing.delay')]: delayText(timingOf.get(c.id)),
             [t('reports.studentNameColumn')]: c.studentName || '',
-            [t('reports.stageColumn')]: c.stage || '',
+            [t('reports.stageColumn')]: stageClassLabel(c),
             ...(showContent ? { [t('reports.content.complaint')]: complaintContent(c).content, [t('reports.content.reply')]: complaintContent(c).reply } : {}),
           })),
           ...(mergeTech ? ticketResults.map((tk) => ({
@@ -633,7 +645,7 @@ export default function Reports() {
             [t('reports.resolutionTime')]: tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(elapsedMs(tk.createdAt, tk.resolutionMessageSentAt, sla), t) : '',
             [t('reports.timing.delay')]: delayText(timingOf.get(tk.id)),
             [t('reports.studentNameColumn')]: tk.studentName || '',
-            [t('reports.stageColumn')]: tk.stage || '',
+            [t('reports.stageColumn')]: stageClassLabel(tk),
             ...(showContent ? { [t('reports.content.complaint')]: ticketContent(tk).content, [t('reports.content.reply')]: ticketContent(tk).reply } : {}),
           })) : []),
         ]);
@@ -688,7 +700,7 @@ export default function Reports() {
         [t('common.status')]: t(`statuses.techSupport.${tk.status}`, tk.status),
         [t('reports.resolutionTime')]: tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(elapsedMs(tk.createdAt, tk.resolutionMessageSentAt, sla), t) : '',
         [t('techSupportDetails.student')]: tk.studentName || '',
-        [t('reports.stageColumn')]: tk.stage || '',
+        [t('reports.stageColumn')]: stageClassLabel(tk),
         ...(showContent ? { [t('reports.content.complaint')]: ticketContent(tk).content, [t('reports.content.reply')]: ticketContent(tk).reply } : {}),
       })));
       XLSX.utils.book_append_sheet(wb, detailSheet, sheetName(t('reports.detailsLabel')));
@@ -787,6 +799,20 @@ export default function Reports() {
             <select name="branch" value={filters.branch} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
               <option value="">{t('common.allBranches')}</option>
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.stageLabel')}</label>
+            <select name="stage" value={filters.stage} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
+              <option value="">{t('reports.allStages')}</option>
+              {STAGES.map((st) => <option key={st} value={st}>{st}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.gradeLabel')}</label>
+            <select name="grade" value={filters.grade} onChange={handleChange} disabled={!filters.stage} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white disabled:text-slate-400 disabled:bg-slate-50">
+              <option value="">{t('reports.allClasses')}</option>
+              {gradeChoices.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>
           {reportType !== 'VISITS' && <div>
@@ -1042,7 +1068,7 @@ export default function Reports() {
                     <td className="py-2 text-slate-600">{t(`statuses.techSupport.${tk.status}`, tk.status)}</td>
                     <td className="py-2 text-slate-600">{tk.resolutionMessageSentAt && tk.createdAt ? formatDuration(elapsedMs(tk.createdAt, tk.resolutionMessageSentAt, sla), t) : '—'}</td>
                     <td className="py-2 text-slate-600">{tk.studentName || '—'}</td>
-                    <td className="py-2 text-slate-600">{tk.stage || '—'}</td>
+                    <td className="py-2 text-slate-600" dir="ltr">{stageClassLabel(tk) || '—'}</td>
                   </tr>
                   {showContent && <RecordContentRow colSpan={10} {...ticketContent(tk)} />}
                   </Fragment>
@@ -1208,7 +1234,7 @@ export default function Reports() {
                     <td className="py-2 text-slate-600">{c.studentName || '—'}</td>
                     <td className="py-2 text-slate-600" dir="ltr">{c.studentId || '—'}</td>
                     <td className="py-2 text-slate-600" dir="ltr">{c.parentPhone || '—'}</td>
-                    <td className="py-2 text-slate-600">{c.stage || '—'}</td>
+                    <td className="py-2 text-slate-600" dir="ltr">{stageClassLabel(c) || '—'}</td>
                   </tr>
                 ))}
               </tbody>
