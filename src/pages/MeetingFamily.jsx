@@ -24,64 +24,66 @@ const writeSession = (token, v) => { try { if (v) localStorage.setItem(storeKey(
 export default function MeetingFamily({ token }) {
   const { t } = useTranslation();
   const [sess, setSess] = useState(() => readSession(token));
-  const [state, setState] = useState(null);
-  const [others, setOthers] = useState([]);
-  const [editing, setEditing] = useState(false);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(!!readSession(token));
+  const [first, setFirst] = useState(null); // the sign-in reply
 
-  const refresh = useCallback(async (s = sess, quiet = false) => {
-    if (!s) return;
+  const signOut = () => { writeSession(token, null); setSess(null); setFirst(null); };
+  if (!sess) {
+    return <SignIn onSubmit={(v) => callMeeting('meetingFamilyVerify', { token, ...v })} onDone={(r) => {
+      const s = { familyToken: r.familyToken, session: r.session };
+      writeSession(token, s);
+      setFirst(r);
+      setSess(s);
+    }} />;
+  }
+  return (
+    <>
+      <div className="w-full max-w-2xl flex justify-end text-xs text-slate-500">
+        <button type="button" onClick={signOut} className="flex items-center gap-1 hover:text-primary"><LogOut className="w-3.5 h-3.5" />{t('meetings.family.signOut')}</button>
+      </div>
+      <FamilyPanel sess={sess} initial={first} others={first?.others || []} onExpired={signOut} />
+    </>
+  );
+}
+
+// One meeting for one family (also used for each branch on the portal).
+export function FamilyPanel({ sess, initial, others = [], onExpired }) {
+  const { t } = useTranslation();
+  const [state, setState] = useState(initial || null);
+  const [editing, setEditing] = useState(!!initial && !initial.invite.response && initial.meeting.registrationOpen);
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(!initial);
+
+  const refresh = useCallback(async (quiet = false) => {
     if (!quiet) setLoading(true);
     try {
-      const r = await callMeeting('meetingFamilyState', { token: s.familyToken, session: s.session });
-      setState(r);
+      setState(await callMeeting('meetingFamilyState', { token: sess.familyToken, session: sess.session }));
     } catch (err) {
-      if (/الجلسة|session/i.test(err.message)) { writeSession(token, null); setSess(null); setState(null); } else setError(err.message);
+      if (/الجلسة|session/i.test(err.message)) onExpired?.(); else setError(err.message);
     } finally { setLoading(false); }
-  }, [sess, token]);
-  useEffect(() => { if (sess) refresh(sess); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [sess, onExpired]);
+  useEffect(() => { if (!initial) refresh(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // On the day: the ticket follows the interviews.
   useEffect(() => {
     if (!state?.invite.attended || state.allDone) return undefined;
-    const timer = setInterval(() => refresh(sess, true), 15000);
+    const timer = setInterval(() => refresh(true), 15000);
     return () => clearInterval(timer);
-  }, [state?.invite.attended, state?.allDone, refresh, sess]);
+  }, [state?.invite.attended, state?.allDone, refresh]);
 
-  const signOut = () => { writeSession(token, null); setSess(null); setState(null); setEditing(false); };
-
-  if (loading) return <Loader2 className="w-8 h-8 animate-spin text-primary mt-10" />;
-  if (!state) {
-    return <SignIn token={token} onDone={(r) => {
-      const s = { familyToken: r.familyToken, session: r.session };
-      writeSession(token, s);
-      setSess(s);
-      setOthers(r.others || []);
-      setState(r);
-      setEditing(!r.invite.response && r.meeting.registrationOpen);
-    }} />;
-  }
+  if (loading) return <Loader2 className="w-8 h-8 animate-spin text-primary mt-6" />;
+  if (!state) return <div className={`${card} text-center text-slate-600`}>{error}</div>;
   const { meeting, invite } = state;
-  const head = (
-    <div className="w-full max-w-2xl flex items-center justify-between text-xs text-slate-500">
-      <span>{state.students.map((s) => s.name).join('، ')}</span>
-      <button type="button" onClick={signOut} className="flex items-center gap-1 hover:text-primary"><LogOut className="w-3.5 h-3.5" />{t('meetings.family.signOut')}</button>
-    </div>
-  );
-
-  if (state.surveyOpen) {
-    return <>{head}{state.surveyDone ? <Done title={t('meetings.parent.surveyThanks')} /> : <FamilySurvey sess={sess} state={state} onDone={() => refresh()} />}</>;
-  }
-  if (invite.attended) return <>{head}<TicketView state={state} onRefresh={() => refresh()} /></>;
-  if (meeting.status === 'COMPLETED') return <>{head}<div className={`${card} text-center text-slate-700`}>{t('meetings.parent.ended')}</div></>;
+  if (meeting.status === 'CANCELLED') return <div className={`${card} text-center text-slate-700`}>{t('meetings.parent.cancelled')}</div>;
+  if (state.surveyOpen) return state.surveyDone ? <Done title={t('meetings.parent.surveyThanks')} /> : <FamilySurvey sess={sess} state={state} onDone={() => refresh()} />;
+  if (invite.attended) return <TicketView state={state} onRefresh={() => refresh()} />;
+  if (meeting.status === 'COMPLETED') return <div className={`${card} text-center text-slate-700`}>{t('meetings.parent.ended')}</div>;
   if ((editing || !invite.response) && meeting.registrationOpen) {
-    return <>{head}<RequestForm sess={sess} state={state} others={others} onSaved={(r) => { setState(r); setEditing(false); }} /></>;
+    return <RequestForm sess={sess} state={state} others={others} onSaved={(r) => { setState(r); setEditing(false); }} />;
   }
-  if (invite.response) return <>{head}<FamilyConfirmation state={state} onEdit={meeting.registrationOpen ? () => setEditing(true) : null} /></>;
-  return <>{head}<div className={`${card} text-center text-slate-600`}>{error || t('meetings.parent.closed')}</div></>;
+  if (invite.response) return <FamilyConfirmation state={state} onEdit={meeting.registrationOpen ? () => setEditing(true) : null} />;
+  return <div className={`${card} text-center text-slate-600`}>{error || t('meetings.parent.closed')}</div>;
 }
 
-function SignIn({ token, onDone }) {
+export function SignIn({ onSubmit, onDone, title, hint }) {
   const { t } = useTranslation();
   const [id, setId] = useState('');
   const [mobile, setMobile] = useState('');
@@ -91,12 +93,12 @@ function SignIn({ token, onDone }) {
     e.preventDefault();
     setBusy(true);
     setError(null);
-    try { onDone(await callMeeting('meetingFamilyVerify', { token, id, mobile })); } catch (err) { setError(err.message); } finally { setBusy(false); }
+    try { onDone(await onSubmit({ id, mobile })); } catch (err) { setError(err.message); } finally { setBusy(false); }
   };
   return (
     <form onSubmit={submit} className={`${card} space-y-4`}>
-      <h2 className="font-bold text-slate-900 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" />{t('meetings.family.signInTitle')}</h2>
-      <p className="text-sm text-slate-500">{t('meetings.family.signInHint')}</p>
+      <h2 className="font-bold text-slate-900 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" />{title || t('meetings.family.signInTitle')}</h2>
+      <p className="text-sm text-slate-500">{hint || t('meetings.family.signInHint')}</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">{t('meetings.family.parentId')}</label>

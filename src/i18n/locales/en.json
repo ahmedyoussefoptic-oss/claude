@@ -4422,6 +4422,18 @@
       "poster": "Print QR poster",
       "posterTitle": "Parent meeting",
       "posterHint": "Scan to confirm attendance and choose whom to meet"
+    },
+    "portal": {
+      "title": "Parent meetings",
+      "signInTitle": "Sign in to parent meetings",
+      "signInHint": "Enter your national ID (or one of your children's) and the mobile registered with the school to see your children's meetings in every branch.",
+      "none": "There are no parent meetings for your children right now.",
+      "several": "Your children have meetings in {{count}} branches: each branch has its own requests and its own ticket at that branch's reception.",
+      "others": "No current meeting for: {{list}}",
+      "linkTitle": "General parent link",
+      "linkHint": "One link for every branch: parents sign in with their ID and mobile, see the «interviews on request» meetings of their children in each branch, and get a ticket per branch. It stays the same for every meeting.",
+      "message": "Dear parents, to confirm attendance at the parent meetings and choose whom to meet for each child in their branch: {{link}}",
+      "posterHint": "Scan to confirm attendance and choose whom to meet"
     }
   }
 }

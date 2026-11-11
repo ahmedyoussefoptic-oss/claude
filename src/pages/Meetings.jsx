@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
-import { Presentation, Plus, Loader2, CalendarDays, Clock, MapPin, Users as UsersIcon, Star, BookUser } from 'lucide-react';
+import { Presentation, Plus, Loader2, CalendarDays, Clock, MapPin, Users as UsersIcon, Star, BookUser, Link2 } from 'lucide-react';
+import PortalLink from '../components/meetings/PortalLink';
 import TeacherDirectory from '../components/meetings/TeacherDirectory';
 import { useBranches } from '../hooks/useOrgData';
 import MeetingForm from '../components/meetings/MeetingForm';
@@ -21,6 +22,7 @@ export default function Meetings() {
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
   const [directory, setDirectory] = useState(false);
+  const [portalOpen, setPortalOpen] = useState(false);
   const [status, setStatus] = useState('ACTIVE');
 
   const load = useCallback(async () => {
@@ -43,7 +45,8 @@ export default function Meetings() {
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><Presentation className="w-6 h-6 text-primary" />{t('meetings.title')}</h1>
           <p className="text-sm text-slate-500">{t('meetings.subtitle')}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => setPortalOpen(true)} className="px-4 py-2 border border-primary/40 bg-white text-primary rounded-xl text-sm flex items-center gap-2"><Link2 className="w-4 h-4" />{t('meetings.portal.linkTitle')}</button>
           <button type="button" onClick={() => setDirectory(true)} className="px-4 py-2 border border-slate-200 bg-white text-slate-700 rounded-xl text-sm flex items-center gap-2"><BookUser className="w-4 h-4" />{t('meetings.directory.title')}</button>
           <button type="button" onClick={() => setCreating(true)} className="px-4 py-2 bg-primary text-white rounded-xl text-sm flex items-center gap-2"><Plus className="w-4 h-4" />{t('meetings.new')}</button>
         </div>
@@ -91,6 +94,7 @@ export default function Meetings() {
               </div>
             )}
 
+      {portalOpen && <PortalLink onClose={() => setPortalOpen(false)} />}
       {directory && <TeacherDirectory onClose={() => setDirectory(false)} />}
       {creating && <MeetingForm onClose={() => setCreating(false)} onSaved={(r) => { setCreating(false); load(); setSearchParams({ openId: r.id }); }} />}
     </div>

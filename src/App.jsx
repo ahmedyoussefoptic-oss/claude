@@ -25,6 +25,7 @@ import Meetings from './pages/Meetings';
 import MeetingParent from './pages/MeetingParent';
 import MeetingTeacher from './pages/MeetingTeacher';
 import MeetingDesk, { MeetingCheckin } from './pages/MeetingDesk';
+import MeetingPortal from './pages/MeetingPortal';
 import Settings from './pages/Settings';
 import DeletedComplaints from './pages/DeletedComplaints';
 import { ROLES } from './config/roles';
@@ -99,6 +100,7 @@ function App() {
         <Route path="/meeting-teacher/:token" element={<MeetingTeacher />} />
         <Route path="/meeting-desk/:token" element={<MeetingDesk />} />
         <Route path="/meeting-in/:token" element={<MeetingCheckin />} />
+        <Route path="/parent-meetings" element={<MeetingPortal />} />
         <Route path="/leave" element={<LeaveRequest />} />
         <Route path="/sped/:formId" element={<SpecialEducationForm />} />
         <Route path="/join" element={<JoinInquiry />} />

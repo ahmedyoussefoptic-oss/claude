@@ -897,34 +897,26 @@ module.exports = function meetingsModule(d) {
     for (;;) { const c = String(crypto.randomInt(100000, 1000000)); if (!codes.has(c)) return c; }
   }
 
-  out.meetingFamilyVerify = onCall(async (request) => {
-    const x = await byToken(request.data?.token, ["parent", "meeting"]);
-    if (!requestsMode(x.m)) throw new HttpsError("failed-precondition", "هذا الرابط لا يستخدم طلب المقابلات.");
-    if (x.m.status === "CANCELLED") throw new HttpsError("failed-precondition", "تم إلغاء هذا الاجتماع.");
-    const { id, parentId, list } = await familyStudents(request.data?.id);
-    const intl = toIntlNumber(request.data?.mobile);
-    const active = list.filter((s) => s.nationalId && s.active !== false);
-    const ok = /^\d{10,15}$/.test(intl) && active.some((s) => toIntlNumber(s.mobile) === intl);
-    await guard(`f_${x.ref.id}_${id}`, ok);
-    if (!ok) throw new HttpsError("permission-denied", "لم نتمكن من التحقق. تأكد من رقم الهوية ورقم الجوال المسجّل لدى المدرسة.");
-    const branchOf = await branchResolver();
-    const inMeeting = active.filter((s) => targets(x.m, s, branchOf));
-    if (!inMeeting.length) throw new HttpsError("failed-precondition", "أبناؤكم المسجّلون غير مدعوّين لهذا الاجتماع (الفرع أو الصف). للاستفسار تواصلوا مع الفرع.");
-    const key = parentId ? `P${parentId}` : familyKeyFor(x.m, inMeeting[0]);
-    const invRef = x.ref.collection("invites").doc(key);
+  // The family's invite in one meeting (created when the parent signs in
+  // there first), with the children of the family that meeting is for.
+  async function ensureFamilyInvite(ref, m, active, parentId, intl, branchOf) {
+    const inMeeting = active.filter((s) => targets(m, s, branchOf));
+    if (!inMeeting.length) return null;
+    const key = parentId ? `P${parentId}` : familyKeyFor(m, inMeeting[0]);
+    const invRef = ref.collection("invites").doc(key);
     let inv = (await invRef.get()).data();
     const kids = inMeeting.map((s) => kid(s, branchOf));
     if (!inv) {
       const tk = token();
       const ck = token();
       inv = {
-        token: tk, checkinToken: ck, code: await newInviteCode(x.ref), phone: intl, students: kids, studentIds: kids.map((k) => k.id),
+        token: tk, checkinToken: ck, code: await newInviteCode(ref), phone: intl, students: kids, studentIds: kids.map((k) => k.id),
         wa: { status: "self" }, waEvents: {}, response: "", slots: [], requested: [], session: token(), selfRegistered: true, createdAt: Timestamp.now(),
       };
       const batch = db.batch();
       batch.set(invRef, inv);
-      setToken(batch, tk, { kind: "parent", meetingId: x.ref.id, inviteId: key });
-      setToken(batch, ck, { kind: "checkin", meetingId: x.ref.id, inviteId: key });
+      setToken(batch, tk, { kind: "parent", meetingId: ref.id, inviteId: key });
+      setToken(batch, ck, { kind: "checkin", meetingId: ref.id, inviteId: key });
       await batch.commit();
     } else {
       const update = {};
@@ -934,8 +926,65 @@ module.exports = function meetingsModule(d) {
       if (!inv.phone) update.phone = intl;
       if (Object.keys(update).length) { await invRef.update(update); inv = { ...inv, ...update }; }
     }
-    const others = active.filter((s) => !inMeeting.includes(s)).map((s) => ({ name: s.nameAr || s.name || "", grade: studentGrade(s), branch: branchOf(s) }));
-    return { session: inv.session, familyToken: inv.token, others, ...(await familyState(x.ref, x.m, { id: key, ...inv })) };
+    return { key, inv: { id: key, ...inv }, inMeeting };
+  }
+
+  // The parent's ID + the mobile registered for one of the children.
+  async function verifiedFamily(request, guardKey) {
+    const { id, parentId, list } = await familyStudents(request.data?.id);
+    const intl = toIntlNumber(request.data?.mobile);
+    const active = list.filter((s) => s.nationalId && s.active !== false);
+    const ok = /^\d{10,15}$/.test(intl) && active.some((s) => toIntlNumber(s.mobile) === intl);
+    await guard(`${guardKey}_${id}`, ok);
+    if (!ok) throw new HttpsError("permission-denied", "لم نتمكن من التحقق. تأكد من رقم الهوية ورقم الجوال المسجّل لدى المدرسة.");
+    return { parentId, intl, active, branchOf: await branchResolver() };
+  }
+
+  out.meetingFamilyVerify = onCall(async (request) => {
+    const x = await byToken(request.data?.token, ["parent", "meeting"]);
+    if (!requestsMode(x.m)) throw new HttpsError("failed-precondition", "هذا الرابط لا يستخدم طلب المقابلات.");
+    if (x.m.status === "CANCELLED") throw new HttpsError("failed-precondition", "تم إلغاء هذا الاجتماع.");
+    const { parentId, intl, active, branchOf } = await verifiedFamily(request, `f_${x.ref.id}`);
+    const fam = await ensureFamilyInvite(x.ref, x.m, active, parentId, intl, branchOf);
+    if (!fam) throw new HttpsError("failed-precondition", "أبناؤكم المسجّلون غير مدعوّين لهذا الاجتماع (الفرع أو الصف). للاستفسار تواصلوا مع الفرع.");
+    const others = active.filter((s) => !fam.inMeeting.includes(s)).map((s) => ({ name: s.nameAr || s.name || "", grade: studentGrade(s), branch: branchOf(s) }));
+    return { session: fam.inv.session, familyToken: fam.inv.token, others, ...(await familyState(x.ref, x.m, fam.inv)) };
+  });
+
+  // «رابط أولياء الأمور العام»: one link for every branch. The parent signs
+  // in once and gets, for each current «interviews on request» meeting one of
+  // their children is invited to (one per branch, usually), the family's
+  // session there — each with its own requests and its own ticket.
+  out.meetingPortalVerify = onCall(async (request) => {
+    const { parentId, intl, active, branchOf } = await verifiedFamily(request, "portal");
+    const since = riyadhDay(-7);
+    const snap = await db.collection("meetings").where("date", ">=", since).get();
+    const meetings = snap.docs.filter((x) => requestsMode(x.data()) && ["OPEN", "CLOSED", "COMPLETED"].includes(x.data().status))
+      .sort((a, b) => a.data().date.localeCompare(b.data().date));
+    const sessions = [];
+    const covered = new Set();
+    for (const x of meetings) {
+      const m = x.data();
+      const kidsHere = active.filter((s) => targets(m, s, branchOf));
+      if (!kidsHere.length) continue;
+      // A finished meeting only for families who took part (for the survey).
+      if (m.status === "COMPLETED") {
+        const key = parentId ? `P${parentId}` : familyKeyFor(m, kidsHere[0]);
+        const inv = (await x.ref.collection("invites").doc(key).get()).data();
+        if (!inv?.response) continue;
+      }
+      const fam = await ensureFamilyInvite(x.ref, m, active, parentId, intl, branchOf);
+      if (!fam) continue;
+      fam.inMeeting.forEach((s) => covered.add(String(s.nationalId)));
+      sessions.push({ familyToken: fam.inv.token, session: fam.inv.session, ...(await familyState(x.ref, m, fam.inv)) });
+    }
+    const branchSnaps = await db.getAll(...[...new Set(active.map((s) => branchOf(s)).filter(Boolean))].map((b) => db.collection("branches").doc(b)));
+    const bName = Object.fromEntries(branchSnaps.map((b) => [b.id, b.exists ? b.data().name : b.id]));
+    return {
+      sessions,
+      // Children with no current meeting in their branch / grade.
+      others: active.filter((s) => !covered.has(String(s.nationalId))).map((s) => ({ name: s.nameAr || s.name || "", grade: studentGrade(s), branchName: bName[branchOf(s)] || "" })),
+    };
   });
 
   async function familySession(request) {
