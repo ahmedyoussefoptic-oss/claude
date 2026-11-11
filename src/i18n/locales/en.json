@@ -3928,12 +3928,14 @@
     "type": {
       "BOTH": "General + one-to-one",
       "INDIVIDUAL": "One-to-one with teachers",
-      "GENERAL": "General session"
+      "GENERAL": "General session",
+      "REQUESTS": "Interviews on request"
     },
     "typeHint": {
       "BOTH": "A hall session, then appointments with teachers",
       "INDIVIDUAL": "Timed appointments with each teacher",
-      "GENERAL": "One session for all parents"
+      "GENERAL": "One session for all parents",
+      "REQUESTS": "No appointments: parents choose whom to meet for each child; a supervisor directs them on arrival"
     },
     "status": {
       "DRAFT": "Draft",
@@ -4017,7 +4019,11 @@
       "roomsToggle": "Set a room for each teacher in this meeting",
       "roomForAll": "One room for everyone (optional)",
       "applyRoom": "Apply to all teachers",
-      "roomsHint": "Rooms are typed per meeting and shown to parents next to their appointment and at reception. Leave off if the meeting is in one place."
+      "roomsHint": "Rooms are typed per meeting and shown to parents next to their appointment and at reception. Leave off if the meeting is in one place.",
+      "staffTitle": "Teachers and managers",
+      "staffHint": "Whom parents can ask to meet: academic manager, administrative manager and the child's teachers. Each gets a link and code for their requests screen. Classes decide which students see them (no classes = everyone).",
+      "role": "Role",
+      "staffTitleField": "Position (e.g. primary stage)"
     },
     "tabs": {
       "overview": "Overview",
@@ -4091,7 +4097,8 @@
         "message": "Message",
         "response": "Reply",
         "slots": "Appointments",
-        "attendance": "Attendance"
+        "attendance": "Attendance",
+        "requests": "Meetings"
       },
       "walkIn": "Walk-in",
       "came": "Attended",
@@ -4120,7 +4127,11 @@
       "next": "Next {{time}} — {{name}}",
       "late": "Late ({{count}})",
       "noLate": "Nobody is late.",
-      "notToday": "The late list shows on the meeting day."
+      "notToday": "The late list shows on the meeting day.",
+      "nowWith": "In a meeting with: {{name}}",
+      "free": "Free",
+      "directedN": "{{count}} directed",
+      "activeN": "{{count}} in progress"
     },
     "complete": {
       "title": "End meeting",
@@ -4251,7 +4262,19 @@
       "meeting": "Meeting",
       "responseRate": "Response",
       "attendanceRate": "Attendance",
-      "avgRating": "Satisfaction"
+      "avgRating": "Satisfaction",
+      "sheetRequests": "Meetings",
+      "sheetPurposes": "Purposes",
+      "person": "Person",
+      "role": "Role",
+      "asked": "Asked",
+      "notMet": "Not held",
+      "avgWait": "Avg. wait (min)",
+      "avgLength": "Avg. length (min)",
+      "purpose": "Purpose",
+      "requestsTitle": "Interviews on request",
+      "doneOf": "{{done}} of {{asked}} done",
+      "purposes": "Meeting purposes ({{count}})"
     },
     "staff": {
       "pinHint": "Enter the 4-digit access code you received with the link.",
@@ -4294,7 +4317,14 @@
       "walkInHint": "For a student from the meeting's branches who wasn't invited.",
       "register": "Register",
       "already": "Already checked in",
-      "showCode": "Entry code for {{names}} — show it to reception:"
+      "showCode": "Entry code for {{names}} — show it to reception:",
+      "ticketN": "Ticket {{n}}",
+      "board": "Waiting board",
+      "boardCounts": "Waiting {{waiting}} · finished {{finished}}",
+      "boardEmpty": "No parents waiting.",
+      "staffBusy": "This person is in a meeting now",
+      "busyDirect": "Direct (busy)",
+      "direct": "Direct"
     },
     "record": {
       "title": "Parent meetings",
@@ -4316,6 +4346,82 @@
       "notSaved": "Not saved yet",
       "empty": "No rows with teacher names and branches in the file.",
       "noBranchColumn": "No «branch» and «teacher name» columns found. Use the form."
+    },
+    "roles": {
+      "TEACHER": "Teacher",
+      "ACADEMIC": "Academic manager",
+      "ADMIN": "Administrative manager"
+    },
+    "request": {
+      "REQUESTED": "Waiting",
+      "DIRECTED": "Directed",
+      "IN_PROGRESS": "In progress",
+      "DONE": "Done",
+      "CANCELLED": "Not held"
+    },
+    "family": {
+      "signOut": "Sign out",
+      "signInTitle": "Sign in to the parent meeting",
+      "signInHint": "Enter your national ID (or one of your children's) and the mobile registered with the school to see your invited children.",
+      "parentId": "Parent national ID",
+      "pickSomeone": "Choose someone to meet for at least one child.",
+      "purposeRequired": "Write the purpose of each meeting.",
+      "pickTitle": "Whom would you like to meet?",
+      "pickHint": "For each child: choose the academic manager, administrative manager or the child's teachers, and write the purpose so they can prepare.",
+      "selectedN": "{{count}} meetings",
+      "meet": {
+        "ACADEMIC": "Meet an academic manager",
+        "ADMIN": "Meet an administrative manager",
+        "TEACHER": "Meet the child's teachers"
+      },
+      "listOf": {
+        "ACADEMIC": "Academic managers",
+        "ADMIN": "Administrative managers",
+        "TEACHER": "The child's teachers"
+      },
+      "purposePh": "Purpose of the meeting (e.g. maths level, homework...)",
+      "othersNote": "Children not in this meeting: {{list}}",
+      "confirm": "Confirm attendance and send requests",
+      "qrHint": "On arrival show this code at reception, or tell them the number. This page then becomes your ticket.",
+      "edit": "Change meetings",
+      "ticket": "Ticket number",
+      "goNow": "Please go now to: {{name}}",
+      "inMeeting": "Your meeting is in progress with: {{name}}",
+      "allDone": "Your meetings are over, thank you.",
+      "wait": "Please wait — the supervisor will direct you. This page updates itself.",
+      "autoRefresh": "Updates automatically — tap to refresh now",
+      "ratePerson": "{{name}} ({{role}})"
+    },
+    "staffReq": {
+      "skipPrompt": "Why the meeting was not held (optional):",
+      "empty": "No meeting requests for you yet.",
+      "group": {
+        "now": "Current meeting",
+        "directed": "Directed to you now",
+        "waiting": "Arrived and waiting",
+        "notArrived": "Not arrived yet",
+        "done": "Finished meetings"
+      },
+      "arrivedTicket": "Arrived · ticket {{n}} · {{time}}",
+      "startedAt": "started {{time}}",
+      "start": "Start meeting",
+      "end": "End and write result",
+      "skip": "Not held",
+      "purpose": "Purpose",
+      "alsoMeeting": "Also meeting: {{list}}",
+      "result": "Result",
+      "endTitle": "End meeting",
+      "resultRequired": "Write the result of the meeting.",
+      "endSave": "Close meeting"
+    },
+    "publicLink": {
+      "title": "Meeting link for parents",
+      "hint": "One link for all parents: they sign in with their ID and mobile, see their children and request meetings. Share it in class groups or print the QR poster.",
+      "message": "Dear parents, you are invited to «{{title}}» on {{date}}. To confirm and choose whom to meet: {{link}}",
+      "copyMessage": "Copy ready message",
+      "poster": "Print QR poster",
+      "posterTitle": "Parent meeting",
+      "posterHint": "Scan to confirm attendance and choose whom to meet"
     }
   }
 }

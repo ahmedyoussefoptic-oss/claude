@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { complaintTypesOf, complaintTypesLabel } from '../config/complaintTypes';
+import { complaintTypesOf, complaintTypesLabel, isFinancePrimary } from '../config/complaintTypes';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Search, Loader2, X, FileText, Wrench, PackageSearch, Repeat, FileSpreadsheet, ChevronLeft, User, Phone, GraduationCap } from 'lucide-react';
@@ -82,7 +82,7 @@ export default function StudentRecords() {
     return [
       ...complaints.map((c) => base('complaint', c, c.studentId, {
         number: c.complaintId, category: complaintTypesOf(c).map(typeName).join(' + '), title: complaintTypesLabel(c, typeName),
-        subject: c.subject || '', parentName: c.parentName, parentPhone: c.parentPhone,
+        subject: c.subject || '', parentName: c.parentName, parentPhone: c.parentPhone, finance: isFinancePrimary(c),
       })),
       ...tickets.map((tk) => base('tech', tk, tk.nationalId, {
         number: tk.ticketId, category: problemName(tk.problemType), title: problemName(tk.problemType), subject: tk.platform || '',

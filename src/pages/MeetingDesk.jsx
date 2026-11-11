@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Search, UserCheck, Undo2, QrCode, UserPlus, RefreshCw, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Loader2, Search, UserCheck, Undo2, QrCode, UserPlus, RefreshCw, CheckCircle2, AlertTriangle, Ticket, ArrowLeftRight } from 'lucide-react';
 import { PublicShell } from './MeetingParent';
 import { PinGate } from './MeetingTeacher';
 import { callMeeting, meetingTime, savedPin, savePin, savedDesks } from '../config/meetings';
@@ -17,7 +17,7 @@ function InviteRow({ inv, teachers, onCheckin, onUndo, busy, lang, readOnly = fa
       <div className="flex items-start justify-between gap-2">
         <div>
           {inv.students.map((s, i) => <p key={i} className="text-sm font-medium text-slate-900">{s.name} <span className="text-xs text-slate-500" dir="ltr">{s.grade} {s.className}</span></p>)}
-          <p className="text-xs text-slate-500">{t(`meetings.response.${inv.response || 'NONE'}`)}{inv.attendees > 1 ? ` · ×${inv.attendees}` : ''} · <span dir="ltr">{inv.code}</span></p>
+          <p className="text-xs text-slate-500">{inv.ticketNo ? <b className="text-primary">{t('meetings.desk.ticketN', { n: inv.ticketNo })} · </b> : null}{t(`meetings.response.${inv.response || 'NONE'}`)}{inv.attendees > 1 ? ` · ×${inv.attendees}` : ''} · <span dir="ltr">{inv.code}</span></p>
         </div>
         {readOnly ? null : inv.attended
           ? <button type="button" disabled={busy} onClick={onUndo} className="px-2.5 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg flex items-center gap-1 shrink-0"><Undo2 className="w-3.5 h-3.5" />{t('meetings.desk.undo')}</button>
@@ -61,6 +61,13 @@ export default function MeetingDesk() {
     } finally { setBusy(false); }
   }, [token, pin]);
   useEffect(() => { if (pin) load(pin); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // The waiting board follows the interviews.
+  const hasBoard = !!data?.queue;
+  useEffect(() => {
+    if (!hasBoard) return undefined;
+    const timer = setInterval(() => callMeeting('meetingDesk', { token, pin }).then(setData).catch(() => {}), 15000);
+    return () => clearInterval(timer);
+  }, [hasBoard, token, pin]);
 
   const act = async (payload) => {
     setBusy(true);
@@ -79,7 +86,7 @@ export default function MeetingDesk() {
     const r = await act({ action, inviteId: inv.id });
     if (!r) return;
     setResults((list) => list.map((x) => (x.id === inv.id ? r.invite : x)));
-    setData((d) => ({ ...d, stats: r.stats }));
+    setData((d) => ({ ...d, stats: r.stats, queue: r.queue ?? d.queue }));
     if (action === 'checkin') setFlash(r.invite);
   };
   const walkIn = async (e) => {
@@ -88,7 +95,7 @@ export default function MeetingDesk() {
     if (!r) return;
     setWalkId('');
     setFlash(r.invite);
-    setData((d) => ({ ...d, stats: r.stats }));
+    setData((d) => ({ ...d, stats: r.stats, queue: r.queue ?? d.queue }));
   };
 
   if (!data) return <PublicShell><PinGate title={t('meetings.staff.deskTitle')} busy={busy} error={error} onSubmit={(p) => { setPin(p); load(p); }} /></PublicShell>;
@@ -115,7 +122,7 @@ export default function MeetingDesk() {
       {flash && (
         <div className={`${card} border-emerald-200 bg-emerald-50 flex items-center gap-3`}>
           <CheckCircle2 className="w-8 h-8 text-emerald-600 shrink-0" />
-          <div><p className="font-bold text-emerald-800">{t('meetings.desk.welcome')}</p><p className="text-sm text-emerald-700">{flash.students.map((x) => x.name).join('، ')}</p></div>
+          <div><p className="font-bold text-emerald-800">{t('meetings.desk.welcome')}{flash.ticketNo ? ` — ${t('meetings.desk.ticketN', { n: flash.ticketNo })}` : ''}</p><p className="text-sm text-emerald-700">{flash.students.map((x) => x.name).join('، ')}</p></div>
         </div>
       )}
 
@@ -128,6 +135,8 @@ export default function MeetingDesk() {
         {results.length === 0 && q && !busy && <p className="text-xs text-slate-400">{t('meetings.desk.noResults')}</p>}
       </form>
 
+      {data.queue && <WaitingBoard queue={data.queue} busy={busy} onAct={async (payload) => { const r = await act(payload); if (r) setData(r); }} />}
+
       <form onSubmit={walkIn} className={`${card} space-y-2`}>
         <p className="text-sm font-medium text-slate-800 flex items-center gap-1.5"><UserPlus className="w-4 h-4 text-primary" />{t('meetings.desk.walkIn')}</p>
         <p className="text-xs text-slate-500">{t('meetings.desk.walkInHint')}</p>
@@ -138,6 +147,51 @@ export default function MeetingDesk() {
       </form>
       {error && <p className="text-sm text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" />{error}</p>}
     </PublicShell>
+  );
+}
+
+// «مقابلات حسب الطلب»: families in the building by ticket; the supervisor
+// directs each one to a person who is free (the parent's page shows it).
+function WaitingBoard({ queue, busy, onAct }) {
+  const { t } = useTranslation();
+  const tone = { REQUESTED: 'border-slate-200', DIRECTED: 'border-amber-300 bg-amber-50', IN_PROGRESS: 'border-sky-300 bg-sky-50', DONE: 'border-emerald-200 bg-emerald-50 opacity-70' };
+  const waiting = queue.filter((f) => f.requests.some((r) => r.status !== 'DONE'));
+  const finished = queue.length - waiting.length;
+  return (
+    <div className={`${card} space-y-3`}>
+      <div className="flex items-center justify-between">
+        <p className="font-bold text-slate-900 flex items-center gap-1.5"><Ticket className="w-4 h-4 text-primary" />{t('meetings.desk.board')}</p>
+        <span className="text-xs text-slate-500">{t('meetings.desk.boardCounts', { waiting: waiting.length, finished })}</span>
+      </div>
+      {!waiting.length && <p className="text-sm text-slate-500">{t('meetings.desk.boardEmpty')}</p>}
+      {waiting.map((f) => (
+        <div key={f.inviteId} className="border border-slate-200 rounded-xl p-3">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-lg font-bold text-primary" dir="ltr">#{f.ticketNo ?? '—'}</span>
+            <span className="text-sm text-slate-800">{f.students.map((s) => s.name).join('، ')}</span>
+          </div>
+          <div className="space-y-1.5">
+            {f.requests.map((r) => (
+              <div key={r.id} className={`flex items-center justify-between gap-2 border rounded-lg p-2 text-sm ${tone[r.status] || ''}`}>
+                <div className="min-w-0">
+                  <p className="text-slate-800">{r.staffName} <span className="text-xs text-slate-500">({t(`meetings.roles.${r.staffRole}`)}{r.room ? ` · ${r.room}` : ''})</span></p>
+                  <p className="text-xs text-slate-500 truncate">{r.studentName} — {r.purpose}</p>
+                </div>
+                <div className="shrink-0 flex items-center gap-1.5">
+                  {r.status === 'REQUESTED' && (
+                    <button type="button" disabled={busy} onClick={() => onAct({ action: 'direct', requestId: r.id })} className={`px-2.5 py-1 text-xs rounded-lg flex items-center gap-1 ${r.staffBusy ? 'border border-amber-300 text-amber-800' : 'bg-primary text-white'}`} title={r.staffBusy ? t('meetings.desk.staffBusy') : ''}>
+                      <ArrowLeftRight className="w-3.5 h-3.5" />{r.staffBusy ? t('meetings.desk.busyDirect') : t('meetings.desk.direct')}
+                    </button>
+                  )}
+                  {r.status === 'DIRECTED' && <button type="button" disabled={busy} onClick={() => onAct({ action: 'undirect', requestId: r.id })} className="px-2 py-1 text-xs text-slate-500 border border-slate-200 rounded-lg">{t('meetings.desk.undo')}</button>}
+                  {r.status !== 'REQUESTED' && <span className="text-xs text-slate-600">{t(`meetings.request.${r.status}`)}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 

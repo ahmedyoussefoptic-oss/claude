@@ -7,10 +7,10 @@ import useAuthStore from '../../stores/useAuthStore';
 import { useBranches, useDepartments } from '../../hooks/useOrgData';
 import { userBranches } from '../../utils/scope';
 import { STAGES } from '../../config/complaintTypes';
-import { MEETING_TYPES, isIndividual, callMeeting, classLabel } from '../../config/meetings';
+import { MEETING_TYPES, STAFF_ROLES, isIndividual, isRequests, callMeeting, classLabel } from '../../config/meetings';
 
 const EMPTY = {
-  title: '', type: 'BOTH', branches: [], stages: [], classes: [], sections: [], gender: 'ALL',
+  title: '', type: 'REQUESTS', branches: [], stages: [], classes: [], sections: [], gender: 'ALL',
   date: '', startTime: '16:00', endTime: '19:00', location: '', teamsLink: '', agenda: '',
   slotsStart: '16:30', slotsEnd: '19:00', slotMinutes: 10, breakStart: '', breakEnd: '', regDeadline: '', autoReminders: true, teachers: [],
 };
@@ -95,7 +95,7 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
   // taken from the Excel files), only when the meeting needs them.
   const [showRooms, setShowRooms] = useState(() => (meeting?.teachers || []).some((x) => x.room));
   const [allRooms, setAllRooms] = useState('');
-  const addTeacher = () => setForm((f) => ({ ...f, teachers: [...f.teachers, { name: '', subject: '', room: '', classes: [] }] }));
+  const addTeacher = () => setForm((f) => ({ ...f, teachers: [...f.teachers, { name: '', subject: '', room: '', role: 'TEACHER', classes: [] }] }));
 
   // Teachers from an Excel file: a teacher already in the list (same name)
   // is updated, the others are added.
@@ -109,7 +109,7 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
     teachers.forEach((x) => {
       const i = list.findIndex((y) => key(y.name) === key(x.name));
       if (i >= 0) {
-        list[i] = { ...list[i], subject: x.subject || list[i].subject, classes: x.classes.length ? x.classes : list[i].classes || [] };
+        list[i] = { ...list[i], subject: x.subject || list[i].subject, role: x.role || list[i].role || 'TEACHER', classes: x.classes.length ? x.classes : list[i].classes || [] };
         updated++;
       } else { list.push(x); added++; }
     });
@@ -155,7 +155,7 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
     setBusy(true);
     try {
       const payload = Object.fromEntries(Object.keys(EMPTY).map((k) => [k, form[k]]));
-      payload.teachers = form.teachers.map((x) => ({ id: x.id, name: x.name, subject: x.subject, room: showRooms ? (x.room || '').trim() : '', classes: x.classes || [] }));
+      payload.teachers = form.teachers.map((x) => ({ id: x.id, name: x.name, subject: x.subject, role: x.role || 'TEACHER', room: showRooms ? (x.room || '').trim() : '', classes: x.classes || [] }));
       const r = await callMeeting('saveMeeting', { id: meeting?.id || null, meeting: payload, notifyChange: editing && notifyChange });
       onSaved(r);
     } catch (err) {
@@ -177,7 +177,7 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
           <Section title={t('meetings.form.basics')}>
             <Field label={t('meetings.form.title')}><input required value={form.title} onChange={(e) => set('title', e.target.value)} placeholder={t('meetings.form.titlePh')} className={inputCls} /></Field>
             <Field label={t('meetings.form.type')}>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
                 {MEETING_TYPES.map((ty) => (
                   <button type="button" key={ty} onClick={() => set('type', ty)} className={`p-2.5 rounded-xl border text-start ${form.type === ty ? 'border-primary bg-primary/5' : 'border-slate-200'}`}>
                     <p className="text-sm font-medium text-slate-800">{t(`meetings.type.${ty}`)}</p>
@@ -231,7 +231,7 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
             </Section>
           )}
 
-          <Section title={t('meetings.form.teachers')} hint={t('meetings.form.teachersHint')}>
+          <Section title={isRequests(form) ? t('meetings.form.staffTitle') : t('meetings.form.teachers')} hint={isRequests(form) ? t('meetings.form.staffHint') : t('meetings.form.teachersHint')}>
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input type="checkbox" checked={showRooms} onChange={(e) => setShowRooms(e.target.checked)} />
@@ -247,10 +247,13 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
             </div>
             {form.teachers.map((tc, i) => (
               <div key={tc.id || i} className="border border-slate-200 rounded-xl p-3 space-y-2">
-                <div className={`grid grid-cols-1 gap-2 ${showRooms ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+                <div className={`grid grid-cols-1 gap-2 ${showRooms ? 'sm:grid-cols-4' : 'sm:grid-cols-3'}`}>
+                  <select value={tc.role || 'TEACHER'} onChange={(e) => setTeacher(i, 'role', e.target.value)} className={inputCls} aria-label={t('meetings.form.role')}>
+                    {STAFF_ROLES.map((r) => <option key={r} value={r}>{t(`meetings.roles.${r}`)}</option>)}
+                  </select>
                   <input required placeholder={t('meetings.form.teacherName')} value={tc.name} onChange={(e) => setTeacher(i, 'name', e.target.value)} className={inputCls} />
                   <div className="flex gap-2">
-                    <input placeholder={t('meetings.form.subject')} value={tc.subject} onChange={(e) => setTeacher(i, 'subject', e.target.value)} className={inputCls} />
+                    <input placeholder={(tc.role || 'TEACHER') === 'TEACHER' ? t('meetings.form.subject') : t('meetings.form.staffTitleField')} value={tc.subject} onChange={(e) => setTeacher(i, 'subject', e.target.value)} className={inputCls} />
                     {!showRooms && <button type="button" onClick={() => setForm((f) => ({ ...f, teachers: f.teachers.filter((_, j) => j !== i) }))} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg shrink-0" aria-label={t('common.delete')}><Trash2 className="w-4 h-4" /></button>}
                   </div>
                   {showRooms && <div className="flex gap-2">

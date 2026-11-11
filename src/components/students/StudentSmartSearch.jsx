@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
 import { collection, getDocs, query, where, limit } from 'firebase/firestore';
@@ -142,8 +143,14 @@ export default function StudentSmartSearch({ records, branchName }) {
 }
 
 // The full file of one roster student.
+// Each item of the file opens where it lives (its page, ?openId=…).
+const RECORD_PATHS = { complaint: '/complaints', tech: '/tech-support', lostFound: '/lost-found' };
+const itemCls = 'py-1.5 flex justify-between gap-2 cursor-pointer rounded-lg hover:bg-primary/5 hover:text-primary px-1 -mx-1';
+
 function StudentFile({ student: s, records, branchName, canEdit, onEdit, onOpen, onClose }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const go = (path, id) => { onClose(); navigate(`${path}?openId=${encodeURIComponent(id)}`); };
   const { userData } = useAuthStore();
   const platform = canSeePlatform(userData);
   const tripsOk = canSeeTrips(userData);
@@ -257,23 +264,31 @@ function StudentFile({ student: s, records, branchName, canEdit, onEdit, onOpen,
           </li>
         )))}
         {section(FileText, t('studentRecords.smart.records'), mine.length, list(mine, (r) => (
-          <li key={`${r.kind}-${r.id}`} className="py-1.5 flex justify-between gap-2">
+          <li key={`${r.kind}-${r.id}`} className={itemCls} onClick={() => go(r.kind === 'complaint' && r.finance ? '/finance' : RECORD_PATHS[r.kind], r.id)}>
             <span><span className="text-xs text-slate-400">{t(`studentRecords.kinds.${r.kind}`)}</span> {r.title}</span>
             <span className="text-xs text-slate-500 shrink-0">{t(`statuses.${STATUS_NS[r.kind]}.${r.status}`, r.status)} · {format(r.date, 'yyyy-MM-dd')}</span>
           </li>
         )))}
         {tripsOk && section(Bus, t('studentRecords.smart.trips'), trips?.length, list(trips, (tr) => (
-          <li key={tr.tripId} className="py-1.5 flex justify-between gap-2">
+          <li key={tr.tripId} className={itemCls} onClick={() => go('/trips', tr.tripId)}>
             <span>{tr.title}</span><span className="text-xs text-slate-500 shrink-0">{t(`trips.enrollment.${tr.status}`, tr.status)} · {tr.date}</span>
           </li>
         )))}
         {section(Presentation, t('studentRecords.smart.meetings'), meetings?.length, list(meetings, (mt) => (
           <li key={mt.id} className="py-1.5">
-            <div className="flex justify-between gap-2"><span>{mt.title}</span><span className="text-xs text-slate-500 shrink-0">{mt.attended ? t('meetings.invites.came') : t(`meetings.response.${mt.response || 'NONE'}`)} · {mt.date}</span></div>
+            <div className={itemCls} onClick={() => go('/meetings', mt.id)}><span>{mt.title}</span><span className="text-xs text-slate-500 shrink-0">{mt.attended ? t('meetings.invites.came') : t(`meetings.response.${mt.response || 'NONE'}`)} · {mt.date}</span></div>
             {mt.minutes.map((mn, i) => (
               <div key={i} className="text-xs text-slate-600 bg-slate-50 rounded-lg p-2 mt-1">
                 <b>{mn.teacherName}</b>{mn.subject ? ` (${mn.subject})` : ''}: {[mn.points, mn.recommendations && `${t('meetings.teacher.recommendations')}: ${mn.recommendations}`, mn.agreements && `${t('meetings.teacher.agreements')}: ${mn.agreements}`].filter(Boolean).join(' — ')}
-                {mn.followUp?.complaintNo && <span className="text-amber-700"> · {t('meetings.teacher.followUpCreated', { number: mn.followUp.complaintNo })}</span>}
+                {mn.followUp?.complaintNo && <span className="text-amber-700 cursor-pointer hover:underline" onClick={() => go('/complaints', mn.followUp.complaintId)}> · {t('meetings.teacher.followUpCreated', { number: mn.followUp.complaintNo })}</span>}
+              </div>
+            ))}
+            {(mt.requests || []).map((rq, i) => (
+              <div key={`r${i}`} className="text-xs text-slate-600 bg-slate-50 rounded-lg p-2 mt-1">
+                <b>{rq.staffName}</b> ({t(`meetings.roles.${rq.staffRole}`)}) · {t(`meetings.request.${rq.status}`)}
+                <p>{t('meetings.staffReq.purpose')}: {rq.purpose}</p>
+                {rq.result && <p className="text-slate-800">{t('meetings.staffReq.result')}: {rq.result}{rq.recommendations ? ` — ${t('meetings.teacher.recommendations')}: ${rq.recommendations}` : ''}</p>}
+                {rq.followUp?.complaintNo && <span className="text-amber-700 cursor-pointer hover:underline" onClick={() => go('/complaints', rq.followUp.complaintId)}>{t('meetings.teacher.followUpCreated', { number: rq.followUp.complaintNo })}</span>}
               </div>
             ))}
           </li>
@@ -282,7 +297,7 @@ function StudentFile({ student: s, records, branchName, canEdit, onEdit, onOpen,
           <li key={i} className="py-1.5 text-sm">{[e.grade, e.inclusionType, e.disability].filter(Boolean).join(' · ')} <span className="text-xs text-slate-500">— {e.guardianName}</span></li>
         )))}
         {platform && section(DoorOpen, t('studentRecords.smart.leaves'), extra?.leaves.length, list(extra && extra.leaves, (l) => (
-          <li key={l.id} className="py-1.5 flex justify-between gap-2">
+          <li key={l.id} className={itemCls} onClick={() => go('/platform/leaves', l.id)}>
             <span>{t(`platform.leaves.reasons.${l.reason}`, l.reason || '')}</span><span className="text-xs text-slate-500 shrink-0">{t(`platform.leaves.status.${l.status}`, l.status || '')} · {day(l.at)}</span>
           </li>
         )))}

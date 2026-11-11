@@ -4,10 +4,13 @@ import { useTranslation } from 'react-i18next';
 import {
   ArrowRight, ArrowLeft, Loader2, Send, RefreshCw, Lock, Unlock, CheckCircle2, XCircle, Pencil, Copy, Check, MessageCircle, Search,
   CalendarDays, Clock, MapPin, Video, Users as UsersIcon, UserCheck, ClipboardList, Activity, FileBarChart, KeyRound, AlertTriangle, X, Phone, Undo2,
+  QrCode, Printer, Link2,
 } from 'lucide-react';
+import QRCode from 'qrcode';
+import { printPage, escapeHtml } from '../../utils/printPage';
 import { useBranches } from '../../hooks/useOrgData';
 import {
-  MEETING_STATUS_STYLES, RESPONSE_STYLES, WA_STATUS_STYLES, isIndividual, callMeeting, meetingTime, classLabel, pct,
+  MEETING_STATUS_STYLES, RESPONSE_STYLES, WA_STATUS_STYLES, REQUEST_STATUS_STYLES, isIndividual, isRequests, callMeeting, meetingTime, classLabel, pct,
 } from '../../config/meetings';
 import MeetingForm from './MeetingForm';
 import MeetingReport from './MeetingReport';
@@ -52,6 +55,20 @@ function Dialog({ title, children, onClose }) {
   );
 }
 
+// A printable A4 poster with the meeting's general link as a QR code.
+async function printPoster(m, t, i18n) {
+  const qr = await QRCode.toDataURL(m.publicLink, { width: 900, margin: 1, errorCorrectionLevel: 'M' });
+  printPage({
+    title: m.title, subtitle: `${m.date} · ${m.startTime} – ${m.endTime}${m.location ? ` · ${m.location}` : ''}`, school: t('trips.print.school'),
+    body: `<div style="text-align:center;margin-top:20mm">
+      <h2 style="font-size:24pt;color:#0369a1;margin:0 0 6mm">${escapeHtml(t('meetings.publicLink.posterTitle'))}</h2>
+      <p style="font-size:14pt;margin:0 0 10mm">${escapeHtml(t('meetings.publicLink.posterHint'))}</p>
+      <img src="${qr}" style="width:120mm;height:120mm" alt="">
+      <p style="font-size:10pt;color:#64748b;margin-top:6mm;direction:ltr">${escapeHtml(m.publicLink)}</p></div>`,
+    dir: i18n.dir(), lang: i18n.language,
+  });
+}
+
 const inputCls = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
 
 // One meeting: actions, invitations, the teachers' schedule, the live view
@@ -88,6 +105,7 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
   const m = data?.meeting;
   const teachersById = useMemo(() => Object.fromEntries((m?.teachers || []).map((x) => [x.id, x])), [m]);
   const invitesById = useMemo(() => Object.fromEntries((data?.invites || []).map((x) => [x.id, x])), [data]);
+  const requestsBy = useMemo(() => (data?.requests || []).reduce((acc, r) => { (acc[r.inviteId] = acc[r.inviteId] || []).push(r); return acc; }, {}), [data]);
   const names = (inv) => (inv?.students || []).map((s) => s.name).join('، ');
 
   const run = async (action, extra = {}) => {
@@ -226,6 +244,19 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
           </div>
           {m.agenda && <div className="bg-white border border-slate-200 rounded-2xl p-4"><p className="text-sm font-bold text-slate-800 mb-1">{t('meetings.form.agenda')}</p><p className="text-sm text-slate-600 whitespace-pre-wrap">{m.agenda}</p></div>}
 
+          {isRequests(m) && m.publicLink && (
+            <div className="bg-white border border-primary/30 rounded-2xl p-4 space-y-2">
+              <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5"><Link2 className="w-4 h-4 text-primary" />{t('meetings.publicLink.title')}</p>
+              <p className="text-xs text-slate-500">{t('meetings.publicLink.hint')}</p>
+              <p className="text-xs text-slate-700 bg-slate-50 rounded-lg p-2 break-all" dir="ltr">{m.publicLink}</p>
+              <div className="flex flex-wrap gap-2">
+                <CopyBtn text={m.publicLink} label={t('meetings.links.copy')} />
+                <CopyBtn text={t('meetings.publicLink.message', { title: m.title, date: m.date, link: m.publicLink })} label={t('meetings.publicLink.copyMessage')} />
+                <button type="button" onClick={() => printPoster(m, t, i18n)} className="px-2 py-1 text-xs border border-slate-200 rounded-lg flex items-center gap-1 text-slate-600"><Printer className="w-3.5 h-3.5" />{t('meetings.publicLink.poster')}</button>
+              </div>
+            </div>
+          )}
+
           <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
             <div>
               <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5"><KeyRound className="w-4 h-4 text-primary" />{t('meetings.links.title')}</p>
@@ -240,8 +271,8 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
               return (
                 <div key={tc.id} className="border border-slate-100 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{tc.name} {tc.subject && <span className="text-xs text-slate-500">· {tc.subject}</span>} {tc.room && <span className="text-xs text-slate-500">· {tc.room}</span>}</p>
-                    <p className="text-xs text-slate-500">{t('meetings.links.pin')}: <b dir="ltr">{tc.pin}</b>{tc.classes?.length ? ` · ${tc.classes.map(classLabel).join(', ')}` : ` · ${t('meetings.links.allClasses')}`}</p>
+                    <p className="text-sm font-medium text-slate-800">{tc.name} {isRequests(m) && <span className="text-xs text-primary">· {t(`meetings.roles.${tc.role || 'TEACHER'}`)}</span>} {tc.subject && <span className="text-xs text-slate-500">· {tc.subject}</span>} {tc.room && <span className="text-xs text-slate-500">· {tc.room}</span>}</p>
+                    <p className="text-xs text-slate-500">{t('meetings.links.pin')}: <b dir="ltr">{tc.pin}</b>{tc.classes?.length ? ` · ${[...new Set(tc.classes.map(classLabel))].join(', ')}` : ` · ${t('meetings.links.allClasses')}`}</p>
                   </div>
                   <div className="flex gap-2">
                     <CopyBtn text={msg} label={t('meetings.links.copy')} />
@@ -268,7 +299,7 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="text-xs text-slate-500 border-b border-slate-100">
-                  {['students', 'phone', 'message', 'response', 'slots', 'attendance', ''].map((h) => <th key={h} className="text-start font-medium p-2">{h && t(`meetings.invites.col.${h}`)}</th>)}
+                  {['students', 'phone', 'message', 'response', 'slots', 'attendance', ''].map((h) => <th key={h} className="text-start font-medium p-2">{h && t(`meetings.invites.col.${h === 'slots' && isRequests(m) ? 'requests' : h}`)}</th>)}
                 </tr></thead>
                 <tbody>
                   {shown.map((inv) => (
@@ -285,7 +316,11 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
                         {inv.response === 'ATTEND' && inv.attendees > 1 && <span className="text-xs text-slate-500"> ×{inv.attendees}</span>}
                         {inv.respondedBy && inv.respondedBy !== 'ولي الأمر' && <p className="text-[11px] text-slate-400">{inv.respondedBy}</p>}
                       </td>
-                      <td className="p-2 text-xs text-slate-600">{(inv.slots || []).map((sl) => <p key={sl.teacherId}>{meetingTime(sl.time, lang)} · {teachersById[sl.teacherId]?.name}</p>)}</td>
+                      <td className="p-2 text-xs text-slate-600">
+                        {(inv.slots || []).map((sl) => <p key={sl.teacherId}>{meetingTime(sl.time, lang)} · {teachersById[sl.teacherId]?.name}</p>)}
+                        {(requestsBy[inv.id] || []).map((r) => <p key={r.id} title={r.purpose}><span className={`inline-block px-1.5 rounded border text-[10px] ${REQUEST_STATUS_STYLES[r.status]}`}>{t(`meetings.request.${r.status}`)}</span> {r.staffName} <span className="text-slate-400">({r.studentName.split(' ')[0]})</span></p>)}
+                        {inv.ticketNo && <p className="text-primary font-medium">{t('meetings.desk.ticketN', { n: inv.ticketNo })}</p>}
+                      </td>
                       <td className="p-2 text-xs">{inv.attended ? <span className="text-emerald-700 flex items-center gap-1"><UserCheck className="w-3.5 h-3.5" />{t('meetings.invites.came')}</span> : '—'}</td>
                       <td className="p-2">
                         <div className="flex flex-wrap gap-1 justify-end">
@@ -345,9 +380,28 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
             <Stat label={t('meetings.live.confirmed')} value={confirmed.length} sub={t('meetings.live.persons', { count: s.attendees || 0 })} />
             <Stat label={t('meetings.live.arrived')} value={s.attended || 0} tone="text-emerald-700" sub={`${pct(s.attended, confirmed.length)}%`} />
             <Stat label={t('meetings.live.notYet')} value={confirmed.filter((x) => !x.attended).length} tone="text-amber-600" />
-            <Stat label={t('meetings.live.meetingsDone')} value={`${s.done || 0}/${s.booked || 0}`} tone="text-sky-700" />
+            <Stat label={t('meetings.live.meetingsDone')} value={isRequests(m) ? `${s.requestsDone || 0}/${s.requests || 0}` : `${s.done || 0}/${s.booked || 0}`} sub={isRequests(m) && s.requestsActive ? t('meetings.live.activeN', { count: s.requestsActive }) : null} tone="text-sky-700" />
           </div>
           <p className="text-xs text-slate-400 flex items-center gap-1"><RefreshCw className="w-3.5 h-3.5" />{t('meetings.live.auto')}</p>
+          {isRequests(m) && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {(m.teachers || []).map((tc) => {
+                const mine = (data.requests || []).filter((r) => r.staffId === tc.id);
+                const cnt = (st) => mine.filter((r) => r.status === st).length;
+                const arrivedWaiting = mine.filter((r) => ['REQUESTED', 'DIRECTED'].includes(r.status) && invitesById[r.inviteId]?.attended).length;
+                const now = mine.find((r) => r.status === 'IN_PROGRESS');
+                return (
+                  <div key={tc.id} className={`bg-white border rounded-2xl p-3 ${arrivedWaiting >= 3 ? 'border-amber-300' : 'border-slate-200'}`}>
+                    <div className="flex items-center justify-between"><p className="font-medium text-slate-800">{tc.name}</p><span className="text-xs text-slate-500">{cnt('DONE')}/{mine.length}</span></div>
+                    <p className="text-xs text-slate-500">{t(`meetings.roles.${tc.role || 'TEACHER'}`)}{tc.subject ? ` · ${tc.subject}` : ''}</p>
+                    <div className="h-1.5 bg-slate-100 rounded-full mt-2 overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${pct(cnt('DONE'), mine.length)}%` }} /></div>
+                    <p className="text-xs mt-2 text-slate-600">{now ? t('meetings.live.nowWith', { name: now.studentName }) : t('meetings.live.free')}</p>
+                    <p className={`text-xs ${arrivedWaiting >= 3 ? 'text-amber-700 font-medium' : 'text-slate-500'}`}>{t('meetings.live.waiting', { count: arrivedWaiting })}{cnt('DIRECTED') ? ` · ${t('meetings.live.directedN', { count: cnt('DIRECTED') })}` : ''}</p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {isIndividual(m) && (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {teacherLive.map(({ tc, booked, done, waiting, next }) => (

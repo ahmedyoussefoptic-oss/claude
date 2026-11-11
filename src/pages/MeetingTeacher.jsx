@@ -86,14 +86,16 @@ export default function MeetingTeacher() {
           <div>
             <p className="text-xs text-slate-500">{data.meeting.title} · {data.meeting.date}</p>
             <h1 className="text-lg font-bold text-slate-900">{data.teacher.name}</h1>
-            <p className="text-sm text-slate-500">{data.teacher.subject}{data.teacher.room ? ` · ${data.teacher.room}` : ''}</p>
+            <p className="text-sm text-slate-500">{data.mode === 'REQUESTS' ? `${t(`meetings.roles.${data.teacher.role || 'TEACHER'}`)} · ` : ''}{data.teacher.subject}{data.teacher.room ? ` · ${data.teacher.room}` : ''}</p>
           </div>
           <button type="button" onClick={() => load(pin)} className="p-2 text-slate-500 hover:text-primary" aria-label={t('common.refresh')}>{busy ? <Loader2 className="w-5 h-5 animate-spin" /> : <RefreshCw className="w-5 h-5" />}</button>
         </div>
         {data.slots.length > 0 && <p className="text-sm text-slate-600 mt-2">{t('meetings.teacher.progress', { done, total: data.slots.length })}</p>}
       </div>
 
-      {data.slots.length === 0 && data.others.length === 0 && <div className={`${card} text-center text-slate-500`}>{t('meetings.teacher.empty')}</div>}
+      {data.mode === 'REQUESTS' && <RequestsBoard requests={data.requests} act={act} onError={setError} />}
+
+      {data.mode !== 'REQUESTS' && data.slots.length === 0 && data.others.length === 0 && <div className={`${card} text-center text-slate-500`}>{t('meetings.teacher.empty')}</div>}
 
       {data.slots.map((s) => (
         <div key={s.id} className={`${card} ${s.doneAt ? 'opacity-70' : ''}`}>
@@ -128,6 +130,123 @@ export default function MeetingTeacher() {
       {editing && <MinuteEditor minute={minuteOf(editing.student.id)} student={editing.student} onClose={() => setEditing(null)}
         onSave={async (minute) => { await act({ action: 'saveMinute', inviteId: editing.inviteId, studentId: editing.student.id, minute }); setEditing(null); }} />}
     </PublicShell>
+  );
+}
+
+// «مقابلات حسب الطلب»: this person's requests — start when the parent is
+// in the room, end with the result (required), or mark as not met.
+const GROUPS = [
+  ['now', (r) => r.status === 'IN_PROGRESS'],
+  ['directed', (r) => r.status === 'DIRECTED'],
+  ['waiting', (r) => r.status === 'REQUESTED' && r.arrived],
+  ['notArrived', (r) => r.status === 'REQUESTED' && !r.arrived],
+  ['done', (r) => r.status === 'DONE'],
+];
+function RequestsBoard({ requests, act, onError }) {
+  const { t } = useTranslation();
+  const [ending, setEnding] = useState(null);
+  const [busy, setBusy] = useState('');
+  const run = async (payload, key) => {
+    setBusy(key);
+    try { await act(payload); } catch (err) { onError(err.message); } finally { setBusy(''); }
+  };
+  const skip = (r) => {
+    const reason = window.prompt(t('meetings.staffReq.skipPrompt'));
+    if (reason !== null) run({ action: 'skipRequest', requestId: r.id, reason }, r.id);
+  };
+  if (!requests.length) return <div className={`${card} text-center text-slate-500`}>{t('meetings.staffReq.empty')}</div>;
+  const time = (ms) => (ms ? new Date(ms).toLocaleTimeString('ar-SA-u-nu-latn', { hour: 'numeric', minute: '2-digit' }) : '');
+  return (
+    <>
+      {GROUPS.map(([g, f]) => {
+        const list = requests.filter(f);
+        if (!list.length) return null;
+        return (
+          <div key={g} className={`${card} space-y-2`}>
+            <p className="font-bold text-slate-900">{t(`meetings.staffReq.group.${g}`)} <span className="text-slate-400 font-normal">({list.length})</span></p>
+            {list.map((r) => (
+              <div key={r.id} className={`border rounded-xl p-3 ${g === 'now' ? 'border-sky-300 bg-sky-50/50' : g === 'directed' ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200'}`}>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-bold text-slate-900">{r.studentName} <span className="text-xs font-normal text-slate-500" dir="ltr">{r.grade} {r.className}</span></p>
+                    <p className="text-xs text-slate-500">
+                      {r.arrived ? t('meetings.staffReq.arrivedTicket', { n: r.ticketNo ?? '—', time: time(r.checkedInAt) }) : t('meetings.teacher.notArrived')}
+                      {r.startedAt && ` · ${t('meetings.staffReq.startedAt', { time: time(r.startedAt) })}`}
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5 shrink-0">
+                    {['REQUESTED', 'DIRECTED'].includes(r.status) && r.arrived && <button type="button" disabled={!!busy} onClick={() => run({ action: 'startRequest', requestId: r.id }, r.id)} className="px-2.5 py-1.5 text-xs bg-primary text-white rounded-lg flex items-center gap-1">{busy === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}{t('meetings.staffReq.start')}</button>}
+                    {r.status === 'IN_PROGRESS' && <button type="button" onClick={() => setEnding(r)} className="px-2.5 py-1.5 text-xs bg-emerald-600 text-white rounded-lg flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />{t('meetings.staffReq.end')}</button>}
+                    {r.status !== 'DONE' && <button type="button" disabled={!!busy} onClick={() => skip(r)} className="px-2 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg">{t('meetings.staffReq.skip')}</button>}
+                  </div>
+                </div>
+                <div className="bg-amber-50 border border-amber-100 rounded-lg p-2 mt-2 text-sm text-slate-700">
+                  <p className="text-xs font-medium text-amber-800">{t('meetings.staffReq.purpose')}</p>
+                  <p className="whitespace-pre-wrap">{r.purpose}</p>
+                </div>
+                {r.others.length > 0 && <p className="text-xs text-slate-500 mt-1">{t('meetings.staffReq.alsoMeeting', { list: r.others.join('، ') })}</p>}
+                {r.status === 'DONE' && (
+                  <div className="text-sm text-slate-700 mt-2 bg-emerald-50 rounded-lg p-2">
+                    <p className="text-xs font-medium text-emerald-800">{t('meetings.staffReq.result')}</p>
+                    <p className="whitespace-pre-wrap">{r.result}</p>
+                    {r.followUp?.complaintNo && <p className="text-xs text-amber-700 mt-1">{t('meetings.teacher.followUpCreated', { number: r.followUp.complaintNo })}</p>}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      })}
+      {ending && <ResultEditor request={ending} onClose={() => setEnding(null)} onSave={async (minute) => { await act({ action: 'endRequest', requestId: ending.id, minute }); setEnding(null); }} />}
+    </>
+  );
+}
+
+function ResultEditor({ request, onClose, onSave }) {
+  const { t } = useTranslation();
+  const [f, setF] = useState({ result: '', recommendations: '', followUpType: '', followUpText: '' });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    if (!f.result.trim()) { setError(t('meetings.staffReq.resultRequired')); return; }
+    if (f.followUpType && !f.followUpText.trim()) { setError(t('meetings.teacher.followUpTextRequired')); return; }
+    setBusy(true);
+    try { await onSave(f); } catch (err) { setError(err.message); setBusy(false); }
+  };
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <form onSubmit={submit} className="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100 sticky top-0 bg-white">
+          <div><p className="font-bold text-slate-900">{t('meetings.staffReq.endTitle')}</p><p className="text-sm text-slate-500">{request.studentName}</p></div>
+          <button type="button" onClick={onClose} className="p-1 text-slate-400"><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-4 space-y-3">
+          <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">{t('meetings.staffReq.purpose')}: {request.purpose}</p>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('meetings.staffReq.result')} <span className="text-red-500">*</span></label>
+            <textarea rows={4} value={f.result} onChange={(e) => set('result', e.target.value)} className={inputCls} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('meetings.teacher.recommendations')}</label>
+            <textarea rows={2} value={f.recommendations} onChange={(e) => set('recommendations', e.target.value)} className={inputCls} />
+          </div>
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-2">
+            <p className="text-sm font-medium text-slate-700">{t('meetings.teacher.followUp')}</p>
+            <p className="text-xs text-slate-500">{t('meetings.teacher.followUpHint')}</p>
+            <select value={f.followUpType} onChange={(e) => set('followUpType', e.target.value)} className={inputCls}>
+              <option value="">{t('meetings.teacher.noFollowUp')}</option>
+              {FOLLOW_TYPES.map((x) => <option key={x} value={x}>{t(`businessData.complaintTypes.${x}`, x)}</option>)}
+            </select>
+            {f.followUpType && <textarea rows={2} value={f.followUpText} onChange={(e) => set('followUpText', e.target.value)} placeholder={t('meetings.teacher.followUpPh')} className={inputCls} />}
+          </div>
+          {error && <p className="text-sm text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" />{error}</p>}
+          <button disabled={busy} className="w-full py-2.5 bg-emerald-600 text-white rounded-xl text-sm flex items-center justify-center gap-2 disabled:opacity-60">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}{t('meetings.staffReq.endSave')}</button>
+        </div>
+      </form>
+    </div>
   );
 }
 

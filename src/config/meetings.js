@@ -3,7 +3,17 @@ import { functions } from './firebase';
 import { rosterClassCode } from '../utils/classFilter';
 
 // «اجتماعات أولياء الأمور» — shared constants (see functions/meetings.js).
-export const MEETING_TYPES = ['BOTH', 'INDIVIDUAL', 'GENERAL'];
+export const MEETING_TYPES = ['REQUESTS', 'BOTH', 'INDIVIDUAL', 'GENERAL'];
+// Interviews on request (no appointments): who the parent can ask to meet.
+export const STAFF_ROLES = ['TEACHER', 'ACADEMIC', 'ADMIN'];
+export const isRequests = (m) => m?.type === 'REQUESTS';
+export const REQUEST_STATUS_STYLES = {
+  REQUESTED: 'bg-slate-50 text-slate-600 border-slate-200',
+  DIRECTED: 'bg-amber-50 text-amber-800 border-amber-200',
+  IN_PROGRESS: 'bg-sky-50 text-sky-700 border-sky-200',
+  DONE: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  CANCELLED: 'bg-rose-50 text-rose-600 border-rose-200',
+};
 export const MEETING_STATUSES = ['DRAFT', 'OPEN', 'CLOSED', 'COMPLETED', 'CANCELLED'];
 export const MEETING_STATUS_STYLES = {
   DRAFT: 'bg-slate-100 text-slate-700 border-slate-200',

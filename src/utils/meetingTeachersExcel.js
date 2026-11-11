@@ -10,8 +10,16 @@ import { normClass, rosterClassCode } from './classFilter';
 const COLUMNS = {
   branch: ['الفرع', 'branch'],
   name: ['اسم المعلم', 'الاسم', 'المعلم', 'name', 'teacher', 'teacher name'],
-  subject: ['المادة', 'subject'],
+  subject: ['المادة', 'المادة / المنصب', 'المنصب', 'subject'],
+  role: ['الصفة', 'الدور', 'role'],
   classes: ['الفصول', 'فصول المعلم', 'classes', 'class'],
+};
+// «الصفة»: معلم (default) / مدير أكاديمي / مدير إداري.
+export const roleFromText = (v) => {
+  const t = String(v || '').toLowerCase();
+  if (/أكاديمي|اكاديمي|academic/.test(t)) return 'ACADEMIC';
+  if (/إداري|اداري|admin/.test(t)) return 'ADMIN';
+  return 'TEACHER';
 };
 const norm = (s) => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 const AR = '٠١٢٣٤٥٦٧٨٩';
@@ -65,7 +73,7 @@ export function teacherForMeeting(t, keys) {
     if (found.length) found.forEach((k) => classes.add(k));
     else unmatched.push(tok);
   });
-  return { teacher: { name: t.name, subject: t.subject || '', room: '', classes: [...classes] }, teaches: !tokens.length || classes.size > 0, unmatched };
+  return { teacher: { name: t.name, subject: t.subject || '', room: '', role: t.role || 'TEACHER', classes: [...classes] }, teaches: !tokens.length || classes.size > 0, unmatched };
 }
 
 async function readRows(file, required = []) {
@@ -81,7 +89,7 @@ async function readRows(file, required = []) {
     if (required.some((k) => col[k] < 0)) continue;
     const get = (r, k) => (col[k] >= 0 ? String(r[col[k]] ?? '').trim() : '');
     return rows.slice(headerAt + 1).filter((r) => r.some((c) => String(c).trim())).map((r) => ({
-      branch: get(r, 'branch'), name: get(r, 'name'), subject: get(r, 'subject'), classes: get(r, 'classes'),
+      branch: get(r, 'branch'), name: get(r, 'name'), subject: get(r, 'subject'), role: roleFromText(get(r, 'role')), classes: get(r, 'classes'),
     }));
   }
   throw new Error(required.includes('branch') ? 'branchHeader' : 'header');
@@ -126,7 +134,7 @@ export async function readTeacherDirectoryFile(file, branches) {
       ['subject'].forEach((k) => { if (!dup[k]) dup[k] = r[k]; });
       return;
     }
-    const tch = { name: r.name, subject: r.subject, classes: splitClasses(r.classes).join('، ') };
+    const tch = { name: r.name, subject: r.subject, role: r.role, classes: splitClasses(r.classes).join('، ') };
     seen.set(`${id}|${key(r.name)}`, tch);
     (byBranch[id] = byBranch[id] || []).push(tch);
   });

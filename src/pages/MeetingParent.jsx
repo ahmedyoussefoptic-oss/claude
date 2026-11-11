@@ -6,7 +6,8 @@ import { Presentation, CalendarDays, Clock, MapPin, Loader2, ShieldCheck, CheckC
 import Watermark from '../components/common/Watermark';
 import LanguageSwitcher from '../components/common/LanguageSwitcher';
 import logo from '../assets/logo.png';
-import { callMeeting, meetingTime, isIndividual } from '../config/meetings';
+import { callMeeting, meetingTime, isIndividual, isRequests } from '../config/meetings';
+import MeetingFamily from './MeetingFamily';
 
 const inputCls = 'w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
 const card = 'w-full max-w-2xl bg-white p-5 md:p-7 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100';
@@ -113,6 +114,8 @@ export default function MeetingParent() {
               <MeetingInfo meeting={view} />
               {view.status === 'CANCELLED' ? (
                 <div className={`${card} text-center text-slate-700`}>{t('meetings.parent.cancelled')}{view.cancelReason ? ` — ${view.cancelReason}` : ''}</div>
+              ) : isRequests(view) ? (
+                <MeetingFamily token={token} />
               ) : !state ? (
                 <form onSubmit={verify} className={`${card} space-y-4`}>
                   <h2 className="font-bold text-slate-900 flex items-center gap-2"><ShieldCheck className="w-5 h-5 text-primary" />{t('meetings.parent.verifyTitle')}</h2>
