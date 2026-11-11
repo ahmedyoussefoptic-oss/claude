@@ -41,6 +41,13 @@ module.exports = function meetingsModule(d) {
   const ROLE_NAMES = { TEACHER: "معلم", ACADEMIC: "مدير أكاديمي", ADMIN: "مدير إداري" };
   const REQ_OPEN = ["REQUESTED", "DIRECTED", "IN_PROGRESS"];
   const requestsMode = (m) => m?.type === "REQUESTS";
+// Who came for the family (name + relation to the student).
+const RELATIONS = ["FATHER", "MOTHER", "BROTHER", "SISTER", "GRANDFATHER", "GRANDMOTHER", "UNCLE", "AUNT", "GUARDIAN", "OTHER"];
+const attendeeOf = (raw) => {
+  const name = String(raw?.name || "").replace(/\s+/g, " ").trim().slice(0, 80);
+  const relation = RELATIONS.includes(raw?.relation) ? raw.relation : "";
+  return name && relation ? { name, relation } : null;
+};
   const RESPONSES = ["ATTEND", "REMOTE", "DECLINE"];
   const FOLLOW_TYPES = ["ACADEMIC", "BEHAVIORAL", "ADMINISTRATIVE", "FINANCE"];
   const LIVE = ["OPEN", "CLOSED"];
@@ -575,7 +582,7 @@ module.exports = function meetingsModule(d) {
           invited: !!(i.waEvents?.invite || i.wa?.status === "manual"), response: i.response || "", attendees: i.attendees || 0, topics: i.topics || "",
           respondedAt: ms(i.respondedAt), slots: i.slots || [], attended: i.attended === true, checkedInAt: ms(i.checkedInAt), checkedInBy: i.checkedInBy || "",
           walkIn: i.walkIn === true, surveyed: surveyed.has(x.id), respondedBy: i.respondedBy || "",
-          ticketNo: i.ticketNo || null, selfRegistered: i.selfRegistered === true,
+          ticketNo: i.ticketNo || null, selfRegistered: i.selfRegistered === true, attendee: i.attendee || null,
         };
       }),
       requests: reqs.docs.map((x) => ({ id: x.id, ...x.data() })).filter((r) => r.status !== "CANCELLED").map((r) => ({
@@ -839,7 +846,7 @@ module.exports = function meetingsModule(d) {
 
   // --- interviews on request: the family's page ----------------------------
   // From the meeting's general link (or a family's own link) the parent signs
-  // in with their national ID and the mobile registered with the school; the
+  // in with their national ID (or a child's ID); the
   // page then works with the family's link + a session key kept in the browser.
   async function familyStudents(idRaw) {
     const id = normalizeDigits(idRaw).replace(/\D/g, "");
@@ -874,7 +881,7 @@ module.exports = function meetingsModule(d) {
       mode: "REQUESTS",
       invite: {
         response: inv.response || "", attended: inv.attended === true, ticketNo: inv.ticketNo || null, code: inv.code,
-        checkinLink: `${PUBLIC_APP_URL}/meeting-in/${inv.checkinToken}`, checkedInAt: ms(inv.checkedInAt),
+        checkinLink: `${PUBLIC_APP_URL}/meeting-in/${inv.checkinToken}`, checkedInAt: ms(inv.checkedInAt), attendee: inv.attendee || null,
       },
       students: (inv.students || []).map((s) => ({
         id: s.id, name: s.name, grade: s.grade, className: s.className, branch: s.branch, branchName: bName[s.branch] || s.branch || "",
@@ -929,14 +936,15 @@ module.exports = function meetingsModule(d) {
     return { key, inv: { id: key, ...inv }, inMeeting };
   }
 
-  // The parent's ID + the mobile registered for one of the children.
+  // The parent's national ID (or a child's ID). The family's WhatsApp
+  // number is the one the school has for the children.
   async function verifiedFamily(request, guardKey) {
     const { id, parentId, list } = await familyStudents(request.data?.id);
-    const intl = toIntlNumber(request.data?.mobile);
     const active = list.filter((s) => s.nationalId && s.active !== false);
-    const ok = /^\d{10,15}$/.test(intl) && active.some((s) => toIntlNumber(s.mobile) === intl);
+    const ok = active.length > 0;
     await guard(`${guardKey}_${id}`, ok);
-    if (!ok) throw new HttpsError("permission-denied", "لم نتمكن من التحقق. تأكد من رقم الهوية ورقم الجوال المسجّل لدى المدرسة.");
+    if (!ok) throw new HttpsError("permission-denied", "لم نجد طلاباً مسجّلين بهذا الرقم. تأكدوا من رقم هوية ولي الأمر.");
+    const intl = active.map((s) => toIntlNumber(s.mobile)).find((p) => /^\d{10,15}$/.test(p)) || "";
     return { parentId, intl, active, branchOf: await branchResolver() };
   }
 
@@ -994,7 +1002,7 @@ module.exports = function meetingsModule(d) {
     const snap = await invRef.get();
     const inv = snap.exists ? { id: snap.id, ...snap.data() } : null;
     const session = String(request.data?.session || "");
-    if (!inv || !inv.session || session !== inv.session) throw new HttpsError("unauthenticated", "انتهت الجلسة، أدخلوا رقم الهوية والجوال مرة أخرى.");
+    if (!inv || !inv.session || session !== inv.session) throw new HttpsError("unauthenticated", "انتهت الجلسة، أدخلوا رقم الهوية مرة أخرى.");
     return { ...x, invRef, inv };
   }
 
@@ -1024,6 +1032,8 @@ module.exports = function meetingsModule(d) {
     });
     if (response === "ATTEND" && !wanted.length) throw new HttpsError("invalid-argument", "اختاروا من تودّون مقابلته لأحد الأبناء على الأقل.");
     if (wanted.some((r) => !r.purpose)) throw new HttpsError("invalid-argument", "اكتبوا الغرض من كل مقابلة.");
+    const attendee = attendeeOf(request.data?.attendee);
+    if (response === "ATTEND" && !attendee) throw new HttpsError("invalid-argument", "اكتبوا اسم من سيحضر وصلته بالطالب/ة.");
     const now = Timestamp.now();
     const existing = new Map((await ref.collection("requests").where("inviteId", "==", inv.id).get()).docs.map((x) => [x.id, x.data()]));
     const batch = db.batch();
@@ -1045,9 +1055,9 @@ module.exports = function meetingsModule(d) {
       if (!keep.has(docId) && ["REQUESTED", "DIRECTED"].includes(r.status)) batch.update(ref.collection("requests").doc(docId), { status: "CANCELLED", cancelledAt: now, cancelledBy: "ولي الأمر" });
     });
     const requested = wanted.map((r) => ({ studentId: r.studentId, staffId: r.staffId }));
-    batch.update(invRef, { response, respondedAt: now, respondedBy: "ولي الأمر", requested, attendees: response === "ATTEND" ? 1 : 0 });
+    batch.update(invRef, { response, respondedAt: now, respondedBy: "ولي الأمر", requested, attendees: response === "ATTEND" ? 1 : 0, ...(attendee ? { attendee } : {}) });
     await batch.commit();
-    const updated = { ...inv, response, requested };
+    const updated = { ...inv, response, requested, ...(attendee ? { attendee } : {}) };
     if (response === "ATTEND" && inv.phone) {
       const settings = await waSettings();
       if (settings && settings.autoSend !== false) await sendMany(settings, ref, m, [updated], "confirm").catch(() => {});
@@ -1098,7 +1108,7 @@ module.exports = function meetingsModule(d) {
       const i = invites.get(r.inviteId) || {};
       return {
         id: r.id, inviteId: r.inviteId, studentId: r.studentId, studentName: r.studentName, grade: r.grade, className: r.className, purpose: r.purpose || "",
-        status: r.status, arrived: i.attended === true, ticketNo: i.ticketNo || null, checkedInAt: ms(i.checkedInAt),
+        status: r.status, arrived: i.attended === true, ticketNo: i.ticketNo || null, checkedInAt: ms(i.checkedInAt), attendee: i.attendee || null,
         directedAt: ms(r.directedAt), startedAt: ms(r.startedAt), endedAt: ms(r.endedAt), result: r.result || "", recommendations: r.recommendations || "",
         followUp: r.followUp || null,
         // The other people this family asked to meet (to plan together).
@@ -1222,7 +1232,7 @@ module.exports = function meetingsModule(d) {
           meetingId: ref.id, meetingTitle: m.title, meetingCode: m.code, date: m.date, branch: student.branch || "",
           teacherId: teacher.id, teacherName: teacher.name, subject: teacher.subject || "", role: teacher.role || "TEACHER", inviteId: r.inviteId, requestId: rRef.id,
           studentId: r.studentId, studentName: r.studentName, grade: r.grade || "", className: r.className || "", purpose: r.purpose || "",
-          points: result, recommendations, agreements: "", followUp, createdAt: now, updatedAt: now,
+          points: result, recommendations, agreements: "", followUp, attendee: inv.attendee || null, createdAt: now, updatedAt: now,
         });
         if (inv.attended !== true) await checkIn(ref, r.inviteId, `${teacher.name} (المقابلة)`);
         await familyFinished(ref, m, r.inviteId);
@@ -1259,6 +1269,7 @@ module.exports = function meetingsModule(d) {
     return {
       id, students: (i.students || []).map((s) => ({ name: s.name, grade: s.grade, className: s.className })), code: i.code, response: i.response || "", attendees: i.attendees || 0,
       slots: i.slots || [], requested: i.requested || [], attended: i.attended === true, checkedInAt: ms(i.checkedInAt), ticketNo: i.ticketNo || null,
+      attendee: i.attendee || null,
     };
   }
   async function deskState(ref, m) {
@@ -1283,7 +1294,7 @@ module.exports = function meetingsModule(d) {
     // Who is busy right now (one interview at a time per person).
     const busy = new Set(reqs.docs.map((x) => x.data()).filter((r) => r.status === "IN_PROGRESS").map((r) => r.staffId));
     return inv.docs.map((x) => ({ id: x.id, ...x.data() })).map((i) => ({
-      inviteId: i.id, ticketNo: i.ticketNo || null, checkedInAt: ms(i.checkedInAt), students: (i.students || []).map((s) => ({ name: s.name, grade: s.grade, className: s.className })),
+      inviteId: i.id, ticketNo: i.ticketNo || null, checkedInAt: ms(i.checkedInAt), attendee: i.attendee || null, students: (i.students || []).map((s) => ({ name: s.name, grade: s.grade, className: s.className })),
       requests: (byInvite.get(i.id) || []).map((r) => ({ ...r, staffBusy: busy.has(r.staffId) && r.status !== "IN_PROGRESS" })),
     })).sort((a, b) => (a.ticketNo || 1e9) - (b.ticketNo || 1e9));
   }
@@ -1320,8 +1331,19 @@ module.exports = function meetingsModule(d) {
       const invRef = ref.collection("invites").doc(String(request.data?.inviteId || "_"));
       const i = (await invRef.get()).data();
       if (!i) throw new HttpsError("not-found", "لم يتم العثور على الدعوة.");
-      if (action === "checkin") await checkIn(ref, invRef.id, "الاستقبال");
-      else await invRef.update({ attended: false, checkedInAt: FieldValue.delete(), checkedInBy: FieldValue.delete() });
+      if (action === "checkin") {
+        const attendee = attendeeOf(request.data?.attendee);
+        if (attendee) await invRef.update({ attendee });
+        await checkIn(ref, invRef.id, "الاستقبال");
+      } else await invRef.update({ attended: false, checkedInAt: FieldValue.delete(), checkedInBy: FieldValue.delete() });
+      return { invite: deskInvite(invRef.id, (await invRef.get()).data()), ...(await deskState(ref, m)) };
+    }
+    if (action === "attendee") {
+      const invRef = ref.collection("invites").doc(String(request.data?.inviteId || "_"));
+      if (!(await invRef.get()).exists) throw new HttpsError("not-found", "لم يتم العثور على الدعوة.");
+      const attendee = attendeeOf(request.data?.attendee);
+      if (!attendee) throw new HttpsError("invalid-argument", "اكتب اسم الحاضر وصلته بالطالب/ة.");
+      await invRef.update({ attendee });
       return { invite: deskInvite(invRef.id, (await invRef.get()).data()), ...(await deskState(ref, m)) };
     }
     if (action === "walkIn") {
@@ -1351,6 +1373,8 @@ module.exports = function meetingsModule(d) {
         setToken(batch, ck, { kind: "checkin", meetingId: ref.id, inviteId: key });
         await batch.commit();
       }
+      const attendee = attendeeOf(request.data?.attendee);
+      if (attendee) await invRef.update({ attendee });
       await checkIn(ref, key, "الاستقبال");
       return { invite: deskInvite(key, (await invRef.get()).data()), ...(await deskState(ref, m)) };
     }
@@ -1539,7 +1563,7 @@ module.exports = function meetingsModule(d) {
         if (!inv || !(inv.studentIds || []).includes(studentId)) return null;
         return {
           id: x.id, title: x.data().title, code: x.data().code, date: x.data().date, status: x.data().status, response: inv.response || "", attended: inv.attended === true,
-          type: x.data().type,
+          type: x.data().type, attendee: inv.attendee || null,
           minutes: mins.filter((y) => y.meetingId === x.id && !y.requestId).map((y) => ({ teacherName: y.teacherName, subject: y.subject, points: y.points, recommendations: y.recommendations, agreements: y.agreements, followUp: y.followUp || null })),
           requests: reqLists[i].filter((r) => r.status !== "CANCELLED" || r.cancelledBy !== "ولي الأمر").map((r) => ({
             staffName: r.staffName, staffRole: r.staffRole, purpose: r.purpose || "", status: r.status, result: r.result || "", recommendations: r.recommendations || "",

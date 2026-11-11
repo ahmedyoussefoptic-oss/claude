@@ -1,28 +1,68 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Search, UserCheck, Undo2, QrCode, UserPlus, RefreshCw, CheckCircle2, AlertTriangle, Ticket, ArrowLeftRight } from 'lucide-react';
+import { Loader2, Search, UserCheck, Undo2, QrCode, UserPlus, RefreshCw, CheckCircle2, AlertTriangle, Ticket, ArrowLeftRight, HeartHandshake } from 'lucide-react';
 import { PublicShell } from './MeetingParent';
 import { PinGate } from './MeetingTeacher';
-import { callMeeting, meetingTime, savedPin, savePin, savedDesks } from '../config/meetings';
+import { callMeeting, meetingTime, savedPin, savePin, savedDesks, RELATIONS } from '../config/meetings';
 
 const inputCls = 'w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
 const card = 'w-full max-w-2xl bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100';
 
-function InviteRow({ inv, teachers, onCheckin, onUndo, busy, lang, readOnly = false }) {
+export function AttendeeText({ attendee, className = '' }) {
+  const { t } = useTranslation();
+  if (!attendee) return null;
+  return <span className={`inline-flex items-center gap-1 ${className}`}><HeartHandshake className="w-3.5 h-3.5 text-rose-500" />{attendee.name} ({t(`meetings.family.relations.${attendee.relation}`)})</span>;
+}
+
+// Name + relation of who came (asked at the desk when the parent didn't
+// give it, or to correct it).
+function AttendeeInputs({ value, onChange }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col sm:flex-row gap-2 mt-2">
+      <input value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder={t('meetings.family.attendeeName')} className={`${inputCls} py-2`} maxLength={80} />
+      <select value={value.relation} onChange={(e) => onChange({ ...value, relation: e.target.value })} className={`${inputCls} py-2 sm:w-44`}>
+        <option value="">{t('meetings.family.relation')}</option>
+        {RELATIONS.map((r) => <option key={r} value={r}>{t(`meetings.family.relations.${r}`)}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function InviteRow({ inv, teachers, onCheckin, onUndo, onAttendee, busy, lang, readOnly = false }) {
   const { t } = useTranslation();
   const tName = (id) => teachers.find((x) => x.id === id);
+  const [att, setAtt] = useState(() => ({ name: inv.attendee?.name || '', relation: inv.attendee?.relation || '' }));
+  const [editAtt, setEditAtt] = useState(false);
+  const full = att.name.trim() && att.relation;
+  const showInputs = !readOnly && (editAtt || (!inv.attended && !inv.attendee));
   return (
     <div className={`border rounded-xl p-3 ${inv.attended ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200'}`}>
       <div className="flex items-start justify-between gap-2">
         <div>
           {inv.students.map((s, i) => <p key={i} className="text-sm font-medium text-slate-900">{s.name} <span className="text-xs text-slate-500" dir="ltr">{s.grade} {s.className}</span></p>)}
           <p className="text-xs text-slate-500">{inv.ticketNo ? <b className="text-primary">{t('meetings.desk.ticketN', { n: inv.ticketNo })} · </b> : null}{t(`meetings.response.${inv.response || 'NONE'}`)}{inv.attendees > 1 ? ` · ×${inv.attendees}` : ''} · <span dir="ltr">{inv.code}</span></p>
+          {inv.attendee && !editAtt && (
+            <p className="text-xs text-slate-700 mt-0.5"><AttendeeText attendee={inv.attendee} />{!readOnly && <button type="button" onClick={() => setEditAtt(true)} className="ms-2 text-primary hover:underline">{t('common.edit')}</button>}</p>
+          )}
         </div>
         {readOnly ? null : inv.attended
           ? <button type="button" disabled={busy} onClick={onUndo} className="px-2.5 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg flex items-center gap-1 shrink-0"><Undo2 className="w-3.5 h-3.5" />{t('meetings.desk.undo')}</button>
-          : <button type="button" disabled={busy} onClick={onCheckin} className="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded-lg flex items-center gap-1 shrink-0"><UserCheck className="w-4 h-4" />{t('meetings.desk.checkin')}</button>}
+          : <button type="button" disabled={busy} onClick={() => onCheckin(full ? att : null)} className="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded-lg flex items-center gap-1 shrink-0"><UserCheck className="w-4 h-4" />{t('meetings.desk.checkin')}</button>}
       </div>
+      {showInputs && (
+        <div>
+          <p className="text-xs font-medium text-slate-600 mt-2">{t('meetings.desk.setAttendee')}</p>
+          <AttendeeInputs value={att} onChange={setAtt} />
+          {(editAtt || inv.attended) && (
+            <div className="flex gap-2 mt-2">
+              <button type="button" disabled={busy || !full} onClick={async () => { if (await onAttendee?.(att)) setEditAtt(false); }} className="px-3 py-1.5 text-xs bg-primary text-white rounded-lg disabled:opacity-50">{t('meetings.desk.saveAttendee')}</button>
+              {editAtt && <button type="button" onClick={() => setEditAtt(false)} className="px-3 py-1.5 text-xs text-slate-500">{t('common.cancel')}</button>}
+            </div>
+          )}
+        </div>
+      )}
       {inv.slots.length > 0 && (
         <div className="mt-2 text-xs text-slate-600 space-y-0.5">
           {[...inv.slots].sort((a, b) => a.time.localeCompare(b.time)).map((s) => <p key={s.teacherId}>{meetingTime(s.time, lang)} — {tName(s.teacherId)?.name} {tName(s.teacherId)?.room ? `(${tName(s.teacherId).room})` : ''}</p>)}
@@ -46,6 +86,7 @@ export default function MeetingDesk() {
   const [q, setQ] = useState('');
   const [results, setResults] = useState([]);
   const [walkId, setWalkId] = useState('');
+  const [walkAtt, setWalkAtt] = useState({ name: '', relation: '' });
   const [flash, setFlash] = useState(null);
 
   const load = useCallback(async (p = pin) => {
@@ -82,18 +123,27 @@ export default function MeetingDesk() {
     const r = await act({ action: 'search', q });
     if (r) setResults(r.results);
   };
-  const checkin = async (inv, action = 'checkin') => {
-    const r = await act({ action, inviteId: inv.id });
+  const checkin = async (inv, action = 'checkin', attendee = null) => {
+    const r = await act({ action, inviteId: inv.id, ...(attendee ? { attendee } : {}) });
     if (!r) return;
     setResults((list) => list.map((x) => (x.id === inv.id ? r.invite : x)));
     setData((d) => ({ ...d, stats: r.stats, queue: r.queue ?? d.queue }));
     if (action === 'checkin') setFlash(r.invite);
   };
+  const setAttendee = async (inv, attendee) => {
+    const r = await act({ action: 'attendee', inviteId: inv.id, attendee });
+    if (!r) return false;
+    setResults((list) => list.map((x) => (x.id === inv.id ? r.invite : x)));
+    setData((d) => ({ ...d, stats: r.stats, queue: r.queue ?? d.queue }));
+    return true;
+  };
   const walkIn = async (e) => {
     e.preventDefault();
-    const r = await act({ action: 'walkIn', studentId: walkId });
+    const full = walkAtt.name.trim() && walkAtt.relation;
+    const r = await act({ action: 'walkIn', studentId: walkId, ...(full ? { attendee: walkAtt } : {}) });
     if (!r) return;
     setWalkId('');
+    setWalkAtt({ name: '', relation: '' });
     setFlash(r.invite);
     setData((d) => ({ ...d, stats: r.stats, queue: r.queue ?? d.queue }));
   };
@@ -122,7 +172,7 @@ export default function MeetingDesk() {
       {flash && (
         <div className={`${card} border-emerald-200 bg-emerald-50 flex items-center gap-3`}>
           <CheckCircle2 className="w-8 h-8 text-emerald-600 shrink-0" />
-          <div><p className="font-bold text-emerald-800">{t('meetings.desk.welcome')}{flash.ticketNo ? ` — ${t('meetings.desk.ticketN', { n: flash.ticketNo })}` : ''}</p><p className="text-sm text-emerald-700">{flash.students.map((x) => x.name).join('، ')}</p></div>
+          <div><p className="font-bold text-emerald-800">{t('meetings.desk.welcome')}{flash.ticketNo ? ` — ${t('meetings.desk.ticketN', { n: flash.ticketNo })}` : ''}</p><p className="text-sm text-emerald-700">{flash.students.map((x) => x.name).join('، ')}</p>{flash.attendee && <p className="text-sm text-emerald-800"><AttendeeText attendee={flash.attendee} /></p>}</div>
         </div>
       )}
 
@@ -131,7 +181,7 @@ export default function MeetingDesk() {
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('meetings.desk.search')} className={inputCls} />
           <button disabled={busy || q.trim().length < 2} className="px-4 bg-primary text-white rounded-xl disabled:opacity-60"><Search className="w-4 h-4" /></button>
         </div>
-        {results.map((inv) => <InviteRow key={inv.id} inv={inv} teachers={data.teachers} lang={lang} busy={busy} onCheckin={() => checkin(inv)} onUndo={() => checkin(inv, 'undo')} />)}
+        {results.map((inv) => <InviteRow key={inv.id} inv={inv} teachers={data.teachers} lang={lang} busy={busy} onCheckin={(a) => checkin(inv, 'checkin', a)} onUndo={() => checkin(inv, 'undo')} onAttendee={(a) => setAttendee(inv, a)} />)}
         {results.length === 0 && q && !busy && <p className="text-xs text-slate-400">{t('meetings.desk.noResults')}</p>}
       </form>
 
@@ -144,6 +194,7 @@ export default function MeetingDesk() {
           <input required inputMode="numeric" dir="ltr" value={walkId} onChange={(e) => setWalkId(e.target.value)} placeholder={t('tripConsent.studentId')} className={inputCls} />
           <button disabled={busy} className="px-4 bg-slate-800 text-white rounded-xl text-sm disabled:opacity-60">{t('meetings.desk.register')}</button>
         </div>
+        <AttendeeInputs value={walkAtt} onChange={setWalkAtt} />
       </form>
       {error && <p className="text-sm text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" />{error}</p>}
     </PublicShell>
@@ -170,6 +221,7 @@ function WaitingBoard({ queue, busy, onAct }) {
             <span className="text-lg font-bold text-primary" dir="ltr">#{f.ticketNo ?? '—'}</span>
             <span className="text-sm text-slate-800">{f.students.map((s) => s.name).join('، ')}</span>
           </div>
+          {f.attendee && <p className="text-xs text-slate-600 -mt-1 mb-2"><AttendeeText attendee={f.attendee} /></p>}
           <div className="space-y-1.5">
             {f.requests.map((r) => (
               <div key={r.id} className={`flex items-center justify-between gap-2 border rounded-lg p-2 text-sm ${tone[r.status] || ''}`}>

@@ -10,23 +10,47 @@ import { callMeeting, meetingTime, isIndividual, isRequests } from '../config/me
 import MeetingFamily from './MeetingFamily';
 
 const inputCls = 'w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
-const card = 'w-full max-w-2xl bg-white p-5 md:p-7 rounded-2xl shadow-xl shadow-slate-200/50 border border-slate-100';
+const card = 'w-full max-w-2xl bg-white/90 backdrop-blur p-5 md:p-7 rounded-[28px] shadow-lg shadow-slate-200/70 border border-slate-100';
 
-export function PublicShell({ children }) {
+export function PublicShell({ children, festive = false }) {
   const { t } = useTranslation();
+  if (!festive) {
+    return (
+      <div className="relative min-h-screen bg-slate-50 flex flex-col">
+        <Watermark />
+        <header className="relative z-10 bg-white border-b border-slate-200 py-4 px-6 sticky top-0 shadow-sm">
+          <div className="max-w-2xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2 text-primary">
+              <img src={logo} alt={t('tripConsent.schoolName')} className="h-8 w-auto" />
+              <span className="font-bold text-lg">{t('tripConsent.schoolName')}</span>
+            </div>
+            <LanguageSwitcher />
+          </div>
+        </header>
+        <main className="relative z-10 flex-1 flex flex-col items-center p-4 md:p-6 gap-5">{children}</main>
+      </div>
+    );
+  }
+  // The parents' pages: a light page with a few soft colour washes.
   return (
-    <div className="relative min-h-screen bg-slate-50 flex flex-col">
-      <Watermark />
-      <header className="relative z-10 bg-white border-b border-slate-200 py-4 px-6 sticky top-0 shadow-sm">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2 text-primary">
-            <img src={logo} alt={t('tripConsent.schoolName')} className="h-8 w-auto" />
-            <span className="font-bold text-lg">{t('tripConsent.schoolName')}</span>
+    <div className="relative min-h-screen overflow-x-hidden bg-slate-50 flex flex-col text-[15px] leading-relaxed">
+      <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-[520px] overflow-hidden">
+        <div className="absolute -top-32 -start-24 w-96 h-96 rounded-full bg-blue-200/40 blur-3xl" />
+        <div className="absolute -top-16 -end-24 w-80 h-80 rounded-full bg-violet-200/40 blur-3xl" />
+        <div className="absolute top-60 start-1/3 w-72 h-72 rounded-full bg-amber-100/60 blur-3xl" />
+      </div>
+      <header className="relative z-10 sticky top-0 bg-white/85 backdrop-blur-md border-b border-slate-100">
+        <div className="h-1 bg-gradient-to-l from-[#1f3c64] via-violet-500 to-amber-400" />
+        <div className="max-w-2xl mx-auto flex items-center justify-between py-3 px-4">
+          <div className="flex items-center gap-2.5">
+            <img src={logo} alt={t('tripConsent.schoolName')} className="h-10 w-auto" />
+            <span className="font-extrabold text-lg text-[#1b345a]">{t('tripConsent.schoolName')}</span>
           </div>
           <LanguageSwitcher />
         </div>
       </header>
-      <main className="relative z-10 flex-1 flex flex-col items-center p-4 md:p-6 gap-5">{children}</main>
+      <main className="relative z-10 flex-1 flex flex-col items-center px-4 py-6 md:py-8 gap-4">{children}</main>
+      <footer className="relative z-10 text-center text-xs text-slate-400 pb-5">{t('tripConsent.schoolName')}</footer>
     </div>
   );
 }
@@ -34,23 +58,30 @@ export function PublicShell({ children }) {
 export function MeetingInfo({ meeting }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
+  const chip = 'flex items-center gap-2 rounded-2xl px-3 py-2 text-[15px] font-medium';
   return (
-    <div className={card}>
-      <div className="flex items-start gap-3">
-        <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shrink-0"><Presentation className="w-6 h-6" /></div>
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">{meeting.title}</h2>
-          <p className="text-sm text-slate-500 mt-0.5">{meeting.branchNames.join(lang === 'ar' ? '، ' : ', ')} · {t(`meetings.type.${meeting.type}`)}</p>
+    <div className="w-full max-w-2xl rounded-3xl overflow-hidden shadow-lg shadow-slate-200/70 bg-white border border-slate-100">
+      <div className="bg-gradient-to-br from-[#1f3c64] via-[#1b345a] to-[#152a4a] text-white p-5 md:p-6 relative overflow-hidden">
+        <div aria-hidden className="absolute -top-10 -end-10 w-40 h-40 rounded-full bg-white/10" />
+        <div aria-hidden className="absolute -bottom-12 start-1/3 w-32 h-32 rounded-full bg-amber-300/20" />
+        <div className="relative flex items-start gap-3">
+          <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0"><Presentation className="w-6 h-6" /></div>
+          <div>
+            <h2 className="text-xl md:text-2xl font-extrabold leading-snug">{meeting.title}</h2>
+            <p className="text-sm text-white/85 mt-0.5">{meeting.branchNames.join(lang === 'ar' ? '، ' : ', ')} · {t(`meetings.type.${meeting.type}`)}</p>
+          </div>
         </div>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5 text-sm">
-        <p className="flex items-center gap-2 text-slate-700"><CalendarDays className="w-4 h-4 text-primary shrink-0" />{lang === 'ar' ? meeting.dateLabel : meeting.date}</p>
-        <p className="flex items-center gap-2 text-slate-700"><Clock className="w-4 h-4 text-primary shrink-0" />{meetingTime(meeting.startTime, lang)} – {meetingTime(meeting.endTime, lang)}</p>
-        {meeting.location && <p className="flex items-center gap-2 text-slate-700"><MapPin className="w-4 h-4 text-primary shrink-0" />{meeting.location}</p>}
-        {meeting.remote && <p className="flex items-center gap-2 text-slate-700"><Video className="w-4 h-4 text-primary shrink-0" />{t('meetings.parent.remoteAvailable')}</p>}
+      <div className="p-4 md:p-5 space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <p className={`${chip} bg-sky-50 text-sky-900`}><CalendarDays className="w-5 h-5 text-sky-600 shrink-0" />{lang === 'ar' ? meeting.dateLabel : meeting.date}</p>
+          <p className={`${chip} bg-violet-50 text-violet-900`}><Clock className="w-5 h-5 text-violet-600 shrink-0" />{meetingTime(meeting.startTime, lang)} – {meetingTime(meeting.endTime, lang)}</p>
+          {meeting.location && <p className={`${chip} bg-emerald-50 text-emerald-900`}><MapPin className="w-5 h-5 text-emerald-600 shrink-0" />{meeting.location}</p>}
+          {meeting.remote && <p className={`${chip} bg-amber-50 text-amber-900`}><Video className="w-5 h-5 text-amber-600 shrink-0" />{t('meetings.parent.remoteAvailable')}</p>}
+        </div>
+        {meeting.agenda && <div><p className="text-[15px] font-bold text-slate-800">{t('meetings.form.agenda')}</p><p className="text-[15px] text-slate-600 whitespace-pre-wrap">{meeting.agenda}</p></div>}
+        {meeting.registrationOpen && <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-2xl p-3 flex gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5" />{t('meetings.parent.deadline', { date: lang === 'ar' ? meeting.regDeadlineLabel : meeting.regDeadline })}</p>}
       </div>
-      {meeting.agenda && <div className="mt-4"><p className="text-sm font-medium text-slate-800">{t('meetings.form.agenda')}</p><p className="text-sm text-slate-600 whitespace-pre-wrap">{meeting.agenda}</p></div>}
-      {meeting.registrationOpen && <p className="text-sm text-amber-700 bg-amber-50 border border-amber-100 rounded-xl p-3 mt-4 flex gap-2"><Info className="w-4 h-4 shrink-0 mt-0.5" />{t('meetings.parent.deadline', { date: lang === 'ar' ? meeting.regDeadlineLabel : meeting.regDeadline })}</p>}
     </div>
   );
 }
@@ -105,12 +136,12 @@ export default function MeetingParent() {
 
   const view = state?.meeting || meeting;
   return (
-    <PublicShell>
+    <PublicShell festive>
       {loadError ? <div className={`${card} mt-10 text-center text-slate-600`}>{loadError}</div>
         : !view ? <Loader2 className="w-8 h-8 animate-spin text-primary mt-20" />
           : (
             <>
-              <h1 className="w-full max-w-2xl text-center text-2xl font-bold text-primary mt-2">{t('meetings.parent.brand')}</h1>
+              <h1 className="w-full max-w-2xl text-center text-2xl md:text-3xl font-extrabold bg-gradient-to-l from-[#1f3c64] via-violet-600 to-fuchsia-500 bg-clip-text text-transparent mt-1 pb-1">{t('meetings.parent.brand')}</h1>
               <MeetingInfo meeting={view} />
               {view.status === 'CANCELLED' ? (
                 <div className={`${card} text-center text-slate-700`}>{t('meetings.parent.cancelled')}{view.cancelReason ? ` — ${view.cancelReason}` : ''}</div>

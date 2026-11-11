@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Building2, CalendarDays, Clock, MapPin, LogOut, Info } from 'lucide-react';
+import { Building2, CalendarDays, Clock, MapPin, Info } from 'lucide-react';
 import { PublicShell } from './MeetingParent';
-import { FamilyPanel, SignIn } from './MeetingFamily';
+import { FamilyPanel, SignIn, Steps, SignOutBar } from './MeetingFamily';
 import { callMeeting, meetingTime } from '../config/meetings';
 
 // The family's sessions on this device (one per branch meeting).
@@ -38,38 +38,42 @@ export default function MeetingPortal() {
   };
 
   return (
-    <PublicShell>
-      <h1 className="w-full max-w-2xl text-center text-2xl font-bold text-primary mt-2">{t('meetings.portal.title')}</h1>
+    <PublicShell festive>
+      <h1 className="w-full max-w-2xl text-center text-2xl md:text-3xl font-extrabold bg-gradient-to-l from-[#1f3c64] via-violet-600 to-fuchsia-500 bg-clip-text text-transparent pb-1">{t('meetings.portal.title')}</h1>
       {!portal ? (
+        <>
+        <Steps at={0} />
         <SignIn title={t('meetings.portal.signInTitle')} hint={t('meetings.portal.signInHint')} onSubmit={(v) => callMeeting('meetingPortalVerify', v)} onDone={onSignedIn} />
+        </>
       ) : (
         <>
-          <div className="w-full max-w-2xl flex justify-end text-xs text-slate-500">
-            <button type="button" onClick={signOut} className="flex items-center gap-1 hover:text-primary"><LogOut className="w-3.5 h-3.5" />{t('meetings.family.signOut')}</button>
-          </div>
+          <SignOutBar onClick={signOut} />
           {portal.sessions.length === 0 && (
-            <div className="w-full max-w-2xl bg-white p-6 rounded-2xl border border-slate-100 text-center text-slate-600">{t('meetings.portal.none')}</div>
+            <div className="w-full max-w-2xl bg-white p-6 rounded-[28px] border border-slate-100 shadow-lg shadow-slate-200/70 text-center text-[15px] text-slate-600">{t('meetings.portal.none')}</div>
           )}
-          {portal.sessions.length > 1 && <p className="w-full max-w-2xl text-sm text-slate-600 flex gap-1.5"><Info className="w-4 h-4 shrink-0 mt-0.5 text-primary" />{t('meetings.portal.several', { count: portal.sessions.length })}</p>}
+          {portal.sessions.length > 1 && <p className="w-full max-w-2xl text-[15px] text-violet-900 bg-violet-50 border border-violet-100 rounded-2xl p-3 flex gap-2"><Info className="w-5 h-5 shrink-0 mt-0.5 text-violet-600" />{t('meetings.portal.several', { count: portal.sessions.length })}</p>}
           {portal.sessions.map((sx) => {
             const m = sx.meeting;
             return (
-              <section key={sx.familyToken} className="w-full max-w-2xl flex flex-col items-center gap-3">
-                <div className="w-full bg-primary text-white rounded-2xl p-4">
-                  <p className="text-lg font-bold flex items-center gap-2"><Building2 className="w-5 h-5" />{(m.branchNames || []).join('، ')}</p>
-                  <p className="text-sm opacity-90">{m.title}</p>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm mt-1 opacity-90">
-                    <span className="flex items-center gap-1"><CalendarDays className="w-4 h-4" />{lang === 'ar' ? m.dateLabel : m.date}</span>
-                    <span className="flex items-center gap-1"><Clock className="w-4 h-4" />{meetingTime(m.startTime, lang)} – {meetingTime(m.endTime, lang)}</span>
-                    {m.location && <span className="flex items-center gap-1"><MapPin className="w-4 h-4" />{m.location}</span>}
+              <section key={sx.familyToken} className="w-full max-w-2xl flex flex-col items-center gap-4">
+                <div className="w-full bg-white rounded-[28px] border border-slate-100 shadow-lg shadow-slate-200/70 p-4 flex items-start gap-3">
+                  <span className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white flex items-center justify-center shrink-0"><Building2 className="w-6 h-6" /></span>
+                  <div className="min-w-0">
+                    <p className="text-xl font-extrabold text-[#1b345a]">{(m.branchNames || []).join('، ')}</p>
+                    <p className="text-[15px] text-slate-600">{m.title}</p>
+                    <div className="flex flex-wrap gap-2 text-sm mt-2">
+                      <span className="flex items-center gap-1.5 rounded-full bg-blue-50 text-blue-900 px-3 py-1"><CalendarDays className="w-4 h-4 text-blue-600" />{lang === 'ar' ? m.dateLabel : m.date}</span>
+                      <span className="flex items-center gap-1.5 rounded-full bg-violet-50 text-violet-900 px-3 py-1"><Clock className="w-4 h-4 text-violet-600" />{meetingTime(m.startTime, lang)} – {meetingTime(m.endTime, lang)}</span>
+                      {m.location && <span className="flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-900 px-3 py-1"><MapPin className="w-4 h-4 text-emerald-600" />{m.location}</span>}
+                    </div>
                   </div>
                 </div>
-                <FamilyPanel sess={sx} initial={fresh[sx.familyToken] || null} onExpired={signOut} />
+                <FamilyPanel sess={sx} initial={fresh[sx.familyToken] || null} onExpired={signOut} showSteps={portal.sessions.length === 1} />
               </section>
             );
           })}
           {portal.others.length > 0 && (
-            <p className="w-full max-w-2xl text-xs text-slate-500">{t('meetings.portal.others', { list: portal.others.map((o) => `${o.name} (${o.branchName})`).join('، ') })}</p>
+            <p className="w-full max-w-2xl text-sm text-slate-500">{t('meetings.portal.others', { list: portal.others.map((o) => `${o.name} (${o.branchName})`).join('، ') })}</p>
           )}
         </>
       )}

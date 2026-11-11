@@ -277,6 +277,7 @@ function StudentFile({ student: s, records, branchName, canEdit, onEdit, onOpen,
         {section(Presentation, t('studentRecords.smart.meetings'), meetings?.length, list(meetings, (mt) => (
           <li key={mt.id} className="py-1.5">
             <div className={itemCls} onClick={() => go('/meetings', mt.id)}><span>{mt.title}</span><span className="text-xs text-slate-500 shrink-0">{mt.attended ? t('meetings.invites.came') : t(`meetings.response.${mt.response || 'NONE'}`)} · {mt.date}</span></div>
+            {mt.attendee && <p className="text-xs text-slate-600 mt-1">{t('meetings.family.attendee', { name: mt.attendee.name, relation: t(`meetings.family.relations.${mt.attendee.relation}`) })}</p>}
             {mt.minutes.map((mn, i) => (
               <div key={i} className="text-xs text-slate-600 bg-slate-50 rounded-lg p-2 mt-1">
                 <b>{mn.teacherName}</b>{mn.subject ? ` (${mn.subject})` : ''}: {[mn.points, mn.recommendations && `${t('meetings.teacher.recommendations')}: ${mn.recommendations}`, mn.agreements && `${t('meetings.teacher.agreements')}: ${mn.agreements}`].filter(Boolean).join(' — ')}

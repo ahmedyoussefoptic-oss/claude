@@ -6,6 +6,8 @@ import { rosterClassCode } from '../utils/classFilter';
 export const MEETING_TYPES = ['REQUESTS', 'BOTH', 'INDIVIDUAL', 'GENERAL'];
 // Interviews on request (no appointments): who the parent can ask to meet.
 export const STAFF_ROLES = ['TEACHER', 'ACADEMIC', 'ADMIN'];
+// Who came for the family: their relation to the student.
+export const RELATIONS = ['FATHER', 'MOTHER', 'BROTHER', 'SISTER', 'GRANDFATHER', 'GRANDMOTHER', 'UNCLE', 'AUNT', 'GUARDIAN', 'OTHER'];
 export const isRequests = (m) => m?.type === 'REQUESTS';
 export const REQUEST_STATUS_STYLES = {
   REQUESTED: 'bg-slate-50 text-slate-600 border-slate-200',

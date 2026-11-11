@@ -4327,7 +4327,11 @@
       "boardEmpty": "No parents waiting.",
       "staffBusy": "This person is in a meeting now",
       "busyDirect": "Direct (busy)",
-      "direct": "Direct"
+      "direct": "Direct",
+      "attendee": "Attendee",
+      "setAttendee": "Attendee name & relation",
+      "saveAttendee": "Save",
+      "noAttendee": "Attendee not set"
     },
     "record": {
       "title": "Parent meetings",
@@ -4365,7 +4369,7 @@
     "family": {
       "signOut": "Sign out",
       "signInTitle": "Sign in to the parent meeting",
-      "signInHint": "Enter your national ID (or one of your children's) and the mobile registered with the school to see your invited children.",
+      "signInHint": "Enter your national ID (or one of your children's) to see your invited children.",
       "parentId": "Parent national ID",
       "pickSomeone": "Choose someone to meet for at least one child.",
       "purposeRequired": "Write the purpose of each meeting.",
@@ -4394,7 +4398,52 @@
       "wait": "Please wait — the supervisor will direct you. This page updates itself.",
       "autoRefresh": "Updates automatically — tap to refresh now",
       "ratePerson": "{{name}} ({{role}})",
-      "notAvailable": "Not available in this meeting"
+      "notAvailable": "Not available in this meeting",
+      "idPh": "National ID / Iqama",
+      "welcomeTitle": "Parents meeting",
+      "welcomeSub": "Your partnership is the secret of our children’s success 🌱",
+      "steps": {
+        "id": "ID",
+        "pick": "Choose meetings",
+        "ticket": "Ticket"
+      },
+      "relations": {
+        "FATHER": "Father",
+        "MOTHER": "Mother",
+        "BROTHER": "Brother",
+        "SISTER": "Sister",
+        "GRANDFATHER": "Grandfather",
+        "GRANDMOTHER": "Grandmother",
+        "UNCLE": "Uncle",
+        "AUNT": "Aunt",
+        "GUARDIAN": "Legal guardian",
+        "OTHER": "Other"
+      },
+      "attendeeTitle": "Who will attend?",
+      "attendeeName": "Attendee name",
+      "attendeeNamePh": "The name reception will call",
+      "relation": "Relation to the student",
+      "relationPick": "Choose",
+      "attendeeRequired": "Enter the attendee name and their relation to the student.",
+      "attendee": "Attending: {{name}} ({{relation}})",
+      "hello": "Hello {{name}}",
+      "chosen": "Selected",
+      "choose": "Request a meeting",
+      "grade": "Grade",
+      "class": "Class",
+      "branch": "Branch",
+      "chosenN": "Meetings",
+      "noneYet": "Choose whom to meet",
+      "teachersOf": "{{name}}'s teachers",
+      "children": "Children",
+      "interviews": "Interviews",
+      "remaining": "Remaining",
+      "awaitingCheckin": "Awaiting check-in",
+      "allDoneShort": "Interviews done",
+      "goNowShort": "Please go now",
+      "waitShort": "Awaiting direction",
+      "printCard": "Print / save the card with QR",
+      "relationShort": "Relation"
     },
     "staffReq": {
       "skipPrompt": "Why the meeting was not held (optional):",
@@ -4430,12 +4479,12 @@
     "portal": {
       "title": "Parent meetings",
       "signInTitle": "Sign in to parent meetings",
-      "signInHint": "Enter your national ID (or one of your children's) and the mobile registered with the school to see your children's meetings in every branch.",
+      "signInHint": "Enter your national ID (or one of your children's) to see your children's meetings in every branch.",
       "none": "There are no parent meetings for your children right now.",
       "several": "Your children have meetings in {{count}} branches: each branch has its own requests and its own ticket at that branch's reception.",
       "others": "No current meeting for: {{list}}",
       "linkTitle": "General parent link",
-      "linkHint": "One link for every branch: parents sign in with their ID and mobile, see the «interviews on request» meetings of their children in each branch, and get a ticket per branch. It stays the same for every meeting.",
+      "linkHint": "One link for every branch: the parent signs in with their national ID only and sees the «interviews on request» meetings of their children in each branch, with a ticket per branch. No need to change it per meeting.",
       "message": "Dear parents, to confirm attendance at the parent meetings and choose whom to meet for each child in their branch: {{link}}",
       "posterHint": "Scan to confirm attendance and choose whom to meet"
     }

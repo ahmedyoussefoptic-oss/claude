@@ -173,6 +173,7 @@ function RequestsBoard({ requests, act, onError }) {
                       {r.arrived ? t('meetings.staffReq.arrivedTicket', { n: r.ticketNo ?? '—', time: time(r.checkedInAt) }) : t('meetings.teacher.notArrived')}
                       {r.startedAt && ` · ${t('meetings.staffReq.startedAt', { time: time(r.startedAt) })}`}
                     </p>
+                    {r.attendee && <p className="text-xs text-slate-700 mt-0.5">{t('meetings.family.attendee', { name: r.attendee.name, relation: t(`meetings.family.relations.${r.attendee.relation}`) })}</p>}
                   </div>
                   <div className="flex gap-1.5 shrink-0">
                     {['REQUESTED', 'DIRECTED'].includes(r.status) && r.arrived && <button type="button" disabled={!!busy} onClick={() => run({ action: 'startRequest', requestId: r.id }, r.id)} className="px-2.5 py-1.5 text-xs bg-primary text-white rounded-lg flex items-center gap-1">{busy === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}{t('meetings.staffReq.start')}</button>}

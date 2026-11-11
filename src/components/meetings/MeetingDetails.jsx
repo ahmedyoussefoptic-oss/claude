@@ -308,6 +308,7 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
                         {(inv.students || []).map((st) => <p key={st.id} className="text-slate-800">{st.name} <span className="text-xs text-slate-500" dir="ltr">{st.grade} {st.className}</span></p>)}
                         {inv.topics && <p className="text-xs text-slate-500 mt-0.5">“{inv.topics}”</p>}
                         {inv.walkIn && <span className="text-[11px] text-amber-700">{t('meetings.invites.walkIn')}</span>}
+                        {inv.attendee && <p className="text-[11px] text-slate-600">{t('meetings.family.attendee', { name: inv.attendee.name, relation: t(`meetings.family.relations.${inv.attendee.relation}`) })}</p>}
                       </td>
                       <td className="p-2 text-xs text-slate-500" dir="ltr">{inv.phone || '—'}</td>
                       <td className={`p-2 text-xs ${WA_STATUS_STYLES[inv.wa.status] || ''}`} title={inv.wa.error}>{t(`meetings.wa.${inv.wa.status || 'pending'}`, inv.wa.status)}{inv.wa.count > 1 ? ` ×${inv.wa.count}` : ''}</td>
