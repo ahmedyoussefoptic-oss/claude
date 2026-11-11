@@ -95,7 +95,9 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
   // taken from the Excel files), only when the meeting needs them.
   const [showRooms, setShowRooms] = useState(() => (meeting?.teachers || []).some((x) => x.room));
   const [allRooms, setAllRooms] = useState('');
-  const addTeacher = () => setForm((f) => ({ ...f, teachers: [...f.teachers, { name: '', subject: '', room: '', role: 'TEACHER', classes: [] }] }));
+  const addTeacher = (role = 'TEACHER') => setForm((f) => ({ ...f, teachers: [...f.teachers, { name: '', subject: '', room: '', role, classes: [] }] }));
+  // Interviews on request: the roles parents will not find in this meeting.
+  const missingRoles = isRequests(form) ? ['ACADEMIC', 'ADMIN'].filter((r) => !form.teachers.some((x) => (x.role || 'TEACHER') === r)) : [];
 
   // Teachers from an Excel file: a teacher already in the list (same name)
   // is updated, the others are added.
@@ -270,7 +272,10 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
               </div>
             ))}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-              <button type="button" onClick={addTeacher} className="text-sm text-primary flex items-center gap-1 hover:underline"><Plus className="w-4 h-4" />{t('meetings.form.addTeacher')}</button>
+              <button type="button" onClick={() => addTeacher()} className="text-sm text-primary flex items-center gap-1 hover:underline"><Plus className="w-4 h-4" />{t('meetings.form.addTeacher')}</button>
+              {isRequests(form) && ['ACADEMIC', 'ADMIN'].map((r) => (
+                <button key={r} type="button" onClick={() => addTeacher(r)} className="text-sm text-primary flex items-center gap-1 hover:underline"><Plus className="w-4 h-4" />{t('meetings.form.addRole', { role: t(`meetings.roles.${r}`) })}</button>
+              ))}
               <button type="button" disabled={importing} onClick={fromDirectory} className="text-sm text-indigo-700 flex items-center gap-1 hover:underline"><BookUser className="w-4 h-4" />{t('meetings.form.fromDirectory')}</button>
               <label className="text-sm text-emerald-700 flex items-center gap-1 hover:underline cursor-pointer">
                 {importing ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}{t('meetings.form.importTeachers')}
@@ -279,6 +284,9 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
               <button type="button" onClick={() => downloadTeachersTemplate()} className="text-sm text-slate-500 flex items-center gap-1 hover:underline"><Download className="w-4 h-4" />{t('meetings.form.teachersTemplate')}</button>
             </div>
             <p className="text-[11px] text-slate-400">{t('meetings.form.importHint')}</p>
+            {missingRoles.length > 0 && (
+              <p className="text-xs bg-amber-50 border border-amber-200 text-amber-800 rounded-lg p-2 flex gap-1.5"><AlertTriangle className="w-4 h-4 shrink-0" />{t('meetings.form.missingRoles', { roles: missingRoles.map((r) => t(`meetings.roles.${r}`)).join(t('meetings.form.and')) })}</p>
+            )}
             {importMsg && <p className={`text-xs rounded-lg p-2 ${importMsg.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-800'}`}>{importMsg.text}</p>}
           </Section>
 

@@ -4023,7 +4023,10 @@
       "staffTitle": "Teachers and managers",
       "staffHint": "Whom parents can ask to meet: academic manager, administrative manager and the child's teachers. Each gets a link and code for their requests screen. Classes decide which students see them (no classes = everyone).",
       "role": "Role",
-      "staffTitleField": "Position (e.g. primary stage)"
+      "staffTitleField": "Position (e.g. primary stage)",
+      "addRole": "Add {{role}}",
+      "missingRoles": "This meeting has no {{roles}}, so parents cannot ask to meet one. Add one with the buttons above, pick the role next to a name, or add a «Role» column to the directory file.",
+      "and": " or "
     },
     "tabs": {
       "overview": "Overview",
@@ -4390,7 +4393,8 @@
       "allDone": "Your meetings are over, thank you.",
       "wait": "Please wait — the supervisor will direct you. This page updates itself.",
       "autoRefresh": "Updates automatically — tap to refresh now",
-      "ratePerson": "{{name}} ({{role}})"
+      "ratePerson": "{{name}} ({{role}})",
+      "notAvailable": "Not available in this meeting"
     },
     "staffReq": {
       "skipPrompt": "Why the meeting was not held (optional):",

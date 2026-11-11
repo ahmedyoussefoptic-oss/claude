@@ -159,8 +159,8 @@ function RequestForm({ sess, state, others, onSaved }) {
               return (
                 <button key={role} type="button" disabled={!list.length} onClick={() => setOpen((o) => ({ ...o, [k]: !o[k] }))}
                   className={`p-3 rounded-xl border text-start text-sm flex items-center justify-between gap-2 disabled:opacity-40 ${open[k] ? 'border-primary bg-primary/5' : 'border-slate-200'}`}>
-                  <span className="flex items-center gap-2 font-medium text-slate-800"><Icon className="w-4 h-4 text-primary" />{t(`meetings.family.meet.${role}`)}{n > 0 && <span className="text-xs text-primary">({n})</span>}</span>
-                  {open[k] ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+                  <span className="flex items-center gap-2 font-medium text-slate-800"><Icon className="w-4 h-4 text-primary" /><span>{t(`meetings.family.meet.${role}`)}{!list.length && <span className="block text-[11px] font-normal text-slate-500">{t('meetings.family.notAvailable')}</span>}</span>{n > 0 && <span className="text-xs text-primary">({n})</span>}</span>
+                  {list.length > 0 && (open[k] ? <ChevronUp className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />)}
                 </button>
               );
             })}
