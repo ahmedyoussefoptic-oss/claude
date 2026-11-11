@@ -3,13 +3,11 @@ import { useSearchParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CheckCircle2, Copy, Check, FileText, PackageSearch, Wrench, Wallet } from 'lucide-react';
 import { trackingLink } from '../utils/whatsapp';
-import logo from '../assets/logo.png';
-import Watermark from '../components/common/Watermark';
 import SystemCredit from '../components/common/SystemCredit';
-import LanguageSwitcher from '../components/common/LanguageSwitcher';
 import PublicComplaintFields from '../components/publicReport/PublicComplaintFields';
 import PublicLostFoundFields from '../components/publicReport/PublicLostFoundFields';
 import PublicTechSupportFields from '../components/publicReport/PublicTechSupportFields';
+import PublicHeader from '../components/common/PublicHeader';
 
 // FINANCE = financial feedback (fees, invoices, refunds...): a complaint
 // with the financial category, routed to the finance department.
@@ -51,16 +49,7 @@ export default function PublicReportForm() {
 
   return (
     <div className="relative min-h-screen bg-slate-50 flex flex-col">
-      <Watermark />
-      <header className="relative z-10 bg-white border-b border-slate-200 py-4 px-6 sticky top-0 shadow-sm">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2 text-primary">
-            <img src={logo} alt={t('app.brand')} className="h-8 w-auto" />
-            <span className="font-bold text-lg">{t('app.brand')}</span>
-          </div>
-          <LanguageSwitcher />
-        </div>
-      </header>
+      <PublicHeader width="max-w-2xl" title={t(`publicReport.kinds.${kind}.pageTitle`)} />
 
       <main className="relative z-10 flex-1 flex flex-col items-center p-6">
         {saved ? (
@@ -109,7 +98,7 @@ export default function PublicReportForm() {
         ) : (
           <>
             <div className="w-full max-w-xl mt-6 mb-4 text-center">
-              <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2">{t(`publicReport.kinds.${kind}.pageTitle`)}</h1>
+              <h1 className="public-title text-2xl md:text-3xl font-bold text-slate-900 mb-2">{t(`publicReport.kinds.${kind}.pageTitle`)}</h1>
               <p className="text-slate-500 text-sm">{t(`publicReport.kinds.${kind}.pageSubtitle`)}</p>
             </div>
 

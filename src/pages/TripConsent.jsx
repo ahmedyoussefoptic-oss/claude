@@ -7,11 +7,9 @@ import { format } from 'date-fns';
 import { ar as arLocale, enUS } from 'date-fns/locale';
 import { functions } from '../config/firebase';
 import { tripErrorText } from '../utils/tripErrors';
-import Watermark from '../components/common/Watermark';
-import LanguageSwitcher from '../components/common/LanguageSwitcher';
-import logo from '../assets/logo.png';
 import { fileToBase64, MAX_PUBLIC_FILE_BYTES } from '../utils/publicSubmission';
 import { ENROLLMENT_STATUS_STYLES, TRIP_DECLINE_REASONS, TRIP_RATINGS, TRIP_GENDER_STYLES, TRIP_BANK_LETTER_URL, tripTime } from '../config/trips';
+import PublicHeader from '../components/common/PublicHeader';
 
 // Post-trip parent survey (submitTripSurvey): four 1–5 ratings, "would you
 // recommend it", and a free comment.
@@ -183,16 +181,7 @@ export default function TripConsent() {
 
   return (
     <div className="relative min-h-screen bg-slate-50 flex flex-col">
-      <Watermark />
-      <header className="relative z-10 bg-white border-b border-slate-200 py-4 px-6 sticky top-0 shadow-sm">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2 text-primary">
-            <img src={logo} alt={t('tripConsent.schoolName')} className="h-8 w-auto" />
-            <span className="font-bold text-lg">{t('tripConsent.schoolName')}</span>
-          </div>
-          <LanguageSwitcher />
-        </div>
-      </header>
+      <PublicHeader width="max-w-2xl" title={t('tripConsent.brandTitle')} />
 
       <main className="relative z-10 flex-1 flex flex-col items-center p-4 md:p-6 gap-5">
         {loadError ? (
@@ -201,7 +190,7 @@ export default function TripConsent() {
           <Loader2 className="w-8 h-8 animate-spin text-primary mt-20" />
         ) : (
           <>
-            <h1 className="w-full max-w-2xl text-center text-2xl font-bold text-primary mt-2">{t('tripConsent.brandTitle')}</h1>
+            <h1 className="public-title w-full max-w-2xl text-center text-2xl font-bold text-primary mt-2">{t('tripConsent.brandTitle')}</h1>
             <div className={card}>
               {trip.imageUrl && <img src={trip.imageUrl} alt="" className="w-full max-h-72 object-cover rounded-2xl mb-5" />}
               <div className="flex items-start gap-3">

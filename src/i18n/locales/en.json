@@ -4510,5 +4510,10 @@
     "unassigned": "Unassigned",
     "searching": "Not returned yet",
     "returned": "Returned"
+  },
+  "publicDesign": {
+    "title": "Public links design",
+    "hint": "Applies to every link parents and visitors open: the complaint form and tracking, trip approval, leave requests, branch visits, school visit requests, admission inquiries, special education forms, and the teachers' and reception links. The parents' meeting pages always keep the navy design.",
+    "saved": "Saved. Visitors see the new design right away."
   }
 }

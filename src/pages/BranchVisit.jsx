@@ -4,12 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { CheckCircle2, MapPin, Armchair, CalendarCheck, CalendarPlus, UserRound, Loader2 } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { functions } from '../config/firebase';
-import logo from '../assets/logo.png';
-import Watermark from '../components/common/Watermark';
 import SystemCredit from '../components/common/SystemCredit';
-import LanguageSwitcher from '../components/common/LanguageSwitcher';
 import PublicComplaintFields from '../components/publicReport/PublicComplaintFields';
 import { useBranches } from '../hooks/useOrgData';
+import PublicHeader from '../components/common/PublicHeader';
 
 // Branch check-in page, opened by scanning the QR code posted at a branch
 // (see BranchQrCodes.jsx — /visit?branch=<id>). The parent fills in their
@@ -56,16 +54,7 @@ export default function BranchVisit() {
 
   return (
     <div className="relative min-h-screen bg-slate-50 flex flex-col">
-      <Watermark />
-      <header className="relative z-10 bg-white border-b border-slate-200 py-4 px-6 sticky top-0 shadow-sm">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2 text-primary">
-            <img src={logo} alt={t('app.brand')} className="h-8 w-auto" />
-            <span className="font-bold text-lg">{t('app.brand')}</span>
-          </div>
-          <LanguageSwitcher />
-        </div>
-      </header>
+      <PublicHeader width="max-w-2xl" title={t('branchVisit.pageTitle')} />
 
       <main className="relative z-10 flex-1 flex flex-col items-center p-6">
         {apptDone ? (
@@ -102,7 +91,7 @@ export default function BranchVisit() {
         ) : (
           <>
             <div className="w-full max-w-xl mt-6 mb-4 text-center">
-              <h1 className="text-2xl md:text-3xl font-bold text-slate-900 mb-2">{t('branchVisit.pageTitle')}</h1>
+              <h1 className="public-title text-2xl md:text-3xl font-bold text-slate-900 mb-2">{t('branchVisit.pageTitle')}</h1>
               {branchLabel && (
                 <p className="inline-flex items-center gap-1.5 text-primary font-medium bg-primary/10 px-3 py-1 rounded-full text-sm mb-2">
                   <MapPin className="w-4 h-4" />

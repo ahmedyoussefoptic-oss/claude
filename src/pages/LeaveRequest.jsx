@@ -4,11 +4,9 @@ import { httpsCallable } from 'firebase/functions';
 import { DoorOpen, ShieldCheck, Loader2, CheckCircle2, Paperclip, AlertTriangle, IdCard, Car, MapPin, Clock, Ban, RefreshCw, XCircle, Plus } from 'lucide-react';
 import { format } from 'date-fns';
 import { functions } from '../config/firebase';
-import Watermark from '../components/common/Watermark';
-import LanguageSwitcher from '../components/common/LanguageSwitcher';
-import logo from '../assets/logo.png';
 import { fileToBase64, MAX_PUBLIC_FILE_BYTES } from '../utils/publicSubmission';
 import { LEAVE_REASONS, PICKUP_RELATIONS } from '../config/platform';
+import PublicHeader from '../components/common/PublicHeader';
 
 const call = (name, data) => httpsCallable(functions, name)(data).then((r) => r.data);
 const inputCls = 'w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
@@ -197,15 +195,9 @@ export default function LeaveRequest() {
   const showTrack = track && !newRequest;
   return (
     <div className="relative min-h-screen bg-slate-50 flex flex-col">
-      <Watermark />
-      <header className="relative z-10 bg-white border-b border-slate-200 py-4 px-6 sticky top-0 shadow-sm">
-        <div className="max-w-xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2 text-primary"><img src={logo} alt="" className="h-8 w-auto" /><span className="font-bold text-lg">{t('app.brand')}</span></div>
-          <LanguageSwitcher />
-        </div>
-      </header>
+      <PublicHeader width="max-w-xl" title={t('leaveRequest.title')} icon={DoorOpen} />
       <main className="relative z-10 flex-1 flex flex-col items-center p-4 md:p-6 gap-4">
-        <h1 className="text-2xl font-bold text-slate-900 mt-4 flex items-center gap-2"><DoorOpen className="w-7 h-7 text-primary" />{t('leaveRequest.title')}</h1>
+        <h1 className="public-title text-2xl font-bold text-slate-900 mt-4 flex items-center gap-2"><DoorOpen className="w-7 h-7 text-primary" />{t('leaveRequest.title')}</h1>
         <p className="text-sm text-slate-500 text-center max-w-md">{t('leaveRequest.subtitle')}</p>
         {!ctx ? (
           <form onSubmit={verify} className={`${card} space-y-4`}>

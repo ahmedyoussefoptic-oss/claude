@@ -8,6 +8,7 @@ import LanguageSwitcher from '../components/common/LanguageSwitcher';
 import logo from '../assets/logo.png';
 import { callMeeting, meetingTime, isIndividual, isRequests } from '../config/meetings';
 import MeetingFamily from './MeetingFamily';
+import PublicHeader from '../components/common/PublicHeader';
 
 const inputCls = 'w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
 const card = 'w-full max-w-2xl bg-white/90 backdrop-blur p-5 md:p-7 rounded-[28px] shadow-lg shadow-slate-200/70 border border-slate-100';
@@ -17,16 +18,7 @@ export function PublicShell({ children, festive = false }) {
   if (!festive) {
     return (
       <div className="relative min-h-screen bg-slate-50 flex flex-col">
-        <Watermark />
-        <header className="relative z-10 bg-white border-b border-slate-200 py-4 px-6 sticky top-0 shadow-sm">
-          <div className="max-w-2xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-2 text-primary">
-              <img src={logo} alt={t('tripConsent.schoolName')} className="h-8 w-auto" />
-              <span className="font-bold text-lg">{t('tripConsent.schoolName')}</span>
-            </div>
-            <LanguageSwitcher />
-          </div>
-        </header>
+        <PublicHeader />
         <main className="relative z-10 flex-1 flex flex-col items-center p-4 md:p-6 gap-5">{children}</main>
       </div>
     );

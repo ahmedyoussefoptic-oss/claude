@@ -15,6 +15,7 @@ import {
 import { useMessageTemplates } from '../hooks/useMessageTemplates';
 import WhatsAppApiSettings from '../components/settings/WhatsAppApiSettings';
 import SlaSettings from '../components/settings/SlaSettings';
+import PublicDesignSettings from '../components/settings/PublicDesignSettings';
 import AppointmentSettings from '../components/settings/AppointmentSettings';
 import SettingsGate from '../components/settings/SettingsGate';
 import OwnerSettings from '../components/settings/OwnerSettings';
@@ -705,6 +706,7 @@ export default function Settings() {
       <EditableList title={t('settings.itemCategoriesTitle')} icon={Package} items={itemCategories} collectionName="itemCategories" />
       <StudentImport />
       <StudentAccountsImport />
+      <PublicDesignSettings />
       <SlaSettings />
       <AppointmentSettings />
       <MessageTemplatesEditor />

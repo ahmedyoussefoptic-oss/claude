@@ -7,11 +7,9 @@ import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../config/firebase';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
-import logo from '../assets/logo.png';
-import Watermark from '../components/common/Watermark';
 import SystemCredit from '../components/common/SystemCredit';
 import { formatAppointment } from '../components/appointments/AppointmentPicker';
-import LanguageSwitcher from '../components/common/LanguageSwitcher';
+import PublicHeader from '../components/common/PublicHeader';
 
 // Each trackable record type: which collection its survey update targets
 // (techSupport has none — that goes through the submitTechSupportSurvey
@@ -170,22 +168,12 @@ export default function ParentPortal() {
 
   return (
     <div className="relative min-h-screen bg-slate-50 flex flex-col">
-      <Watermark />
-      {/* Public Header */}
-      <header className="relative z-10 bg-white border-b border-slate-200 py-4 px-6 sticky top-0 shadow-sm">
-        <div className="max-w-4xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2 text-primary">
-            <img src={logo} alt={t('app.brand')} className="h-8 w-auto" />
-            <span className="font-bold text-lg">{t('app.brand')}</span>
-          </div>
-          <LanguageSwitcher />
-        </div>
-      </header>
+      <PublicHeader width="max-w-4xl" title={t('parentPortal.pageTitle')} />
 
       <main className="relative z-10 flex-1 flex flex-col items-center p-6 mt-10">
 
         <div className="w-full max-w-xl mb-10 text-center">
-          <h1 className="text-3xl font-bold text-slate-900 mb-4">{t('parentPortal.pageTitle')}</h1>
+          <h1 className="public-title text-3xl font-bold text-slate-900 mb-4">{t('parentPortal.pageTitle')}</h1>
           <p className="text-slate-500">{t('parentPortal.pageSubtitle')}</p>
         </div>
 

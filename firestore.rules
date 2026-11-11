@@ -263,7 +263,8 @@ service cloud.firestore {
     // edit the wording.
     match /settings/{docId} {
       // teamsAttendance (Teams connection, sync state): Cloud Functions only.
-      allow read: if isAuthenticated() && docId != 'teamsAttendance';
+      // publicDesign (the public links' design) is read by the public pages.
+      allow read: if (isAuthenticated() && docId != 'teamsAttendance') || docId == 'publicDesign';
       // adminPermissions: owner only; security: Cloud Functions only.
       allow write: if docId == 'adminPermissions' ? isOwner() : (!(docId in ['security', 'teamsAttendance']) && canWriteSettings());
     }

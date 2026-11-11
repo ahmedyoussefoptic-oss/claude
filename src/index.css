@@ -35,6 +35,9 @@ html[data-design="navy"]:not(.dark) {
 }
 /* Pages without the navy title card yet: their heading takes the navy. */
 html[data-design="navy"] main h1.text-2xl.text-slate-900 { color: var(--color-primary); font-weight: 800; }
+/* Public links in the navy design: the title moves into the navy card. */
+html[data-design="navy"] .public-title { display: none; }
+html[data-design="navy"] main h1.text-3xl.text-slate-900 { color: var(--color-primary); font-weight: 800; }
 /* Buttons placed on the navy title card: the main one turns white. */
 .navy-hero .bg-primary { background-color: #ffffff; color: #1b345a; }
 .navy-hero .bg-primary:hover, .navy-hero .hover\:bg-primary-dark:hover { background-color: #e8eef7; }
