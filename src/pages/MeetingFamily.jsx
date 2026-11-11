@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import QRCode from 'qrcode';
 import { Loader2, CheckCircle2, Star, AlertTriangle, Pencil, Ticket, ArrowLeftRight, LogOut, Sparkles, HeartHandshake, Check, Printer } from 'lucide-react';
@@ -23,6 +23,17 @@ const tail = (id) => `ID ••••${String(id || '').slice(-4)}`;
 const storeKey = (token) => `meeting:fam:${token}`;
 const readSession = (token) => { try { return JSON.parse(localStorage.getItem(storeKey(token)) || 'null'); } catch { return null; } };
 const writeSession = (token, v) => { try { if (v) localStorage.setItem(storeKey(token), JSON.stringify(v)); else localStorage.removeItem(storeKey(token)); } catch { /* storage unavailable */ } };
+
+// Who will attend: typed once, filled in for the family's other branches
+// (kept on this device until sign-out; open forms follow it as it's typed).
+const ATT_KEY = 'meeting:attendee';
+const ATT_EVENT = 'meeting-attendee';
+const readAttendee = () => { try { const v = JSON.parse(localStorage.getItem(ATT_KEY) || 'null'); return v && typeof v.name === 'string' ? { name: v.name, relation: v.relation || '' } : null; } catch { return null; } };
+const shareAttendee = (v, from) => {
+  try { localStorage.setItem(ATT_KEY, JSON.stringify(v)); } catch { /* storage unavailable */ }
+  window.dispatchEvent(new CustomEvent(ATT_EVENT, { detail: { v, from } }));
+};
+export const clearAttendee = () => { try { localStorage.removeItem(ATT_KEY); } catch { /* storage unavailable */ } };
 
 function Avatar({ name, size = 'w-12 h-12 text-lg' }) {
   const s = String(name || '').trim();
@@ -106,7 +117,7 @@ export default function MeetingFamily({ token }) {
   const [sess, setSess] = useState(() => readSession(token));
   const [first, setFirst] = useState(null); // the sign-in reply
 
-  const signOut = () => { writeSession(token, null); setSess(null); setFirst(null); };
+  const signOut = () => { writeSession(token, null); clearAttendee(); setSess(null); setFirst(null); };
   if (!sess) {
     return (
       <>
@@ -259,7 +270,17 @@ function RequestForm({ sess, state, others, onSaved }) {
   const { t, i18n } = useTranslation();
   const keyOf = (studentId, staffId) => `${studentId}|${staffId}`;
   const [picks, setPicks] = useState(() => Object.fromEntries(state.requests.filter((r) => r.status !== 'CANCELLED').map((r) => [keyOf(r.studentId, r.staffId), r.purpose])));
-  const [attendee, setAttendee] = useState(() => ({ name: state.invite.attendee?.name || '', relation: state.invite.attendee?.relation || '' }));
+  const [attendee, setAttendeeState] = useState(() => (state.invite.attendee ? { name: state.invite.attendee.name, relation: state.invite.attendee.relation } : readAttendee() || { name: '', relation: '' }));
+  // Typed here → shared with the other branches' forms; typed there → taken
+  // here unless this form's own answer was already given.
+  const formId = useRef(Math.random().toString(36)).current;
+  const own = useRef(!!state.invite.attendee);
+  const setAttendee = (v) => { own.current = false; setAttendeeState(v); shareAttendee(v, formId); };
+  useEffect(() => {
+    const on = (e) => { if (e.detail.from !== formId && !own.current) setAttendeeState(e.detail.v); };
+    window.addEventListener(ATT_EVENT, on);
+    return () => window.removeEventListener(ATT_EVENT, on);
+  }, [formId]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const locked = new Set(state.requests.filter((r) => ['IN_PROGRESS', 'DONE'].includes(r.status)).map((r) => keyOf(r.studentId, r.staffId)));

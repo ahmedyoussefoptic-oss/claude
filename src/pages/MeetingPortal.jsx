@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Building2, CalendarDays, Clock, MapPin, Info } from 'lucide-react';
 import { PublicShell } from './MeetingParent';
-import { FamilyPanel, SignIn, Steps, SignOutBar } from './MeetingFamily';
+import { FamilyPanel, SignIn, Steps, SignOutBar, clearAttendee } from './MeetingFamily';
 import { callMeeting, meetingTime } from '../config/meetings';
 
 // The family's sessions on this device (one per branch meeting).
@@ -26,7 +26,7 @@ export default function MeetingPortal() {
     return () => { document.title = prev; };
   }, [t]);
 
-  const signOut = useCallback(() => { writePortal(null); setPortal(null); setFresh({}); }, []);
+  const signOut = useCallback(() => { writePortal(null); clearAttendee(); setPortal(null); setFresh({}); }, []);
   const onSignedIn = (r) => {
     const v = {
       sessions: r.sessions.map((x) => ({ familyToken: x.familyToken, session: x.session, meeting: x.meeting })),
