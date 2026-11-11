@@ -14,6 +14,7 @@ import LeadDetails from '../../components/platform/LeadDetails';
 import LeadsReport from '../../components/platform/LeadsReport';
 import { LeadVisitsDay, dayKeyOf } from '../../components/platform/LeadVisits';
 import { leadOpen, stageOverdue, followUpOverdue, tsMs } from '../../components/platform/leadUtils';
+import PageHero from '../../components/common/PageHero';
 
 // العملاء الجدد — every enquiry about enrolling becomes a file that moves
 // through nine stages until the student is enrolled (or is closed with a
@@ -94,16 +95,20 @@ export default function Leads() {
 
   return (
     <div className="max-w-[1400px] mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><UserPlus className="w-6 h-6 text-primary" />{t('platform.leads.title')}</h1>
-          <p className="text-slate-500 mt-1">{t('platform.leads.subtitle')}</p>
-        </div>
+      <PageHero
+        icon={UserPlus}
+        title={t('platform.leads.title')}
+        subtitle={t('platform.leads.subtitle')}
+        facts={[{ label: t('platform.leads.statOpen'), value: stats.open }, { label: t('platform.leads.statOverdue'), value: stats.overdue, tone: 'red' }, { label: t('platform.leads.statToday'), value: stats.today, tone: 'amber' }]}
+        actions={(
+          <>
         <div className="flex flex-wrap gap-2">
           <button onClick={async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ } }} className={btn.ghost}>{copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Link2 className="w-4 h-4" />}{t('platform.leads.copyFormLink')}</button>
           <button onClick={() => setShowForm(true)} className={btn.primary}><Plus className="w-4 h-4" />{t('platform.leads.new')}</button>
         </div>
-      </div>
+          </>
+        )}
+      />
 
       <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
         <Tile label={t('platform.leads.statOpen')} value={stats.open} icon={UserPlus} onClick={() => setQuick('OPEN')} active={quick === 'OPEN'} />

@@ -12,6 +12,7 @@ import { userBranches } from '../utils/scope';
 import { isOwner } from '../config/adminPermissions';
 import { readBevatelReport, BevatelReportError } from '../utils/bevatelReport';
 import logo from '../assets/logo.png';
+import PageHero from '../components/common/PageHero';
 
 const inputCls = 'px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
 const mmss = (sec) => (sec == null || Number.isNaN(sec) ? '—' : `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`);
@@ -193,12 +194,14 @@ export default function Calls() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 no-print">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><PhoneCall className="w-6 h-6 text-primary" />{t('calls.title')}</h1>
-          <p className="text-slate-500 mt-1">{t('calls.subtitle')}</p>
+      <div className="no-print">
+        <PageHero
+          icon={PhoneCall}
+          title={t('calls.title')}
+          subtitle={t('calls.subtitle')}
+          toolbar={(
+          <>
           {cfg?.lastSyncAt && <p className="text-xs text-slate-400 mt-1">{t('calls.lastSync', { time: format(cfg.lastSyncAt.toDate(), 'yyyy-MM-dd HH:mm') })}</p>}
-        </div>
         <div className="flex flex-wrap items-end gap-2">
           <label className="text-xs text-slate-500">{t('calls.from')}<input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className={`${inputCls} block mt-1`} /></label>
           <label className="text-xs text-slate-500">{t('calls.to')}<input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} className={`${inputCls} block mt-1`} /></label>
@@ -215,6 +218,9 @@ export default function Calls() {
           <button type="button" disabled={!a} onClick={exportExcel} className="px-4 py-2 flex items-center gap-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-medium text-sm disabled:opacity-50"><FileSpreadsheet className="w-4 h-4" />{t('reports.exportExcel')}</button>
           <button type="button" disabled={!a} onClick={() => window.print()} className="px-4 py-2 flex items-center gap-2 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm disabled:opacity-50"><Printer className="w-4 h-4" />{t('reports.printSavePdf')}</button>
         </div>
+          </>
+        )}
+        />
       </div>
 
       {cfg && cfg.connected !== true && !cfg.webhookLastAt && (

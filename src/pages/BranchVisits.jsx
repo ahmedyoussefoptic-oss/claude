@@ -17,6 +17,7 @@ import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import AppointmentPicker from '../components/appointments/AppointmentPicker';
 import VisitDeclineDialog from '../components/visits/VisitDeclineDialog';
 import VisitRequestsPanel from '../components/visits/VisitRequestsPanel';
+import PageHero from '../components/common/PageHero';
 
 const isToday = (ts) => {
   if (!ts?.toDate) return false;
@@ -208,13 +209,12 @@ export default function BranchVisits() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <Armchair className="w-6 h-6 text-primary" />
-          {t('branchVisits.title')}
-        </h1>
-        <p className="text-slate-500 mt-1">{t('branchVisits.subtitle')}</p>
-      </div>
+      <PageHero
+        icon={Armchair}
+        title={t('branchVisits.title')}
+        subtitle={t('branchVisits.subtitle')}
+        facts={[{ label: t('branchVisits.waitingNow'), value: stats.waiting, tone: 'red' }, { label: t('branchVisits.today'), value: stats.today }, { label: t('branchVisits.metToday'), value: stats.metToday, tone: 'green' }]}
+      />
 
       <VisitRequestsPanel />
 

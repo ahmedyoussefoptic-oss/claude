@@ -29,6 +29,7 @@ import { complaintContent, ticketContent } from '../utils/reportContent';
 import { matchesClass, classOptions, stageClassLabel } from '../utils/classFilter';
 import { STAGES } from '../config/complaintTypes';
 import { classOptionsForStage } from '../config/techSupport';
+import PageHero from '../components/common/PageHero';
 
 // Excel sheet names are capped at 31 chars and can't contain \ / ? * [ ] : —
 // our translated labels are short enough in practice, but trim defensively.
@@ -718,11 +719,12 @@ export default function Reports() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('nav.reports')}</h1>
-          <p className="text-slate-500 mt-1">{t('reports.pageSubtitle')}</p>
-        </div>
+      <div className="no-print">
+        <PageHero
+          title={t('nav.reports')}
+          subtitle={t('reports.pageSubtitle')}
+          actions={(
+          <>
         <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={handleExportExcel}
@@ -739,6 +741,9 @@ export default function Reports() {
             {t('reports.printSavePdf')}
           </button>
         </div>
+          </>
+        )}
+        />
       </div>
 
       {/* Report type */}

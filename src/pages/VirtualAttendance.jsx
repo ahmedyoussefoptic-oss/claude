@@ -10,6 +10,7 @@ import StatCard from '../components/dashboard/StatCard';
 import { VC_STATUSES, VC_STATUS_STYLES, VC_STATUS_BAR, vcRate } from '../config/attendance';
 import SessionDetails from '../components/attendance/SessionDetails';
 import AttendanceSettings from '../components/attendance/AttendanceSettings';
+import PageHero from '../components/common/PageHero';
 
 const riyadhDay = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Riyadh' }).format(new Date());
 const call = (name, data) => httpsCallable(functions, name)(data).then((r) => r.data);
@@ -75,10 +76,11 @@ export default function VirtualAttendance() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><Video className="w-6 h-6 text-primary" />{t('vc.title')}</h1>
-        <p className="text-slate-500 mt-1">{t('vc.subtitle')}</p>
-      </div>
+      <PageHero
+        icon={Video}
+        title={t('vc.title')}
+        subtitle={t('vc.subtitle')}
+      />
 
       {cfg && !cfg.connected && (
         <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-xl p-3 flex items-start gap-2">

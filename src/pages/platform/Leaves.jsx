@@ -13,6 +13,7 @@ import { useBranches } from '../../hooks/useOrgData';
 import { waLink } from '../../utils/whatsapp';
 import { Modal, Tile, Field, Pill, inputCls, btn } from '../../components/platform/ui';
 import StudentPicker from '../../components/platform/StudentPicker';
+import PageHero from '../../components/common/PageHero';
 import {
   LEAVE_REASONS, LEAVE_STATUSES, LEAVE_STATUS_STYLES, LEAVE_OPEN, PICKUP_RELATIONS, usePlatformSettings, rosterGrade, randomCode,
 } from '../../config/platform';
@@ -233,17 +234,21 @@ export default function Leaves() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><DoorOpen className="w-6 h-6 text-primary" />{t('platform.leaves.title')}</h1>
-          <p className="text-slate-500 mt-1">{t('platform.leaves.subtitle')}</p>
-        </div>
+      <PageHero
+        icon={DoorOpen}
+        title={t('platform.leaves.title')}
+        subtitle={t('platform.leaves.subtitle')}
+        facts={[{ label: t('platform.leaves.statPending'), value: stats.pending, tone: 'amber' }, { label: t('platform.leaves.statWaiting'), value: stats.waiting, tone: 'violet' }]}
+        actions={(
+          <>
         <div className="flex flex-wrap gap-2">
           <button onClick={async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ } }} className={btn.ghost}>{copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Link2 className="w-4 h-4" />}{t('platform.leaves.copyParentLink')}</button>
           <button onClick={exportExcel} className={btn.ghost}><FileDown className="w-4 h-4" />{t('platform.exportExcel')}</button>
           {platform && <button onClick={() => setShowForm(true)} className={btn.primary}><Plus className="w-4 h-4" />{t('platform.leaves.new')}</button>}
         </div>
-      </div>
+          </>
+        )}
+      />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <Tile label={t('platform.leaves.statPending')} value={stats.pending} icon={Clock} tone="text-amber-600" onClick={() => setStatusFilter('PENDING')} active={statusFilter === 'PENDING'} />

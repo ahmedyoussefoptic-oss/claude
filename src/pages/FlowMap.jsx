@@ -6,6 +6,7 @@ import { db } from '../config/firebase';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
 import { userBranches, scopeConstraints } from '../utils/scope';
+import PageHero from '../components/common/PageHero';
 
 const MAIN_FLOW_KEYS = ['RECEIVED', 'IN_PROGRESS', 'WAITING_PARENT_RESPONSE', 'SOLVED', 'CLOSED'];
 const EXCEPTION_FLOW_KEYS = [
@@ -47,11 +48,11 @@ export default function FlowMap() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('flowMap.title')}</h1>
-          <p className="text-slate-500 mt-1">{t('flowMap.subtitle')}</p>
-        </div>
+      <PageHero
+        title={t('flowMap.title')}
+        subtitle={t('flowMap.subtitle')}
+        toolbar={(
+          <>
         {visibleBranches.length > 1 && (
           <select
             value={branchFilter}
@@ -62,7 +63,9 @@ export default function FlowMap() {
             {visibleBranches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
           </select>
         )}
-      </div>
+          </>
+        )}
+      />
 
       {loading ? (
         <div className="flex items-center justify-center p-16">

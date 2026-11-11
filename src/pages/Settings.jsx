@@ -25,6 +25,7 @@ import { parseStudentRows, upsertStudents, listStudentIds } from '../utils/stude
 import { parseAccountsWorkbook, importStudentAccounts } from '../utils/studentAccounts';
 import { DEFAULT_TEMPLATES, TEMPLATE_PLACEHOLDERS } from '../utils/whatsapp';
 import { Settings as SettingsIcon, Pencil, Check, X, Plus, Trash2, Building2, GraduationCap, Upload, Users as UsersIcon, Loader2, MessageCircle, RotateCcw, Tag, Tags, Wrench, Monitor, Package, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
+import PageHero from '../components/common/PageHero';
 
 function MessageTemplatesEditor() {
   const { t, i18n } = useTranslation();
@@ -687,13 +688,11 @@ export default function Settings() {
   return (
     <SettingsGate>
     <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <SettingsIcon className="w-6 h-6 text-primary" />
-          {t('nav.settings')}
-        </h1>
-        <p className="text-slate-500 mt-1">{t('settings.pageSubtitle')}</p>
-      </div>
+      <PageHero
+        icon={SettingsIcon}
+        title={t('nav.settings')}
+        subtitle={t('settings.pageSubtitle')}
+      />
 
       {isOwner(userData) && <OwnerSettings />}
 

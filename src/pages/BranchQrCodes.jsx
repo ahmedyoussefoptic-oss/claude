@@ -7,6 +7,7 @@ import useAuthStore from '../stores/useAuthStore';
 import { userBranches } from '../utils/scope';
 import logo from '../assets/logo.png';
 import { schoolVisitLink } from '../components/visits/VisitRequestsPanel';
+import PageHero from '../components/common/PageHero';
 
 // The link a branch's QR code points to — the branch check-in page
 // (BranchVisit.jsx) with that branch preselected.
@@ -85,16 +86,20 @@ export default function BranchQrCodes() {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <QrCode className="w-6 h-6 text-primary" />
-          {t('branchQr.title')}
-        </h1>
-        <p className="text-slate-500 mt-1">{kind === 'request' ? t('branchQr.request.subtitle') : t('branchQr.subtitle')}</p>
+        <PageHero
+          icon={QrCode}
+          title={t('branchQr.title')}
+          subtitle={kind === 'request' ? t('branchQr.request.subtitle') : t('branchQr.subtitle')}
+          toolbar={(
+          <>
         <div className="flex gap-2 mt-3">
           {['checkin', 'request'].map((k) => (
             <button key={k} onClick={() => setKind(k)} className={`px-4 py-2 rounded-xl text-sm font-medium border ${kind === k ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'}`}>{t(`branchQr.kinds.${k}`)}</button>
           ))}
         </div>
+          </>
+        )}
+        />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

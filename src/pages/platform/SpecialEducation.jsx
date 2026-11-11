@@ -7,6 +7,7 @@ import useAuthStore from '../../stores/useAuthStore';
 import { useBranches } from '../../hooks/useOrgData';
 import { Modal, Tile, Field, Pill, btn, inputCls } from '../../components/platform/ui';
 import { parseSpedTemplate, fillSpedTemplate, SPED_COLUMNS, SPED_MAX_ROWS } from '../../utils/spedTemplate';
+import PageHero from '../../components/common/PageHero';
 
 const ms = (v) => v?.toMillis?.() || 0;
 const fmt = (v) => (v ? new Intl.DateTimeFormat('ar-SA-u-ca-gregory-nu-latn', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }).format(ms(v)) : '');
@@ -126,14 +127,17 @@ export default function SpecialEducation() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><HeartHandshake className="w-7 h-7 text-primary" />{t('platform.sped.title')}</h1>
-          <p className="text-sm text-slate-500 mt-1">{t('platform.sped.subtitle')}</p>
-        </div>
+      <PageHero
+        icon={HeartHandshake}
+        title={t('platform.sped.title')}
+        subtitle={t('platform.sped.subtitle')}
+        actions={(
+          <>
         <button type="button" onClick={() => fileRef.current?.click()} className={btn.primary}><Upload className="w-4 h-4" />{t('platform.sped.upload')}</button>
         <input ref={fileRef} type="file" accept=".xlsx" className="hidden" onChange={pick} />
-      </div>
+          </>
+        )}
+      />
       {error && <p className="text-sm bg-rose-50 border border-rose-100 text-rose-700 rounded-xl p-3">{error}</p>}
       {notice && <p className="text-sm bg-emerald-50 border border-emerald-100 text-emerald-700 rounded-xl p-3">{notice}</p>}
 

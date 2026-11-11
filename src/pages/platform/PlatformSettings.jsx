@@ -8,6 +8,7 @@ import { useBranches } from '../../hooks/useOrgData';
 import { LEAD_STAGES, LEAD_SOURCES, usePlatformSettings } from '../../config/platform';
 import { STAGES } from '../../config/complaintTypes';
 import { Field, inputCls, btn } from '../../components/platform/ui';
+import PageHero from '../../components/common/PageHero';
 
 // Suggested WhatsApp template for visit confirmations / reminders
 // (sendLeadVisitReminders fills the five variables and the button).
@@ -56,10 +57,11 @@ export default function PlatformSettings() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><Settings2 className="w-6 h-6 text-primary" />{t('platform.settings.title')}</h1>
-        <p className="text-slate-500 mt-1">{t('platform.settings.subtitle')}</p>
-      </div>
+      <PageHero
+        icon={Settings2}
+        title={t('platform.settings.title')}
+        subtitle={t('platform.settings.subtitle')}
+      />
 
       <section className={card}>
         <h3 className="font-bold text-slate-900">{t('platform.settings.links')}</h3>

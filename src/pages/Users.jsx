@@ -12,6 +12,7 @@ import ModuleAccessEditor, { moduleOverrides } from '../components/users/ModuleA
 import { STAGES } from '../config/complaintTypes';
 import NotificationPrefsEditor from '../components/common/NotificationPrefsEditor';
 import { Users as UsersIcon, Plus, Loader2, Mail, Lock, Phone, Briefcase, User as UserIcon, Pencil, Trash2, KeyRound, X, SlidersHorizontal, RotateCcw, FileDown } from 'lucide-react';
+import PageHero from '../components/common/PageHero';
 
 // Specialist departments — the same ids as complaint categories (auto-
 // assignment matches them); FINANCE pairs with a category coded FINANCE.
@@ -306,14 +307,13 @@ export default function Users() {
 
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <UsersIcon className="w-6 h-6 text-primary" />
-            {t('users.pageTitle')}
-          </h1>
-          <p className="text-slate-500 mt-1">{t('users.pageSubtitle')}</p>
-        </div>
+      <div className="mb-8">
+        <PageHero
+          icon={UsersIcon}
+          title={t('users.pageTitle')}
+          subtitle={t('users.pageSubtitle')}
+          actions={(
+          <>
         <div className="flex flex-wrap gap-2">
           <button
             onClick={() => setShowExport(true)}
@@ -330,6 +330,9 @@ export default function Users() {
             {t('users.addUser')}
           </button>
         </div>
+          </>
+        )}
+        />
       </div>
       {showExport && (
         <ExportLoginsDialog

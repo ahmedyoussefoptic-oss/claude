@@ -10,6 +10,7 @@ import { useBranches } from '../hooks/useOrgData';
 import StatCard from '../components/dashboard/StatCard';
 import { ROLE_LABELS } from '../config/roles';
 import ActivityReport from '../components/activity/ActivityReport';
+import PageHero from '../components/common/PageHero';
 
 const ONLINE_MS = 3 * 60 * 1000;
 const PAGE_NAMES = {
@@ -72,10 +73,12 @@ export default function UserActivity() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><Activity className="w-6 h-6 text-primary" />{t('activity.title')}</h1>
-        <p className="text-slate-500 mt-1">{t('activity.subtitle')}</p>
-      </div>
+      <PageHero
+        icon={Activity}
+        title={t('activity.title')}
+        subtitle={t('activity.subtitle')}
+        facts={[{ label: t('activity.onlineNow'), value: stats.online, tone: 'green' }, { label: t('activity.lastHour'), value: stats.hour }]}
+      />
       <div className="flex gap-1 bg-white rounded-xl border border-slate-100 shadow-sm p-1 w-fit">
         {[['now', Wifi], ['report', BarChart3]].map(([k, Icon]) => (
           <button key={k} onClick={() => setView(k)} className={`px-4 py-2 rounded-lg text-sm flex items-center gap-1.5 ${view === k ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-100'}`}><Icon className="w-4 h-4" />{t(`activity.tabs.${k}`)}</button>

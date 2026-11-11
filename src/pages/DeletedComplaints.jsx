@@ -6,6 +6,7 @@ import { db } from '../config/firebase';
 import { useBranches, useComplaintTypes } from '../hooks/useOrgData';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
+import PageHero from '../components/common/PageHero';
 
 const asDate = (v) => (v?.toDate ? v.toDate() : v instanceof Date ? v : null);
 
@@ -79,11 +80,11 @@ export default function DeletedComplaints() {
   return (
     <div className="max-w-7xl mx-auto">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-          <Archive className="w-6 h-6 text-primary" />
-          {t('deletedComplaints.title')}
-        </h1>
-        <p className="text-slate-500 mt-1">{t('deletedComplaints.subtitle')}</p>
+        <PageHero
+          icon={Archive}
+          title={t('deletedComplaints.title')}
+          subtitle={t('deletedComplaints.subtitle')}
+        />
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col min-h-[400px]">

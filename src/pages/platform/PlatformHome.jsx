@@ -9,6 +9,7 @@ import { useSlaSettings } from '../../utils/businessTime';
 import { usePlatformSettings } from '../../config/platform';
 import { leadOpen, stageOverdue, followUpOverdue } from '../../components/platform/leadUtils';
 import { dayKeyOf } from '../../components/platform/LeadVisits';
+import PageHero from '../../components/common/PageHero';
 
 // منصة المكتشف — one screen over every module: today's leaves, the
 // enrollment pipeline, re-enrollment, and the existing complaints / visits /
@@ -57,11 +58,16 @@ export default function PlatformHome() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><LayoutDashboard className="w-6 h-6 text-primary" />{t('platform.home.title')}</h1>
-        <p className="text-slate-500 mt-1">{t('platform.home.subtitle')}</p>
+      <PageHero
+        icon={LayoutDashboard}
+        title={t('platform.home.title')}
+        subtitle={t('platform.home.subtitle')}
+        toolbar={(
+          <>
         <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 mt-3 inline-flex items-center gap-1.5"><Lock className="w-3.5 h-3.5" />{t('platform.home.ownerOnly')}</p>
-      </div>
+          </>
+        )}
+      />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {modules.map((m) => {
           const Icon = m.icon;

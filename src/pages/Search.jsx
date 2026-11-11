@@ -11,6 +11,7 @@ import { normalizeAssignees } from '../utils/assignees';
 import { scopeConstraints } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
+import PageHero from '../components/common/PageHero';
 
 const STATUS_IDS = ['', 'RECEIVED', 'IN_PROGRESS', 'WAITING_PARENT_RESPONSE', 'SOLVED', 'ESCALATED', 'REJECTED', 'CLOSED'];
 const PRIORITY_IDS = ['', 'NORMAL', 'HIGH', 'URGENT'];
@@ -129,10 +130,10 @@ export default function Search() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">{t('nav.advancedSearch')}</h1>
-        <p className="text-slate-500 mt-1">{t('search.pageSubtitle')}</p>
-      </div>
+      <PageHero
+        title={t('nav.advancedSearch')}
+        subtitle={t('search.pageSubtitle')}
+      />
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">

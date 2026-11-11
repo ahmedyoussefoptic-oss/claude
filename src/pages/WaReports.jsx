@@ -9,6 +9,7 @@ import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
 import StatCard from '../components/dashboard/StatCard';
 import { userBranches } from '../utils/scope';
+import PageHero from '../components/common/PageHero';
 
 // What the parents wrote about (counted by the branch each day).
 export const WA_TOPICS = ['REGISTRATION', 'FEES', 'TRANSPORT', 'ACADEMIC', 'PLATFORMS', 'ABSENCE', 'COMPLAINT', 'TRIPS', 'GENERAL', 'OTHER'];
@@ -129,10 +130,11 @@ export default function WaReports() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><MessageSquareText className="w-6 h-6 text-primary" />{t('waReports.title')}</h1>
-        <p className="text-slate-500 mt-1">{t('waReports.subtitle')}</p>
-      </div>
+      <PageHero
+        icon={MessageSquareText}
+        title={t('waReports.title')}
+        subtitle={t('waReports.subtitle')}
+      />
       <div className="flex gap-2">
         {[['entry', ClipboardEdit], ['analysis', BarChart3]].map(([k, Icon]) => (
           <button key={k} onClick={() => setTab(k)} className={`px-4 py-2 rounded-xl text-sm font-medium border flex items-center gap-1.5 ${tab === k ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'}`}><Icon className="w-4 h-4" />{t(`waReports.tabs.${k}`)}</button>

@@ -8,6 +8,7 @@ import { useBranches } from '../../hooks/useOrgData';
 import { REENROLL_INTENTS, REENROLL_STYLES, REENROLL_REASONS, usePlatformSettings, rosterGrade } from '../../config/platform';
 import { Tile, btn } from '../../components/platform/ui';
 import Student360 from '../../components/platform/Student360';
+import PageHero from '../../components/common/PageHero';
 
 const PAGE = 100;
 const GRADE_ORDER = ['KG1', 'KG2', 'KG3', 'G1', 'G2', 'G3', 'G4', 'G5', 'G6', 'G7', 'G8', 'G9', 'G10', 'G11', 'G12', 'SEN'];
@@ -102,13 +103,16 @@ export default function CurrentStudents() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><GraduationCap className="w-6 h-6 text-primary" />{t('platform.students.title')}</h1>
-          <p className="text-slate-500 mt-1">{t('platform.students.subtitle')}</p>
-        </div>
+      <PageHero
+        icon={GraduationCap}
+        title={t('platform.students.title')}
+        subtitle={t('platform.students.subtitle')}
+        actions={(
+          <>
         <button onClick={exportExcel} disabled={!students} className={btn.ghost}><FileDown className="w-4 h-4" />{t('platform.exportExcel')}</button>
-      </div>
+          </>
+        )}
+      />
 
       <div className="flex bg-slate-100 rounded-xl p-1 w-fit">
         {[['directory', UsersIcon], ['reenroll', RotateCcw]].map(([v, Icon]) => (

@@ -7,9 +7,10 @@ import logo from '../../assets/logo.png';
 // design: the navy card (logo, date, big title, a row of facts, a tear line
 // with a status pill and the page's actions).
 //   facts: [{ label, value, tone?: 'amber'|'green'|'red'|'violet', to? }]
+//   toolbar: filters / tabs — beside the actions (classic) or under the card (navy).
 const TONE = { amber: 'text-amber-300', green: 'text-emerald-300', red: 'text-rose-300', violet: 'text-violet-300' };
 
-export default function PageHero({ title, subtitle, icon: Icon, actions, facts = [], pill }) {
+export default function PageHero({ title, subtitle, icon: Icon, actions, toolbar, facts = [], pill }) {
   const navy = useNavy();
   const navigate = useNavigate();
   const { t, i18n } = useTranslation();
@@ -20,12 +21,12 @@ export default function PageHero({ title, subtitle, icon: Icon, actions, facts =
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">{Icon && <Icon className="w-6 h-6 text-primary" />}{title}</h1>
           {subtitle && <p className="text-slate-500 mt-1 text-sm md:text-base">{subtitle}</p>}
         </div>
-        {actions && <div className="flex flex-wrap items-center gap-2 md:gap-3">{actions}</div>}
+        {(actions || toolbar) && <div className="flex flex-wrap items-center gap-2 md:gap-3">{toolbar}{actions}</div>}
       </div>
     );
   }
   const date = new Date().toLocaleDateString(i18n.language === 'ar' ? 'ar-SA-u-ca-gregory-nu-latn' : 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-  return (
+  const card = (
     <div className="navy-hero relative rounded-[28px] bg-[#1b345a] text-white shadow-xl shadow-slate-300/40 overflow-hidden">
       <svg aria-hidden className="absolute -top-28 -start-28 w-[440px] h-[440px] text-white/10 pointer-events-none" viewBox="0 0 100 100" fill="none"><circle cx="50" cy="50" r="49" stroke="currentColor" strokeWidth=".4" /></svg>
       <div className="relative px-5 md:px-7 pt-5 md:pt-6">
@@ -49,6 +50,8 @@ export default function PageHero({ title, subtitle, icon: Icon, actions, facts =
           </div>
         )}
       </div>
+      {(pill || actions) ? (
+      <>
       <div className="relative h-10 mt-3">
         <span className="absolute -start-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-50" />
         <span className="absolute -end-4 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-slate-50" />
@@ -58,6 +61,15 @@ export default function PageHero({ title, subtitle, icon: Icon, actions, facts =
         {pill ? <span className="bg-white/15 rounded-full px-4 py-1.5 text-sm font-bold">{pill}</span> : <span />}
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
+      </>
+      ) : <div className="h-6" />}
+    </div>
+  );
+  if (!toolbar) return card;
+  return (
+    <div className="space-y-3">
+      {card}
+      <div className="flex flex-wrap items-center gap-2">{toolbar}</div>
     </div>
   );
 }
