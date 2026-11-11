@@ -4488,5 +4488,15 @@
       "message": "Dear parents, to confirm attendance at the parent meetings and choose whom to meet for each child in their branch: {{link}}",
       "posterHint": "Scan to confirm attendance and choose whom to meet"
     }
+  },
+  "design": {
+    "name": {
+      "classic": "Classic design",
+      "navy": "Navy design"
+    },
+    "switchTo": {
+      "classic": "Switch to the classic design",
+      "navy": "Switch to the navy design"
+    }
   }
 }

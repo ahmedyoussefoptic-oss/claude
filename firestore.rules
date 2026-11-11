@@ -212,12 +212,12 @@ service cloud.firestore {
         !isAdmin() && myPerm('users') && request.auth.uid != userId &&
         resource.data.role != 'ADMIN' && !grantsAdminPower(request.resource.data)
       )) || (
-        // A signed-in user may rename themselves and manage their own push
-        // notification tokens, but never touch the security-relevant fields
+        // A signed-in user may rename themselves, manage their own push
+        // notification tokens and pick their design (uiDesign), but never touch the security-relevant fields
         // (role/branch/access/perms) on their own doc — otherwise any
         // account could grant itself admin rights.
         isAuthenticated() && request.auth.uid == userId &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'fcmTokens', 'notificationPrefs', 'notificationChannels'])
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'fcmTokens', 'notificationPrefs', 'notificationChannels', 'uiDesign'])
       );
     }
 

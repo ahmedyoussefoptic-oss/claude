@@ -19,6 +19,27 @@
   }
 }
 
+/* «التصميم الكحلي» (navy design, the switch in the top bar; html[data-design],
+   saved per user). The palette variables the utilities read are remapped:
+   the primary colour becomes the school's navy, with violet as the accent;
+   the layout's own navy pieces (sidebar…) check the design in React. */
+html[data-design="navy"] {
+  --color-primary: #1f3c64;
+  --color-primary-dark: #152a4a;
+  --color-secondary: #3b5b8a;
+  --color-accent: #8b5cf6;
+}
+html[data-design="navy"]:not(.dark) {
+  --color-background: #f3f5f9;
+  --color-slate-50: #f3f5f9;
+}
+/* On the dark background the navy is lifted so text and buttons stay legible. */
+html.dark[data-design="navy"] {
+  --color-primary: #5b8bd0;
+  --color-primary-dark: #4a78bb;
+  --color-secondary: #7aa2dc;
+}
+
 /* Printable reports: only #report-print-area is rendered when printing,
    full-bleed and without the shell chrome around it. */
 @media print {

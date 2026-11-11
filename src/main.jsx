@@ -6,9 +6,11 @@ import App from './App.jsx'
 import ErrorBoundary from './components/common/ErrorBoundary.jsx'
 import { MESSAGING_SW_URL } from './config/firebase';
 import { applyTheme, readTheme } from './components/common/ThemeToggle';
+import { applyDesign, readDesign } from './stores/useDesignStore';
 
 // The saved light/dark choice is applied before the first paint.
 applyTheme(readTheme());
+applyDesign(readDesign());
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>

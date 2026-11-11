@@ -13,6 +13,8 @@ import Watermark from '../common/Watermark';
 import SystemCredit from '../common/SystemCredit';
 import LanguageSwitcher from '../common/LanguageSwitcher';
 import ThemeToggle from '../common/ThemeToggle';
+import DesignToggle from '../common/DesignToggle';
+import useDesignStore from '../../stores/useDesignStore';
 import logo from '../../assets/logo.png';
 import { canSeeModule, tripsAccessOf } from '../../utils/scope';
 
@@ -46,6 +48,12 @@ export default function AppLayout() {
   }, [user?.uid, !!userData]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { presenceRef.current?.pageChanged(); }, [location.pathname]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { design, setDesign } = useDesignStore();
+  const navy = design === 'navy';
+  // The design saved on the account (chosen on another device) wins.
+  useEffect(() => {
+    if (userData?.uiDesign && userData.uiDesign !== useDesignStore.getState().design) setDesign(userData.uiDesign);
+  }, [userData?.uiDesign, setDesign]);
 
   const handleLogout = async () => {
     await logout();
@@ -137,29 +145,31 @@ export default function AppLayout() {
       {/* Sidebar — always right-aligned regardless of language, only the
           text swaps for English; mirroring the whole shell isn't worth the
           risk of positioning bugs this combination of sticky+rtl:/ltr: caused. */}
-      <aside className={`fixed md:sticky top-0 right-0 h-screen w-64 bg-white border-l border-slate-200 z-50 md:z-0 transition-transform transform ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full'} md:translate-x-0 flex flex-col`}>
-        <div className="p-6 border-b border-slate-100 flex items-center gap-3">
-          <img src={logo} alt="Al Moktashef International Schools" className="h-10 w-auto shrink-0" />
+      <aside className={`fixed md:sticky top-0 right-0 h-screen w-64 ${navy ? 'bg-[#1b345a] text-white' : 'bg-white border-l border-slate-200'} z-50 md:z-0 transition-transform transform ${mobileMenuOpen ? 'translate-x-0' : 'translate-x-full'} md:translate-x-0 flex flex-col`}>
+        <div className={`p-6 border-b flex items-center gap-3 ${navy ? 'border-white/10' : 'border-slate-100'}`}>
+          {navy
+            ? <span className="bg-[#ffffff] rounded-xl p-1.5 shrink-0"><img src={logo} alt="Al Moktashef International Schools" className="h-9 w-auto" /></span>
+            : <img src={logo} alt="Al Moktashef International Schools" className="h-10 w-auto shrink-0" />}
           <div>
-            <h2 className="text-base font-bold text-primary leading-tight">{t('app.brand')}</h2>
-            <p className="text-xs text-slate-500 mt-0.5">{t('app.tagline')}</p>
+            <h2 className={`text-base font-bold leading-tight ${navy ? 'text-white' : 'text-primary'}`}>{t('app.brand')}</h2>
+            <p className={`text-xs mt-0.5 ${navy ? 'text-white/60' : 'text-slate-500'}`}>{t('app.tagline')}</p>
           </div>
         </div>
 
-        <div className="p-4 flex items-center gap-3 border-b border-slate-100">
-          <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-600">
-            <User className="w-5 h-5" />
-          </div>
+        <div className={`p-4 flex items-center gap-3 border-b ${navy ? 'border-white/10' : 'border-slate-100'}`}>
+          {navy
+            ? <div className="w-10 h-10 bg-violet-500 rounded-full flex items-center justify-center text-white font-extrabold shrink-0">{String(userData?.name || user.email || '?').trim().charAt(0)}</div>
+            : <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-600"><User className="w-5 h-5" /></div>}
           <div>
-            <p className="text-sm font-medium text-slate-900">{userData?.name || user.email}</p>
-            <p className={`text-xs ${isOwner(userData) ? 'text-amber-600 font-bold' : 'text-slate-500'}`}>{isOwner(userData) ? t('roles.OWNER') : t(`roles.${role}`, { defaultValue: role || '' })}</p>
+            <p className={`text-sm font-medium ${navy ? 'text-white' : 'text-slate-900'}`}>{userData?.name || user.email}</p>
+            <p className={`text-xs ${isOwner(userData) ? (navy ? 'text-amber-300 font-bold' : 'text-amber-600 font-bold') : (navy ? 'text-white/60' : 'text-slate-500')}`}>{isOwner(userData) ? t('roles.OWNER') : t(`roles.${role}`, { defaultValue: role || '' })}</p>
           </div>
         </div>
 
         <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             if (item.divider) {
-              return <p key={item.path} className="pt-4 pb-1 px-3 text-[11px] font-bold text-amber-600 tracking-wide">{item.divider}</p>;
+              return <p key={item.path} className={`pt-4 pb-1 px-3 text-[11px] font-bold tracking-wide ${navy ? 'text-amber-300' : 'text-amber-600'}`}>{item.divider}</p>;
             }
             const Icon = item.icon;
             const isActive = location.pathname.startsWith(item.path);
@@ -171,24 +181,24 @@ export default function AppLayout() {
                   setMobileMenuOpen(false);
                 }}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-primary/10 text-primary'
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  navy
+                    ? (isActive ? 'bg-[#ffffff] text-[#1b345a] font-bold shadow-sm' : 'text-white/75 hover:bg-white/10 hover:text-white')
+                    : (isActive ? 'bg-primary/10 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900')
                 }`}
               >
-                <Icon className={`w-5 h-5 ${isActive ? 'text-primary' : 'text-slate-400'}`} />
+                <Icon className={`w-5 h-5 ${navy ? (isActive ? 'text-[#1b345a]' : 'text-white/50') : (isActive ? 'text-primary' : 'text-slate-400')}`} />
                 {item.name}
               </button>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-slate-100">
+        <div className={`p-4 border-t ${navy ? 'border-white/10' : 'border-slate-100'}`}>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${navy ? 'text-rose-300 hover:bg-white/10' : 'text-red-600 hover:bg-red-50'}`}
           >
-            <LogOut className="w-5 h-5 text-red-500" />
+            <LogOut className={`w-5 h-5 ${navy ? 'text-rose-300' : 'text-red-500'}`} />
             {t('nav.logout')}
           </button>
         </div>
@@ -210,6 +220,7 @@ export default function AppLayout() {
             <h2 className="text-lg font-bold text-slate-900">{t('app.brandShort')}</h2>
           </div>
           <div className="flex items-center gap-1">
+            <DesignToggle />
             <ThemeToggle />
             <LanguageSwitcher />
             <NotificationBell />
@@ -222,7 +233,10 @@ export default function AppLayout() {
           </div>
         </header>
         <div className="hidden md:flex items-center justify-between px-8 py-3 border-b border-slate-200 bg-white sticky top-0 z-30">
-          <ThemeToggle />
+          <div className="flex items-center gap-1">
+            <DesignToggle withLabel />
+            <ThemeToggle />
+          </div>
             <LanguageSwitcher />
           <NotificationBell />
         </div>
