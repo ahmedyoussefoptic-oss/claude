@@ -10,7 +10,7 @@ import { readTeacherDirectoryFile, DIRECTORY_TEMPLATE_URL } from '../../utils/me
 // «دليل المعلمين»: one Excel file with the teachers of every branch. Saving
 // replaces the lists of the branches in the file (other branches are kept).
 export default function TeacherDirectory({ onClose }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const branches = useBranches();
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
   const [saved, setSaved] = useState(null);
@@ -27,7 +27,9 @@ export default function TeacherDirectory({ onClose }) {
     setMsg(null);
     setPending(null);
     try {
-      const r = await readTeacherDirectoryFile(file, branches);
+      // English names too (as the school's English sheet writes them).
+      const en = i18n.getFixedT('en');
+      const r = await readTeacherDirectoryFile(file, branches.map((b) => ({ ...b, aliases: [en(`tripConsent.branchNames.${b.id}`, { defaultValue: '' })].filter(Boolean) })));
       if (!Object.keys(r.byBranch).length) { setMsg({ ok: false, text: t('meetings.directory.empty') }); return; }
       setPending(r);
     } catch (err) {

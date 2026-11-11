@@ -110,13 +110,35 @@ export async function readTeachersFile(file, classKeys) {
   return { teachers, unmatched: [...unmatched], skipped };
 }
 
+// English branch names are spelled many ways ("Al Mohammadiyah" /
+// "Al Muhammadiyah", "Downtown Boys" / "Downtown - Boys" / DOWN_TOWN_BOYS):
+// compared by their consonants, so these all match.
+const latinSkeleton = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '').replace(/[aeiouyhw]/g, '');
+
 // «دليل المعلمين» → { byBranch: {id: [teacher]}, unknownBranches: [text], noBranch, skipped }.
-// The branch is matched by its name (with or without «فرع») or its code.
+// The branch is matched by its Arabic name (with or without «فرع»), its code,
+// or an English name (`branches[].aliases`), in any common spelling.
 export async function readTeacherDirectoryFile(file, branches) {
   const rows = await readRows(file, ['branch']);
-  const key = (s) => norm(s).replace(/^فرع\s+/, '').replace(/[ةه]$/g, 'ه').replace(/[أإآ]/g, 'ا');
-  const byKey = new Map();
-  branches.forEach((b) => { byKey.set(key(b.name), b.id); byKey.set(key(b.id), b.id); });
+  const arKey = (s) => norm(s).replace(/^فرع\s+/, '').replace(/[ةه]$/g, 'ه').replace(/[أإآ]/g, 'ا');
+  const byAr = new Map();
+  const byLatin = new Map();
+  branches.forEach((b) => {
+    byAr.set(arKey(b.name), b.id);
+    byAr.set(arKey(b.id), b.id);
+    [b.id, b.name, ...(b.aliases || [])].map(latinSkeleton).filter((k) => k.length >= 2).forEach((k) => byLatin.set(k, b.id));
+  });
+  const latinKeys = [...byLatin.keys()].sort((a, b) => b.length - a.length);
+  const branchOf = (text) => {
+    const a = byAr.get(arKey(text));
+    if (a) return a;
+    const k = latinSkeleton(text);
+    if (!k) return '';
+    if (byLatin.has(k)) return byLatin.get(k);
+    // "Al Salamah 2 - Special Education" → the branch "Al Salama 2".
+    const prefix = latinKeys.find((x) => x.length >= 3 && k.startsWith(x));
+    return prefix ? byLatin.get(prefix) : '';
+  };
   const byBranch = {};
   const unknown = new Set();
   let noBranch = 0;
@@ -125,17 +147,17 @@ export async function readTeacherDirectoryFile(file, branches) {
   rows.forEach((r) => {
     if (!r.name) { skipped++; return; }
     if (!r.branch) { noBranch++; return; }
-    const id = byKey.get(key(r.branch));
+    const id = branchOf(r.branch);
     if (!id) { unknown.add(r.branch); return; }
     // The same teacher on two rows of a branch: one teacher, classes merged.
-    const dup = seen.get(`${id}|${key(r.name)}`);
+    const dup = seen.get(`${id}|${norm(r.name)}`);
     if (dup) {
       dup.classes = [...new Set([...splitClasses(dup.classes), ...splitClasses(r.classes)])].join('، ');
       ['subject'].forEach((k) => { if (!dup[k]) dup[k] = r[k]; });
       return;
     }
     const tch = { name: r.name, subject: r.subject, role: r.role, classes: splitClasses(r.classes).join('، ') };
-    seen.set(`${id}|${key(r.name)}`, tch);
+    seen.set(`${id}|${norm(r.name)}`, tch);
     (byBranch[id] = byBranch[id] || []).push(tch);
   });
   return { byBranch, unknownBranches: [...unknown], noBranch, skipped };
