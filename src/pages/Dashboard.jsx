@@ -1,9 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { FileText, Clock, AlertTriangle, CheckCircle2, Download, Plus, Star, Gauge, Repeat, Wrench, ShieldAlert, PackageSearch, PackageCheck, GraduationCap, Briefcase, AlertOctagon, Link2, Armchair, Handshake, CalendarDays, UserX } from 'lucide-react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../config/firebase';
 import StatCard from '../components/dashboard/StatCard';
+import PageHero from '../components/common/PageHero';
+import Initials from '../components/common/Initials';
+import { useNavy } from '../stores/useDesignStore';
 import { TrendChart, BranchChart } from '../components/dashboard/Charts';
 import BranchIndicators from '../components/dashboard/BranchIndicators';
 import useAuthStore from '../stores/useAuthStore';
@@ -220,29 +224,38 @@ export default function Dashboard() {
   }, [complaints]);
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
   const getStatusName = (status) => t(`statuses.complaint.${status}`, status);
+  const navy = useNavy();
+  const navigate = useNavigate();
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('dashboard.greeting', { name: userData?.name || (i18n.language === 'ar' ? 'مستخدم' : 'User') })}</h1>
-          <p className="text-slate-500 mt-1">{t('dashboard.subtitle')}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setShowLinkModal(true)} className="px-4 py-2.5 flex items-center gap-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm">
-            <Link2 className="w-4 h-4" />
-            {t('dashboard.reportLink')}
-          </button>
-          <button onClick={handleExportCSV} className="px-4 py-2.5 flex items-center gap-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm">
-            <Download className="w-4 h-4" />
-            {t('dashboard.exportReport')}
-          </button>
-          <button onClick={() => setShowNewForm(true)} className="px-4 py-2.5 flex items-center gap-2 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm">
-            <Plus className="w-4 h-4" />
-            {t('dashboard.newComplaint')}
-          </button>
-        </div>
-      </div>
+      <PageHero
+        title={t('dashboard.greeting', { name: userData?.name || (i18n.language === 'ar' ? 'مستخدم' : 'User') })}
+        subtitle={t('dashboard.subtitle')}
+        facts={[
+          { label: t('dashboard.totalComplaints'), value: stats.total, to: '/complaints' },
+          { label: t('dashboard.inProgress'), value: stats.inProgress, tone: 'amber', to: '/complaints?filter=ACTIVE' },
+          { label: t('dashboard.overdue'), value: stats.overdue, tone: stats.overdue ? 'red' : undefined, to: '/complaints?filter=OVERDUE' },
+          { label: t('dashboard.solved'), value: stats.solved, tone: 'green', to: '/complaints?filter=RESOLVED' },
+        ]}
+        pill={stats.unassigned ? t('dashboard.unassignedPill', { count: stats.unassigned }) : t('dashboard.allAssigned')}
+        actions={(
+          <>
+            <button onClick={() => setShowLinkModal(true)} className="px-4 py-2.5 flex items-center gap-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm">
+              <Link2 className="w-4 h-4" />
+              {t('dashboard.reportLink')}
+            </button>
+            <button onClick={handleExportCSV} className="px-4 py-2.5 flex items-center gap-2 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors shadow-sm">
+              <Download className="w-4 h-4" />
+              {t('dashboard.exportReport')}
+            </button>
+            <button onClick={() => setShowNewForm(true)} className="px-4 py-2.5 flex items-center gap-2 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm">
+              <Plus className="w-4 h-4" />
+              {t('dashboard.newComplaint')}
+            </button>
+          </>
+        )}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <StatCard
@@ -433,7 +446,24 @@ export default function Dashboard() {
         showTechSupport={canSeeTechSupport}
       />
 
-      {/* Recent Activity Table */}
+      {/* Recent Activity: navy design → person cards, classic → table */}
+      {navy ? (
+        <div className="space-y-2.5">
+          <h3 className="text-xl font-extrabold text-primary flex items-center gap-2"><span className="w-2.5 h-2.5 rounded-full bg-violet-500" />{t('dashboard.recentComplaints')}</h3>
+          {complaints.slice(0, 5).map((c) => (
+            <button key={c.id} type="button" onClick={() => navigate(`/complaints?openId=${encodeURIComponent(c.id)}`)}
+              className="w-full text-start bg-white rounded-3xl border border-slate-100 hover:border-slate-300 shadow-sm p-4 flex items-center gap-3 transition">
+              <Initials name={c.parentName} size="w-12 h-12 text-lg" />
+              <div className="flex-1 min-w-0">
+                <p className="font-extrabold text-slate-900 truncate">{c.parentName || '—'} <span className="text-slate-400 font-medium text-sm" dir="ltr">· {c.complaintId}</span></p>
+                <p className="text-sm text-slate-500 truncate">{complaintTypesOf(c).map(typeName).join(' + ')} · {branchName(c.branch)}</p>
+              </div>
+              <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold shrink-0 ${getStatusBadge(c.status)}`}>{getStatusName(c.status)}</span>
+            </button>
+          ))}
+          {complaints.length === 0 && <p className="bg-white rounded-3xl border border-dashed border-slate-200 p-6 text-center text-slate-500">{t('dashboard.noComplaints')}</p>}
+        </div>
+      ) : (
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-100">
           <h3 className="text-lg font-bold text-slate-900">{t('dashboard.recentComplaints')}</h3>
@@ -474,6 +504,7 @@ export default function Dashboard() {
           </table>
         </div>
       </div>
+      )}
 
       {showNewForm && (
         <ComplaintForm onClose={() => setShowNewForm(false)} />

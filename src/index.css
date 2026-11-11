@@ -33,6 +33,15 @@ html[data-design="navy"]:not(.dark) {
   --color-background: #f3f5f9;
   --color-slate-50: #f3f5f9;
 }
+/* Pages without the navy title card yet: their heading takes the navy. */
+html[data-design="navy"] main h1.text-2xl.text-slate-900 { color: var(--color-primary); font-weight: 800; }
+/* Buttons placed on the navy title card: the main one turns white. */
+.navy-hero .bg-primary { background-color: #ffffff; color: #1b345a; }
+.navy-hero .bg-primary:hover, .navy-hero .hover\:bg-primary-dark:hover { background-color: #e8eef7; }
+.navy-hero .bg-white { background-color: rgb(255 255 255 / .1); color: #fff; border-color: rgb(255 255 255 / .25); }
+.navy-hero .bg-white:hover, .navy-hero .hover\:bg-slate-50:hover { background-color: rgb(255 255 255 / .2); }
+.navy-hero .bg-white svg, .navy-hero .bg-white .text-slate-700 { color: #fff; }
+.navy-hero .text-slate-700 { color: #fff; }
 /* On the dark background the navy is lifted so text and buttons stay legible. */
 html.dark[data-design="navy"] {
   --color-primary: #5b8bd0;

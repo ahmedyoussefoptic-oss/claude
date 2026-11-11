@@ -15,6 +15,7 @@ import MessageStatusIndicators from '../components/common/MessageStatusIndicator
 import { scopeConstraints } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
+import PageHero from '../components/common/PageHero';
 
 const FILTER_IDS = ['ALL', 'OPEN', 'UNASSIGNED', 'ASSIGNED', 'IN_PROGRESS', 'OVERDUE', 'SOLVED', 'CLOSED'];
 const matchesStatus = (tk, id) => (id === 'ALL' ? true : id === 'OPEN' ? OPEN_TICKET_STATUSES.includes(tk.status) : id === 'UNASSIGNED' ? OPEN_TICKET_STATUSES.includes(tk.status) && !(tk.assignedTo || []).length : id === 'OVERDUE' ? isTicketOverdue(tk) : tk.status === id);
@@ -122,21 +123,30 @@ export default function TechSupport() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('techSupportList.title')}</h1>
-          <p className="text-slate-500 mt-1">{t('techSupportList.subtitle')}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={() => setShowAccounts(true)} className="px-4 py-2.5 bg-white border border-primary/40 text-primary rounded-xl hover:bg-primary/5 font-medium text-sm transition-colors flex items-center gap-2">
-            <KeyRound className="w-4 h-4" />
-            {t('studentAccounts.title')}
-          </button>
-          <button onClick={() => setShowNewForm(true)} className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2">
-            <Plus className="w-4 h-4" />
-            {t('techSupportList.newTicket')}
-          </button>
-        </div>
+      <div className="mb-6">
+      <PageHero
+        title={t('techSupportList.title')}
+        subtitle={t('techSupportList.subtitle')}
+        facts={[
+          { label: t('hero.total'), value: tickets.length },
+          { label: t('hero.open'), value: tickets.filter((x) => OPEN_TICKET_STATUSES.includes(x.status)).length, tone: 'amber' },
+          { label: t('hero.overdue'), value: tickets.filter(isTicketOverdue).length, tone: 'red' },
+          { label: t('hero.unassigned'), value: tickets.filter((x) => OPEN_TICKET_STATUSES.includes(x.status) && !(x.assignedTo || []).length).length, tone: 'violet' },
+        ]}
+        pill={t('hero.shown', { count: filteredTickets.length })}
+        actions={(
+          <>
+            <button onClick={() => setShowAccounts(true)} className="px-4 py-2.5 bg-white border border-primary/40 text-primary rounded-xl hover:bg-primary/5 font-medium text-sm transition-colors flex items-center gap-2">
+              <KeyRound className="w-4 h-4" />
+              {t('studentAccounts.title')}
+            </button>
+            <button onClick={() => setShowNewForm(true)} className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              {t('techSupportList.newTicket')}
+            </button>
+          </>
+        )}
+      />
       </div>
       {showAccounts && <StudentAccountsTool onClose={() => setShowAccounts(false)} />}
 

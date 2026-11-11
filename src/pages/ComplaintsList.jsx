@@ -18,6 +18,7 @@ import { studentKey } from '../utils/studentKey';
 import { isComplaintOverdue, complaintStatusLabel, complaintHasType, complaintTypesOf, FINANCE_TYPE, isFinanceComplaint, isFinancePrimary } from '../config/complaintTypes';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
+import PageHero from '../components/common/PageHero';
 
 const QUICK_FILTER_IDS = ['ALL', 'OPEN', 'UNASSIGNED', 'ASSIGNED', 'IN_PROGRESS', 'ESCALATED', 'OVERDUE', 'SOLVED', 'CLOSED', 'VISITS'];
 
@@ -236,27 +237,31 @@ export default function ComplaintsList({ finance = false }) {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            {finance && <Wallet className="w-6 h-6 text-primary" />}
-            {t(finance ? 'financeList.title' : 'complaintsList.title')}
-          </h1>
-          <p className="text-slate-500 mt-1">{t(finance ? 'financeList.subtitle' : 'complaintsList.subtitle')}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button onClick={handleExportCSV} disabled={filteredComplaints.length === 0} className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50">
-            <Download className="w-4 h-4" />
-            {t('common.export')}
-          </button>
-          <button
-            onClick={() => setShowNewForm(true)}
-            className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            {t(finance ? 'financeList.newComplaint' : 'complaintsList.newComplaint')}
-          </button>
-        </div>
+      <div className="mb-6">
+      <PageHero
+        icon={finance ? Wallet : undefined}
+        title={t(finance ? 'financeList.title' : 'complaintsList.title')}
+        subtitle={t(finance ? 'financeList.subtitle' : 'complaintsList.subtitle')}
+        facts={[
+          { label: t('hero.total'), value: complaints.length },
+          { label: t('hero.open'), value: complaints.filter(QUICK_MATCH.OPEN).length, tone: 'amber' },
+          { label: t('hero.overdue'), value: complaints.filter(QUICK_MATCH.OVERDUE).length, tone: 'red' },
+          { label: t('hero.solved'), value: complaints.filter(QUICK_MATCH.RESOLVED).length, tone: 'green' },
+        ]}
+        pill={t('hero.shown', { count: filteredComplaints.length })}
+        actions={(
+          <>
+            <button onClick={handleExportCSV} disabled={filteredComplaints.length === 0} className="px-4 py-2.5 bg-white border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-50 font-medium text-sm transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50">
+              <Download className="w-4 h-4" />
+              {t('common.export')}
+            </button>
+            <button onClick={() => setShowNewForm(true)} className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2">
+              <Plus className="w-4 h-4" />
+              {t(finance ? 'financeList.newComplaint' : 'complaintsList.newComplaint')}
+            </button>
+          </>
+        )}
+      />
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col min-h-[400px]">

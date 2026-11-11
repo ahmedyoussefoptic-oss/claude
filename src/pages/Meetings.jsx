@@ -8,6 +8,7 @@ import { useBranches } from '../hooks/useOrgData';
 import MeetingForm from '../components/meetings/MeetingForm';
 import MeetingDetails from '../components/meetings/MeetingDetails';
 import { MEETING_STATUSES, MEETING_STATUS_STYLES, callMeeting, meetingTime, pct } from '../config/meetings';
+import PageHero from '../components/common/PageHero';
 
 // «اجتماعات أولياء الأمور»: the meetings of the user's branches; one opens
 // in its details (invitations, schedule, the day, the report).
@@ -40,17 +41,23 @@ export default function Meetings() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><Presentation className="w-6 h-6 text-primary" />{t('meetings.title')}</h1>
-          <p className="text-sm text-slate-500">{t('meetings.subtitle')}</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={() => setPortalOpen(true)} className="px-4 py-2 border border-primary/40 bg-white text-primary rounded-xl text-sm flex items-center gap-2"><Link2 className="w-4 h-4" />{t('meetings.portal.linkTitle')}</button>
-          <button type="button" onClick={() => setDirectory(true)} className="px-4 py-2 border border-slate-200 bg-white text-slate-700 rounded-xl text-sm flex items-center gap-2"><BookUser className="w-4 h-4" />{t('meetings.directory.title')}</button>
-          <button type="button" onClick={() => setCreating(true)} className="px-4 py-2 bg-primary text-white rounded-xl text-sm flex items-center gap-2"><Plus className="w-4 h-4" />{t('meetings.new')}</button>
-        </div>
-      </div>
+      <PageHero
+        icon={Presentation}
+        title={t('meetings.title')}
+        subtitle={t('meetings.subtitle')}
+        facts={[
+          { label: t('hero.total'), value: meetings.length },
+          { label: t('meetings.filterActive'), value: meetings.filter((m) => ['DRAFT', 'OPEN', 'CLOSED'].includes(m.status)).length, tone: 'amber' },
+          { label: t('meetings.status.COMPLETED'), value: meetings.filter((m) => m.status === 'COMPLETED').length, tone: 'green' },
+        ]}
+        actions={(
+          <>
+            <button type="button" onClick={() => setPortalOpen(true)} className="px-4 py-2 border border-primary/40 bg-white text-primary rounded-xl text-sm flex items-center gap-2"><Link2 className="w-4 h-4" />{t('meetings.portal.linkTitle')}</button>
+            <button type="button" onClick={() => setDirectory(true)} className="px-4 py-2 border border-slate-200 bg-white text-slate-700 rounded-xl text-sm flex items-center gap-2"><BookUser className="w-4 h-4" />{t('meetings.directory.title')}</button>
+            <button type="button" onClick={() => setCreating(true)} className="px-4 py-2 bg-primary text-white rounded-xl text-sm flex items-center gap-2"><Plus className="w-4 h-4" />{t('meetings.new')}</button>
+          </>
+        )}
+      />
 
       <div className="flex gap-1 overflow-x-auto">
         {['ACTIVE', ...MEETING_STATUSES, 'ALL'].map((s) => (

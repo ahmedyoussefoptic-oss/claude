@@ -145,7 +145,9 @@
     "visitsMetToday": "Met today",
     "unassigned": "Unassigned",
     "unassignedSub": "Open feedback with no one assigned",
-    "unassignedTech": "Unassigned tech tickets"
+    "unassignedTech": "Unassigned tech tickets",
+    "unassignedPill": "{{count}} unassigned",
+    "allAssigned": "Every complaint has an owner"
   },
   "statuses": {
     "complaint": {
@@ -4498,5 +4500,15 @@
       "classic": "Switch to the classic design",
       "navy": "Switch to the navy design"
     }
+  },
+  "hero": {
+    "total": "Total",
+    "open": "Open",
+    "overdue": "Overdue",
+    "solved": "Solved",
+    "shown": "Showing {{count}}",
+    "unassigned": "Unassigned",
+    "searching": "Not returned yet",
+    "returned": "Returned"
   }
 }

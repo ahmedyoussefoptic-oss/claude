@@ -30,3 +30,6 @@ const useDesignStore = create((set, get) => ({
 }));
 
 export default useDesignStore;
+
+// true when the navy design is on (for the pieces whose layout changes).
+export const useNavy = () => useDesignStore((s) => s.design === 'navy');

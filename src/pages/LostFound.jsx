@@ -14,6 +14,7 @@ import MessageStatusIndicators from '../components/common/MessageStatusIndicator
 import { scopeConstraints } from '../utils/scope';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
+import PageHero from '../components/common/PageHero';
 
 const FILTER_IDS = ['ALL', 'UNCLAIMED', 'SEARCHING', 'MATCHED', 'RETURNED'];
 
@@ -95,20 +96,23 @@ export default function LostFound() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('lostFound.title')}</h1>
-          <p className="text-slate-500 mt-1">{t('lostFound.subtitle')}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setShowNewForm(true)}
-            className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2"
-          >
+      <div className="mb-6">
+      <PageHero
+        title={t('lostFound.title')}
+        subtitle={t('lostFound.subtitle')}
+        facts={[
+          { label: t('hero.total'), value: items.length },
+          { label: t('hero.searching'), value: items.filter((x) => x.status !== 'RETURNED').length, tone: 'amber' },
+          { label: t('hero.returned'), value: items.filter((x) => x.status === 'RETURNED').length, tone: 'green' },
+        ]}
+        pill={t('hero.shown', { count: filteredItems.length })}
+        actions={(
+          <button onClick={() => setShowNewForm(true)} className="px-4 py-2.5 bg-primary text-white rounded-xl hover:bg-primary-dark font-medium text-sm transition-colors shadow-sm flex items-center gap-2">
             <Plus className="w-4 h-4" />
             {t('lostFound.newRecord')}
           </button>
-        </div>
+        )}
+      />
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col min-h-[400px]">

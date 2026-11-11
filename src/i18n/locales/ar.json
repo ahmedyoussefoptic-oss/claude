@@ -145,7 +145,9 @@
     "visitsMetToday": "تمت مقابلتهم اليوم",
     "unassigned": "غير مسندة",
     "unassignedSub": "ملاحظات مفتوحة بلا مسؤول",
-    "unassignedTech": "بلاغات تقنية غير مسندة"
+    "unassignedTech": "بلاغات تقنية غير مسندة",
+    "unassignedPill": "{{count}} بلا مسؤول",
+    "allAssigned": "كل الملاحظات لها مسؤول"
   },
   "statuses": {
     "complaint": {
@@ -4503,5 +4505,15 @@
       "classic": "التبديل إلى التصميم الكلاسيكي",
       "navy": "التبديل إلى التصميم الكحلي"
     }
+  },
+  "hero": {
+    "total": "الإجمالي",
+    "open": "مفتوحة",
+    "overdue": "متأخرة",
+    "solved": "تم الحل",
+    "shown": "المعروض الآن: {{count}}",
+    "unassigned": "بلا مسؤول",
+    "searching": "لم تُسلَّم بعد",
+    "returned": "سُلِّمت"
   }
 }

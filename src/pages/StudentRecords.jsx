@@ -19,6 +19,8 @@ import TechSupportDetails from '../components/techSupport/TechSupportDetails';
 import LostFoundDetails from '../components/lostFound/LostFoundDetails';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
+import PageHero from '../components/common/PageHero';
+import { useNavy } from '../stores/useDesignStore';
 
 const COMPLAINT_STATUS_BADGE = {
   RECEIVED: 'bg-blue-100 text-blue-800 border-blue-200',
@@ -47,6 +49,7 @@ function academicYearOf(date) {
 // and lost & found report tied to the same student, so repeated issues are
 // visible in one place instead of as unrelated records.
 export default function StudentRecords() {
+  const navy = useNavy();
   const { t, i18n } = useTranslation();
   const dateLocale = i18n.language === 'ar' ? ar : enUS;
   const { userData } = useAuthStore();
@@ -178,20 +181,27 @@ export default function StudentRecords() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">{t('studentRecords.title')}</h1>
-          <p className="text-slate-500 mt-1">{t('studentRecords.subtitle')}</p>
-        </div>
-        <button onClick={handleExport} disabled={filtered.length === 0} className="px-4 py-2.5 bg-white border border-emerald-300 text-emerald-700 rounded-xl hover:bg-emerald-50 font-medium text-sm transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50">
-          <FileSpreadsheet className="w-4 h-4" />
-          {t('studentRecords.exportExcel')}
-        </button>
+      <div className="mb-6">
+      <PageHero
+        title={t('studentRecords.title')}
+        subtitle={t('studentRecords.subtitle')}
+        facts={[
+          { label: t('studentRecords.studentsCount'), value: students.length },
+          { label: t('studentRecords.repeatedCount'), value: repeatedCount, tone: 'amber' },
+          { label: t('studentRecords.recordsCount'), value: totalRecords, tone: 'green' },
+        ]}
+        actions={(
+          <button onClick={handleExport} disabled={filtered.length === 0} className="px-4 py-2.5 bg-white border border-emerald-300 text-emerald-700 rounded-xl hover:bg-emerald-50 font-medium text-sm transition-colors flex items-center gap-2 shadow-sm disabled:opacity-50">
+            <FileSpreadsheet className="w-4 h-4" />
+            {t('studentRecords.exportExcel')}
+          </button>
+        )}
+      />
       </div>
 
       <StudentSmartSearch records={records} branchName={(id) => branches.find((b) => b.id === id)?.name || ''} />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+      {!navy && <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
         {[[t('studentRecords.studentsCount'), students.length, 'bg-sky-50 text-sky-600', GraduationCap],
           [t('studentRecords.repeatedCount'), repeatedCount, 'bg-amber-50 text-amber-600', Repeat],
           [t('studentRecords.recordsCount'), totalRecords, 'bg-emerald-50 text-emerald-600', FileText]].map(([label, value, cls, Icon]) => (
@@ -200,7 +210,7 @@ export default function StudentRecords() {
             <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${cls}`}><Icon className="w-5 h-5" /></div>
           </div>
         ))}
-      </div>
+      </div>}
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden flex flex-col min-h-[400px]">
         <div className="p-4 border-b border-slate-100 flex flex-col lg:flex-row gap-3 lg:items-center justify-between bg-slate-50/50">

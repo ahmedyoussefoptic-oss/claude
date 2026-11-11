@@ -19,6 +19,7 @@ import TripAccounts from '../components/trips/TripAccounts';
 import { canSeeTrips } from '../utils/scope';
 import { printPage, escapeHtml } from '../utils/printPage';
 import { TRIP_STATUSES, TRIP_STATUS_STYLES, TRIP_DOT, TRIP_GENDER_STYLES, ENROLLMENT_STATUS_STYLES, canCreateTrips, tripConflicts, dayToDate, tripTime } from '../config/trips';
+import PageHero from '../components/common/PageHero';
 
 const ymd = (d) => format(d, 'yyyy-MM-dd');
 
@@ -152,17 +153,22 @@ export default function Trips() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2"><Bus className="w-6 h-6 text-primary" />{t('trips.title')}</h1>
-          <p className="text-slate-500 mt-1">{t('trips.subtitle')}</p>
-        </div>
-        {canCreateTrips(userData) && (
-          <button onClick={() => setFormTrip({})} className="px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-dark flex items-center gap-2 self-start">
+      <PageHero
+        icon={Bus}
+        title={t('trips.title')}
+        subtitle={t('trips.subtitle')}
+        facts={[
+          { label: t('trips.statUpcoming'), value: stats.upcoming },
+          { label: t('trips.statOpen'), value: stats.open, tone: 'amber' },
+          { label: t('trips.statConfirmed'), value: stats.confirmed, tone: 'green' },
+          { label: t('trips.statReview'), value: stats.review, tone: 'violet' },
+        ]}
+        actions={canCreateTrips(userData) && (
+          <button onClick={() => setFormTrip({})} className="px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-dark flex items-center gap-2">
             <Plus className="w-4 h-4" />{t('trips.newTrip')}
           </button>
         )}
-      </div>
+      />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard title={t('trips.statUpcoming')} value={String(stats.upcoming)} icon={CalendarDays} gradient="from-sky-500 to-blue-600" onClick={() => showTrips('ALL')} />
