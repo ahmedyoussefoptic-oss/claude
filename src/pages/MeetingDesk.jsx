@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Loader2, Search, UserCheck, Undo2, QrCode, UserPlus, RefreshCw, CheckCircle2, AlertTriangle, Ticket, ArrowLeftRight, HeartHandshake } from 'lucide-react';
 import { PublicShell } from './MeetingParent';
 import { PinGate } from './MeetingTeacher';
-import { callMeeting, meetingTime, savedPin, savePin, savedDesks, RELATIONS } from '../config/meetings';
+import { callMeeting, meetingTime, savedPin, savePin, savedDesks, relationsFor, isWomenOnly } from '../config/meetings';
 
 const inputCls = 'w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
 const card = 'w-full max-w-2xl bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-100';
@@ -17,14 +17,14 @@ export function AttendeeText({ attendee, className = '' }) {
 
 // Name + relation of who came (asked at the desk when the parent didn't
 // give it, or to correct it).
-function AttendeeInputs({ value, onChange }) {
+function AttendeeInputs({ value, onChange, womenOnly = false }) {
   const { t } = useTranslation();
   return (
     <div className="flex flex-col sm:flex-row gap-2 mt-2">
       <input value={value.name} onChange={(e) => onChange({ ...value, name: e.target.value })} placeholder={t('meetings.family.attendeeName')} className={`${inputCls} py-2`} maxLength={80} />
       <select value={value.relation} onChange={(e) => onChange({ ...value, relation: e.target.value })} className={`${inputCls} py-2 sm:w-44`}>
         <option value="">{t('meetings.family.relation')}</option>
-        {RELATIONS.map((r) => <option key={r} value={r}>{t(`meetings.family.relations.${r}`)}</option>)}
+        {relationsFor(womenOnly).map((r) => <option key={r} value={r}>{t(`meetings.family.relations.${r}`)}</option>)}
       </select>
     </div>
   );
@@ -54,7 +54,7 @@ function InviteRow({ inv, teachers, onCheckin, onUndo, onAttendee, busy, lang, r
       {showInputs && (
         <div>
           <p className="text-xs font-medium text-slate-600 mt-2">{t('meetings.desk.setAttendee')}</p>
-          <AttendeeInputs value={att} onChange={setAtt} />
+          <AttendeeInputs value={att} onChange={setAtt} womenOnly={isWomenOnly(inv.students)} />
           {(editAtt || inv.attended) && (
             <div className="flex gap-2 mt-2">
               <button type="button" disabled={busy || !full} onClick={async () => { if (await onAttendee?.(att)) setEditAtt(false); }} className="px-3 py-1.5 text-xs bg-primary text-white rounded-lg disabled:opacity-50">{t('meetings.desk.saveAttendee')}</button>

@@ -66,6 +66,17 @@ const attendeeOf = (raw) => {
   const relation = RELATIONS.includes(raw?.relation) ? raw.relation : "";
   return name && relation ? { name, relation } : null;
 };
+// Branches where only women attend parent meetings: no male relation there.
+const WOMEN_ONLY_BRANCHES = ["AL_NAEEM", "AL_ZAHRA", "AL_SHATI", "AL_SALAMA_GIRLS", "DOWN_TOWN_GIRLS"];
+const MALE_RELATIONS = ["FATHER", "BROTHER", "GRANDFATHER", "UNCLE"];
+const womenOnly = (students) => (students || []).length > 0 && students.every((x) => WOMEN_ONLY_BRANCHES.includes(x.branch));
+const checkAttendee = (attendee, students) => {
+  if (attendee && womenOnly(students) && MALE_RELATIONS.includes(attendee.relation)) {
+    throw new HttpsError("invalid-argument", "الحضور في هذا الفرع للسيدات فقط، اختر صلة أخرى.");
+  }
+};
+// A meeting a teacher or manager left open, closed when they start the next one.
+const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقابلة التالية — لم تُكتب النتيجة بعد.";
   const RESPONSES = ["ATTEND", "REMOTE", "DECLINE"];
   const FOLLOW_TYPES = ["ACADEMIC", "BEHAVIORAL", "ADMINISTRATIVE", "FINANCE"];
   const LIVE = ["OPEN", "CLOSED"];
@@ -912,6 +923,7 @@ const attendeeOf = (raw) => {
       invite: {
         response: inv.response || "", attended: inv.attended === true, ticketNo: inv.ticketNo || null, code: inv.code,
         checkinLink: `${PUBLIC_APP_URL}/meeting-in/${inv.checkinToken}`, checkedInAt: ms(inv.checkedInAt), attendee: inv.attendee || null,
+        womenOnly: womenOnly(inv.students),
       },
       students: (inv.students || []).map((s) => ({
         id: s.id, name: s.name, grade: s.grade, className: s.className, branch: s.branch, branchName: bName[s.branch] || s.branch || "",
@@ -1064,6 +1076,7 @@ const attendeeOf = (raw) => {
     if (wanted.some((r) => !r.purpose)) throw new HttpsError("invalid-argument", "اكتبوا الغرض من كل مقابلة.");
     const attendee = attendeeOf(request.data?.attendee);
     if (response === "ATTEND" && !attendee) throw new HttpsError("invalid-argument", "اكتبوا اسم من سيحضر وصلته بالطالب/ة.");
+    checkAttendee(attendee, inv.students);
     const now = Timestamp.now();
     const existing = new Map((await ref.collection("requests").where("inviteId", "==", inv.id).get()).docs.map((x) => [x.id, x.data()]));
     const batch = db.batch();
@@ -1140,7 +1153,7 @@ const attendeeOf = (raw) => {
         id: r.id, inviteId: r.inviteId, studentId: r.studentId, studentName: r.studentName, grade: r.grade, className: r.className, purpose: r.purpose || "",
         status: r.status, arrived: i.attended === true, ticketNo: i.ticketNo || null, checkedInAt: ms(i.checkedInAt), attendee: i.attendee || null,
         directedAt: ms(r.directedAt), startedAt: ms(r.startedAt), endedAt: ms(r.endedAt), result: r.result || "", recommendations: r.recommendations || "",
-        followUp: r.followUp || null,
+        followUp: r.followUp || null, autoClosed: r.autoClosed === true,
         // The other people this family asked to meet (to plan together).
         others: (i.requested || []).filter((o) => o.staffId !== teacher.id && o.studentId === r.studentId).map((o) => teacherName(m, o.staffId)).filter(Boolean),
       };
@@ -1237,6 +1250,20 @@ const attendeeOf = (raw) => {
     return teacherState(ref, (await ref.get()).data(), teacher);
   });
 
+  async function autoClose(ref, m, teacher, d, now) {
+    const r = d.data();
+    await d.ref.update({ status: "DONE", startedAt: r.startedAt || now, endedAt: now, result: AUTO_CLOSED_NOTE, recommendations: "", followUp: null, closedBy: teacher.name, autoClosed: true });
+    const inv = (await ref.collection("invites").doc(r.inviteId).get()).data() || {};
+    const student = (inv.students || []).find((st) => st.id === r.studentId) || {};
+    await db.collection("meetingMinutes").doc(`${ref.id}_${teacher.id}_${r.studentId}`).set({
+      meetingId: ref.id, meetingTitle: m.title, meetingCode: m.code, date: m.date, branch: student.branch || r.branch || "",
+      teacherId: teacher.id, teacherName: teacher.name, subject: teacher.subject || "", role: teacher.role || "TEACHER", inviteId: r.inviteId, requestId: d.id,
+      studentId: r.studentId, studentName: r.studentName, grade: r.grade || "", className: r.className || "", purpose: r.purpose || "",
+      points: AUTO_CLOSED_NOTE, recommendations: "", agreements: "", followUp: null, attendee: inv.attendee || null, createdAt: now, updatedAt: now,
+    });
+    await familyFinished(ref, m, r.inviteId);
+  }
+
   // A request's start / end (with the result) / «not held», for a teacher or
   // for a manager signed in on the managers' link.
   async function requestAction(ref, m, teacher, data) {
@@ -1250,7 +1277,14 @@ const attendeeOf = (raw) => {
       if (action === "startRequest") {
         if (r.status === "DONE") throw new HttpsError("failed-precondition", "انتهت هذه المقابلة.");
         if (inv.attended !== true) throw new HttpsError("failed-precondition", "لم يُسجَّل وصول ولي الأمر بعد في الاستقبال.");
-        if (r.status !== "IN_PROGRESS") await rRef.update({ status: "IN_PROGRESS", startedAt: now, heldBy: teacher.name });
+        if (r.status !== "IN_PROGRESS") {
+          // The person's meeting still open (they forgot to end it) closes now;
+          // they can write its result afterwards.
+          const open = (await ref.collection("requests").where("staffId", "==", teacher.id).get()).docs
+            .filter((d) => d.id !== rRef.id && d.data().status === "IN_PROGRESS" && (d.data().heldBy || teacher.name) === teacher.name);
+          for (const d of open) await autoClose(ref, m, teacher, d, now);
+          await rRef.update({ status: "IN_PROGRESS", startedAt: now, heldBy: teacher.name });
+        }
       } else if (action === "skipRequest") {
         // Not met (the parent left, or it is not needed any more).
         if (r.status === "DONE") throw new HttpsError("failed-precondition", "انتهت هذه المقابلة.");
@@ -1260,14 +1294,14 @@ const attendeeOf = (raw) => {
         const x = data.minute || {};
         const result = str(x.result, 3000);
         if (!result) throw new HttpsError("invalid-argument", "اكتب نتيجة المقابلة قبل إغلاقها.");
-        if (r.status === "DONE") throw new HttpsError("failed-precondition", "أُغلقت هذه المقابلة مسبقاً.");
+        if (r.status === "DONE" && !r.autoClosed) throw new HttpsError("failed-precondition", "أُغلقت هذه المقابلة مسبقاً.");
         const student = (inv.students || []).find((st) => st.id === r.studentId) || { id: r.studentId, name: r.studentName, grade: r.grade, className: r.className, branch: r.branch, section: r.section };
         const recommendations = str(x.recommendations, 2000);
         let followUp = null;
         const fType = FOLLOW_TYPES.includes(x.followUpType) ? x.followUpType : "";
         const fText = str(x.followUpText, 1500);
         if (fType && fText) followUp = await followUpComplaint(ref, m, teacher, inv, student, fType, fText);
-        await rRef.update({ status: "DONE", startedAt: r.startedAt || now, endedAt: now, result, recommendations, followUp, closedBy: teacher.name });
+        await rRef.update({ status: "DONE", startedAt: r.startedAt || now, endedAt: r.autoClosed ? r.endedAt || now : now, result, recommendations, followUp, closedBy: teacher.name, autoClosed: false });
         // Kept with the student's record like the teachers' minutes.
         await db.collection("meetingMinutes").doc(`${ref.id}_${teacher.id}_${r.studentId}`).set({
           meetingId: ref.id, meetingTitle: m.title, meetingCode: m.code, date: m.date, branch: student.branch || "",
@@ -1336,7 +1370,7 @@ const attendeeOf = (raw) => {
   // Reception desk.
   function deskInvite(id, i) {
     return {
-      id, students: (i.students || []).map((s) => ({ name: s.name, grade: s.grade, className: s.className })), code: i.code, response: i.response || "", attendees: i.attendees || 0,
+      id, students: (i.students || []).map((s) => ({ name: s.name, grade: s.grade, className: s.className, branch: s.branch || "" })), code: i.code, response: i.response || "", attendees: i.attendees || 0,
       slots: i.slots || [], requested: i.requested || [], attended: i.attended === true, checkedInAt: ms(i.checkedInAt), ticketNo: i.ticketNo || null,
       attendee: i.attendee || null,
     };
@@ -1402,6 +1436,7 @@ const attendeeOf = (raw) => {
       if (!i) throw new HttpsError("not-found", "لم يتم العثور على الدعوة.");
       if (action === "checkin") {
         const attendee = attendeeOf(request.data?.attendee);
+        checkAttendee(attendee, i.students);
         if (attendee) await invRef.update({ attendee });
         await checkIn(ref, invRef.id, "الاستقبال");
       } else await invRef.update({ attended: false, checkedInAt: FieldValue.delete(), checkedInBy: FieldValue.delete() });
@@ -1409,9 +1444,11 @@ const attendeeOf = (raw) => {
     }
     if (action === "attendee") {
       const invRef = ref.collection("invites").doc(String(request.data?.inviteId || "_"));
-      if (!(await invRef.get()).exists) throw new HttpsError("not-found", "لم يتم العثور على الدعوة.");
+      const cur = (await invRef.get()).data();
+      if (!cur) throw new HttpsError("not-found", "لم يتم العثور على الدعوة.");
       const attendee = attendeeOf(request.data?.attendee);
       if (!attendee) throw new HttpsError("invalid-argument", "اكتب اسم الحاضر وصلته بالطالب/ة.");
+      checkAttendee(attendee, cur.students);
       await invRef.update({ attendee });
       return { invite: deskInvite(invRef.id, (await invRef.get()).data()), ...(await deskState(ref, m)) };
     }
@@ -1422,6 +1459,7 @@ const attendeeOf = (raw) => {
       if (!s || s.active === false) throw new HttpsError("not-found", "لم يتم العثور على الطالب/ة.");
       const branchOf = await branchResolver();
       if (!(m.branches || []).includes(branchOf(s))) throw new HttpsError("failed-precondition", "الطالب/ة من فرع غير مشمول بهذا الاجتماع.");
+      checkAttendee(attendeeOf(request.data?.attendee), [{ branch: branchOf(s) }]);
       const key = familyKeyFor(m, s);
       const invRef = ref.collection("invites").doc(key);
       const cur = (await invRef.get()).data();

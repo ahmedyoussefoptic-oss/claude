@@ -23,6 +23,11 @@ export const positionLabel = (t, x) => {
 };
 // Who came for the family: their relation to the student.
 export const RELATIONS = ['FATHER', 'MOTHER', 'BROTHER', 'SISTER', 'GRANDFATHER', 'GRANDMOTHER', 'UNCLE', 'AUNT', 'GUARDIAN', 'OTHER'];
+// Branches where only women attend parent meetings (as in functions/meetings.js).
+export const WOMEN_ONLY_BRANCHES = ['AL_NAEEM', 'AL_ZAHRA', 'AL_SHATI', 'AL_SALAMA_GIRLS', 'DOWN_TOWN_GIRLS'];
+export const MALE_RELATIONS = ['FATHER', 'BROTHER', 'GRANDFATHER', 'UNCLE'];
+export const isWomenOnly = (students) => (students || []).length > 0 && students.every((s) => WOMEN_ONLY_BRANCHES.includes(s.branch));
+export const relationsFor = (womenOnly) => (womenOnly ? RELATIONS.filter((r) => !MALE_RELATIONS.includes(r)) : RELATIONS);
 export const isRequests = (m) => m?.type === 'REQUESTS';
 export const REQUEST_STATUS_STYLES = {
   REQUESTED: 'bg-slate-50 text-slate-600 border-slate-200',

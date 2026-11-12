@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import QRCode from 'qrcode';
 import { Loader2, CheckCircle2, Star, AlertTriangle, Pencil, Ticket, ArrowLeftRight, LogOut, Sparkles, HeartHandshake, Check, Printer, ChevronDown } from 'lucide-react';
 import logo from '../assets/logo.png';
-import { callMeeting, RELATIONS, STAFF_POSITIONS, SUBJECTS, positionLabel } from '../config/meetings';
+import { callMeeting, relationsFor, MALE_RELATIONS, STAFF_POSITIONS, SUBJECTS, positionLabel } from '../config/meetings';
 
 // The parents' pages share one look: a navy card (like a student card) with
 // the school's logo, then white cards with coloured initials for the people.
@@ -215,7 +215,7 @@ export function SignIn({ onSubmit, onDone, title, hint }) {
   );
 }
 
-function AttendeeFields({ value, onChange }) {
+function AttendeeFields({ value, onChange, womenOnly = false }) {
   const { t } = useTranslation();
   return (
     <div className={`${card} space-y-4`}>
@@ -226,8 +226,9 @@ function AttendeeFields({ value, onChange }) {
       </div>
       <div>
         <p className="text-[15px] font-bold text-slate-800 mb-2">{t('meetings.family.relation')}</p>
+        {womenOnly && <p className="text-sm text-rose-700 bg-rose-50 border border-rose-100 rounded-xl px-3 py-2 mb-2">{t('meetings.family.womenOnlyNote')}</p>}
         <div className="flex flex-wrap gap-2">
-          {RELATIONS.map((r) => (
+          {relationsFor(womenOnly).map((r) => (
             <button key={r} type="button" onClick={() => onChange({ ...value, relation: r })}
               className={`px-4 py-2 rounded-full text-[15px] font-bold border-2 transition ${value.relation === r ? `${NAVY} border-transparent text-white shadow` : 'bg-white border-slate-200 text-slate-700 hover:border-slate-400'}`}>
               {t(`meetings.family.relations.${r}`)}
@@ -318,14 +319,17 @@ function RequestForm({ sess, state, others, onSaved }) {
   const { t, i18n } = useTranslation();
   const keyOf = (studentId, staffId) => `${studentId}|${staffId}`;
   const [picks, setPicks] = useState(() => Object.fromEntries(state.requests.filter((r) => r.status !== 'CANCELLED').map((r) => [keyOf(r.studentId, r.staffId), r.purpose])));
-  const [attendee, setAttendeeState] = useState(() => (state.invite.attendee ? { name: state.invite.attendee.name, relation: state.invite.attendee.relation } : readAttendee() || { name: '', relation: '' }));
+  // Women-only branches: a man's name and relation from another branch's form aren't taken.
+  const womenOnly = !!state.invite.womenOnly;
+  const fit = (v) => (v && womenOnly && MALE_RELATIONS.includes(v.relation) ? { name: '', relation: '' } : v);
+  const [attendee, setAttendeeState] = useState(() => fit(state.invite.attendee ? { name: state.invite.attendee.name, relation: state.invite.attendee.relation } : readAttendee() || { name: '', relation: '' }));
   // Typed here → shared with the other branches' forms; typed there → taken
   // here unless this form's own answer was already given.
   const formId = useRef(Math.random().toString(36)).current;
   const own = useRef(!!state.invite.attendee);
   const setAttendee = (v) => { own.current = false; setAttendeeState(v); shareAttendee(v, formId); };
   useEffect(() => {
-    const on = (e) => { if (e.detail.from !== formId && !own.current) setAttendeeState(e.detail.v); };
+    const on = (e) => { if (e.detail.from !== formId && !own.current) setAttendeeState(fit(e.detail.v)); };
     window.addEventListener(ATT_EVENT, on);
     return () => window.removeEventListener(ATT_EVENT, on);
   }, [formId]);
@@ -358,7 +362,7 @@ function RequestForm({ sess, state, others, onSaved }) {
           <NavyCard date={date} title={s.name}
             fields={[[t('meetings.family.grade'), s.grade || '—'], [t('meetings.family.class'), s.className || '—'], [t('meetings.family.branch'), s.branchName || '—'], [t('meetings.family.chosenN'), count(s.id)]]}
             pill={count(s.id) ? t('meetings.family.selectedN', { count: count(s.id) }) : t('meetings.family.noneYet')} corner={tail(s.id)} />
-          {['ACADEMIC', 'ADMIN', 'TEACHER'].map((role) => {
+          {['ADMIN', 'ACADEMIC', 'TEACHER'].map((role) => {
             const list = s.options.filter((o) => o.role === role);
             return (
               <div key={role} className="space-y-2.5">
@@ -382,7 +386,7 @@ function RequestForm({ sess, state, others, onSaved }) {
         </section>
       ))}
       {others.length > 0 && <p className="w-full max-w-2xl text-sm text-slate-500">{t('meetings.family.othersNote', { list: others.map((o) => `${o.name} (${o.grade})`).join('، ') })}</p>}
-      <AttendeeFields value={attendee} onChange={setAttendee} />
+      <AttendeeFields value={attendee} onChange={setAttendee} womenOnly={womenOnly} />
       <div className="w-full max-w-2xl space-y-3">
         {error && <p className="text-[15px] text-rose-700 bg-rose-50 border border-rose-100 rounded-2xl p-3 flex items-center gap-2"><AlertTriangle className="w-5 h-5 shrink-0" />{error}</p>}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">

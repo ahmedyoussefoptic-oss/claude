@@ -4098,7 +4098,14 @@
       "colLink": "Link",
       "deskNote": "Scan the code with the reception phone and enter the access code.",
       "managersCardNote": "Scan the code, enter the access code, then write your name and choose your job title.",
-      "teacherCardNote": "Scan the code with your phone camera and enter the access code to see your appointments and the parents' requests."
+      "teacherCardNote": "Scan the code with your phone camera and enter the access code to see your appointments and the parents' requests.",
+      "printTitleTeachers": "Teachers' access details",
+      "printTitleAdmin": "Management and reception access details",
+      "nothingToPrint": "Nothing to print in this section.",
+      "group": {
+        "teachers": "Teachers",
+        "admin": "Management and reception"
+      }
     },
     "invites": {
       "search": "Search by student name, ID, class or entry code",
@@ -4396,14 +4403,14 @@
       "pickHint": "For each child: choose the academic manager, administrative manager or the child's teachers, and write the purpose so they can prepare.",
       "selectedN": "{{count}} meetings",
       "meet": {
-        "ACADEMIC": "Meet an academic manager",
-        "ADMIN": "Meet an administrative manager",
-        "TEACHER": "Meet the child's teachers"
+        "ACADEMIC": "Meet the academic administration",
+        "ADMIN": "Meet the branch administration",
+        "TEACHER": "Meet the student's teachers"
       },
       "listOf": {
-        "ACADEMIC": "Academic managers",
-        "ADMIN": "Administrative managers",
-        "TEACHER": "The child's teachers"
+        "ACADEMIC": "Academic administration",
+        "ADMIN": "Branch administration",
+        "TEACHER": "The student's teachers"
       },
       "purposePh": "Purpose of the meeting (e.g. maths level, homework...)",
       "othersNote": "Children not in this meeting: {{list}}",
@@ -4466,7 +4473,8 @@
       "pickFromList": "Choose from the list…",
       "unavailable": "not available",
       "picked": "selected",
-      "onDutyNote": "You'll meet whoever holds this position on the day"
+      "onDutyNote": "You'll meet whoever holds this position on the day",
+      "womenOnlyNote": "Attendance at this branch is for women only."
     },
     "staffReq": {
       "skipPrompt": "Why the meeting was not held (optional):",
@@ -4488,7 +4496,9 @@
       "result": "Result",
       "endTitle": "End meeting",
       "resultRequired": "Write the result of the meeting.",
-      "endSave": "Close meeting"
+      "endSave": "Close meeting",
+      "autoClosed": "Closed automatically when another meeting started; its result isn't written yet.",
+      "writeResult": "Write the result"
     },
     "publicLink": {
       "title": "Meeting link for parents",

@@ -72,18 +72,23 @@ async function printPoster(m, t, i18n) {
 // The access to the meeting's screens: every teacher's link and code, the
 // reception's and the managers'. «list» = one table for the administration;
 // «cards» = one card per person (QR + code) to cut out and hand over.
-async function printAccess(m, t, i18n, mode) {
+//   group: 'teachers' (the teachers' links) or 'admin' (the managers' link,
+//   managers listed in the meeting, and reception) — printed separately.
+async function printAccess(m, t, i18n, mode, group = 'teachers') {
   const e = escapeHtml;
   const role = (r) => t(`meetings.roles.${r || 'TEACHER'}`);
   const classesOf = (tc) => (tc.classes?.length ? [...new Set(tc.classes.map(classLabel))].join('، ') : t('meetings.links.allClasses'));
-  const rows = [
-    { kind: t('meetings.links.desk'), name: '', subject: '', classes: '', room: '', link: m.deskLink, pin: m.deskPin, note: t('meetings.links.deskNote') },
+  const person = (tc) => ({ kind: role(tc.role), name: tc.name, subject: tc.subject || '', classes: classesOf(tc), room: tc.room || '', link: tc.link, pin: tc.pin, note: t('meetings.links.teacherCardNote') });
+  const isTeacher = (tc) => (tc.role || 'TEACHER') === 'TEACHER';
+  const rows = group === 'admin' ? [
     ...(m.managerLink ? [{ kind: t('meetings.links.managers'), name: '', subject: '', classes: '', room: '', link: m.managerLink, pin: m.managerPin, note: t('meetings.links.managersCardNote') }] : []),
-    ...(m.teachers || []).map((tc) => ({ kind: role(tc.role), name: tc.name, subject: tc.subject || '', classes: classesOf(tc), room: tc.room || '', link: tc.link, pin: tc.pin, note: t('meetings.links.teacherCardNote') })),
-  ];
-  const head = { title: `${t('meetings.links.printTitle')} — ${m.title}`, subtitle: `${m.date} · ${meetingTime(m.startTime, i18n.language)} – ${meetingTime(m.endTime, i18n.language)}${m.location ? ` · ${m.location}` : ''}`, school: t('trips.print.school'), dir: i18n.dir(), lang: i18n.language };
+    ...(m.teachers || []).filter((tc) => !isTeacher(tc)).map(person),
+    { kind: t('meetings.links.desk'), name: '', subject: '', classes: '', room: '', link: m.deskLink, pin: m.deskPin, note: t('meetings.links.deskNote') },
+  ] : (m.teachers || []).filter(isTeacher).map(person);
+  if (!rows.length) { window.alert(t('meetings.links.nothingToPrint')); return; }
+  const head = { title: `${t(group === 'admin' ? 'meetings.links.printTitleAdmin' : 'meetings.links.printTitleTeachers')} — ${m.title}`, subtitle: `${m.date} · ${meetingTime(m.startTime, i18n.language)} – ${meetingTime(m.endTime, i18n.language)}${m.location ? ` · ${m.location}` : ''}`, school: t('trips.print.school'), dir: i18n.dir(), lang: i18n.language };
   if (mode === 'list') {
-    const th = ['#', t('meetings.links.colRole'), t('meetings.form.teacherName'), t('meetings.form.subject'), t('meetings.links.colClasses'), t('meetings.form.room'), t('meetings.links.pin'), t('meetings.links.colLink')];
+    const th = ['#', t('meetings.links.colRole'), group === 'admin' ? t('meetings.manager.name') : t('meetings.form.teacherName'), t('meetings.form.subject'), t('meetings.links.colClasses'), t('meetings.form.room'), t('meetings.links.pin'), t('meetings.links.colLink')];
     printPage({
       ...head,
       landscape: true,
@@ -304,9 +309,14 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
                 <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5"><KeyRound className="w-4 h-4 text-primary" />{t('meetings.links.title')}</p>
                 <p className="text-xs text-slate-500">{t('meetings.links.hint')}</p>
               </div>
-              <div className="flex flex-wrap gap-2">
-                <button type="button" onClick={() => printAccess(m, t, i18n, 'list')} className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg flex items-center gap-1 text-slate-700 hover:border-primary"><Printer className="w-3.5 h-3.5" />{t('meetings.links.printList')}</button>
-                <button type="button" onClick={() => printAccess(m, t, i18n, 'cards')} className="px-2.5 py-1.5 text-xs bg-primary text-white rounded-lg flex items-center gap-1"><Printer className="w-3.5 h-3.5" />{t('meetings.links.printCards')}</button>
+              <div className="space-y-1.5">
+                {[['teachers', 'bg-primary text-white'], ['admin', 'bg-violet-600 text-white']].map(([g, solid]) => (
+                  <div key={g} className="flex flex-wrap items-center justify-end gap-2">
+                    <span className="text-xs font-bold text-slate-600">{t(`meetings.links.group.${g}`)}:</span>
+                    <button type="button" onClick={() => printAccess(m, t, i18n, 'list', g)} className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg flex items-center gap-1 text-slate-700 hover:border-primary"><Printer className="w-3.5 h-3.5" />{t('meetings.links.printList')}</button>
+                    <button type="button" onClick={() => printAccess(m, t, i18n, 'cards', g)} className={`px-2.5 py-1.5 text-xs rounded-lg flex items-center gap-1 ${solid}`}><Printer className="w-3.5 h-3.5" />{t('meetings.links.printCards')}</button>
+                  </div>
+                ))}
               </div>
             </div>
             <div className="border border-slate-100 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">

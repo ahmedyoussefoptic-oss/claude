@@ -186,7 +186,13 @@ export function RequestsBoard({ requests, act, onError }) {
                   <p className="whitespace-pre-wrap">{r.purpose}</p>
                 </div>
                 {r.others.length > 0 && <p className="text-xs text-slate-500 mt-1">{t('meetings.staffReq.alsoMeeting', { list: r.others.join('، ') })}</p>}
-                {r.status === 'DONE' && (
+                {r.status === 'DONE' && r.autoClosed && (
+                  <div className="text-sm mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2 flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-amber-900">{t('meetings.staffReq.autoClosed')}</p>
+                    <button type="button" onClick={() => setEnding(r)} className="px-2.5 py-1.5 text-xs bg-emerald-600 text-white rounded-lg flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />{t('meetings.staffReq.writeResult')}</button>
+                  </div>
+                )}
+                {r.status === 'DONE' && !r.autoClosed && (
                   <div className="text-sm text-slate-700 mt-2 bg-emerald-50 rounded-lg p-2">
                     <p className="text-xs font-medium text-emerald-800">{t('meetings.staffReq.result')}</p>
                     <p className="whitespace-pre-wrap">{r.result}</p>
