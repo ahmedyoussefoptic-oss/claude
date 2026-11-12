@@ -143,7 +143,7 @@ const GROUPS = [
   ['done', (r) => r.status === 'DONE'],
 ];
 function RequestsBoard({ requests, act, onError }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [ending, setEnding] = useState(null);
   const [busy, setBusy] = useState('');
   const run = async (payload, key) => {
@@ -155,7 +155,7 @@ function RequestsBoard({ requests, act, onError }) {
     if (reason !== null) run({ action: 'skipRequest', requestId: r.id, reason }, r.id);
   };
   if (!requests.length) return <div className={`${card} text-center text-slate-500`}>{t('meetings.staffReq.empty')}</div>;
-  const time = (ms) => (ms ? new Date(ms).toLocaleTimeString('ar-SA-u-nu-latn', { hour: 'numeric', minute: '2-digit' }) : '');
+  const time = (ms) => (ms ? new Date(ms).toLocaleTimeString(i18n.language === 'ar' ? 'ar-SA-u-nu-latn' : 'en-US', { hour: 'numeric', minute: '2-digit' }) : '');
   return (
     <>
       {GROUPS.map(([g, f]) => {

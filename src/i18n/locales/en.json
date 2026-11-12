@@ -4471,7 +4471,7 @@
     },
     "publicLink": {
       "title": "Meeting link for parents",
-      "hint": "One link for all parents: they sign in with their ID and mobile, see their children and request meetings. Share it in class groups or print the QR poster.",
+      "hint": "One link for all parents: they sign in with their national ID, see their children and request meetings. Share it in class groups or print the QR poster.",
       "message": "Dear parents, you are invited to «{{title}}» on {{date}}. To confirm and choose whom to meet: {{link}}",
       "copyMessage": "Copy ready message",
       "poster": "Print QR poster",
