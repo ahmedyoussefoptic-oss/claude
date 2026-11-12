@@ -5,7 +5,7 @@ const TONES = ['bg-[#1f3c64]', 'bg-violet-500', 'bg-blue-500', 'bg-[#1f3c64]', '
 export function initialOf(name) {
   const s = String(name || '').trim();
   const word = s.split(/\s+/).find((w) => w.length > 1 && !/[.:]$/.test(w) && !/^(أ|د|م|ا)\.?$/.test(w)) || s;
-  return word.replace(/^[^\p{L}\p{N}]+/u, '').charAt(0) || '؟';
+  return word.replace(/^[^\p{L}\p{N}]+/u, '').replace(/^ال(?=\p{L}{2})/u, '').charAt(0) || '؟';
 }
 
 export default function Initials({ name, size = 'w-10 h-10 text-base', className = '' }) {

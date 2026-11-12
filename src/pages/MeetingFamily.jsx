@@ -40,7 +40,7 @@ function Avatar({ name, size = 'w-12 h-12 text-lg' }) {
   const h = [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 9973, 7);
   // The first letter of the name itself (titles such as «أ.» «د.» «Mr.» skipped).
   const word = s.split(/\s+/).find((w) => w.length > 1 && !/[.:]$/.test(w) && !/^(أ|د|م|ا)\.?$/.test(w)) || s;
-  return <span className={`${size} ${AVATAR_TONES[h % AVATAR_TONES.length]} rounded-full text-white font-extrabold flex items-center justify-center shrink-0 uppercase`}>{word.replace(/^[^\p{L}]+/u, '').charAt(0) || '؟'}</span>;
+  return <span className={`${size} ${AVATAR_TONES[h % AVATAR_TONES.length]} rounded-full text-white font-extrabold flex items-center justify-center shrink-0 uppercase`}>{word.replace(/^[^\p{L}]+/u, '').replace(/^ال(?=\p{L}{2})/u, '').charAt(0) || '؟'}</span>;
 }
 
 // The navy card: logo, school, date, a big title, a row of facts, a tear line
@@ -412,7 +412,7 @@ function RequestList({ state, withStatus = false }) {
               <div className="flex items-center gap-3 min-w-0">
                 <Avatar name={r.holder || r.staffName} />
                 <div className="min-w-0">
-                  <p className="text-lg font-extrabold text-slate-900 truncate" dir="auto">{staffLabel(t, r)}</p>
+                  <p className="text-lg font-extrabold text-slate-900 leading-snug break-words" dir="auto">{staffLabel(t, r)}</p>
                   <p className="text-[15px] text-slate-500 truncate"><span className={`inline-block w-2 h-2 rounded-full me-1.5 ${ROLE_DOT[r.staffRole] || ROLE_DOT.TEACHER}`} />{withStatus ? t(`meetings.roles.${r.staffRole}`) : r.purpose}</p>
                 </div>
               </div>
