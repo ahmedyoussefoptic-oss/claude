@@ -2,13 +2,49 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
-import { X, Loader2, Download, FileSpreadsheet, Save, AlertTriangle, ChevronDown, ChevronUp, BookUser, Search } from 'lucide-react';
+import { X, Loader2, Download, FileSpreadsheet, Save, AlertTriangle, ChevronDown, ChevronUp, BookUser, Search, Plus, Pencil, Trash2 } from 'lucide-react';
 import { useBranches } from '../../hooks/useOrgData';
 import { callMeeting } from '../../config/meetings';
 import { normalizeArabic } from '../../utils/students';
 import { readTeacherDirectoryFile, DIRECTORY_TEMPLATE_URL } from '../../utils/meetingTeachersExcel';
 
 const fold = (x) => normalizeArabic(x).toLowerCase();
+const input = 'w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:border-primary';
+
+// Add / edit one teacher: branch, name, subject and classes.
+function TeacherEditor({ value, branches, subjects, busy, onSave, onCancel }) {
+  const { t } = useTranslation();
+  const [f, setF] = useState(value);
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSave(f); }} className="bg-primary/5 border border-primary/30 rounded-xl p-3 space-y-2.5">
+      <p className="text-sm font-bold text-slate-800">{value.originalName ? t('meetings.directory.editTitle', { name: value.originalName }) : t('meetings.directory.addTitle')}</p>
+      <div className="grid sm:grid-cols-2 gap-2">
+        <label className="space-y-1"><span className="text-xs text-slate-600">{t('meetings.directory.branch')}</span>
+          <select value={f.branch} onChange={set('branch')} required className={input}>
+            <option value="">{t('meetings.directory.pickBranch')}</option>
+            {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </select>
+        </label>
+        <label className="space-y-1"><span className="text-xs text-slate-600">{t('meetings.form.teacherName')}</span>
+          <input value={f.name} onChange={set('name')} required maxLength={80} autoFocus className={input} />
+        </label>
+        <label className="space-y-1"><span className="text-xs text-slate-600">{t('meetings.form.subject')}</span>
+          <input value={f.subject} onChange={set('subject')} maxLength={80} list="dir-subjects" className={input} />
+          <datalist id="dir-subjects">{subjects.map((x) => <option key={x} value={x} />)}</datalist>
+        </label>
+        <label className="space-y-1"><span className="text-xs text-slate-600">{t('meetings.form.classes')}</span>
+          <input value={f.classes} onChange={set('classes')} maxLength={300} dir="ltr" placeholder="4-1، 4-2، B9-1" className={input} />
+        </label>
+      </div>
+      <p className="text-xs text-slate-500">{t('meetings.directory.classesHint')}</p>
+      <div className="flex gap-2">
+        <button type="submit" disabled={busy} className="px-3 py-1.5 bg-primary text-white rounded-lg text-sm flex items-center gap-1.5 disabled:opacity-60">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}{t('common.save')}</button>
+        <button type="button" onClick={onCancel} className="px-3 py-1.5 text-sm text-slate-600">{t('common.cancel')}</button>
+      </div>
+    </form>
+  );
+}
 
 // «دليل المعلمين»: one Excel file with the teachers of every branch. Saving
 // replaces the lists of the branches in the file (other branches are kept).
@@ -22,6 +58,7 @@ export default function TeacherDirectory({ onClose }) {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const [q, setQ] = useState('');
+  const [editing, setEditing] = useState(null); // {branch, originalName?, name, subject, classes}
 
   const load = () => callMeeting('getMeetingTeacherDirectory', {}).then((r) => setSaved(r.branches)).catch((err) => setMsg({ ok: false, text: err.message }));
   useEffect(() => { load(); }, []);
@@ -49,6 +86,31 @@ export default function TeacherDirectory({ onClose }) {
       await load();
     } catch (err) { setMsg({ ok: false, text: err.message }); } finally { setBusy(false); }
   };
+
+  // One teacher added / edited / deleted (saved at once).
+  const edit = async (data, done) => {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await callMeeting('editMeetingTeacherDirectory', data);
+      await load();
+      done?.();
+    } catch (err) { setMsg({ ok: false, text: err.message }); } finally { setBusy(false); }
+  };
+  const saveTeacher = (f) => {
+    const teacher = { name: f.name.trim(), subject: f.subject.trim(), classes: f.classes.trim() };
+    if (!f.originalName) {
+      edit({ action: 'add', branch: f.branch, teacher }, () => { setEditing(null); setOpen(f.branch); setMsg({ ok: true, text: t('meetings.directory.added', { name: teacher.name, branch: branchName(f.branch) }) }); });
+    } else {
+      edit({ action: 'update', branch: f.fromBranch, toBranch: f.branch, originalName: f.originalName, teacher }, () => { setEditing(null); setOpen(f.branch); setMsg({ ok: true, text: t('meetings.directory.updated', { name: teacher.name }) }); });
+    }
+  };
+  const remove = (branch, x) => {
+    if (!window.confirm(t('meetings.directory.deleteConfirm', { name: x.name, branch: branchName(branch) }))) return;
+    edit({ action: 'delete', branch, originalName: x.name }, () => setMsg({ ok: true, text: t('meetings.directory.deleted', { name: x.name }) }));
+  };
+  const subjects = [...new Set((saved || []).flatMap((b) => b.teachers.map((x) => x.subject)).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
+  const editorProps = { branches, subjects, busy, onSave: saveTeacher, onCancel: () => setEditing(null) };
 
   const all = pending
     ? Object.entries(pending.byBranch).map(([branch, teachers]) => ({ branch, teachers, isNew: true }))
@@ -81,8 +143,13 @@ export default function TeacherDirectory({ onClose }) {
               <FileSpreadsheet className="w-4 h-4" />{t('meetings.directory.upload')}
               <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = ''; }} />
             </label>
+            {!pending && saved !== null && (
+              <button type="button" onClick={() => setEditing({ branch: open || '', name: '', subject: '', classes: '' })} className="px-3 py-2 text-sm bg-primary text-white rounded-xl flex items-center gap-1.5"><Plus className="w-4 h-4" />{t('meetings.directory.add')}</button>
+            )}
           </div>
           {msg && <p className={`text-sm rounded-xl p-2.5 ${msg.ok ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>{msg.text}</p>}
+
+          {editing && !editing.originalName && <TeacherEditor key="new" value={editing} {...editorProps} />}
 
           {pending && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1 text-sm text-amber-900">
@@ -145,8 +212,20 @@ export default function TeacherDirectory({ onClose }) {
                         {expanded && (
                           <div className="border-t border-slate-100 p-2 overflow-x-auto">
                             <table className="w-full text-xs">
-                              <thead><tr className="text-slate-500"><th className="p-1.5 w-8 text-start font-medium">#</th>{['teacherName', 'subject', 'classes'].map((k) => <th key={k} className="p-1.5 text-start font-medium">{t(`meetings.form.${k}`)}</th>)}</tr></thead>
-                              <tbody>{b.shown.map((x, i) => <tr key={i} className="border-t border-slate-50"><td className="p-1.5 text-slate-400 tabular-nums">{i + 1}</td><td className="p-1.5">{x.name}</td><td className="p-1.5">{x.subject}</td><td className="p-1.5" dir="ltr">{x.classes}</td></tr>)}</tbody>
+                              <thead><tr className="text-slate-500"><th className="p-1.5 w-8 text-start font-medium">#</th>{['teacherName', 'subject', 'classes'].map((k) => <th key={k} className="p-1.5 text-start font-medium">{t(`meetings.form.${k}`)}</th>)}{!b.isNew && <th className="p-1.5 w-16" />}</tr></thead>
+                              <tbody>{b.shown.map((x, i) => (editing?.originalName === x.name && editing.fromBranch === b.branch ? (
+                                <tr key={i}><td colSpan={5} className="p-1.5"><TeacherEditor key={`${b.branch}|${x.name}`} value={editing} {...editorProps} /></td></tr>
+                              ) : (
+                                <tr key={i} className="border-t border-slate-50 group">
+                                  <td className="p-1.5 text-slate-400 tabular-nums">{i + 1}</td><td className="p-1.5">{x.name}</td><td className="p-1.5">{x.subject}</td><td className="p-1.5" dir="ltr">{x.classes}</td>
+                                  {!b.isNew && (
+                                    <td className="p-1 whitespace-nowrap text-end">
+                                      <button type="button" disabled={busy} onClick={() => setEditing({ fromBranch: b.branch, branch: b.branch, originalName: x.name, name: x.name, subject: x.subject || '', classes: x.classes || '' })} aria-label={t('common.edit')} title={t('common.edit')} className="p-1.5 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg"><Pencil className="w-3.5 h-3.5" /></button>
+                                      <button type="button" disabled={busy} onClick={() => remove(b.branch, x)} aria-label={t('common.delete')} title={t('common.delete')} className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    </td>
+                                  )}
+                                </tr>
+                              )))}</tbody>
                             </table>
                           </div>
                         )}

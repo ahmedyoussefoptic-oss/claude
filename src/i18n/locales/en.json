@@ -4386,7 +4386,17 @@
       "matches": "{{count}} of {{total}}",
       "noMatches": "No teacher matches «{{q}}».",
       "found": "Results: {{count}}",
-      "clear": "Clear search"
+      "clear": "Clear search",
+      "add": "Add teacher",
+      "addTitle": "Add a teacher to the directory",
+      "editTitle": "Edit {{name}}",
+      "branch": "Branch",
+      "pickBranch": "Choose a branch",
+      "classesHint": "Separate classes with commas, e.g. 4-1, 4-2. British-section classes start with B, e.g. B9-1. Leave empty for someone who meets every class.",
+      "added": "{{name}} was added to {{branch}}.",
+      "updated": "{{name}} was saved.",
+      "deleted": "{{name}} was removed from the directory.",
+      "deleteConfirm": "Remove {{name}} from the {{branch}} directory?\nMeetings that already have this teacher are not affected."
     },
     "roles": {
       "TEACHER": "Teacher",

@@ -1650,6 +1650,63 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     return { saved };
   });
 
+  // One teacher added / edited / deleted in the directory (from its window).
+  // The teacher is found by name in its branch, so edits by two people do not
+  // overwrite each other; an edit may move the teacher to another branch.
+  out.editMeetingTeacherDirectory = onCall(async (request) => {
+    const caller = await meetingCaller(request);
+    const d = request.data || {};
+    const action = ["add", "update", "delete"].includes(d.action) ? d.action : "";
+    if (!action) throw new HttpsError("invalid-argument", "إجراء غير معروف.");
+    const key = (s) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const from = str(d.branch, 60);
+    const to = action === "update" ? str(d.toBranch || d.branch, 60) : from;
+    const known = new Set((await db.collection("branches").get()).docs.map((x) => x.id));
+    for (const b of new Set([from, to])) {
+      if (!known.has(b) || !callerHasBranch(caller, b)) throw new HttpsError("permission-denied", "الفرع خارج صلاحيتك أو غير معروف.");
+    }
+    const t = d.teacher || {};
+    const teacher = { name: str(t.name, 80), subject: str(t.subject, 80), classes: str(t.classes, 300) };
+    if (action !== "delete" && !teacher.name) throw new HttpsError("invalid-argument", "اكتب اسم المعلم.");
+    const original = key(d.originalName);
+    if (action !== "add" && !original) throw new HttpsError("invalid-argument", "المعلم غير محدد.");
+    const now = Timestamp.now();
+    const stamp = { updatedAt: now, updatedBy: caller.uid, updatedByName: caller.name || "" };
+    await db.runTransaction(async (tx) => {
+      const fromRef = db.collection("meetingTeacherDirectory").doc(from);
+      const toRef = db.collection("meetingTeacherDirectory").doc(to);
+      const fromList = [...(((await tx.get(fromRef)).data() || {}).teachers || [])];
+      const toList = to === from ? fromList : [...(((await tx.get(toRef)).data() || {}).teachers || [])];
+      const at = action === "add" ? -1 : fromList.findIndex((x) => key(x.name) === original);
+      if (action !== "add" && at < 0) throw new HttpsError("not-found", "لم يُعثر على المعلم — ربما عدّله أو حذفه شخص آخر. حدّث الصفحة.");
+      if (action === "delete") {
+        fromList.splice(at, 1);
+        tx.set(fromRef, { teachers: fromList, ...stamp });
+        return;
+      }
+      const clash = toList.findIndex((x) => key(x.name) === key(teacher.name));
+      if (clash >= 0 && !(to === from && clash === at)) throw new HttpsError("already-exists", "يوجد معلم بهذا الاسم في هذا الفرع.");
+      if (action === "add") {
+        if (toList.length >= 400) throw new HttpsError("resource-exhausted", "الحد الأقصى 400 معلم في الفرع.");
+        toList.push({ ...teacher, role: "TEACHER", roleText: "" });
+        tx.set(toRef, { teachers: toList, ...stamp });
+        return;
+      }
+      const updated = { ...fromList[at], ...teacher };
+      if (to === from) {
+        fromList[at] = updated;
+        tx.set(fromRef, { teachers: fromList, ...stamp });
+        return;
+      }
+      if (toList.length >= 400) throw new HttpsError("resource-exhausted", "الحد الأقصى 400 معلم في الفرع.");
+      fromList.splice(at, 1);
+      toList.push(updated);
+      tx.set(fromRef, { teachers: fromList, ...stamp });
+      tx.set(toRef, { teachers: toList, ...stamp });
+    });
+    return { ok: true };
+  });
+
   // --- student record: the meetings a student was invited to + minutes ----
   out.getStudentMeetings = onCall(async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
