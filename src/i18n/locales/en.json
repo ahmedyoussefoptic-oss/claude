@@ -4378,7 +4378,14 @@
       "count": "{{count}} teachers",
       "notSaved": "Not saved yet",
       "empty": "No rows with teacher names and branches in the file.",
-      "noBranchColumn": "No «branch» and «teacher name» columns found. Use the form."
+      "noBranchColumn": "No «branch» and «teacher name» columns found. Use the form.",
+      "search": "Search teachers by name, subject or class",
+      "total": "Total teachers",
+      "branchesN": "{{count}} branches",
+      "matches": "{{count}} of {{total}}",
+      "noMatches": "No teacher matches «{{q}}».",
+      "found": "Results: {{count}}",
+      "clear": "Clear search"
     },
     "roles": {
       "TEACHER": "Teacher",
