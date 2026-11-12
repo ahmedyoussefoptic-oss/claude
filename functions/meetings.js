@@ -76,6 +76,7 @@ const checkAttendee = (attendee, students) => {
   }
 };
 // A meeting a teacher or manager left open, closed when they start the next one.
+const MAX_TEACHERS = 200;
 const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقابلة التالية — لم تُكتب النتيجة بعد.";
   const RESPONSES = ["ATTEND", "REMOTE", "DECLINE"];
   const FOLLOW_TYPES = ["ACADEMIC", "BEHAVIORAL", "ADMINISTRATIVE", "FINANCE"];
@@ -175,7 +176,10 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     }
     // Teachers keep their id, link and code across edits.
     const old = new Map((current?.teachers || []).map((t) => [t.id, t]));
-    m.teachers = (Array.isArray(x.teachers) ? x.teachers : []).slice(0, 80).map((t) => {
+    // Up to 200 (a large branch has over 100); more is refused, not cut off.
+    const given = Array.isArray(x.teachers) ? x.teachers : [];
+    if (given.length > MAX_TEACHERS) throw new HttpsError("invalid-argument", `الحد الأقصى ${MAX_TEACHERS} معلماً في الاجتماع الواحد.`);
+    m.teachers = given.map((t) => {
       const prev = old.get(String(t?.id || ""));
       const role = STAFF_ROLES.includes(t?.role) ? t.role : "TEACHER";
       const position = (STAFF_POSITIONS[role] || []).includes(t?.position) ? t.position : "";

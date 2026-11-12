@@ -5,12 +5,10 @@ import { format } from 'date-fns';
 import { X, Loader2, Download, FileSpreadsheet, Save, AlertTriangle, ChevronDown, ChevronUp, BookUser, Search } from 'lucide-react';
 import { useBranches } from '../../hooks/useOrgData';
 import { callMeeting } from '../../config/meetings';
+import { normalizeArabic } from '../../utils/students';
 import { readTeacherDirectoryFile, DIRECTORY_TEMPLATE_URL } from '../../utils/meetingTeachersExcel';
 
-// Search key: lower case, no tashkeel or tatweel, one form of alef / ya / ta marbuta.
-const fold = (s) => String(s || '').toLowerCase()
-  .replace(/[ً-ْـ]/g, '').replace(/[أإآ]/g, 'ا').replace(/ى/g, 'ي').replace(/ة/g, 'ه')
-  .replace(/\s+/g, ' ').trim();
+const fold = (x) => normalizeArabic(x).toLowerCase();
 
 // «دليل المعلمين»: one Excel file with the teachers of every branch. Saving
 // replaces the lists of the branches in the file (other branches are kept).

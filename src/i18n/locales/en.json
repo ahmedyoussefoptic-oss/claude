@@ -4105,7 +4105,8 @@
       "group": {
         "teachers": "Teachers",
         "admin": "Management and reception"
-      }
+      },
+      "teachersCount": "Teachers in this meeting"
     },
     "invites": {
       "search": "Search by student name, ID, class or entry code",

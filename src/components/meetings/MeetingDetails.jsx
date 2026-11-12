@@ -9,6 +9,7 @@ import {
 import QRCode from 'qrcode';
 import { printPage, escapeHtml } from '../../utils/printPage';
 import { useBranches } from '../../hooks/useOrgData';
+import { normalizeArabic } from '../../utils/students';
 import {
   MEETING_STATUS_STYLES, RESPONSE_STYLES, WA_STATUS_STYLES, REQUEST_STATUS_STYLES, isIndividual, isRequests, callMeeting, meetingTime, classLabel, pct,
 } from '../../config/meetings';
@@ -153,6 +154,14 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
   const invitesById = useMemo(() => Object.fromEntries((data?.invites || []).map((x) => [x.id, x])), [data]);
   const requestsBy = useMemo(() => (data?.requests || []).reduce((acc, r) => { (acc[r.inviteId] = acc[r.inviteId] || []).push(r); return acc; }, {}), [data]);
   const names = (inv) => (inv?.students || []).map((s) => s.name).join('، ');
+  // The teachers' links: search by name, subject, room or class.
+  const [teacherQ, setTeacherQ] = useState('');
+  const shownTeachers = useMemo(() => {
+    const needle = normalizeArabic(teacherQ).toLowerCase();
+    const list = m?.teachers || [];
+    if (!needle) return list;
+    return list.filter((tc) => normalizeArabic(`${tc.name} ${tc.subject || ''} ${tc.room || ''} ${(tc.classes || []).map(classLabel).join(' ')}`).toLowerCase().includes(needle));
+  }, [m, teacherQ]);
 
   const run = async (action, extra = {}) => {
     setBusy(action);
@@ -335,7 +344,26 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
                 </div>
               </div>
             )}
-            {(m.teachers || []).map((tc) => {
+            {(m.teachers || []).length > 0 && (
+              <div className="border-t border-slate-100 pt-3 space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                    {t('meetings.links.teachersCount')}
+                    <span className="px-2 py-0.5 rounded-lg bg-primary/10 text-primary tabular-nums">{m.teachers.length}</span>
+                    {m.branches?.length > 0 && <span className="text-xs font-normal text-slate-500">· {m.branches.map(branchName).join('، ')}</span>}
+                  </p>
+                  {teacherQ.trim() && <span className="text-xs text-slate-500">{t('meetings.directory.found', { count: shownTeachers.length })}</span>}
+                </div>
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3 pointer-events-none" />
+                  <input type="text" inputMode="search" value={teacherQ} onChange={(e) => setTeacherQ(e.target.value)} placeholder={t('meetings.directory.search')}
+                    className="w-full ps-9 pe-9 py-2 text-sm border border-slate-200 rounded-xl focus:outline-none focus:border-primary bg-white" />
+                  {teacherQ && <button type="button" onClick={() => setTeacherQ('')} aria-label={t('meetings.directory.clear')} className="absolute top-1/2 -translate-y-1/2 end-2 p-1 text-slate-400 hover:text-slate-700"><X className="w-4 h-4" /></button>}
+                </div>
+                {!shownTeachers.length && <p className="text-sm text-slate-500 text-center py-3">{t('meetings.directory.noMatches', { q: teacherQ.trim() })}</p>}
+              </div>
+            )}
+            {shownTeachers.map((tc) => {
               const msg = t('meetings.links.teacherMsg', { name: tc.name, title: m.title, date: m.date, link: tc.link, pin: tc.pin });
               return (
                 <div key={tc.id} className="border border-slate-100 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
