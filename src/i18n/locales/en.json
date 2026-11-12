@@ -4031,7 +4031,8 @@
       "and": " or ",
       "position": "Position",
       "positionPick": "Choose the position",
-      "subjectPick": "Choose the subject"
+      "subjectPick": "Choose the subject",
+      "managersNote": "Academic and administrative managers aren't added here: all their positions appear to parents automatically, and whoever meets parents on the day opens the «Managers' link» (in the meeting details) and writes their name and title. Add teachers only here."
     },
     "tabs": {
       "overview": "Overview",
@@ -4084,7 +4085,11 @@
       "open": "Open",
       "allClasses": "All classes",
       "whatsapp": "WhatsApp",
-      "teacherMsg": "{{name}}, your schedule and minutes for «{{title}}» on {{date}}:\n{{link}}\nAccess code: {{pin}}"
+      "teacherMsg": "{{name}}, your schedule and minutes for «{{title}}» on {{date}}:\n{{link}}\nAccess code: {{pin}}",
+      "managers": "Managers' link",
+      "managersHint": "a manager opens it, writes their name and title, and sees that position's requests",
+      "managersMsg": "Managers' link for «{{title}}» on {{date}}: {{link}}\nAccess code: {{pin}}\nWrite your name and choose your job title to see the parents' requests and record each meeting's result.",
+      "copyMsg": "Copy message"
     },
     "invites": {
       "search": "Search by student name, ID, class or entry code",
@@ -4451,7 +4456,8 @@
       "relationShort": "Relation",
       "pickFromList": "Choose from the list…",
       "unavailable": "not available",
-      "picked": "selected"
+      "picked": "selected",
+      "onDutyNote": "You'll meet whoever holds this position on the day"
     },
     "staffReq": {
       "skipPrompt": "Why the meeting was not held (optional):",
@@ -4518,6 +4524,18 @@
       "ART": "Art",
       "PE": "Physical education",
       "LIFE_SKILLS": "Life skills"
+    },
+    "manager": {
+      "title": "Managers' screen — parent meeting",
+      "whoTitle": "Who are you?",
+      "whoHint": "Write your name and choose your job title to see the parents' requests for that position.",
+      "name": "Name",
+      "namePh": "e.g. Mr. Fahad Harbi",
+      "jobTitle": "Job title",
+      "room": "Office or room (optional)",
+      "roomPh": "e.g. Office 3",
+      "start": "Show requests",
+      "change": "Change"
     }
   },
   "design": {

@@ -226,7 +226,7 @@ function WaitingBoard({ queue, busy, onAct }) {
             {f.requests.map((r) => (
               <div key={r.id} className={`flex items-center justify-between gap-2 border rounded-lg p-2 text-sm ${tone[r.status] || ''}`}>
                 <div className="min-w-0">
-                  <p className="text-slate-800">{r.staffName} <span className="text-xs text-slate-500">({t(`meetings.roles.${r.staffRole}`)}{r.room ? ` · ${r.room}` : ''})</span></p>
+                  <p className="text-slate-800">{r.staffName}{r.holder ? ` — ${r.holder}` : ''} <span className="text-xs text-slate-500">({t(`meetings.roles.${r.staffRole}`)}{r.room ? ` · ${r.room}` : ''})</span></p>
                   <p className="text-xs text-slate-500 truncate">{r.studentName} — {r.purpose}</p>
                 </div>
                 <div className="shrink-0 flex items-center gap-1.5">

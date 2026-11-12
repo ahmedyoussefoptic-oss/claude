@@ -249,8 +249,8 @@ function PersonRow({ person, on, locked, purpose, onToggle, onPurpose }) {
         <span className="flex items-center gap-3 min-w-0">
           <Avatar name={person.name} />
           <span className="min-w-0">
-            <span className="block text-lg font-extrabold text-slate-900 truncate" dir="auto">{person.name}</span>
-            {person.subject && <span className="block text-[15px] text-slate-500 truncate" dir="auto">{person.subject}</span>}
+            <span className="block text-lg font-extrabold text-slate-900 leading-snug break-words" dir="auto">{person.name}</span>
+            {person.subject && <span className="block text-[15px] text-slate-500 leading-snug break-words" dir="auto">{person.subject}</span>}
           </span>
         </span>
         {on
@@ -307,7 +307,8 @@ function ManagerPicker({ role, list, studentId, picks, locked, keyOf, onAdd, onT
       </div>
       {chosen.map((o) => {
         const k = keyOf(studentId, o.id);
-        return <PersonRow key={o.id} person={{ ...o, subject: positionLabel(t, o) || o.subject }} on locked={locked.has(k)} purpose={picks[k] || ''} onToggle={() => onToggle(k)} onPurpose={(v) => onPurpose(k, v)} />;
+        const person = o.slot ? { ...o, name: positionLabel(t, o), subject: t('meetings.family.onDutyNote') } : { ...o, subject: positionLabel(t, o) || o.subject };
+        return <PersonRow key={o.id} person={person} on locked={locked.has(k)} purpose={picks[k] || ''} onToggle={() => onToggle(k)} onPurpose={(v) => onPurpose(k, v)} />;
       })}
     </div>
   );
@@ -393,6 +394,9 @@ function RequestForm({ sess, state, others, onSaved }) {
   );
 }
 
+// Whom a request is for: the teacher, or the position (+ who holds it today).
+const staffLabel = (t, r) => `${positionLabel(t, r) || r.staffName}${r.holder ? ` — ${r.holder}` : ''}`;
+
 const byStudent = (state) => state.students.map((s) => ({ ...s, requests: state.requests.filter((r) => r.studentId === s.id) })).filter((s) => s.requests.length);
 
 // The family's interviews as person cards (with their status on the day).
@@ -406,9 +410,9 @@ function RequestList({ state, withStatus = false }) {
           {s.requests.map((r) => (
             <div key={r.id} className="bg-white rounded-3xl border-2 border-slate-100 p-4 flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
-                <Avatar name={r.staffName} />
+                <Avatar name={r.holder || r.staffName} />
                 <div className="min-w-0">
-                  <p className="text-lg font-extrabold text-slate-900 truncate" dir="auto">{r.staffName}</p>
+                  <p className="text-lg font-extrabold text-slate-900 truncate" dir="auto">{staffLabel(t, r)}</p>
                   <p className="text-[15px] text-slate-500 truncate"><span className={`inline-block w-2 h-2 rounded-full me-1.5 ${ROLE_DOT[r.staffRole] || ROLE_DOT.TEACHER}`} />{withStatus ? t(`meetings.roles.${r.staffRole}`) : r.purpose}</p>
                 </div>
               </div>
@@ -483,7 +487,7 @@ function TicketView({ state, onRefresh }) {
         pill={state.allDone ? t('meetings.family.allDoneShort') : now.length ? t('meetings.family.goNowShort') : t('meetings.family.waitShort')} corner={state.invite.code ? `#${state.invite.code}` : ''} />
       {now.map((r) => (
         <div key={r.id} className={`w-full max-w-2xl rounded-3xl p-5 text-center border-2 ${r.status === 'DIRECTED' ? 'border-amber-400 bg-gradient-to-br from-amber-50 to-yellow-50' : 'border-blue-300 bg-blue-50'}`}>
-          <p className="text-xl font-extrabold text-slate-900 flex items-center justify-center gap-2"><ArrowLeftRight className="w-5 h-5" />{r.status === 'DIRECTED' ? t('meetings.family.goNow', { name: r.staffName }) : t('meetings.family.inMeeting', { name: r.staffName })}</p>
+          <p className="text-xl font-extrabold text-slate-900 flex items-center justify-center gap-2"><ArrowLeftRight className="w-5 h-5" />{r.status === 'DIRECTED' ? t('meetings.family.goNow', { name: staffLabel(t, r) }) : t('meetings.family.inMeeting', { name: staffLabel(t, r) })}</p>
           {r.room && <p className="text-lg font-bold text-slate-700 mt-1">{r.room}</p>}
         </div>
       ))}

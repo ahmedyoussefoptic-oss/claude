@@ -142,7 +142,7 @@ const GROUPS = [
   ['notArrived', (r) => r.status === 'REQUESTED' && !r.arrived],
   ['done', (r) => r.status === 'DONE'],
 ];
-function RequestsBoard({ requests, act, onError }) {
+export function RequestsBoard({ requests, act, onError }) {
   const { t, i18n } = useTranslation();
   const [ending, setEnding] = useState(null);
   const [busy, setBusy] = useState('');

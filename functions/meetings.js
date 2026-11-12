@@ -42,6 +42,20 @@ module.exports = function meetingsModule(d) {
 // subject supervisor — as in src/config/meetings.js.
 const STAFF_POSITIONS = { ADMIN: ["PRINCIPAL", "VICE_PRINCIPAL", "COUNSELOR"], ACADEMIC: ["ACADEMIC_DIRECTOR", "ACADEMIC_DEPUTY", "SUBJECT_SUPERVISOR"] };
 const SUBJECTS = ["ARABIC", "ENGLISH", "MATH", "SCIENCE", "ISLAMIC", "QURAN", "SOCIAL", "ICT", "FRENCH", "ART", "PE", "LIFE_SKILLS"];
+const POSITION_AR = { PRINCIPAL: "مدير المدرسة", VICE_PRINCIPAL: "وكيل المدرسة", COUNSELOR: "المرشد الطلابي", ACADEMIC_DIRECTOR: "المدير الأكاديمي", ACADEMIC_DEPUTY: "نائب المدير الأكاديمي", SUBJECT_SUPERVISOR: "مشرف مادة" };
+const SUBJECT_AR = { ARABIC: "اللغة العربية", ENGLISH: "اللغة الإنجليزية", MATH: "الرياضيات", SCIENCE: "العلوم", ISLAMIC: "الدراسات الإسلامية", QURAN: "القرآن الكريم", SOCIAL: "الدراسات الاجتماعية", ICT: "الحاسب وتقنية المعلومات", FRENCH: "اللغة الفرنسية", ART: "التربية الفنية", PE: "التربية البدنية", LIFE_SKILLS: "المهارات الحياتية" };
+// «Interviews on request»: parents ask for a manager by position (every
+// position, always); whoever holds it on the day signs in on the meeting's
+// managers' link and takes those requests.
+const POSITION_SLOTS = Object.entries(STAFF_POSITIONS).flatMap(([role, list]) => list.flatMap((position) => (position === "SUBJECT_SUPERVISOR" ? SUBJECTS : [""]).map((posSubject) => ({
+  id: posSubject ? `P-${position}-${posSubject}` : `P-${position}`, role, position, posSubject,
+  name: posSubject ? `مشرف مادة ${SUBJECT_AR[posSubject]}` : POSITION_AR[position], subject: "", room: "", classes: [], slot: true,
+}))));
+const slotOf = (id) => POSITION_SLOTS.find((x) => x.id === id) || null;
+// Who holds a position now (signed in on the managers' link).
+const onDutyOf = (m, id) => (m?.onDuty || {})[id] || null;
+const staffRoom = (m, id) => (m.teachers || []).find((t) => t.id === id)?.room || onDutyOf(m, id)?.room || "";
+const holderOf = (m, r) => r.heldBy || onDutyOf(m, r.staffId)?.name || "";
   const ROLE_NAMES = { TEACHER: "معلم", ACADEMIC: "مدير أكاديمي", ADMIN: "مدير إداري" };
   const REQ_OPEN = ["REQUESTED", "DIRECTED", "IN_PROGRESS"];
   const requestsMode = (m) => m?.type === "REQUESTS";
@@ -168,7 +182,6 @@ const attendeeOf = (raw) => {
       };
     }).filter((t) => t.name);
     if (individual(m) && !m.teachers.length) throw new HttpsError("invalid-argument", "أضف معلماً واحداً على الأقل للقاءات الفردية.");
-    if (requestsMode(m) && !m.teachers.length) throw new HttpsError("invalid-argument", "أضف من سيقابل أولياء الأمور: المعلمين أو المدير الأكاديمي أو الإداري.");
     return m;
   }
 
@@ -233,7 +246,7 @@ const attendeeOf = (raw) => {
   const autoOn = (settings, m) => !!settings && settings.autoSend !== false && m.autoReminders !== false;
   const link = (inv) => `${PUBLIC_APP_URL}/meeting/${inv.token}`;
   const names = (inv) => (inv.students || []).map((s) => s.name).join("، ");
-  const teacherName = (m, id) => (m.teachers || []).find((t) => t.id === id)?.name || "";
+  const teacherName = (m, id) => (m.teachers || []).find((t) => t.id === id)?.name || slotOf(id)?.name || "";
   const requestsText = (m, inv) => {
     const who = [...new Set((inv.requested || []).map((r) => teacherName(m, r.staffId)).filter(Boolean))];
     return who.length ? `مقابلاتكم: ${who.join("، ")}.` : "";
@@ -338,6 +351,7 @@ const attendeeOf = (raw) => {
       teamsLink: m.teamsLink || "", agenda: m.agenda || "", slotsStart: m.slotsStart || "", slotsEnd: m.slotsEnd || "", slotMinutes: m.slotMinutes || 10,
       breakStart: m.breakStart || "", breakEnd: m.breakEnd || "", regDeadline: m.regDeadline, autoReminders: m.autoReminders !== false,
       teachers: (m.teachers || []).map((t) => ({ id: t.id, name: t.name, subject: t.subject, room: t.room, role: t.role || "TEACHER", position: t.position || "", posSubject: t.posSubject || "", classes: t.classes || [], ...(secrets ? { link: `${PUBLIC_APP_URL}/meeting-teacher/${t.token}`, pin: t.pin } : {}) })),
+      ...(secrets && m.managerToken ? { managerLink: `${PUBLIC_APP_URL}/meeting-manager/${m.managerToken}`, managerPin: m.managerPin } : {}),
       ...(secrets ? { deskLink: `${PUBLIC_APP_URL}/meeting-desk/${m.deskToken}`, deskPin: m.deskPin, publicLink: m.publicToken ? `${PUBLIC_APP_URL}/meeting/${m.publicToken}` : "" } : {}),
       stats: m.stats || {}, createdByName: m.createdByName || "", createdAt: ms(m.createdAt), invitedAt: ms(m.invitedAt), completedAt: ms(m.completedAt),
       cancelReason: m.cancelReason || "", summary: m.summary || "", callCampaignId: m.callCampaignId || null,
@@ -564,6 +578,14 @@ const attendeeOf = (raw) => {
   out.getMeeting = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
     const caller = await meetingCaller(request);
     const { ref, m } = await loadMeeting(request.data?.id, caller);
+    // «Interviews on request»: the managers' link (one per meeting, with its code).
+    if (requestsMode(m) && !m.managerToken) {
+      Object.assign(m, { managerToken: token(), managerPin: pin() });
+      const batch = db.batch();
+      batch.update(ref, { managerToken: m.managerToken, managerPin: m.managerPin });
+      setToken(batch, m.managerToken, { kind: "manager", meetingId: ref.id });
+      await batch.commit();
+    }
     // Meetings created before the general link existed get one now.
     if (!m.publicToken) {
       m.publicToken = token();
@@ -594,7 +616,7 @@ const attendeeOf = (raw) => {
         };
       }),
       requests: reqs.docs.map((x) => ({ id: x.id, ...x.data() })).filter((r) => r.status !== "CANCELLED").map((r) => ({
-        id: r.id, inviteId: r.inviteId, studentId: r.studentId, studentName: r.studentName, staffId: r.staffId, staffName: r.staffName, staffRole: r.staffRole,
+        id: r.id, inviteId: r.inviteId, studentId: r.studentId, studentName: r.studentName, staffId: r.staffId, staffName: r.staffName, staffRole: r.staffRole, holder: holderOf(m, r),
         purpose: r.purpose || "", status: r.status, directedAt: ms(r.directedAt), startedAt: ms(r.startedAt), endedAt: ms(r.endedAt), result: r.result || "",
       })),
       slots: slots.docs.map((x) => ({ id: x.id, teacherId: x.data().teacherId, time: x.data().time, inviteId: x.data().inviteId, startedAt: ms(x.data().startedAt), doneAt: ms(x.data().doneAt) })),
@@ -835,7 +857,7 @@ const attendeeOf = (raw) => {
     const r = (v) => { const n = Math.floor(Number(v)); return n >= 1 && n <= 5 ? n : 0; };
     const survey = {
       overall: r(d2.overall), organization: r(d2.organization), usefulness: r(d2.usefulness),
-      teachers: Object.fromEntries(Object.entries(d2.teachers || {}).filter(([k]) => (m.teachers || []).some((t) => t.id === k)).map(([k, v]) => [k, r(v)]).filter(([, v]) => v)),
+      teachers: Object.fromEntries(Object.entries(d2.teachers || {}).filter(([k]) => (m.teachers || []).some((t) => t.id === k) || !!slotOf(k)).map(([k, v]) => [k, r(v)]).filter(([, v]) => v)),
       answered: ["YES", "PARTLY", "NO"].includes(d2.answered) ? d2.answered : "",
       comment: str(d2.comment, 1000),
     };
@@ -871,7 +893,7 @@ const attendeeOf = (raw) => {
     }
     return { id, list: [own] };
   }
-  const staffOut = (t) => ({ id: t.id, name: t.name, subject: t.subject || "", room: t.room || "", role: t.role || "TEACHER", position: t.position || "", posSubject: t.posSubject || "" });
+  const staffOut = (t) => ({ id: t.id, name: t.name, subject: t.subject || "", room: t.room || "", role: t.role || "TEACHER", position: t.position || "", posSubject: t.posSubject || "", ...(t.slot ? { slot: true } : {}) });
 
   async function familyState(ref, m, inv) {
     const [view, reqSnap, branchSnaps] = await Promise.all([
@@ -893,16 +915,16 @@ const attendeeOf = (raw) => {
       },
       students: (inv.students || []).map((s) => ({
         id: s.id, name: s.name, grade: s.grade, className: s.className, branch: s.branch, branchName: bName[s.branch] || s.branch || "",
-        options: (m.teachers || []).filter((t) => teachesStudent(t, s)).map(staffOut),
+        options: [...(m.teachers || []).filter((t) => (t.role || "TEACHER") === "TEACHER" && teachesStudent(t, s)), ...POSITION_SLOTS].map(staffOut),
       })),
       requests: reqs.map((r) => ({
-        id: r.id, studentId: r.studentId, staffId: r.staffId, staffName: r.staffName, staffRole: r.staffRole, room: (m.teachers || []).find((t) => t.id === r.staffId)?.room || "",
+        id: r.id, studentId: r.studentId, staffId: r.staffId, staffName: r.staffName, staffRole: r.staffRole, room: staffRoom(m, r.staffId), holder: holderOf(m, r), position: r.position || "", posSubject: r.posSubject || "",
         purpose: r.purpose || "", status: r.status, directedAt: ms(r.directedAt), startedAt: ms(r.startedAt), endedAt: ms(r.endedAt),
       })),
       allDone: done,
       surveyOpen,
       surveyDone: surveyOpen ? (await ref.collection("surveys").doc(inv.id).get()).exists : false,
-      surveyTeachers: (m.teachers || []).filter((t) => met.has(t.id)).map(staffOut),
+      surveyTeachers: [...(m.teachers || []), ...POSITION_SLOTS].filter((t) => met.has(t.id)).map((t) => ({ ...staffOut(t), name: t.slot ? `${t.name}${onDutyOf(m, t.id)?.name ? ` — ${onDutyOf(m, t.id).name}` : ""}` : t.name })),
       teamsLink: "",
     };
   }
@@ -1025,7 +1047,7 @@ const attendeeOf = (raw) => {
     if (!(m.status === "OPEN" && day <= m.date)) throw new HttpsError("failed-precondition", "التسجيل في هذا الاجتماع مغلق. للاستفسار تواصلوا مع الفرع.");
     const response = ["ATTEND", "DECLINE"].includes(request.data?.response) ? request.data.response : "";
     if (!response) throw new HttpsError("invalid-argument", "اختر الرد.");
-    const staff = new Map((m.teachers || []).map((t) => [t.id, t]));
+    const staff = new Map([...(m.teachers || []), ...POSITION_SLOTS].map((t) => [t.id, t]));
     const students = new Map((inv.students || []).map((s) => [s.id, s]));
     const seen = new Set();
     const wanted = response !== "ATTEND" ? [] : (Array.isArray(request.data?.requests) ? request.data.requests : []).slice(0, 40).map((r) => ({
@@ -1055,7 +1077,7 @@ const attendeeOf = (raw) => {
       const t = staff.get(r.staffId);
       batch.set(ref.collection("requests").doc(docId), {
         inviteId: inv.id, studentId: st.id, studentName: st.name, grade: st.grade || "", className: st.className || "", branch: st.branch || "", section: st.section || "",
-        staffId: t.id, staffName: t.name, staffRole: t.role || "TEACHER", purpose: r.purpose,
+        staffId: t.id, staffName: t.name, staffRole: t.role || "TEACHER", position: t.position || "", posSubject: t.posSubject || "", purpose: r.purpose,
         status: cur && cur.status !== "CANCELLED" ? cur.status : "REQUESTED", createdAt: cur?.createdAt || now, updatedAt: now,
       }, { merge: true });
     });
@@ -1098,7 +1120,7 @@ const attendeeOf = (raw) => {
     const x = await byToken(request.data?.token, [kind]);
     const teacher = kind === "teacher" ? (x.m.teachers || []).find((t) => t.id === x.teacherId) : null;
     if (kind === "teacher" && !teacher) throw new HttpsError("not-found", "هذا الرابط لم يعد مرتبطاً بالاجتماع.");
-    const ok = String(request.data?.pin || "") === (kind === "teacher" ? teacher.pin : x.m.deskPin);
+    const ok = String(request.data?.pin || "") === (kind === "teacher" ? teacher.pin : kind === "manager" ? x.m.managerPin : x.m.deskPin);
     await guard(`${kind}_${request.data.token}`, ok);
     if (!ok) throw new HttpsError("permission-denied", "رمز الدخول غير صحيح.");
     if (x.m.status === "CANCELLED") throw new HttpsError("failed-precondition", "الاجتماع ملغى.");
@@ -1209,7 +1231,18 @@ const attendeeOf = (raw) => {
       if (inv.attended !== true) await checkIn(ref, inviteId, `${teacher.name} (المعلم)`);
       await refreshStats(ref);
     } else if (["startRequest", "endRequest", "skipRequest"].includes(action)) {
-      const rRef = ref.collection("requests").doc(String(request.data?.requestId || "_"));
+      await requestAction(ref, m, teacher, request.data || {});
+      await refreshStats(ref);
+    } else throw new HttpsError("invalid-argument", "إجراء غير معروف.");
+    return teacherState(ref, (await ref.get()).data(), teacher);
+  });
+
+  // A request's start / end (with the result) / «not held», for a teacher or
+  // for a manager signed in on the managers' link.
+  async function requestAction(ref, m, teacher, data) {
+    const action = data.action;
+    const now = Timestamp.now();
+      const rRef = ref.collection("requests").doc(String(data.requestId || "_"));
       const r = (await rRef.get()).data();
       if (!r || r.staffId !== teacher.id || r.status === "CANCELLED") throw new HttpsError("not-found", "لم يتم العثور على طلب المقابلة.");
       const invRef = ref.collection("invites").doc(r.inviteId);
@@ -1217,14 +1250,14 @@ const attendeeOf = (raw) => {
       if (action === "startRequest") {
         if (r.status === "DONE") throw new HttpsError("failed-precondition", "انتهت هذه المقابلة.");
         if (inv.attended !== true) throw new HttpsError("failed-precondition", "لم يُسجَّل وصول ولي الأمر بعد في الاستقبال.");
-        if (r.status !== "IN_PROGRESS") await rRef.update({ status: "IN_PROGRESS", startedAt: now });
+        if (r.status !== "IN_PROGRESS") await rRef.update({ status: "IN_PROGRESS", startedAt: now, heldBy: teacher.name });
       } else if (action === "skipRequest") {
         // Not met (the parent left, or it is not needed any more).
         if (r.status === "DONE") throw new HttpsError("failed-precondition", "انتهت هذه المقابلة.");
-        await rRef.update({ status: "CANCELLED", cancelledAt: now, cancelledBy: teacher.name, cancelReason: str(request.data?.reason, 300) });
+        await rRef.update({ status: "CANCELLED", cancelledAt: now, cancelledBy: teacher.name, cancelReason: str(data.reason, 300) });
         await familyFinished(ref, m, r.inviteId);
       } else {
-        const x = request.data?.minute || {};
+        const x = data.minute || {};
         const result = str(x.result, 3000);
         if (!result) throw new HttpsError("invalid-argument", "اكتب نتيجة المقابلة قبل إغلاقها.");
         if (r.status === "DONE") throw new HttpsError("failed-precondition", "أُغلقت هذه المقابلة مسبقاً.");
@@ -1245,10 +1278,8 @@ const attendeeOf = (raw) => {
         if (inv.attended !== true) await checkIn(ref, r.inviteId, `${teacher.name} (المقابلة)`);
         await familyFinished(ref, m, r.inviteId);
       }
-      await refreshStats(ref);
-    } else throw new HttpsError("invalid-argument", "إجراء غير معروف.");
-    return teacherState(ref, (await ref.get()).data(), teacher);
-  });
+    await refreshStats(ref);
+  }
 
   async function followUpComplaint(ref, m, teacher, inv, student, type, text) {
     const complaintId = await nextRecordNumber("COM");
@@ -1271,6 +1302,36 @@ const attendeeOf = (raw) => {
     }
     return { type, text, complaintId: docRef.id, complaintNo: complaintId };
   }
+
+  // --- the managers' link («interviews on request») -------------------------
+  // One link + code per meeting. A manager opens it, writes their name and
+  // picks their position (and their office), then gets that position's
+  // requests like a teacher's board.
+  function managerOf(m, data) {
+    const slot = slotOf(String(data?.slot || ""));
+    const name = str(data?.name, 80);
+    if (!slot || name.length < 2) throw new HttpsError("invalid-argument", "اكتب اسمك واختر مسماك الوظيفي.");
+    const room = str(data?.room, 60);
+    return { id: slot.id, name, subject: slot.name, role: slot.role, room, position: slot.position, posSubject: slot.posSubject };
+  }
+  out.meetingManager = onCall(async (request) => {
+    const { ref, m } = await staffLink(request, "manager");
+    if (!request.data?.slot) {
+      return { meeting: await publicView(m), positions: POSITION_SLOTS.map(({ id, role, position, posSubject, name }) => ({ id, role, position, posSubject, name })) };
+    }
+    const teacher = managerOf(m, request.data);
+    // On duty for that position: reception and parents see the name and office.
+    const onDuty = { ...(m.onDuty || {}), [teacher.id]: { name: teacher.name, room: teacher.room, at: Timestamp.now() } };
+    await ref.update({ onDuty });
+    return requestsState(ref, { ...m, onDuty }, teacher);
+  });
+  out.meetingManagerAction = onCall({ timeoutSeconds: 120 }, async (request) => {
+    const { ref, m } = await staffLink(request, "manager");
+    const teacher = managerOf(m, request.data);
+    if (!["startRequest", "endRequest", "skipRequest"].includes(request.data?.action)) throw new HttpsError("invalid-argument", "إجراء غير معروف.");
+    await requestAction(ref, m, teacher, request.data || {});
+    return requestsState(ref, (await ref.get()).data(), teacher);
+  });
 
   // Reception desk.
   function deskInvite(id, i) {
@@ -1295,7 +1356,7 @@ const attendeeOf = (raw) => {
       const r = x.data();
       if (r.status === "CANCELLED") return;
       (byInvite.get(r.inviteId) || byInvite.set(r.inviteId, []).get(r.inviteId)).push({
-        id: x.id, studentName: r.studentName, staffId: r.staffId, staffName: r.staffName, staffRole: r.staffRole, room: (m.teachers || []).find((t) => t.id === r.staffId)?.room || "",
+        id: x.id, studentName: r.studentName, staffId: r.staffId, staffName: r.staffName, staffRole: r.staffRole, room: staffRoom(m, r.staffId), holder: holderOf(m, r),
         purpose: r.purpose || "", status: r.status, directedAt: ms(r.directedAt), startedAt: ms(r.startedAt), endedAt: ms(r.endedAt),
       });
     });

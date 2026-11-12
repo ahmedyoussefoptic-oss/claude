@@ -266,6 +266,18 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
               <div><p className="text-sm font-medium text-slate-800">{t('meetings.links.desk')}</p><p className="text-xs text-slate-500">{t('meetings.links.pin')}: <b dir="ltr">{m.deskPin}</b></p></div>
               <div className="flex gap-2"><CopyBtn text={m.deskLink} label={t('meetings.links.copy')} /><a href={m.deskLink} target="_blank" rel="noreferrer" className="px-2 py-1 text-xs border border-slate-200 rounded-lg text-slate-600">{t('meetings.links.open')}</a></div>
             </div>
+            {m.managerLink && (
+              <div className="border border-violet-200 bg-violet-50/40 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800">{t('meetings.links.managers')}</p>
+                  <p className="text-xs text-slate-500">{t('meetings.links.pin')}: <b dir="ltr">{m.managerPin}</b> · {t('meetings.links.managersHint')}</p>
+                </div>
+                <div className="flex gap-2">
+                  <CopyBtn text={t('meetings.links.managersMsg', { title: m.title, date: m.date, link: m.managerLink, pin: m.managerPin })} label={t('meetings.links.copyMsg', { defaultValue: t('meetings.links.copy') })} />
+                  <a href={m.managerLink} target="_blank" rel="noreferrer" className="px-2 py-1 text-xs border border-slate-200 rounded-lg text-slate-600">{t('meetings.links.open')}</a>
+                </div>
+              </div>
+            )}
             {(m.teachers || []).map((tc) => {
               const msg = t('meetings.links.teacherMsg', { name: tc.name, title: m.title, date: m.date, link: tc.link, pin: tc.pin });
               return (
