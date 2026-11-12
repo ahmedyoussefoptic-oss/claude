@@ -4089,7 +4089,16 @@
       "managers": "Managers' link",
       "managersHint": "a manager opens it, writes their name and title, and sees that position's requests",
       "managersMsg": "Managers' link for «{{title}}» on {{date}}: {{link}}\nAccess code: {{pin}}\nWrite your name and choose your job title to see the parents' requests and record each meeting's result.",
-      "copyMsg": "Copy message"
+      "copyMsg": "Copy message",
+      "printList": "Print access list",
+      "printCards": "Print access cards",
+      "printTitle": "Access details",
+      "colRole": "Role",
+      "colClasses": "Classes",
+      "colLink": "Link",
+      "deskNote": "Scan the code with the reception phone and enter the access code.",
+      "managersCardNote": "Scan the code, enter the access code, then write your name and choose your job title.",
+      "teacherCardNote": "Scan the code with your phone camera and enter the access code to see your appointments and the parents' requests."
     },
     "invites": {
       "search": "Search by student name, ID, class or entry code",

@@ -69,6 +69,47 @@ async function printPoster(m, t, i18n) {
   });
 }
 
+// The access to the meeting's screens: every teacher's link and code, the
+// reception's and the managers'. «list» = one table for the administration;
+// «cards» = one card per person (QR + code) to cut out and hand over.
+async function printAccess(m, t, i18n, mode) {
+  const e = escapeHtml;
+  const role = (r) => t(`meetings.roles.${r || 'TEACHER'}`);
+  const classesOf = (tc) => (tc.classes?.length ? [...new Set(tc.classes.map(classLabel))].join('، ') : t('meetings.links.allClasses'));
+  const rows = [
+    { kind: t('meetings.links.desk'), name: '', subject: '', classes: '', room: '', link: m.deskLink, pin: m.deskPin, note: t('meetings.links.deskNote') },
+    ...(m.managerLink ? [{ kind: t('meetings.links.managers'), name: '', subject: '', classes: '', room: '', link: m.managerLink, pin: m.managerPin, note: t('meetings.links.managersCardNote') }] : []),
+    ...(m.teachers || []).map((tc) => ({ kind: role(tc.role), name: tc.name, subject: tc.subject || '', classes: classesOf(tc), room: tc.room || '', link: tc.link, pin: tc.pin, note: t('meetings.links.teacherCardNote') })),
+  ];
+  const head = { title: `${t('meetings.links.printTitle')} — ${m.title}`, subtitle: `${m.date} · ${meetingTime(m.startTime, i18n.language)} – ${meetingTime(m.endTime, i18n.language)}${m.location ? ` · ${m.location}` : ''}`, school: t('trips.print.school'), dir: i18n.dir(), lang: i18n.language };
+  if (mode === 'list') {
+    const th = ['#', t('meetings.links.colRole'), t('meetings.form.teacherName'), t('meetings.form.subject'), t('meetings.links.colClasses'), t('meetings.form.room'), t('meetings.links.pin'), t('meetings.links.colLink')];
+    printPage({
+      ...head,
+      landscape: true,
+      css: 'table{width:100%;border-collapse:collapse;font-size:9.5pt} th,td{border:1px solid #cbd5e1;padding:5px 6px;text-align:start;vertical-align:top} th{background:#e2e8f0} td.pin{font-size:13pt;font-weight:bold;letter-spacing:2px;text-align:center;direction:ltr} td.link{direction:ltr;font-size:8pt;color:#334155;word-break:break-all} tr{break-inside:avoid}',
+      body: `<table><thead><tr>${th.map((x) => `<th>${e(x)}</th>`).join('')}</tr></thead><tbody>${rows.map((r, i) => `<tr><td>${i + 1}</td><td>${e(r.kind)}</td><td><b>${e(r.name)}</b></td><td>${e(r.subject)}</td><td>${e(r.classes)}</td><td>${e(r.room)}</td><td class="pin">${e(r.pin)}</td><td class="link">${e(r.link)}</td></tr>`).join('')}</tbody></table>
+        <p style="margin-top:8mm;color:#64748b;font-size:9pt">${e(t('meetings.links.hint'))}</p>`,
+    });
+    return;
+  }
+  const qrs = await Promise.all(rows.map((r) => QRCode.toDataURL(r.link, { width: 360, margin: 1, errorCorrectionLevel: 'M' })));
+  printPage({
+    ...head,
+    css: `.cards{display:grid;grid-template-columns:1fr 1fr;gap:6mm} .card{border:1.5px dashed #94a3b8;border-radius:4mm;padding:5mm;break-inside:avoid;display:flex;gap:4mm;align-items:center;min-height:62mm}
+      .card img{width:36mm;height:36mm;flex-shrink:0} .k{display:inline-block;background:#1b345a;color:#fff;border-radius:3mm;padding:1mm 3mm;font-size:8.5pt}
+      .n{font-size:13pt;font-weight:bold;margin:2mm 0 1mm} .s{color:#475569;font-size:9pt} .p{margin-top:3mm;font-size:9pt;color:#334155}
+      .p b{display:block;font-size:20pt;letter-spacing:4px;color:#1b345a;unicode-bidi:isolate} .h{font-size:8pt;color:#64748b;margin-top:2mm}`,
+    body: `<div class="cards">${rows.map((r, i) => `<div class="card"><img src="${qrs[i]}" alt="">
+      <div style="min-width:0"><span class="k">${e(r.kind)}</span>
+        ${r.name ? `<div class="n">${e(r.name)}</div>` : `<div class="n">${e(m.title)}</div>`}
+        ${r.subject || r.room ? `<div class="s">${e([r.subject, r.room].filter(Boolean).join(' · '))}</div>` : ''}
+        ${r.classes ? `<div class="s">${e(r.classes)}</div>` : ''}
+        <div class="p">${e(t('meetings.links.pin'))}<b>${e(r.pin)}</b></div>
+        <div class="h">${e(r.note)}</div></div></div>`).join('')}</div>`,
+  });
+}
+
 const inputCls = 'w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
 
 // One meeting: actions, invitations, the teachers' schedule, the live view
@@ -258,9 +299,15 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
           )}
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 space-y-3">
-            <div>
-              <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5"><KeyRound className="w-4 h-4 text-primary" />{t('meetings.links.title')}</p>
-              <p className="text-xs text-slate-500">{t('meetings.links.hint')}</p>
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5"><KeyRound className="w-4 h-4 text-primary" />{t('meetings.links.title')}</p>
+                <p className="text-xs text-slate-500">{t('meetings.links.hint')}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => printAccess(m, t, i18n, 'list')} className="px-2.5 py-1.5 text-xs border border-slate-200 rounded-lg flex items-center gap-1 text-slate-700 hover:border-primary"><Printer className="w-3.5 h-3.5" />{t('meetings.links.printList')}</button>
+                <button type="button" onClick={() => printAccess(m, t, i18n, 'cards')} className="px-2.5 py-1.5 text-xs bg-primary text-white rounded-lg flex items-center gap-1"><Printer className="w-3.5 h-3.5" />{t('meetings.links.printCards')}</button>
+              </div>
             </div>
             <div className="border border-slate-100 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
               <div><p className="text-sm font-medium text-slate-800">{t('meetings.links.desk')}</p><p className="text-xs text-slate-500">{t('meetings.links.pin')}: <b dir="ltr">{m.deskPin}</b></p></div>
