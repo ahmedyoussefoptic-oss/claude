@@ -827,7 +827,7 @@
     "SPECIALIST": "Complaint Resolution Specialist",
     "CUSTOMER_SERVICE": "Customer Service",
     "RECEPTIONIST": "Receptionist",
-    "OWNER": "System Owner"
+    "OWNER": "System Builder"
   },
   "users": {
     "pageTitle": "User Management",
@@ -2297,7 +2297,7 @@
       "lockedTitle": "Trip accounts are password-protected",
       "enterHint": "Enter the trip accounts password. It stays open for an hour.",
       "setHint": "No password yet. Choose one (at least 4 characters); everyone opening this section will need it.",
-      "noPassword": "The system owner hasn't set the trip accounts password yet.",
+      "noPassword": "The System Builder hasn't set the trip accounts password yet.",
       "password": "Password",
       "newPassword": "New password",
       "setPassword": "Save password and open",
@@ -2433,10 +2433,10 @@
     }
   },
   "ownerSettings": {
-    "title": "System owner settings",
-    "subtitle": "Visible only to you as the system owner.",
+    "title": "System Builder settings",
+    "subtitle": "Visible only to you as the System Builder.",
     "adminCapsTitle": "System admin permissions",
-    "adminCapsHint": "What other “system admin” accounts may do. As the system owner you always have every permission, and nobody can edit or delete your account.",
+    "adminCapsHint": "What other “system admin” accounts may do. As the System Builder you always have every permission, and nobody can edit or delete your account.",
     "caps": {
       "settings": "Open and change Settings",
       "users": "Manage users",
@@ -2601,7 +2601,7 @@
     "home": {
       "title": "Platform dashboard",
       "subtitle": "Every Al Moktashef module on one screen.",
-      "ownerOnly": "Visible only to you as the system owner; no other user can see it.",
+      "ownerOnly": "Visible only to you as the System Builder; no other user can see it.",
       "leavesToday": "Leaves today",
       "students": "Students",
       "openComplaints": "Open complaints"
@@ -3883,7 +3883,7 @@
       "disconnected": "Disconnected.",
       "connectedOk": "Connected; {{count}} teachers found in the group.",
       "secretExpiring": "The connection secret expires on {{date}}. Ask IT for a new one and enter it here.",
-      "ownerOnly": "Only the system owner can enter the connection details.",
+      "ownerOnly": "Only the System Builder can enter the connection details.",
       "rules": "Attendance rules and messages",
       "presentPct": "Enough attendance %",
       "presentPctHint": "Below it counts as \"Partial\".",

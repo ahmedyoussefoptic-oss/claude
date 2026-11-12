@@ -127,7 +127,7 @@ exports.deleteStaffUser = onCall(async (request) => {
   // owner or an admin allowed to manage admins.
   const targetDoc = await db.collection("users").doc(uid).get();
   if (targetDoc.exists && targetDoc.data().isOwner === true) {
-    throw new HttpsError("permission-denied", "لا يمكن حذف حساب منشئ النظام.");
+    throw new HttpsError("permission-denied", "لا يمكن حذف حساب System Builder.");
   }
   if (targetDoc.exists && targetDoc.data().role === "ADMIN" && !callerCan(caller, "manageAdmins", caps)) {
     throw new HttpsError("permission-denied", "لا يمكن حذف حساب مدير النظام.");
@@ -197,7 +197,7 @@ exports.createStaffUser = onCall(async (request) => {
     throw new HttpsError("invalid-argument", "الاسم والبريد الإلكتروني وكلمة المرور والصلاحية مطلوبة.");
   }
   if (role === "ADMIN" && !callerCan(caller, "manageAdmins", caps)) {
-    throw new HttpsError("permission-denied", "إضافة حساب بصلاحية مدير النظام متاحة لمنشئ النظام فقط.");
+    throw new HttpsError("permission-denied", "إضافة حساب بصلاحية مدير النظام متاحة لـ System Builder فقط.");
   }
   // A "manage users" holder (non-admin) may create staff accounts, but can
   // never grant admin-equivalent power — otherwise perms.users is a full
@@ -295,7 +295,7 @@ exports.updateStaffEmail = onCall(async (request) => {
   const targetRef = db.collection("users").doc(uid);
   const target = (await targetRef.get()).data();
   if (!target) throw new HttpsError("not-found", "لم يتم العثور على الموظف.");
-  if (target.isOwner === true && uid !== request.auth.uid) throw new HttpsError("permission-denied", "لا يمكن تغيير بريد منشئ النظام.");
+  if (target.isOwner === true && uid !== request.auth.uid) throw new HttpsError("permission-denied", "لا يمكن تغيير بريد System Builder.");
   const isAdminCaller = caller.role === "ADMIN" && callerCan(caller, "users", caps);
   if (target.role === "ADMIN" && uid !== request.auth.uid && !(isAdminCaller && callerCan(caller, "manageAdmins", caps))) {
     throw new HttpsError("permission-denied", "لا يمكن تغيير بريد مدير النظام.");
@@ -327,7 +327,7 @@ exports.resetStaffPassword = onCall(async (request) => {
   {
     const target = (await db.collection("users").doc(uid || "-").get()).data();
     if (target?.isOwner === true && uid !== request.auth.uid) {
-      throw new HttpsError("permission-denied", "لا يمكن تغيير كلمة مرور منشئ النظام.");
+      throw new HttpsError("permission-denied", "لا يمكن تغيير كلمة مرور System Builder.");
     }
     if (target?.role === "ADMIN" && uid !== request.auth.uid && !callerCan(caller, "manageAdmins", caps)) {
       throw new HttpsError("permission-denied", "لا يمكن إعادة تعيين كلمة مرور مدير النظام.");
@@ -3395,7 +3395,7 @@ const TRIP_TRANSITIONS = {
 // surveys and activity log, and its uploaded files (receipts, pledges, image).
 exports.deleteTrip = onCall({ timeoutSeconds: 300 }, async (request) => {
   const caller = await tripCaller(request);
-  if (caller.isOwner !== true && caller.perms?.tripDelete !== true) throw new HttpsError("permission-denied", "حذف الرحلات متاح لمنشئ النظام ومن يملك صلاحية حذف الرحلات.");
+  if (caller.isOwner !== true && caller.perms?.tripDelete !== true) throw new HttpsError("permission-denied", "حذف الرحلات متاح لـ System Builder ومن يملك صلاحية حذف الرحلات.");
   const { ref, trip } = await loadTrip(request.data?.id, caller, caller.isOwner === true ? "view" : "manage");
   if (trip.status !== "CANCELLED") throw new HttpsError("failed-precondition", "يمكن حذف الرحلات الملغاة فقط.");
   await getStorage().bucket().deleteFiles({ prefix: `trips/${ref.id}/` }).catch((err) => console.error("deleteTrip files", ref.id, err.message));
@@ -4355,7 +4355,7 @@ async function adminCaller(request) {
 
 exports.setSettingsPassword = onCall(async (request) => {
   const caller = await adminCaller(request);
-  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "تغيير كلمة سر الإعدادات متاح لمنشئ النظام فقط.");
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "تغيير كلمة سر الإعدادات متاح لـ System Builder فقط.");
   const { current, next } = request.data || {};
   const lockSnap = await db.collection("settings").doc("security").get();
   if (lockSnap.exists && lockSnap.data().lockEnabled && !(await verifySettingsPassword(current))) {
@@ -4427,7 +4427,7 @@ async function checkTripPassword(caller, password) {
 
 exports.setTripPassword = onCall(async (request) => {
   const caller = await adminCaller(request);
-  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "تغيير الرقم السري للرحلات متاح لمنشئ النظام فقط.");
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "تغيير الرقم السري للرحلات متاح لـ System Builder فقط.");
   const next = request.data?.next;
   const now = Timestamp.now();
   if (!next) {
@@ -4482,7 +4482,7 @@ exports.tripAccountsStatus = onCall(async (request) => {
 
 exports.setTripAccountsPassword = onCall(async (request) => {
   const caller = await adminCaller(request);
-  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "تغيير الرقم السري لحسابات الرحلات متاح لمنشئ النظام فقط.");
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "تغيير الرقم السري لحسابات الرحلات متاح لـ System Builder فقط.");
   const next = request.data?.next;
   if (typeof next !== "string" || next.length < 4) throw new HttpsError("invalid-argument", "يجب ألا يقل الرقم السري عن 4 خانات.");
   const salt = crypto.randomBytes(16).toString("hex");
@@ -4500,7 +4500,7 @@ exports.setTripAccountsPassword = onCall(async (request) => {
 exports.unlockTripAccounts = onCall(async (request) => {
   const caller = await tripAccountsCaller(request, false);
   const lock = await db.collection("secureConfig").doc("tripAccountsLock").get();
-  if (!lock.exists) throw new HttpsError("failed-precondition", "لم يحدد منشئ النظام الرقم السري لحسابات الرحلات بعد.");
+  if (!lock.exists) throw new HttpsError("failed-precondition", "لم يحدد System Builder الرقم السري لحسابات الرحلات بعد.");
   const guardRef = db.collection("secureConfig").doc(`tripAccountsAttempts_${caller.uid}`);
   const guard = (await guardRef.get()).data() || {};
   const recent = guard.lastAt && Date.now() - guard.lastAt.toMillis() < 15 * 60000;
@@ -4828,7 +4828,7 @@ const hasPlatform = (u) => u.isOwner === true || (u.platformAccess === true && u
 async function ownerCaller(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   const snap = await db.collection("users").doc(request.auth.uid).get();
-  if (!snap.exists || !hasPlatform(snap.data())) throw new HttpsError("permission-denied", "منصة المكتشف متاحة لمن يحددهم منشئ النظام فقط.");
+  if (!snap.exists || !hasPlatform(snap.data())) throw new HttpsError("permission-denied", "منصة المكتشف متاحة لمن يحددهم System Builder فقط.");
   return { uid: request.auth.uid, ...snap.data() };
 }
 // Who is notified of platform events: the owner and the users with access.
@@ -5319,7 +5319,7 @@ exports.saveRosterStudent = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   const u = (await db.collection("users").doc(request.auth.uid).get()).data();
   if (!u || u.active === false || !(hasPlatform(u) || callerCan(u, "settings", await loadAdminCaps()))) {
-    throw new HttpsError("permission-denied", "إضافة الطلاب وتعديل بياناتهم لمدير النظام أو منشئ النظام.");
+    throw new HttpsError("permission-denied", "إضافة الطلاب وتعديل بياناتهم لمدير النظام أو System Builder.");
   }
   const d = request.data?.student || {};
   const isNew = request.data?.isNew === true;
@@ -5434,7 +5434,7 @@ exports.sendLeadVisitReminders = onCall({ secrets: WA_SECRETS, timeoutSeconds: 3
   if (!cfg) throw new HttpsError("failed-precondition", "فعّل واتساب API وأضف اسم قالب «تذكير موعد زيارة» في إعدادات المنصة.");
   const snaps = await db.getAll(...ids.map((id) => db.collection("leadVisits").doc(id)));
   const due = snaps.filter((s) => s.exists && LEAD_VISIT_ACTIVE.includes(s.data().status));
-  return remindLeadVisits(due, kind, caller.name || "منشئ النظام", caller.uid, cfg);
+  return remindLeadVisits(due, kind, caller.name || "System Builder", caller.uid, cfg);
 });
 
 // Optional: every day at 17:00 Riyadh, remind tomorrow's visits
@@ -5464,7 +5464,7 @@ const sha256 = (v) => crypto.createHash("sha256").update(String(v)).digest("hex"
 
 exports.createApiKey = onCall(async (request) => {
   const caller = await adminCaller(request);
-  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "مفاتيح الربط متاحة لمنشئ النظام فقط.");
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "مفاتيح الربط متاحة لـ System Builder فقط.");
   const name = str(request.data?.name, 60) || "Claude";
   const key = `mis_${crypto.randomBytes(24).toString("base64url")}`;
   const ref = await db.collection("apiKeys").add({
@@ -5477,7 +5477,7 @@ exports.createApiKey = onCall(async (request) => {
 
 exports.listApiKeys = onCall(async (request) => {
   const caller = await adminCaller(request);
-  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "مفاتيح الربط متاحة لمنشئ النظام فقط.");
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "مفاتيح الربط متاحة لـ System Builder فقط.");
   const snap = await db.collection("apiKeys").orderBy("createdAt", "desc").get();
   return {
     keys: snap.docs.map((d) => {
@@ -5489,7 +5489,7 @@ exports.listApiKeys = onCall(async (request) => {
 
 exports.revokeApiKey = onCall(async (request) => {
   const caller = await adminCaller(request);
-  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "مفاتيح الربط متاحة لمنشئ النظام فقط.");
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "مفاتيح الربط متاحة لـ System Builder فقط.");
   const id = String(request.data?.id || "");
   if (!id) throw new HttpsError("invalid-argument", "طلب غير صالح.");
   await db.collection("apiKeys").doc(id).update({ revoked: true, revokedAt: Timestamp.now() });
@@ -5850,7 +5850,7 @@ exports.bevatelSync = onSchedule({ schedule: "every 15 minutes", timeZone: "Asia
 
 async function bevatelOwner(request) {
   const caller = await adminCaller(request);
-  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "ربط بيفاتيل متاح لمنشئ النظام فقط.");
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "ربط بيفاتيل متاح لـ System Builder فقط.");
   return caller;
 }
 
@@ -6156,7 +6156,7 @@ async function assistantClient() {
 
 exports.setAssistantKey = onCall({ timeoutSeconds: 60 }, async (request) => {
   const caller = await adminCaller(request);
-  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "إعداد المساعد الذكي متاح لمنشئ النظام فقط.");
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "إعداد المساعد الذكي متاح لـ System Builder فقط.");
   const apiKey = String(request.data?.apiKey || "").trim();
   const cfgRef = db.collection("settings").doc("assistant");
   if (!apiKey) {
@@ -6176,7 +6176,7 @@ exports.setAssistantKey = onCall({ timeoutSeconds: 60 }, async (request) => {
 
 exports.setAssistantEnabled = onCall(async (request) => {
   const caller = await adminCaller(request);
-  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "إعداد المساعد الذكي متاح لمنشئ النظام فقط.");
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "إعداد المساعد الذكي متاح لـ System Builder فقط.");
   await db.collection("settings").doc("assistant").set({ enabled: request.data?.enabled === true, updatedAt: Timestamp.now() }, { merge: true });
   return { ok: true };
 });
@@ -6238,7 +6238,7 @@ exports.assistantChat = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async 
     } catch (err) {
       console.error("assistant", err.status, err.message);
       if (err instanceof Anthropic.RateLimitError) throw new HttpsError("resource-exhausted", "المساعد مشغول حالياً، حاول بعد دقيقة.");
-      if (err instanceof Anthropic.AuthenticationError) throw new HttpsError("failed-precondition", "مفتاح المساعد الذكي غير صالح — يراجعه منشئ النظام.");
+      if (err instanceof Anthropic.AuthenticationError) throw new HttpsError("failed-precondition", "مفتاح المساعد الذكي غير صالح — يراجعه System Builder.");
       throw new HttpsError("unavailable", "تعذر الوصول إلى المساعد الذكي، حاول مرة أخرى.");
     }
     const ru = response.usage || {};
@@ -6284,7 +6284,7 @@ exports.assistantChat = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async 
 // The owner's view of this month's assistant use (tokens → estimated cost).
 exports.assistantUsageSummary = onCall(async (request) => {
   const caller = await adminCaller(request);
-  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "متاح لمنشئ النظام فقط.");
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "متاح لـ System Builder فقط.");
   const month = riyadhDay().slice(0, 7);
   const t = (await db.collection("assistantUsage").doc(`total_${month}`).get()).data() || {};
   // Claude Opus 5.5: $4 / $20 per million input / output tokens; cache reads $0.20, cache writes ~1.25× input.
@@ -6442,7 +6442,7 @@ async function activityCaller(request) {
   if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
   const caller = (await db.collection("users").doc(request.auth.uid).get()).data();
   if (!caller || !(caller.isOwner === true || (caller.activityAccess === true && caller.active !== false))) {
-    throw new HttpsError("permission-denied", "هذه الصفحة لمنشئ النظام ومن يشاركها معهم.");
+    throw new HttpsError("permission-denied", "هذه الصفحة لـ System Builder ومن يشاركها معهم.");
   }
   return caller;
 }
@@ -7528,7 +7528,7 @@ exports.vcGetConfig = onCall(async (request) => {
 // they are kept. A blank secret keeps the saved one; disconnect removes it.
 exports.vcSaveConnection = onCall({ timeoutSeconds: 60 }, async (request) => {
   const caller = await vcCaller(request, { manage: true });
-  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "ربط Microsoft Teams متاح لمنشئ النظام فقط.");
+  if (caller.isOwner !== true) throw new HttpsError("permission-denied", "ربط Microsoft Teams متاح لـ System Builder فقط.");
   const d = request.data || {};
   if (d.disconnect === true) {
     await db.collection("secureConfig").doc("teams").delete();
