@@ -65,6 +65,9 @@ export function rosterClassCode(className, stage) {
   const c = String(className ?? '').trim();
   if (!stage || stage === 'SEN') return c;
   if (stage.startsWith('KG')) return classFromClassName(c, stage);
+  // British section written straight after the branch letter: "MB5-1", "SB7-A".
+  const brit = /^[A-Z]B(\d{1,2})-([A-Z0-9]{1,3})$/i.exec(c);
+  if (brit) return `B${Number(brit[1])}-${brit[2].toUpperCase()}`;
   const sec = /(?:^|-)([A-JL-Z])(\d{1,2})-([A-Z0-9]{1,3})$/i.exec(c);
   if (sec) return `${sec[1].toUpperCase()}${Number(sec[2])}-${sec[3].toUpperCase()}`;
   const m = /(\d{1,2})-([A-Z0-9]{1,3})$/i.exec(c);
