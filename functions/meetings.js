@@ -38,6 +38,10 @@ module.exports = function meetingsModule(d) {
   // and each person starts and ends the meeting with its result.
   const TYPES = ["GENERAL", "INDIVIDUAL", "BOTH", "REQUESTS"];
   const STAFF_ROLES = ["TEACHER", "ACADEMIC", "ADMIN"];
+// The managers' positions (parents choose from them) and the subjects of a
+// subject supervisor — as in src/config/meetings.js.
+const STAFF_POSITIONS = { ADMIN: ["PRINCIPAL", "VICE_PRINCIPAL", "COUNSELOR"], ACADEMIC: ["ACADEMIC_DIRECTOR", "ACADEMIC_DEPUTY", "SUBJECT_SUPERVISOR"] };
+const SUBJECTS = ["ARABIC", "ENGLISH", "MATH", "SCIENCE", "ISLAMIC", "QURAN", "SOCIAL", "ICT", "FRENCH", "ART", "PE", "LIFE_SKILLS"];
   const ROLE_NAMES = { TEACHER: "معلم", ACADEMIC: "مدير أكاديمي", ADMIN: "مدير إداري" };
   const REQ_OPEN = ["REQUESTED", "DIRECTED", "IN_PROGRESS"];
   const requestsMode = (m) => m?.type === "REQUESTS";
@@ -148,12 +152,16 @@ const attendeeOf = (raw) => {
     const old = new Map((current?.teachers || []).map((t) => [t.id, t]));
     m.teachers = (Array.isArray(x.teachers) ? x.teachers : []).slice(0, 80).map((t) => {
       const prev = old.get(String(t?.id || ""));
+      const role = STAFF_ROLES.includes(t?.role) ? t.role : "TEACHER";
+      const position = (STAFF_POSITIONS[role] || []).includes(t?.position) ? t.position : "";
       return {
         id: prev ? prev.id : `t${crypto.randomBytes(4).toString("hex")}`,
         name: str(t?.name, 80),
         subject: str(t?.subject, 80),
         room: str(t?.room, 60),
-        role: STAFF_ROLES.includes(t?.role) ? t.role : "TEACHER",
+        role,
+        position,
+        posSubject: position === "SUBJECT_SUPERVISOR" && SUBJECTS.includes(t?.posSubject) ? t.posSubject : "",
         classes: list(t?.classes, null, 100).map((c) => str(c, 40)),
         token: prev?.token || token(),
         pin: prev?.pin || pin(),
@@ -329,7 +337,7 @@ const attendeeOf = (raw) => {
       sections: m.sections || [], gender: m.gender || "ALL", date: m.date, startTime: m.startTime, endTime: m.endTime, location: m.location || "",
       teamsLink: m.teamsLink || "", agenda: m.agenda || "", slotsStart: m.slotsStart || "", slotsEnd: m.slotsEnd || "", slotMinutes: m.slotMinutes || 10,
       breakStart: m.breakStart || "", breakEnd: m.breakEnd || "", regDeadline: m.regDeadline, autoReminders: m.autoReminders !== false,
-      teachers: (m.teachers || []).map((t) => ({ id: t.id, name: t.name, subject: t.subject, room: t.room, role: t.role || "TEACHER", classes: t.classes || [], ...(secrets ? { link: `${PUBLIC_APP_URL}/meeting-teacher/${t.token}`, pin: t.pin } : {}) })),
+      teachers: (m.teachers || []).map((t) => ({ id: t.id, name: t.name, subject: t.subject, room: t.room, role: t.role || "TEACHER", position: t.position || "", posSubject: t.posSubject || "", classes: t.classes || [], ...(secrets ? { link: `${PUBLIC_APP_URL}/meeting-teacher/${t.token}`, pin: t.pin } : {}) })),
       ...(secrets ? { deskLink: `${PUBLIC_APP_URL}/meeting-desk/${m.deskToken}`, deskPin: m.deskPin, publicLink: m.publicToken ? `${PUBLIC_APP_URL}/meeting/${m.publicToken}` : "" } : {}),
       stats: m.stats || {}, createdByName: m.createdByName || "", createdAt: ms(m.createdAt), invitedAt: ms(m.invitedAt), completedAt: ms(m.completedAt),
       cancelReason: m.cancelReason || "", summary: m.summary || "", callCampaignId: m.callCampaignId || null,
@@ -863,7 +871,7 @@ const attendeeOf = (raw) => {
     }
     return { id, list: [own] };
   }
-  const staffOut = (t) => ({ id: t.id, name: t.name, subject: t.subject || "", room: t.room || "", role: t.role || "TEACHER" });
+  const staffOut = (t) => ({ id: t.id, name: t.name, subject: t.subject || "", room: t.room || "", role: t.role || "TEACHER", position: t.position || "", posSubject: t.posSubject || "" });
 
   async function familyState(ref, m, inv) {
     const [view, reqSnap, branchSnaps] = await Promise.all([
@@ -1530,7 +1538,7 @@ const attendeeOf = (raw) => {
     const batch = db.batch();
     entries.forEach(([branch, list]) => {
       const teachers = (Array.isArray(list) ? list : []).slice(0, 400).map((t) => ({
-        name: str(t?.name, 80), subject: str(t?.subject, 80), classes: str(t?.classes, 300), role: STAFF_ROLES.includes(t?.role) ? t.role : "TEACHER",
+        name: str(t?.name, 80), subject: str(t?.subject, 80), classes: str(t?.classes, 300), role: STAFF_ROLES.includes(t?.role) ? t.role : "TEACHER", roleText: str(t?.roleText, 60),
       })).filter((t) => t.name);
       saved[branch] = teachers.length;
       batch.set(db.collection("meetingTeacherDirectory").doc(branch), { teachers, updatedAt: now, updatedBy: caller.uid, updatedByName: caller.name || "" });

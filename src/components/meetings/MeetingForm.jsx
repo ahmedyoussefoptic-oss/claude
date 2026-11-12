@@ -7,7 +7,7 @@ import useAuthStore from '../../stores/useAuthStore';
 import { useBranches, useDepartments } from '../../hooks/useOrgData';
 import { userBranches } from '../../utils/scope';
 import { STAGES } from '../../config/complaintTypes';
-import { MEETING_TYPES, STAFF_ROLES, isIndividual, isRequests, callMeeting, classLabel } from '../../config/meetings';
+import { MEETING_TYPES, STAFF_ROLES, STAFF_POSITIONS, SUBJECTS, positionLabel, isIndividual, isRequests, callMeeting, classLabel } from '../../config/meetings';
 
 const EMPTY = {
   title: '', type: 'REQUESTS', branches: [], stages: [], classes: [], sections: [], gender: 'ALL',
@@ -91,6 +91,19 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
   const teacherClassOptions = form.classes.length ? form.classes.map((k) => [k, classLabel(k)]) : (preview?.classes || []).map((c) => [c.key, classLabel(c.key)]);
 
   const setTeacher = (i, k, v) => setForm((f) => ({ ...f, teachers: f.teachers.map((x, j) => (j === i ? { ...x, [k]: v } : x)) }));
+  // A manager's position (and a supervisor's subject): the title field
+  // follows it unless it was written by hand.
+  const setPosition = (i, patch) => setForm((f) => ({
+    ...f,
+    teachers: f.teachers.map((x, j) => {
+      if (j !== i) return x;
+      const next = { ...x, ...patch };
+      if (next.position !== 'SUBJECT_SUPERVISOR') next.posSubject = '';
+      const was = positionLabel(t, x);
+      if (!x.subject || x.subject === was) next.subject = positionLabel(t, next);
+      return next;
+    }),
+  }));
   // Rooms change from one meeting to the next, so they are typed here (not
   // taken from the Excel files), only when the meeting needs them.
   const [showRooms, setShowRooms] = useState(() => (meeting?.teachers || []).some((x) => x.room));
@@ -111,7 +124,7 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
     teachers.forEach((x) => {
       const i = list.findIndex((y) => key(y.name) === key(x.name));
       if (i >= 0) {
-        list[i] = { ...list[i], subject: x.subject || list[i].subject, role: x.role || list[i].role || 'TEACHER', classes: x.classes.length ? x.classes : list[i].classes || [] };
+        list[i] = { ...list[i], subject: x.subject || list[i].subject, role: x.role || list[i].role || 'TEACHER', position: x.position || list[i].position || '', posSubject: x.posSubject || list[i].posSubject || '', classes: x.classes.length ? x.classes : list[i].classes || [] };
         updated++;
       } else { list.push(x); added++; }
     });
@@ -157,7 +170,7 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
     setBusy(true);
     try {
       const payload = Object.fromEntries(Object.keys(EMPTY).map((k) => [k, form[k]]));
-      payload.teachers = form.teachers.map((x) => ({ id: x.id, name: x.name, subject: x.subject, role: x.role || 'TEACHER', room: showRooms ? (x.room || '').trim() : '', classes: x.classes || [] }));
+      payload.teachers = form.teachers.map((x) => ({ id: x.id, name: x.name, subject: x.subject, role: x.role || 'TEACHER', position: (x.role || 'TEACHER') === 'TEACHER' ? '' : x.position || '', posSubject: x.posSubject || '', room: showRooms ? (x.room || '').trim() : '', classes: x.classes || [] }));
       const r = await callMeeting('saveMeeting', { id: meeting?.id || null, meeting: payload, notifyChange: editing && notifyChange });
       onSaved(r);
     } catch (err) {
@@ -263,6 +276,20 @@ export default function MeetingForm({ meeting, onClose, onSaved }) {
                     <button type="button" onClick={() => setForm((f) => ({ ...f, teachers: f.teachers.filter((_, j) => j !== i) }))} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg shrink-0" aria-label={t('common.delete')}><Trash2 className="w-4 h-4" /></button>
                   </div>}
                 </div>
+                {(tc.role || 'TEACHER') !== 'TEACHER' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <select value={tc.position || ''} onChange={(e) => setPosition(i, { position: e.target.value })} className={inputCls} aria-label={t('meetings.form.position')}>
+                      <option value="">{t('meetings.form.positionPick')}</option>
+                      {(STAFF_POSITIONS[tc.role] || []).map((p) => <option key={p} value={p}>{t(`meetings.positions.${p}`)}</option>)}
+                    </select>
+                    {tc.position === 'SUBJECT_SUPERVISOR' && (
+                      <select value={tc.posSubject || ''} onChange={(e) => setPosition(i, { posSubject: e.target.value })} className={inputCls} aria-label={t('meetings.form.subjectPick')}>
+                        <option value="">{t('meetings.form.subjectPick')}</option>
+                        {SUBJECTS.map((x) => <option key={x} value={x}>{t(`meetings.subjects.${x}`)}</option>)}
+                      </select>
+                    )}
+                  </div>
+                )}
                 {teacherClassOptions.length > 0 && (
                   <div>
                     <p className="text-[11px] text-slate-500 mb-1">{t('meetings.form.teacherClasses')}</p>

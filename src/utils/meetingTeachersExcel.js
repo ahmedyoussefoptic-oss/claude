@@ -17,10 +17,33 @@ const COLUMNS = {
 // «الصفة»: معلم (default) / مدير أكاديمي / مدير إداري.
 export const roleFromText = (v) => {
   const t = String(v || '').toLowerCase();
-  if (/أكاديمي|اكاديمي|academic/.test(t)) return 'ACADEMIC';
-  if (/إداري|اداري|admin/.test(t)) return 'ADMIN';
+  if (/أكاديمي|اكاديمي|academic|مشرف|supervisor|coordinator|منسق/.test(t)) return 'ACADEMIC';
+  if (/إداري|اداري|admin|وكيل|مرشد|مدير المدرسة|principal|counsel/.test(t)) return 'ADMIN';
   return 'TEACHER';
 };
+// The subject a supervisor is for, from free text ('' when unknown).
+const SUBJECT_WORDS = [
+  ['MATH', /رياضيات|math/], ['SCIENCE', /علوم|science|biology|physics|chemistry|أحياء|فيزياء|كيمياء/], ['ARABIC', /عربي|arabic/],
+  ['ENGLISH', /إنجليزي|انجليزي|انقليزي|english/], ['QURAN', /قرآن|قران|quran/], ['ISLAMIC', /إسلامي|اسلامي|islamic|دين|توحيد|فقه/],
+  ['SOCIAL', /اجتماعي|social|history|تاريخ|جغرافيا/], ['ICT', /حاسب|تقني|رقمي|ict|computer|digital|it\b/], ['FRENCH', /فرنسي|french/],
+  ['ART', /فني|فنية|art/], ['PE', /بدني|بدنية|رياضة|physical|\bpe\b|sport/], ['LIFE_SKILLS', /مهارات|life skill/],
+];
+export const subjectFromText = (v) => (SUBJECT_WORDS.find(([, re]) => re.test(String(v || '').toLowerCase())) || [''])[0];
+// A manager's position from the role and title written in the file.
+export function positionFromText(role, ...texts) {
+  const s = texts.join(' ').toLowerCase();
+  if (role === 'ADMIN') {
+    if (/وكيل|vice|deputy/.test(s)) return { position: 'VICE_PRINCIPAL' };
+    if (/مرشد|counsel/.test(s)) return { position: 'COUNSELOR' };
+    if (/مدير المدرسة|مدير مدرسة|principal|head ?(teacher|master)/.test(s)) return { position: 'PRINCIPAL' };
+  }
+  if (role === 'ACADEMIC') {
+    if (/مشرف|supervisor|coordinator|منسق|hod|head of/.test(s)) return { position: 'SUBJECT_SUPERVISOR', posSubject: subjectFromText(s) };
+    if (/نائب|deputy|vice|assistant/.test(s)) return { position: 'ACADEMIC_DEPUTY' };
+    if (/مدير|director|manager/.test(s)) return { position: 'ACADEMIC_DIRECTOR' };
+  }
+  return { position: '', posSubject: '' };
+}
 const norm = (s) => String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ');
 const AR = '٠١٢٣٤٥٦٧٨٩';
 const latinDigits = (s) => String(s ?? '').replace(/[٠-٩]/g, (x) => String(AR.indexOf(x)));
@@ -73,7 +96,9 @@ export function teacherForMeeting(t, keys) {
     if (found.length) found.forEach((k) => classes.add(k));
     else unmatched.push(tok);
   });
-  return { teacher: { name: t.name, subject: t.subject || '', room: '', role: t.role || 'TEACHER', classes: [...classes] }, teaches: !tokens.length || classes.size > 0, unmatched };
+  const role = t.role || 'TEACHER';
+  const pos = role === 'TEACHER' ? { position: '', posSubject: '' } : { posSubject: '', ...positionFromText(role, t.roleText || '', t.subject || '') };
+  return { teacher: { name: t.name, subject: t.subject || '', room: '', role, ...pos, classes: [...classes] }, teaches: !tokens.length || classes.size > 0, unmatched };
 }
 
 async function readRows(file, required = []) {
@@ -89,7 +114,7 @@ async function readRows(file, required = []) {
     if (required.some((k) => col[k] < 0)) continue;
     const get = (r, k) => (col[k] >= 0 ? String(r[col[k]] ?? '').trim() : '');
     return rows.slice(headerAt + 1).filter((r) => r.some((c) => String(c).trim())).map((r) => ({
-      branch: get(r, 'branch'), name: get(r, 'name'), subject: get(r, 'subject'), role: roleFromText(get(r, 'role')), classes: get(r, 'classes'),
+      branch: get(r, 'branch'), name: get(r, 'name'), subject: get(r, 'subject'), role: roleFromText(get(r, 'role')), roleText: String(get(r, 'role') || '').trim().slice(0, 60), classes: get(r, 'classes'),
     }));
   }
   throw new Error(required.includes('branch') ? 'branchHeader' : 'header');
@@ -156,7 +181,7 @@ export async function readTeacherDirectoryFile(file, branches) {
       ['subject'].forEach((k) => { if (!dup[k]) dup[k] = r[k]; });
       return;
     }
-    const tch = { name: r.name, subject: r.subject, role: r.role, classes: splitClasses(r.classes).join('، ') };
+    const tch = { name: r.name, subject: r.subject, role: r.role, ...(r.role !== 'TEACHER' && r.roleText ? { roleText: r.roleText } : {}), classes: splitClasses(r.classes).join('، ') };
     seen.set(`${id}|${norm(r.name)}`, tch);
     (byBranch[id] = byBranch[id] || []).push(tch);
   });

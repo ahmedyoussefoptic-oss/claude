@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import QRCode from 'qrcode';
-import { Loader2, CheckCircle2, Star, AlertTriangle, Pencil, Ticket, ArrowLeftRight, LogOut, Sparkles, HeartHandshake, Check, Printer } from 'lucide-react';
+import { Loader2, CheckCircle2, Star, AlertTriangle, Pencil, Ticket, ArrowLeftRight, LogOut, Sparkles, HeartHandshake, Check, Printer, ChevronDown } from 'lucide-react';
 import logo from '../assets/logo.png';
-import { callMeeting, RELATIONS } from '../config/meetings';
+import { callMeeting, RELATIONS, STAFF_POSITIONS, SUBJECTS, positionLabel } from '../config/meetings';
 
 // The parents' pages share one look: a navy card (like a student card) with
 // the school's logo, then white cards with coloured initials for the people.
@@ -266,6 +266,53 @@ function PersonRow({ person, on, locked, purpose, onToggle, onPurpose }) {
   );
 }
 
+// The positions of one manager section, in a fixed order, each with the
+// person holding it in this meeting (none → shown as not available); people
+// without a position set come last, by their title.
+function positionSlots(t, role, list) {
+  const out = [];
+  const used = new Set();
+  (STAFF_POSITIONS[role] || []).forEach((pos) => {
+    (pos === 'SUBJECT_SUPERVISOR' ? SUBJECTS : [null]).forEach((sub) => {
+      const label = sub ? t('meetings.positions.supervisorOf', { subject: t(`meetings.subjects.${sub}`) }) : t(`meetings.positions.${pos}`);
+      const holders = list.filter((o) => o.position === pos && (sub ? o.posSubject === sub : true));
+      if (!holders.length) out.push({ key: `${pos}|${sub || ''}`, label, staff: null });
+      holders.forEach((h) => { used.add(h.id); out.push({ key: h.id, label: holders.length > 1 ? `${label} — ${h.name}` : label, staff: h }); });
+    });
+  });
+  list.filter((o) => !used.has(o.id)).forEach((o) => out.push({ key: o.id, label: o.subject || positionLabel(t, o) || o.name, staff: o }));
+  return out;
+}
+
+// A manager section: a drop-down of the positions; each choice becomes a
+// card (with the purpose box) under it.
+function ManagerPicker({ role, list, studentId, picks, locked, keyOf, onAdd, onToggle, onPurpose }) {
+  const { t } = useTranslation();
+  const slots = positionSlots(t, role, list);
+  const chosen = list.filter((o) => keyOf(studentId, o.id) in picks);
+  const picked = new Set(chosen.map((o) => o.id));
+  return (
+    <div className="space-y-2.5">
+      <div className="relative">
+        <select value="" onChange={(e) => { const sl = slots.find((x) => x.key === e.target.value); if (sl?.staff) onAdd(sl.staff); }}
+          className={`${inputCls} appearance-none pe-11 font-bold text-[#1b345a] cursor-pointer`} aria-label={t(`meetings.family.listOf.${role}`)}>
+          <option value="">{t('meetings.family.pickFromList')}</option>
+          {slots.map((sl) => (
+            <option key={sl.key} value={sl.key} disabled={!sl.staff || picked.has(sl.staff.id)}>
+              {sl.label}{!sl.staff ? ` — ${t('meetings.family.unavailable')}` : picked.has(sl.staff.id) ? ` ✓ ${t('meetings.family.picked')}` : ''}
+            </option>
+          ))}
+        </select>
+        <ChevronDown className="w-5 h-5 text-slate-400 absolute top-1/2 -translate-y-1/2 end-4 pointer-events-none" />
+      </div>
+      {chosen.map((o) => {
+        const k = keyOf(studentId, o.id);
+        return <PersonRow key={o.id} person={{ ...o, subject: positionLabel(t, o) || o.subject }} on locked={locked.has(k)} purpose={picks[k] || ''} onToggle={() => onToggle(k)} onPurpose={(v) => onPurpose(k, v)} />;
+      })}
+    </div>
+  );
+}
+
 function RequestForm({ sess, state, others, onSaved }) {
   const { t, i18n } = useTranslation();
   const keyOf = (studentId, staffId) => `${studentId}|${staffId}`;
@@ -318,8 +365,13 @@ function RequestForm({ sess, state, others, onSaved }) {
                   <span className={`w-2.5 h-2.5 rounded-full ${ROLE_DOT[role]}`} />
                   {role === 'TEACHER' ? t('meetings.family.teachersOf', { name: first(s.name) }) : t(`meetings.family.listOf.${role}`)}
                 </h3>
-                {!list.length && <p className="text-[15px] text-slate-400 bg-white/70 border border-dashed border-slate-200 rounded-2xl p-3">{t('meetings.family.notAvailable')}</p>}
-                {list.map((o) => {
+                {role !== 'TEACHER' && (
+                  <ManagerPicker role={role} list={list} studentId={s.id} picks={picks} locked={locked} keyOf={keyOf}
+                    onAdd={(o) => setPicks((p) => ({ ...p, [keyOf(s.id, o.id)]: p[keyOf(s.id, o.id)] ?? '' }))}
+                    onToggle={toggle} onPurpose={(k, v) => setPicks((p) => ({ ...p, [k]: v }))} />
+                )}
+                {role === 'TEACHER' && !list.length && <p className="text-[15px] text-slate-400 bg-white/70 border border-dashed border-slate-200 rounded-2xl p-3">{t('meetings.family.notAvailable')}</p>}
+                {role === 'TEACHER' && list.map((o) => {
                   const k = keyOf(s.id, o.id);
                   return <PersonRow key={o.id} person={o} on={k in picks} locked={locked.has(k)} purpose={picks[k] || ''} onToggle={() => toggle(k)} onPurpose={(v) => setPicks((p) => ({ ...p, [k]: v }))} />;
                 })}

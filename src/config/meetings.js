@@ -6,6 +6,21 @@ import { rosterClassCode } from '../utils/classFilter';
 export const MEETING_TYPES = ['REQUESTS', 'BOTH', 'INDIVIDUAL', 'GENERAL'];
 // Interviews on request (no appointments): who the parent can ask to meet.
 export const STAFF_ROLES = ['TEACHER', 'ACADEMIC', 'ADMIN'];
+// The managers' positions (what parents choose from) and the subjects a
+// subject supervisor can be for.
+export const STAFF_POSITIONS = {
+  ADMIN: ['PRINCIPAL', 'VICE_PRINCIPAL', 'COUNSELOR'],
+  ACADEMIC: ['ACADEMIC_DIRECTOR', 'ACADEMIC_DEPUTY', 'SUBJECT_SUPERVISOR'],
+};
+export const SUBJECTS = ['ARABIC', 'ENGLISH', 'MATH', 'SCIENCE', 'ISLAMIC', 'QURAN', 'SOCIAL', 'ICT', 'FRENCH', 'ART', 'PE', 'LIFE_SKILLS'];
+// The label of a staff member's position ('' when none is set).
+export const positionLabel = (t, x) => {
+  if (!x?.position) return '';
+  if (x.position === 'SUBJECT_SUPERVISOR') {
+    return x.posSubject ? t('meetings.positions.supervisorOf', { subject: t(`meetings.subjects.${x.posSubject}`) }) : t('meetings.positions.SUBJECT_SUPERVISOR');
+  }
+  return t(`meetings.positions.${x.position}`);
+};
 // Who came for the family: their relation to the student.
 export const RELATIONS = ['FATHER', 'MOTHER', 'BROTHER', 'SISTER', 'GRANDFATHER', 'GRANDMOTHER', 'UNCLE', 'AUNT', 'GUARDIAN', 'OTHER'];
 export const isRequests = (m) => m?.type === 'REQUESTS';

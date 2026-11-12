@@ -4028,7 +4028,10 @@
       "staffTitleField": "Position (e.g. primary stage)",
       "addRole": "Add {{role}}",
       "missingRoles": "This meeting has no {{roles}}, so parents cannot ask to meet one. Add one with the buttons above, pick the role next to a name, or add a «Role» column to the directory file.",
-      "and": " or "
+      "and": " or ",
+      "position": "Position",
+      "positionPick": "Choose the position",
+      "subjectPick": "Choose the subject"
     },
     "tabs": {
       "overview": "Overview",
@@ -4445,7 +4448,10 @@
       "goNowShort": "Please go now",
       "waitShort": "Awaiting direction",
       "printCard": "Print / save the card with QR",
-      "relationShort": "Relation"
+      "relationShort": "Relation",
+      "pickFromList": "Choose from the list…",
+      "unavailable": "not available",
+      "picked": "selected"
     },
     "staffReq": {
       "skipPrompt": "Why the meeting was not held (optional):",
@@ -4489,6 +4495,29 @@
       "linkHint": "One link for every branch: the parent signs in with their national ID only and sees the «interviews on request» meetings of their children in each branch, with a ticket per branch. No need to change it per meeting.",
       "message": "Dear parents, to confirm attendance at the parent meetings and choose whom to meet for each child in their branch: {{link}}",
       "posterHint": "Scan to confirm attendance and choose whom to meet"
+    },
+    "positions": {
+      "PRINCIPAL": "School principal",
+      "VICE_PRINCIPAL": "Vice principal",
+      "COUNSELOR": "Student counselor",
+      "ACADEMIC_DIRECTOR": "Academic director",
+      "ACADEMIC_DEPUTY": "Deputy academic director",
+      "SUBJECT_SUPERVISOR": "Subject supervisor",
+      "supervisorOf": "{{subject}} supervisor"
+    },
+    "subjects": {
+      "ARABIC": "Arabic",
+      "ENGLISH": "English",
+      "MATH": "Mathematics",
+      "SCIENCE": "Science",
+      "ISLAMIC": "Islamic studies",
+      "QURAN": "Holy Quran",
+      "SOCIAL": "Social studies",
+      "ICT": "Computing and ICT",
+      "FRENCH": "French",
+      "ART": "Art",
+      "PE": "Physical education",
+      "LIFE_SKILLS": "Life skills"
     }
   },
   "design": {
