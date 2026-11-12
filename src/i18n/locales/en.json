@@ -4573,6 +4573,59 @@
       "roomPh": "e.g. Office 3",
       "start": "Show requests",
       "change": "Change"
+    },
+    "adminAccess": {
+      "managersButton": "Managers' access (all branches)",
+      "deskButton": "Reception access (all branches)",
+      "none": "There are no current meetings.",
+      "noneManagers": "No current meeting has a managers' link — it exists only for «interviews on request» meetings.",
+      "preparing": "Preparing the access links…",
+      "subtitle": "All branches · {{count}} meetings",
+      "warnTitle": "Important",
+      "indexTitle": "Meetings in this file",
+      "colBranch": "Branch",
+      "colMeeting": "Meeting",
+      "colDate": "When",
+      "managersKind": "Managers' link",
+      "deskKind": "Reception link",
+      "namedStaff": "Managers registered by name in this meeting",
+      "managers": {
+        "title": "Managers' access",
+        "intro": "The managers' link is for the branch and academic administration: principal, vice principal, student counselor, academic director and deputy, and subject supervisors. No account is needed; the link or QR code and the 4-digit code are enough. Each branch has a page in this file.",
+        "stepsTitle": "How to sign in",
+        "steps": [
+          "Scan your branch's QR code on its page, or open the link printed below it.",
+          "Type the 4-digit code and tap «Sign in». The phone remembers the code.",
+          "On «Who are you?» write your name, choose your job title, then your office.",
+          "Parents' requests for your position appear, those present first by ticket number.",
+          "When the parent arrives tap «Start», at the end «End and write the result», write it and close the interview.",
+          "If you cover more than one position, tap «Change»."
+        ],
+        "warnings": [
+          "The link and code are for the administration only; do not post them in parents' groups.",
+          "Eight wrong codes lock the link for one hour.",
+          "Starting a new interview closes the previous one automatically; write its result from «Write result».",
+          "Every meeting has a new link and code; this file is valid only for the meetings in it."
+        ]
+      },
+      "desk": {
+        "title": "Reception access",
+        "intro": "The reception link checks parents in and directs them to their interviews. No account is needed; the link or QR code and the 4-digit code are enough. Each branch has a page in this file.",
+        "stepsTitle": "How to sign in and use it",
+        "steps": [
+          "Before the meeting open your branch's link on the reception phone or device and type the code.",
+          "When a parent arrives scan their QR code, or search by student name or ID.",
+          "Confirm the attendee's name and relation, then tap «Check in»; a numbered ticket is issued.",
+          "From the waiting board tap «Direct» to send the parent to the teacher or manager; «Direct (busy)» shows when they are in an interview.",
+          "For a parent with no invitation use «Parent not invited»."
+        ],
+        "warnings": [
+          "The link and code are for reception only; do not post them in parents' groups.",
+          "Eight wrong codes lock the link for one hour.",
+          "In the women's branches (Al Naeem, Al Zahra, Al Shati, Al Salama 1, Downtown Girls) attendance is for women only.",
+          "Every meeting has a new link and code; this file is valid only for the meetings in it."
+        ]
+      }
     }
   },
   "design": {

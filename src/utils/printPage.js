@@ -6,8 +6,10 @@ export const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '
 // `copyStyles` the app's stylesheets come along, so a rendered part of the
 // screen (its outerHTML) prints as it looks — always in light mode, inside
 // #report-print-area so the app's print rules show it.
-export function printPage({ title, subtitle = '', school, body, landscape = false, copyStyles = false, css = '', dir = 'rtl', lang = 'ar' }) {
-  const win = window.open('', '_blank');
+// `win`: a window opened beforehand (in the click itself), for pages built
+// after awaiting data — a window opened later is blocked as a pop-up.
+export function printPage({ title, subtitle = '', school, body, landscape = false, copyStyles = false, css = '', dir = 'rtl', lang = 'ar', win: given = null }) {
+  const win = given || window.open('', '_blank');
   if (!win) return false;
   const logoUrl = new URL(logo, window.location.origin).href;
   const styles = copyStyles

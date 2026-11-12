@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
-import { Presentation, Plus, Loader2, CalendarDays, Clock, MapPin, Users as UsersIcon, Star, BookUser, Link2 } from 'lucide-react';
+import { Presentation, Plus, Loader2, CalendarDays, Clock, MapPin, Users as UsersIcon, Star, BookUser, Link2, KeyRound } from 'lucide-react';
+import { printAdminAccess } from '../components/meetings/printAdminAccess';
 import PortalLink from '../components/meetings/PortalLink';
 import TeacherDirectory from '../components/meetings/TeacherDirectory';
 import { useBranches } from '../hooks/useOrgData';
@@ -25,6 +26,23 @@ export default function Meetings() {
   const [directory, setDirectory] = useState(false);
   const [portalOpen, setPortalOpen] = useState(false);
   const [status, setStatus] = useState('ACTIVE');
+  const [printing, setPrinting] = useState('');
+
+  // The administration's links of every current meeting, in one PDF.
+  const printAdmin = async (group) => {
+    const current = meetings.filter((m) => ['DRAFT', 'OPEN', 'CLOSED'].includes(m.status));
+    if (!current.length) { window.alert(t('meetings.adminAccess.none')); return; }
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.write(`<p style="font-family:Tahoma;padding:24px">${t('meetings.adminAccess.preparing')}</p>`);
+    setPrinting(group);
+    try {
+      if (!(await printAdminAccess(current, { t, i18n, branchName, win, group }))) { win.close(); window.alert(t('meetings.adminAccess.noneManagers')); }
+    } catch (err) {
+      win.close();
+      window.alert(err.message);
+    } finally { setPrinting(''); }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -53,6 +71,9 @@ export default function Meetings() {
         actions={(
           <>
             <button type="button" onClick={() => setPortalOpen(true)} className="px-4 py-2 border border-primary/40 bg-white text-primary rounded-xl text-sm flex items-center gap-2"><Link2 className="w-4 h-4" />{t('meetings.portal.linkTitle')}</button>
+            {[['managers', 'border-violet-300 text-violet-700'], ['desk', 'border-sky-300 text-sky-700']].map(([g, tone]) => (
+              <button key={g} type="button" disabled={!!printing} onClick={() => printAdmin(g)} className={`px-4 py-2 border bg-white rounded-xl text-sm flex items-center gap-2 disabled:opacity-60 ${tone}`}>{printing === g ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}{t(`meetings.adminAccess.${g}Button`)}</button>
+            ))}
             <button type="button" onClick={() => setDirectory(true)} className="px-4 py-2 border border-slate-200 bg-white text-slate-700 rounded-xl text-sm flex items-center gap-2"><BookUser className="w-4 h-4" />{t('meetings.directory.title')}</button>
             <button type="button" onClick={() => setCreating(true)} className="px-4 py-2 bg-primary text-white rounded-xl text-sm flex items-center gap-2"><Plus className="w-4 h-4" />{t('meetings.new')}</button>
           </>
