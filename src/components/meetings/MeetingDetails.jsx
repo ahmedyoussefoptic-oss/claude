@@ -15,6 +15,7 @@ import {
 } from '../../config/meetings';
 import MeetingForm from './MeetingForm';
 import MeetingReport from './MeetingReport';
+import { EnteredBadge } from '../reports/MeetingsAccessReport';
 
 function CopyBtn({ text, label }) {
   const [done, setDone] = useState(false);
@@ -156,12 +157,16 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
   const names = (inv) => (inv?.students || []).map((s) => s.name).join('، ');
   // The teachers' links: search by name, subject, room or class.
   const [teacherQ, setTeacherQ] = useState('');
+  // …and by whether they signed in to their link.
+  const [seen, setSeen] = useState('all');
+  const accessOf = (tc) => data?.access?.[tc.id]?.entered || '';
+  const signedIn = (m?.teachers || []).filter(accessOf).length;
   const shownTeachers = useMemo(() => {
     const needle = normalizeArabic(teacherQ).toLowerCase();
-    const list = m?.teachers || [];
+    const list = (m?.teachers || []).filter((tc) => seen === 'all' || (seen === 'in' ? !!data?.access?.[tc.id]?.entered : !data?.access?.[tc.id]?.entered));
     if (!needle) return list;
     return list.filter((tc) => normalizeArabic(`${tc.name} ${tc.subject || ''} ${tc.room || ''} ${(tc.classes || []).map(classLabel).join(' ')}`).toLowerCase().includes(needle));
-  }, [m, teacherQ]);
+  }, [m, teacherQ, seen, data]);
 
   const run = async (action, extra = {}) => {
     setBusy(action);
@@ -352,6 +357,15 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
                     <span className="px-2 py-0.5 rounded-lg bg-primary/10 text-primary tabular-nums">{m.teachers.length}</span>
                     {m.branches?.length > 0 && <span className="text-xs font-normal text-slate-500">· {m.branches.map(branchName).join('، ')}</span>}
                   </p>
+                  {data?.access && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {[['all', m.teachers.length], ['in', signedIn], ['out', m.teachers.length - signedIn]].map(([v, n]) => (
+                        <button key={v} type="button" onClick={() => setSeen(v)} className={`px-2.5 py-1 text-xs rounded-lg border ${seen === v ? 'bg-primary text-white border-primary' : v === 'out' ? 'border-rose-200 text-rose-700 bg-white' : v === 'in' ? 'border-emerald-200 text-emerald-700 bg-white' : 'border-slate-200 text-slate-600 bg-white'}`}>
+                          {v === 'all' ? t('meetingsAccess.show.all') : v === 'in' ? t('meetingsAccess.signedIn') : t('meetingsAccess.notSignedIn')} <span className="tabular-nums">({n})</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   {teacherQ.trim() && <span className="text-xs text-slate-500">{t('meetings.directory.found', { count: shownTeachers.length })}</span>}
                 </div>
                 <div className="relative">
@@ -368,7 +382,7 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
               return (
                 <div key={tc.id} className="border border-slate-100 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{tc.name} {isRequests(m) && <span className="text-xs text-primary">· {t(`meetings.roles.${tc.role || 'TEACHER'}`)}</span>} {tc.subject && <span className="text-xs text-slate-500">· {tc.subject}</span>} {tc.room && <span className="text-xs text-slate-500">· {tc.room}</span>}</p>
+                    <p className="text-sm font-medium text-slate-800">{data?.access && <span className="me-1.5 align-middle"><EnteredBadge entered={accessOf(tc)} /></span>}{tc.name} {isRequests(m) && <span className="text-xs text-primary">· {t(`meetings.roles.${tc.role || 'TEACHER'}`)}</span>} {tc.subject && <span className="text-xs text-slate-500">· {tc.subject}</span>} {tc.room && <span className="text-xs text-slate-500">· {tc.room}</span>}</p>
                     <p className="text-xs text-slate-500">{t('meetings.links.pin')}: <b dir="ltr">{tc.pin}</b>{tc.classes?.length ? ` · ${[...new Set(tc.classes.map(classLabel))].join(', ')}` : ` · ${t('meetings.links.allClasses')}`}</p>
                   </div>
                   <div className="flex gap-2">

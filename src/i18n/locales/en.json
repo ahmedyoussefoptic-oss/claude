@@ -1127,7 +1127,8 @@
       "SURVEY": "Parent satisfaction survey report",
       "VISITS": "Branch visits",
       "LOST_FOUND": "Lost & found",
-      "MEETINGS": "Parent meetings"
+      "MEETINGS": "Parent meetings",
+      "MEETINGS_ACCESS": "Teachers’ sign-ins"
     },
     "criteriaTitle": "Report criteria",
     "complaintTypeLabel": "Complaint type",
@@ -4761,5 +4762,55 @@
       "who": "Who",
       "requested": "Requested"
     }
+  },
+  "meetingsAccess": {
+    "empty": "No meetings in this period.",
+    "note": "Teachers’ sign-ins to their links are recorded from {{date}}. For earlier meetings a teacher counts as signed in if they did something on their screen: started or closed an interview, wrote a minute, or declined a request.",
+    "total": "Teachers in meetings",
+    "totalSub": "{{people}} teachers · {{meetings}} meetings",
+    "entered": "Signed in",
+    "notEntered": "Not signed in",
+    "byActivity": "Signed in (by activity)",
+    "byLoginN": "By sign-in: {{n}}",
+    "byBranch": "By branch",
+    "listTitle": {
+      "none": "Teachers who did not sign in",
+      "entered": "Teachers who signed in",
+      "all": "All teachers"
+    },
+    "show": {
+      "none": "Not signed in",
+      "entered": "Signed in",
+      "all": "All"
+    },
+    "search": "Search name or subject…",
+    "noRows": "No teachers in this view.",
+    "state": {
+      "login": "Signed in",
+      "activity": "Signed in (activity)",
+      "none": "Not signed in"
+    },
+    "col": {
+      "branch": "Branch",
+      "total": "Teachers",
+      "entered": "Signed in",
+      "notEntered": "Not signed in",
+      "rate": "Rate",
+      "n": "#",
+      "name": "Teacher",
+      "subject": "Subject / title",
+      "meeting": "Meeting",
+      "date": "Date",
+      "state": "Status",
+      "firstAt": "First sign-in",
+      "lastAt": "Last sign-in",
+      "requests": "Interviews (done / asked)",
+      "asked": "Interviews asked",
+      "done": "Interviews done"
+    },
+    "requestsHint": "Interviews: done out of those parents asked for — a teacher who did not sign in but has requests needs following up first.",
+    "inMeeting": "{{n}} of {{total}} signed in",
+    "signedIn": "Signed in",
+    "notSignedIn": "Not signed in"
   }
 }

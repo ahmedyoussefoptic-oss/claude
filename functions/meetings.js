@@ -401,6 +401,31 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
   // read from the meetings' records:
   //   staff (by teachers / branch administration / academic administration),
   //   grades, survey, attendees (relation of who attended), followUps, topStaff.
+  // «دخول المعلمين»: per meeting (in the period / branch), every teacher with
+  // whether they signed in to their link.
+  out.meetingsAccessReport = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
+    const caller = await meetingCaller(request);
+    const d = request.data || {};
+    const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : "");
+    const from = day(d.from);
+    const to = day(d.to);
+    const branch = str(d.branch, 60);
+    const snap = await db.collection("meetings").orderBy("date", "desc").limit(400).get();
+    const list = snap.docs.map((x) => ({ id: x.id, m: x.data() })).filter(({ m }) => inScope(caller, m) && m.status !== "DRAFT" && m.status !== "CANCELLED"
+      && (!from || m.date >= from) && (!to || m.date <= to) && (!branch || (m.branches || []).includes(branch)));
+    const meetings = [];
+    for (let i = 0; i < list.length; i += 8) {
+      meetings.push(...await Promise.all(list.slice(i, i + 8).map(async ({ id, m }) => {
+        const access = await accessOf(db.collection("meetings").doc(id), m);
+        return {
+          id, code: m.code, title: m.title, type: m.type, status: m.status, date: m.date, branches: m.branches || [],
+          teachers: (m.teachers || []).map((t) => ({ id: t.id, name: t.name, subject: t.subject || "", role: t.role || "TEACHER", ...access[t.id] })),
+        };
+      })));
+    }
+    return { meetings, accessSince: ACCESS_SINCE, generatedAt: Date.now() };
+  });
+
   out.meetingsSummaryReport = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
     const caller = await meetingCaller(request);
     const d = request.data || {};
@@ -709,7 +734,9 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       ref.collection("requests").get(),
     ]);
     const surveyed = new Set(surveys.docs.map((x) => x.id));
+    const access = await accessOf(ref, m, { reqs, slots, minutes });
     return {
+      access, accessSince: ACCESS_SINCE,
       meeting: meetingOut(ref.id, m, { secrets: true }),
       waReady: !!settings,
       slotTimes: slotTimes(m),
@@ -1238,7 +1265,56 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     await guard(`${kind}_${request.data.token}`, ok);
     if (!ok) throw new HttpsError("permission-denied", "رمز الدخول غير صحيح.");
     if (x.m.status === "CANCELLED") throw new HttpsError("failed-precondition", "الاجتماع ملغى.");
+    if (kind === "teacher") await noteAccess(x.ref, teacher);
     return { ...x, teacher };
+  }
+
+  // Teachers' sign-ins: the first and the last time each one opened their
+  // link, written at most every 5 minutes per teacher (the page refreshes
+  // itself every 30 seconds). Recorded from ACCESS_SINCE; before that a
+  // teacher counts as signed in when they did something on their screen.
+  const ACCESS_SINCE = "2026-11-13";
+  const seenAt = new Map();
+  async function noteAccess(ref, teacher) {
+    const key = `${ref.id}_${teacher.id}`;
+    if (Date.now() - (seenAt.get(key) || 0) < 5 * 60e3) return;
+    seenAt.set(key, Date.now());
+    try {
+      const a = ref.collection("access").doc(teacher.id);
+      const cur = (await a.get()).data();
+      const now = Timestamp.now();
+      await a.set({ teacherId: teacher.id, name: teacher.name, firstAt: cur?.firstAt || now, lastAt: now, sessions: (cur?.sessions || 0) + 1 });
+    } catch (err) { console.error("noteAccess", err.message); }
+  }
+
+  // Who of a meeting's teachers signed in: {teacherId: {entered: "login" |
+  // "activity" | "", firstAt, lastAt, asked, done}}.
+  async function accessOf(ref, m, pre = {}) {
+    const [acc, reqs, slots, minutes] = await Promise.all([
+      ref.collection("access").get(), pre.reqs || ref.collection("requests").get(), pre.slots || ref.collection("slots").get(),
+      pre.minutes || db.collection("meetingMinutes").where("meetingId", "==", ref.id).get(),
+    ]);
+    const access = new Map(acc.docs.map((x) => [x.id, x.data()]));
+    const names = new Map((m.teachers || []).map((t) => [t.id, t.name]));
+    const acted = new Set();
+    const asked = {};
+    const done = {};
+    const add = (o, k) => { o[k] = (o[k] || 0) + 1; };
+    reqs.docs.map((x) => x.data()).forEach((r) => {
+      if (r.status !== "CANCELLED" || isRejected(r)) add(asked, r.staffId);
+      if (r.status === "DONE") add(done, r.staffId);
+      if (r.startedAt || r.status === "DONE" || (r.status === "CANCELLED" && r.cancelledBy && r.cancelledBy === names.get(r.staffId))) acted.add(r.staffId);
+    });
+    slots.docs.map((x) => x.data()).forEach((sl) => {
+      add(asked, sl.teacherId);
+      if (sl.doneAt) add(done, sl.teacherId);
+      if (sl.startedAt || sl.doneAt) acted.add(sl.teacherId);
+    });
+    minutes.docs.forEach((x) => acted.add(x.data().teacherId));
+    return Object.fromEntries((m.teachers || []).map((t) => {
+      const a = access.get(t.id);
+      return [t.id, { entered: a ? "login" : acted.has(t.id) ? "activity" : "", firstAt: ms(a?.firstAt), lastAt: ms(a?.lastAt), asked: asked[t.id] || 0, done: done[t.id] || 0 }];
+    }));
   }
 
   // Interviews on request: the person's requests, the ones in the building
