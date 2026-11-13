@@ -1637,14 +1637,36 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     const outside = entries.map(([b]) => b).filter((b) => !known.has(b) || !callerHasBranch(caller, b));
     if (outside.length) throw new HttpsError("permission-denied", "الملف فيه فروع خارج صلاحيتك أو غير معروفة.");
     const now = Timestamp.now();
+    const stamp = { updatedAt: now, updatedBy: caller.uid, updatedByName: caller.name || "" };
+    const clean = (list) => (Array.isArray(list) ? list : []).slice(0, 400).map((t) => ({
+      name: str(t?.name, 80), subject: str(t?.subject, 80), classes: str(t?.classes, 300), role: STAFF_ROLES.includes(t?.role) ? t.role : "TEACHER", roleText: str(t?.roleText, 60),
+    })).filter((t) => t.name);
     const saved = {};
+    // mode "merge": the file's teachers are added to the branch's list; a
+    // name already there is kept as it is (counted in `skipped`).
+    if (request.data?.mode === "merge") {
+      const key = (x) => String(x || "").replace(/\s+/g, " ").trim().toLowerCase();
+      const skipped = {};
+      await db.runTransaction(async (tx) => {
+        const refs = entries.map(([b]) => db.collection("meetingTeacherDirectory").doc(b));
+        const docs = await Promise.all(refs.map((r) => tx.get(r)));
+        entries.forEach(([branch, list], i) => {
+          const current = (docs[i].data() || {}).teachers || [];
+          const seen = new Set(current.map((t) => key(t.name)));
+          const added = clean(list).filter((t) => (seen.has(key(t.name)) ? false : seen.add(key(t.name))));
+          if (current.length + added.length > 400) throw new HttpsError("resource-exhausted", "الحد الأقصى 400 معلم في الفرع.");
+          saved[branch] = added.length;
+          skipped[branch] = clean(list).length - added.length;
+          if (added.length) tx.set(refs[i], { teachers: [...current, ...added], ...stamp });
+        });
+      });
+      return { saved, skipped };
+    }
     const batch = db.batch();
     entries.forEach(([branch, list]) => {
-      const teachers = (Array.isArray(list) ? list : []).slice(0, 400).map((t) => ({
-        name: str(t?.name, 80), subject: str(t?.subject, 80), classes: str(t?.classes, 300), role: STAFF_ROLES.includes(t?.role) ? t.role : "TEACHER", roleText: str(t?.roleText, 60),
-      })).filter((t) => t.name);
+      const teachers = clean(list);
       saved[branch] = teachers.length;
-      batch.set(db.collection("meetingTeacherDirectory").doc(branch), { teachers, updatedAt: now, updatedBy: caller.uid, updatedByName: caller.name || "" });
+      batch.set(db.collection("meetingTeacherDirectory").doc(branch), { teachers, ...stamp });
     });
     await batch.commit();
     return { saved };

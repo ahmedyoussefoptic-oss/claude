@@ -77,11 +77,16 @@ export default function TeacherDirectory({ onClose }) {
       setMsg({ ok: false, text: err.message === 'branchHeader' ? t('meetings.directory.noBranchColumn') : t('meetings.form.importFailed') });
     }
   };
-  const save = async () => {
+  // mode: 'merge' adds the file's teachers to the lists; 'replace' replaces them.
+  const save = async (mode) => {
+    if (mode === 'replace' && !window.confirm(t('meetings.directory.replaceConfirm', { list: Object.keys(pending.byBranch).map(branchName).join('، ') }))) return;
     setBusy(true);
     try {
-      const r = await callMeeting('saveMeetingTeacherDirectory', { branches: pending.byBranch });
-      setMsg({ ok: true, text: t('meetings.directory.saved', { count: Object.values(r.saved).reduce((a, b) => a + b, 0), branches: Object.keys(r.saved).length }) });
+      const r = await callMeeting('saveMeetingTeacherDirectory', { branches: pending.byBranch, mode });
+      const sum = (o) => Object.values(o || {}).reduce((a, b) => a + b, 0);
+      setMsg({ ok: true, text: mode === 'merge'
+        ? t('meetings.directory.merged', { count: sum(r.saved), skipped: sum(r.skipped) })
+        : t('meetings.directory.saved', { count: sum(r.saved), branches: Object.keys(r.saved).length }) });
       setPending(null);
       await load();
     } catch (err) { setMsg({ ok: false, text: err.message }); } finally { setBusy(false); }
@@ -154,11 +159,13 @@ export default function TeacherDirectory({ onClose }) {
           {pending && (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 space-y-1 text-sm text-amber-900">
               <p className="font-medium">{t('meetings.directory.review')}</p>
+              <p className="text-xs">{t('meetings.directory.modeHint')}</p>
               {pending.unknownBranches.length > 0 && <p className="flex gap-1"><AlertTriangle className="w-4 h-4 shrink-0" />{t('meetings.directory.unknownBranches', { list: pending.unknownBranches.join('، ') })}</p>}
               {pending.noBranch > 0 && <p>{t('meetings.directory.noBranch', { count: pending.noBranch })}</p>}
               {pending.skipped > 0 && <p>{t('meetings.form.importSkipped', { count: pending.skipped })}</p>}
               <div className="flex gap-2 pt-1">
-                <button type="button" disabled={busy} onClick={save} className="px-3 py-1.5 bg-primary text-white rounded-lg text-sm flex items-center gap-1.5 disabled:opacity-60">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}{t('meetings.directory.save')}</button>
+                <button type="button" disabled={busy} onClick={() => save('merge')} className="px-3 py-1.5 bg-primary text-white rounded-lg text-sm flex items-center gap-1.5 disabled:opacity-60">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}{t('meetings.directory.saveMerge')}</button>
+                <button type="button" disabled={busy} onClick={() => save('replace')} className="px-3 py-1.5 border border-amber-300 bg-white text-amber-800 rounded-lg text-sm flex items-center gap-1.5 disabled:opacity-60"><Save className="w-4 h-4" />{t('meetings.directory.saveReplace')}</button>
                 <button type="button" onClick={() => setPending(null)} className="px-3 py-1.5 text-sm text-slate-600">{t('common.cancel')}</button>
               </div>
             </div>

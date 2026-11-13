@@ -4367,7 +4367,7 @@
     },
     "directory": {
       "title": "Teacher directory",
-      "hint": "Fill the Excel form with the teachers of every branch (branch from a drop-down) and upload it once. When creating a meeting press «Add from teacher directory» to add the chosen branches' teachers who teach the meeting's classes. A new file replaces only the branches it contains.",
+      "hint": "Upload an Excel file of branch teachers (branch from a drop-down), then choose «Add to current lists» to add new teachers, or «Replace» to put the file in place of its branches' lists. A teacher can also be added or edited from this window. When creating a meeting, press «Add from the teachers' directory» to add the chosen branches' teachers who teach the meeting's classes.",
       "template": "Download form",
       "upload": "Upload file",
       "review": "Review the lists, then save:",
@@ -4396,7 +4396,12 @@
       "added": "{{name}} was added to {{branch}}.",
       "updated": "{{name}} was saved.",
       "deleted": "{{name}} was removed from the directory.",
-      "deleteConfirm": "Remove {{name}} from the {{branch}} directory?\nMeetings that already have this teacher are not affected."
+      "deleteConfirm": "Remove {{name}} from the {{branch}} directory?\nMeetings that already have this teacher are not affected.",
+      "saveMerge": "Add to current lists",
+      "saveReplace": "Replace these branches' lists",
+      "modeHint": "«Add» keeps the current teachers and adds only new ones (an existing name is not changed). «Replace» deletes each branch's list in the file and puts the file in its place.",
+      "replaceConfirm": "These branches' lists will be fully replaced by the file:\n{{list}}\nManual edits to them will be lost. Continue?",
+      "merged": "{{count}} teachers were added; {{skipped}} already there were left as they are."
     },
     "roles": {
       "TEACHER": "Teacher",
