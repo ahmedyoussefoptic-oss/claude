@@ -42,16 +42,18 @@ module.exports = function meetingsModule(d) {
   const STAFF_ROLES = ["TEACHER", "ACADEMIC", "ADMIN"];
 // The managers' positions (parents choose from them) and the subjects of a
 // subject supervisor — as in src/config/meetings.js.
-const STAFF_POSITIONS = { ADMIN: ["PRINCIPAL", "VICE_PRINCIPAL", "COUNSELOR"], ACADEMIC: ["ACADEMIC_DIRECTOR", "ACADEMIC_DEPUTY", "SUBJECT_SUPERVISOR"] };
+const STAFF_POSITIONS = { ADMIN: ["PRINCIPAL", "VICE_PRINCIPAL", "COUNSELOR"], ACADEMIC: ["ACADEMIC_DIRECTOR", "ACADEMIC_DIRECTOR_AMERICAN", "ACADEMIC_DIRECTOR_BRITISH", "ACADEMIC_DEPUTY", "SUBJECT_SUPERVISOR"] };
+// A position for one department only: offered to its students' families.
+const POSITION_SECTION = { ACADEMIC_DIRECTOR_AMERICAN: "AMERICAN", ACADEMIC_DIRECTOR_BRITISH: "BRITISH" };
 const SUBJECTS = ["ARABIC", "ENGLISH", "MATH", "SCIENCE", "ISLAMIC", "QURAN", "SOCIAL", "ICT", "FRENCH", "ART", "PE", "LIFE_SKILLS"];
-const POSITION_AR = { PRINCIPAL: "مدير المدرسة", VICE_PRINCIPAL: "وكيل المدرسة", COUNSELOR: "المرشد الطلابي", ACADEMIC_DIRECTOR: "المدير الأكاديمي", ACADEMIC_DEPUTY: "نائب المدير الأكاديمي", SUBJECT_SUPERVISOR: "مشرف مادة" };
+const POSITION_AR = { PRINCIPAL: "مدير المدرسة", VICE_PRINCIPAL: "وكيل المدرسة", COUNSELOR: "المرشد الطلابي", ACADEMIC_DIRECTOR: "المدير الأكاديمي", ACADEMIC_DIRECTOR_AMERICAN: "مدير أكاديمي القسم الأمريكي", ACADEMIC_DIRECTOR_BRITISH: "مدير أكاديمي القسم البريطاني", ACADEMIC_DEPUTY: "نائب المدير الأكاديمي", SUBJECT_SUPERVISOR: "مشرف مادة" };
 const SUBJECT_AR = { ARABIC: "اللغة العربية", ENGLISH: "اللغة الإنجليزية", MATH: "الرياضيات", SCIENCE: "العلوم", ISLAMIC: "الدراسات الإسلامية", QURAN: "القرآن الكريم", SOCIAL: "الدراسات الاجتماعية", ICT: "الحاسب وتقنية المعلومات", FRENCH: "اللغة الفرنسية", ART: "التربية الفنية", PE: "التربية البدنية", LIFE_SKILLS: "المهارات الحياتية" };
 // «Interviews on request»: parents ask for a manager by position (every
 // position, always); whoever holds it on the day signs in on the meeting's
 // managers' link and takes those requests.
 const POSITION_SLOTS = Object.entries(STAFF_POSITIONS).flatMap(([role, list]) => list.flatMap((position) => (position === "SUBJECT_SUPERVISOR" ? SUBJECTS : [""]).map((posSubject) => ({
   id: posSubject ? `P-${position}-${posSubject}` : `P-${position}`, role, position, posSubject,
-  name: posSubject ? `مشرف مادة ${SUBJECT_AR[posSubject]}` : POSITION_AR[position], subject: "", room: "", classes: [], slot: true,
+  name: posSubject ? `مشرف مادة ${SUBJECT_AR[posSubject]}` : POSITION_AR[position], subject: "", room: "", classes: [], slot: true, section: POSITION_SECTION[position] || "",
 }))));
 const slotOf = (id) => POSITION_SLOTS.find((x) => x.id === id) || null;
 // Who holds a position now (signed in on the managers' link).
@@ -887,6 +889,9 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
   // (a teacher with no classes listed meets every family).
   const teachesStudent = (t, s) => !(t.classes || []).length || t.classes.includes(`${s.grade}|${s.className}`);
   const teachesFamily = (t, inv) => (inv.students || []).some((s) => teachesStudent(t, s));
+  // Who a family can ask to meet for a child: their teachers, and the
+  // positions — a department's own position only for that department.
+  const canAsk = (t, s) => teachesStudent(t, s) && (!t.section || !["AMERICAN", "BRITISH"].includes(s.section) || t.section === s.section);
 
   async function parentState(ref, m, inv) {
     const out2 = {
@@ -1067,7 +1072,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       },
       students: (inv.students || []).map((s) => ({
         id: s.id, name: s.name, grade: s.grade, className: s.className, branch: s.branch, branchName: bName[s.branch] || s.branch || "",
-        options: [...(m.teachers || []).filter((t) => (t.role || "TEACHER") === "TEACHER" && teachesStudent(t, s)), ...POSITION_SLOTS].map(staffOut),
+        options: [...(m.teachers || []).filter((t) => (t.role || "TEACHER") === "TEACHER" && teachesStudent(t, s)), ...POSITION_SLOTS.filter((p) => canAsk(p, s))].map(staffOut),
       })),
       requests: reqs.map((r) => ({
         id: r.id, studentId: r.studentId, staffId: r.staffId, staffName: r.staffName, staffRole: r.staffRole, room: staffRoom(m, r.staffId), holder: holderOf(m, r), position: r.position || "", posSubject: r.posSubject || "",
@@ -1209,7 +1214,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       const st = students.get(r.studentId);
       const t = staff.get(r.staffId);
       const k = `${r.studentId}_${r.staffId}`;
-      if (!st || !t || !teachesStudent(t, st) || seen.has(k)) return false;
+      if (!st || !t || !canAsk(t, st) || seen.has(k)) return false;
       seen.add(k);
       return true;
     });

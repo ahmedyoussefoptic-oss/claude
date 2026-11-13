@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import QRCode from 'qrcode';
 import { Loader2, CheckCircle2, Star, AlertTriangle, Pencil, Ticket, ArrowLeftRight, LogOut, Sparkles, HeartHandshake, Check, Printer, ChevronDown } from 'lucide-react';
 import logo from '../assets/logo.png';
-import { callMeeting, relationsFor, MALE_RELATIONS, STAFF_POSITIONS, SUBJECTS, positionLabel } from '../config/meetings';
+import { callMeeting, relationsFor, MALE_RELATIONS, STAFF_POSITIONS, SECTION_POSITIONS, SUBJECTS, positionLabel } from '../config/meetings';
 
 // The parents' pages share one look: a navy card (like a student card) with
 // the school's logo, then white cards with coloured initials for the people.
@@ -277,6 +277,7 @@ function positionSlots(t, role, list) {
     (pos === 'SUBJECT_SUPERVISOR' ? SUBJECTS : [null]).forEach((sub) => {
       const label = sub ? t('meetings.positions.supervisorOf', { subject: t(`meetings.subjects.${sub}`) }) : t(`meetings.positions.${pos}`);
       const holders = list.filter((o) => o.position === pos && (sub ? o.posSubject === sub : true));
+      if (!holders.length && SECTION_POSITIONS.includes(pos)) return; // another department's
       if (!holders.length) out.push({ key: `${pos}|${sub || ''}`, label, staff: null });
       holders.forEach((h) => { used.add(h.id); out.push({ key: h.id, label: holders.length > 1 ? `${label} — ${h.name}` : label, staff: h }); });
     });

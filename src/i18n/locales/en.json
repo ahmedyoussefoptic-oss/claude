@@ -4572,6 +4572,8 @@
       "VICE_PRINCIPAL": "Vice principal",
       "COUNSELOR": "Student counselor",
       "ACADEMIC_DIRECTOR": "Academic director",
+      "ACADEMIC_DIRECTOR_AMERICAN": "Academic Director — American",
+      "ACADEMIC_DIRECTOR_BRITISH": "Academic Director — British",
       "ACADEMIC_DEPUTY": "Deputy academic director",
       "SUBJECT_SUPERVISOR": "Subject supervisor",
       "supervisorOf": "{{subject}} supervisor"

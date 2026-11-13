@@ -10,8 +10,10 @@ export const STAFF_ROLES = ['TEACHER', 'ACADEMIC', 'ADMIN'];
 // subject supervisor can be for.
 export const STAFF_POSITIONS = {
   ADMIN: ['PRINCIPAL', 'VICE_PRINCIPAL', 'COUNSELOR'],
-  ACADEMIC: ['ACADEMIC_DIRECTOR', 'ACADEMIC_DEPUTY', 'SUBJECT_SUPERVISOR'],
+  ACADEMIC: ['ACADEMIC_DIRECTOR', 'ACADEMIC_DIRECTOR_AMERICAN', 'ACADEMIC_DIRECTOR_BRITISH', 'ACADEMIC_DEPUTY', 'SUBJECT_SUPERVISOR'],
 };
+// Positions for one department only (offered to that department's families).
+export const SECTION_POSITIONS = ['ACADEMIC_DIRECTOR_AMERICAN', 'ACADEMIC_DIRECTOR_BRITISH'];
 export const SUBJECTS = ['ARABIC', 'ENGLISH', 'MATH', 'SCIENCE', 'ISLAMIC', 'QURAN', 'SOCIAL', 'ICT', 'FRENCH', 'ART', 'PE', 'LIFE_SKILLS'];
 // The label of a staff member's position ('' when none is set).
 export const positionLabel = (t, x) => {

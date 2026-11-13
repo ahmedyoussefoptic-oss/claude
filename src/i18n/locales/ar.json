@@ -4577,6 +4577,8 @@
       "VICE_PRINCIPAL": "وكيل المدرسة",
       "COUNSELOR": "المرشد الطلابي",
       "ACADEMIC_DIRECTOR": "المدير الأكاديمي",
+      "ACADEMIC_DIRECTOR_AMERICAN": "مدير أكاديمي القسم الأمريكي",
+      "ACADEMIC_DIRECTOR_BRITISH": "مدير أكاديمي القسم البريطاني",
       "ACADEMIC_DEPUTY": "نائب المدير الأكاديمي",
       "SUBJECT_SUPERVISOR": "مشرف مادة",
       "supervisorOf": "مشرف مادة {{subject}}"
