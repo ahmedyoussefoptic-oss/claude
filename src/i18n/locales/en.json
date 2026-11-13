@@ -4306,7 +4306,9 @@
       "purpose": "Purpose",
       "requestsTitle": "Interviews on request",
       "doneOf": "{{done}} of {{asked}} done",
-      "purposes": "Meeting purposes ({{count}})"
+      "purposes": "Meeting purposes ({{count}})",
+      "rejected": "Declined",
+      "rejectReason": "Decline reason"
     },
     "staff": {
       "pinHint": "Enter the 4-digit access code you received with the link.",
@@ -4415,7 +4417,8 @@
       "DIRECTED": "Directed",
       "IN_PROGRESS": "In progress",
       "DONE": "Done",
-      "CANCELLED": "Not held"
+      "CANCELLED": "Not held",
+      "REJECTED": "Declined"
     },
     "family": {
       "signOut": "Sign out",
@@ -4499,7 +4502,9 @@
       "unavailable": "not available",
       "picked": "selected",
       "onDutyNote": "You'll meet whoever holds this position on the day",
-      "womenOnlyNote": "Attendance at this branch is for women only."
+      "womenOnlyNote": "Attendance at this branch is for women only.",
+      "rejected": "Declined",
+      "rejectedReason": "Reason: {{reason}}"
     },
     "staffReq": {
       "skipPrompt": "Why the meeting was not held (optional):",
@@ -4509,7 +4514,8 @@
         "directed": "Directed to you now",
         "waiting": "Arrived and waiting",
         "notArrived": "Not arrived yet",
-        "done": "Finished meetings"
+        "done": "Finished meetings",
+        "rejected": "Declined interviews"
       },
       "arrivedTicket": "Arrived · ticket {{n}} · {{time}}",
       "startedAt": "started {{time}}",
@@ -4523,7 +4529,21 @@
       "resultRequired": "Write the result of the meeting.",
       "endSave": "Close meeting",
       "autoClosed": "Closed automatically when another meeting started; its result isn't written yet.",
-      "writeResult": "Write the result"
+      "writeResult": "Write the result",
+      "reject": "Decline",
+      "rejectTitle": "Decline the interview request",
+      "rejectReason": "Reason",
+      "rejectPh": "Write the reason briefly…",
+      "rejectRequired": "Write why the interview is declined.",
+      "rejectSave": "Decline the interview",
+      "rejectNote": "The parent will see on their page that the interview was declined, with this reason. You can undo it later.",
+      "rejectQuick": [
+        "The student is not in my class",
+        "Outside my role — please see the relevant department",
+        "Already discussed with the parent",
+        "Not enough time left for a new interview"
+      ],
+      "restore": "Undo decline"
     },
     "publicLink": {
       "title": "Meeting link for parents",

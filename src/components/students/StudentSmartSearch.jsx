@@ -288,6 +288,7 @@ function StudentFile({ student: s, records, branchName, canEdit, onEdit, onOpen,
               <div key={`r${i}`} className="text-xs text-slate-600 bg-slate-50 rounded-lg p-2 mt-1">
                 <b>{rq.staffName}</b> ({t(`meetings.roles.${rq.staffRole}`)}) · {t(`meetings.request.${rq.status}`)}
                 <p>{t('meetings.staffReq.purpose')}: {rq.purpose}</p>
+                {rq.rejectReason && <p className="text-rose-700">{t('meetings.staffReq.rejectReason')}: {rq.rejectReason}</p>}
                 {rq.result && <p className="text-slate-800">{t('meetings.staffReq.result')}: {rq.result}{rq.recommendations ? ` — ${t('meetings.teacher.recommendations')}: ${rq.recommendations}` : ''}</p>}
                 {rq.followUp?.complaintNo && <span className="text-amber-700 cursor-pointer hover:underline" onClick={() => go('/complaints', rq.followUp.complaintId)}>{t('meetings.teacher.followUpCreated', { number: rq.followUp.complaintNo })}</span>}
               </div>

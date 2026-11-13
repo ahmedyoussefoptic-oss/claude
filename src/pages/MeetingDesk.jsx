@@ -205,8 +205,8 @@ export default function MeetingDesk() {
 // directs each one to a person who is free (the parent's page shows it).
 function WaitingBoard({ queue, busy, onAct }) {
   const { t } = useTranslation();
-  const tone = { REQUESTED: 'border-slate-200', DIRECTED: 'border-amber-300 bg-amber-50', IN_PROGRESS: 'border-sky-300 bg-sky-50', DONE: 'border-emerald-200 bg-emerald-50 opacity-70' };
-  const waiting = queue.filter((f) => f.requests.some((r) => r.status !== 'DONE'));
+  const tone = { REQUESTED: 'border-slate-200', DIRECTED: 'border-amber-300 bg-amber-50', IN_PROGRESS: 'border-sky-300 bg-sky-50', DONE: 'border-emerald-200 bg-emerald-50 opacity-70', REJECTED: 'border-rose-200 bg-rose-50 opacity-80' };
+  const waiting = queue.filter((f) => f.requests.some((r) => !['DONE', 'REJECTED'].includes(r.status)));
   const finished = queue.length - waiting.length;
   return (
     <div className={`${card} space-y-3`}>
@@ -228,6 +228,7 @@ function WaitingBoard({ queue, busy, onAct }) {
                 <div className="min-w-0">
                   <p className="text-slate-800">{r.staffName}{r.holder ? ` — ${r.holder}` : ''} <span className="text-xs text-slate-500">({t(`meetings.roles.${r.staffRole}`)}{r.room ? ` · ${r.room}` : ''})</span></p>
                   <p className="text-xs text-slate-500 truncate">{r.studentName} — {r.purpose}</p>
+                  {r.status === 'REJECTED' && r.rejectReason && <p className="text-xs text-rose-700">{t('meetings.staffReq.rejectReason')}: {r.rejectReason}</p>}
                 </div>
                 <div className="shrink-0 flex items-center gap-1.5">
                   {r.status === 'REQUESTED' && (

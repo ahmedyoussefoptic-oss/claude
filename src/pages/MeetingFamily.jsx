@@ -15,7 +15,7 @@ const ROLE_DOT = { ACADEMIC: 'bg-violet-500', ADMIN: 'bg-amber-500', TEACHER: 'b
 const AVATAR_TONES = ['bg-[#1f3c64]', 'bg-violet-500', 'bg-blue-500', 'bg-[#1f3c64]', 'bg-teal-500', 'bg-amber-500', 'bg-[#1f3c64]', 'bg-rose-500'];
 const STATUS_TONE = {
   REQUESTED: 'text-slate-700 bg-slate-100', DIRECTED: 'text-amber-900 bg-amber-100',
-  IN_PROGRESS: 'text-blue-800 bg-blue-100', DONE: 'text-emerald-800 bg-emerald-100',
+  IN_PROGRESS: 'text-blue-800 bg-blue-100', DONE: 'text-emerald-800 bg-emerald-100', REJECTED: 'text-rose-800 bg-rose-100',
 };
 const tail = (id) => `ID ••••${String(id || '').slice(-4)}`;
 
@@ -318,7 +318,7 @@ function ManagerPicker({ role, list, studentId, picks, locked, keyOf, onAdd, onT
 function RequestForm({ sess, state, others, onSaved }) {
   const { t, i18n } = useTranslation();
   const keyOf = (studentId, staffId) => `${studentId}|${staffId}`;
-  const [picks, setPicks] = useState(() => Object.fromEntries(state.requests.filter((r) => r.status !== 'CANCELLED').map((r) => [keyOf(r.studentId, r.staffId), r.purpose])));
+  const [picks, setPicks] = useState(() => Object.fromEntries(state.requests.filter((r) => !['CANCELLED', 'REJECTED'].includes(r.status)).map((r) => [keyOf(r.studentId, r.staffId), r.purpose])));
   // Women-only branches: a man's name and relation from another branch's form aren't taken.
   const womenOnly = !!state.invite.womenOnly;
   const fit = (v) => (v && womenOnly && MALE_RELATIONS.includes(v.relation) ? { name: '', relation: '' } : v);
@@ -418,10 +418,11 @@ function RequestList({ state, withStatus = false }) {
                 <div className="min-w-0">
                   <p className="text-lg font-extrabold text-slate-900 leading-snug break-words" dir="auto">{staffLabel(t, r)}</p>
                   <p className="text-[15px] text-slate-500 truncate"><span className={`inline-block w-2 h-2 rounded-full me-1.5 ${ROLE_DOT[r.staffRole] || ROLE_DOT.TEACHER}`} />{withStatus ? t(`meetings.roles.${r.staffRole}`) : r.purpose}</p>
+                  {r.status === 'REJECTED' && <p className="text-sm text-rose-800 mt-1 whitespace-pre-wrap break-words">{t('meetings.family.rejectedReason', { reason: r.rejectReason })}</p>}
                 </div>
               </div>
-              {withStatus
-                ? <span className={`text-sm font-bold px-3 py-1 rounded-full shrink-0 ${STATUS_TONE[r.status] || ''}`}>{t(`meetings.request.${r.status}`)}</span>
+              {withStatus || r.status === 'REJECTED'
+                ? <span className={`text-sm font-bold px-3 py-1 rounded-full shrink-0 ${STATUS_TONE[r.status] || ''}`}>{r.status === 'REJECTED' ? t('meetings.family.rejected') : t(`meetings.request.${r.status}`)}</span>
                 : <span className="text-sm text-slate-400 shrink-0">{t(`meetings.roles.${r.staffRole}`)}</span>}
             </div>
           ))}
@@ -481,7 +482,7 @@ function TicketView({ state, onRefresh }) {
   const { t, i18n } = useTranslation();
   const now = state.requests.filter((r) => r.status === 'DIRECTED' || r.status === 'IN_PROGRESS');
   const { attendee, ticketNo } = state.invite;
-  const left = state.requests.filter((r) => r.status !== 'DONE').length;
+  const left = state.requests.filter((r) => !['DONE', 'REJECTED'].includes(r.status)).length;
   const date = i18n.language === 'ar' ? state.meeting.dateLabel : state.meeting.date;
   return (
     <>

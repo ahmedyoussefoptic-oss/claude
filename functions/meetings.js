@@ -135,6 +135,12 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     return { ref, m };
   }
   const mlog = (ref, action, actor, metadata = {}) => ref.collection("activityLog").add({ action, actorId: actor?.uid || null, actorName: actor?.name || "النظام", metadata, createdAt: Timestamp.now() });
+  // A request the teacher (or manager) declined stays CANCELLED — so every
+  // count and the family's «all done» leave it out — but is shown to staff and
+  // to the family as REJECTED with its reason.
+  const isRejected = (r) => r.status === "CANCELLED" && r.rejected === true;
+  const shownStatus = (r) => (isRejected(r) ? "REJECTED" : r.status);
+  const visibleReq = (r) => r.status !== "CANCELLED" || isRejected(r);
 
   // --- validation ----------------------------------------------------------
   function cleanMeeting(input, current) {
@@ -718,9 +724,10 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
           ticketNo: i.ticketNo || null, selfRegistered: i.selfRegistered === true, attendee: i.attendee || null,
         };
       }),
-      requests: reqs.docs.map((x) => ({ id: x.id, ...x.data() })).filter((r) => r.status !== "CANCELLED").map((r) => ({
+      requests: reqs.docs.map((x) => ({ id: x.id, ...x.data() })).filter(visibleReq).map((r) => ({
         id: r.id, inviteId: r.inviteId, studentId: r.studentId, studentName: r.studentName, staffId: r.staffId, staffName: r.staffName, staffRole: r.staffRole, holder: holderOf(m, r),
-        purpose: r.purpose || "", status: r.status, directedAt: ms(r.directedAt), startedAt: ms(r.startedAt), endedAt: ms(r.endedAt), result: r.result || "",
+        purpose: r.purpose || "", status: shownStatus(r), directedAt: ms(r.directedAt), startedAt: ms(r.startedAt), endedAt: ms(r.endedAt), result: r.result || "",
+        rejectReason: isRejected(r) ? r.rejectReason || "" : "", rejectedBy: isRejected(r) ? r.cancelledBy || "" : "",
       })),
       slots: slots.docs.map((x) => ({ id: x.id, teacherId: x.data().teacherId, time: x.data().time, inviteId: x.data().inviteId, startedAt: ms(x.data().startedAt), doneAt: ms(x.data().doneAt) })),
       minutes: minutes.docs.map((x) => ({ id: x.id, teacherId: x.data().teacherId, studentId: x.data().studentId, studentName: x.data().studentName, followUp: x.data().followUp || null, updatedAt: ms(x.data().updatedAt) })),
@@ -1005,8 +1012,9 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       db.getAll(...[...new Set((inv.students || []).map((s) => s.branch).filter(Boolean))].map((b) => db.collection("branches").doc(b))),
     ]);
     const bName = Object.fromEntries(branchSnaps.map((x) => [x.id, x.exists ? x.data().name : x.id]));
-    const reqs = reqSnap.docs.map((x) => ({ id: x.id, ...x.data() })).filter((r) => r.status !== "CANCELLED");
-    const done = reqs.length > 0 && reqs.every((r) => r.status === "DONE");
+    const reqs = reqSnap.docs.map((x) => ({ id: x.id, ...x.data() })).filter(visibleReq);
+    const live = reqs.filter((r) => !isRejected(r));
+    const done = live.length > 0 && live.every((r) => r.status === "DONE");
     const surveyOpen = inv.attended === true && (done || m.status === "COMPLETED");
     const met = new Set(reqs.filter((r) => r.status === "DONE").map((r) => r.staffId));
     return {
@@ -1023,7 +1031,8 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       })),
       requests: reqs.map((r) => ({
         id: r.id, studentId: r.studentId, staffId: r.staffId, staffName: r.staffName, staffRole: r.staffRole, room: staffRoom(m, r.staffId), holder: holderOf(m, r), position: r.position || "", posSubject: r.posSubject || "",
-        purpose: r.purpose || "", status: r.status, directedAt: ms(r.directedAt), startedAt: ms(r.startedAt), endedAt: ms(r.endedAt),
+        purpose: r.purpose || "", status: shownStatus(r), directedAt: ms(r.directedAt), startedAt: ms(r.startedAt), endedAt: ms(r.endedAt),
+        rejectReason: isRejected(r) ? r.rejectReason || "" : "",
       })),
       allDone: done,
       surveyOpen,
@@ -1177,7 +1186,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       const docId = `${inv.id}_${r.studentId}_${r.staffId}`;
       keep.add(docId);
       const cur = existing.get(docId);
-      if (cur && ["IN_PROGRESS", "DONE"].includes(cur.status)) return;
+      if (cur && (["IN_PROGRESS", "DONE"].includes(cur.status) || isRejected(cur))) return;
       const st = students.get(r.studentId);
       const t = staff.get(r.staffId);
       batch.set(ref.collection("requests").doc(docId), {
@@ -1238,12 +1247,13 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
   async function requestsState(ref, m, teacher) {
     const [reqs, inv] = await Promise.all([ref.collection("requests").where("staffId", "==", teacher.id).get(), ref.collection("invites").get()]);
     const invites = new Map(inv.docs.map((x) => [x.id, x.data()]));
-    const rank = (r) => (r.status === "IN_PROGRESS" ? 0 : r.status === "DIRECTED" ? 1 : r.status === "DONE" ? 4 : r.arrived ? 2 : 3);
-    const requests = reqs.docs.map((x) => ({ id: x.id, ...x.data() })).filter((r) => r.status !== "CANCELLED").map((r) => {
+    const rank = (r) => (r.status === "IN_PROGRESS" ? 0 : r.status === "DIRECTED" ? 1 : r.status === "DONE" ? 4 : r.status === "REJECTED" ? 5 : r.arrived ? 2 : 3);
+    const requests = reqs.docs.map((x) => ({ id: x.id, ...x.data() })).filter(visibleReq).map((r) => {
       const i = invites.get(r.inviteId) || {};
       return {
         id: r.id, inviteId: r.inviteId, studentId: r.studentId, studentName: r.studentName, grade: r.grade, className: r.className, purpose: r.purpose || "",
-        status: r.status, arrived: i.attended === true, ticketNo: i.ticketNo || null, checkedInAt: ms(i.checkedInAt), attendee: i.attendee || null,
+        status: shownStatus(r), arrived: i.attended === true, ticketNo: i.ticketNo || null, checkedInAt: ms(i.checkedInAt), attendee: i.attendee || null,
+        rejectReason: isRejected(r) ? r.rejectReason || "" : "", rejectedBy: isRejected(r) ? r.cancelledBy || "" : "", rejectedAt: isRejected(r) ? ms(r.cancelledAt) : null,
         directedAt: ms(r.directedAt), startedAt: ms(r.startedAt), endedAt: ms(r.endedAt), result: r.result || "", recommendations: r.recommendations || "",
         followUp: r.followUp || null, autoClosed: r.autoClosed === true,
         // The other people this family asked to meet (to plan together).
@@ -1335,7 +1345,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       // A parent the teacher met counts as attended even if reception missed them.
       if (inv.attended !== true) await checkIn(ref, inviteId, `${teacher.name} (المعلم)`);
       await refreshStats(ref);
-    } else if (["startRequest", "endRequest", "skipRequest"].includes(action)) {
+    } else if (REQUEST_ACTIONS.includes(action)) {
       await requestAction(ref, m, teacher, request.data || {});
       await refreshStats(ref);
     } else throw new HttpsError("invalid-argument", "إجراء غير معروف.");
@@ -1356,14 +1366,15 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     await familyFinished(ref, m, r.inviteId);
   }
 
-  // A request's start / end (with the result) / «not held», for a teacher or
+  const REQUEST_ACTIONS = ["startRequest", "endRequest", "skipRequest", "rejectRequest", "restoreRequest"];
+  // A request's start / end (with the result) / «not held» / rejection, for a teacher or
   // for a manager signed in on the managers' link.
   async function requestAction(ref, m, teacher, data) {
     const action = data.action;
     const now = Timestamp.now();
       const rRef = ref.collection("requests").doc(String(data.requestId || "_"));
       const r = (await rRef.get()).data();
-      if (!r || r.staffId !== teacher.id || r.status === "CANCELLED") throw new HttpsError("not-found", "لم يتم العثور على طلب المقابلة.");
+      if (!r || r.staffId !== teacher.id || (r.status === "CANCELLED" && !(action === "restoreRequest" && isRejected(r)))) throw new HttpsError("not-found", "لم يتم العثور على طلب المقابلة.");
       const invRef = ref.collection("invites").doc(r.inviteId);
       const inv = (await invRef.get()).data() || {};
       if (action === "startRequest") {
@@ -1382,6 +1393,21 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
         if (r.status === "DONE") throw new HttpsError("failed-precondition", "انتهت هذه المقابلة.");
         await rRef.update({ status: "CANCELLED", cancelledAt: now, cancelledBy: teacher.name, cancelReason: str(data.reason, 300) });
         await familyFinished(ref, m, r.inviteId);
+      } else if (action === "rejectRequest") {
+        // Declined before it starts, with a reason the family sees.
+        if (!["REQUESTED", "DIRECTED"].includes(r.status)) throw new HttpsError("failed-precondition", "لا يمكن رفض مقابلة بدأت أو انتهت.");
+        const reason = str(data.reason, 300);
+        if (reason.length < 3) throw new HttpsError("invalid-argument", "اكتب سبب رفض المقابلة.");
+        await rRef.update({ status: "CANCELLED", rejected: true, rejectReason: reason, cancelReason: reason, cancelledAt: now, cancelledBy: teacher.name, directedAt: FieldValue.delete() });
+        await mlog(ref, "REQUEST_REJECTED", { name: teacher.name }, { requestId: rRef.id, inviteId: r.inviteId, studentName: r.studentName || "", reason });
+        await familyFinished(ref, m, r.inviteId);
+      } else if (action === "restoreRequest") {
+        // Undo a rejection — only while the family still asks for it.
+        if (!isRejected(r)) throw new HttpsError("failed-precondition", "هذا الطلب غير مرفوض.");
+        if (!(inv.requested || []).some((o) => o.studentId === r.studentId && o.staffId === r.staffId)) throw new HttpsError("failed-precondition", "ألغى ولي الأمر هذا الطلب.");
+        const del = FieldValue.delete();
+        await rRef.update({ status: "REQUESTED", rejected: del, rejectReason: del, cancelReason: del, cancelledAt: del, cancelledBy: del, updatedAt: now });
+        await mlog(ref, "REQUEST_RESTORED", { name: teacher.name }, { requestId: rRef.id, inviteId: r.inviteId, studentName: r.studentName || "" });
       } else {
         const x = data.minute || {};
         const result = str(x.result, 3000);
@@ -1454,7 +1480,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
   out.meetingManagerAction = onCall({ timeoutSeconds: 120 }, async (request) => {
     const { ref, m } = await staffLink(request, "manager");
     const teacher = managerOf(m, request.data);
-    if (!["startRequest", "endRequest", "skipRequest"].includes(request.data?.action)) throw new HttpsError("invalid-argument", "إجراء غير معروف.");
+    if (!REQUEST_ACTIONS.includes(request.data?.action)) throw new HttpsError("invalid-argument", "إجراء غير معروف.");
     await requestAction(ref, m, teacher, request.data || {});
     return requestsState(ref, (await ref.get()).data(), teacher);
   });
@@ -1480,10 +1506,11 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     const byInvite = new Map();
     reqs.docs.forEach((x) => {
       const r = x.data();
-      if (r.status === "CANCELLED") return;
+      if (!visibleReq(r)) return;
       (byInvite.get(r.inviteId) || byInvite.set(r.inviteId, []).get(r.inviteId)).push({
         id: x.id, studentName: r.studentName, staffId: r.staffId, staffName: r.staffName, staffRole: r.staffRole, room: staffRoom(m, r.staffId), holder: holderOf(m, r),
-        purpose: r.purpose || "", status: r.status, directedAt: ms(r.directedAt), startedAt: ms(r.startedAt), endedAt: ms(r.endedAt),
+        rejectReason: isRejected(r) ? r.rejectReason || "" : "",
+        purpose: r.purpose || "", status: shownStatus(r), directedAt: ms(r.directedAt), startedAt: ms(r.startedAt), endedAt: ms(r.endedAt),
       });
     });
     // Who is busy right now (one interview at a time per person).
@@ -1643,13 +1670,13 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       const done = mine.filter((r) => r.status === "DONE");
       const waits = done.map((r) => { const c = inv.get(r.inviteId)?.checkedInAt; return c && r.startedAt ? Math.max(0, (r.startedAt.toMillis() - c.toMillis()) / 60e3) : null; }).filter((v) => v != null);
       const lengths = done.map((r) => (r.startedAt && r.endedAt ? (r.endedAt.toMillis() - r.startedAt.toMillis()) / 60e3 : null)).filter((v) => v != null);
-      return { id: t.id, name: t.name, role: t.role || "TEACHER", subject: t.subject || "", asked: mine.length, done: done.length, notMet: mine.filter((r) => r.status === "CANCELLED").length, avgWait: avg(waits), avgLength: avg(lengths) };
+      return { id: t.id, name: t.name, role: t.role || "TEACHER", subject: t.subject || "", asked: mine.length, done: done.length, notMet: mine.filter((r) => r.status === "CANCELLED" && !isRejected(r)).length, rejected: mine.filter(isRejected).length, avgWait: avg(waits), avgLength: avg(lengths) };
     });
     const active = reqs.filter((r) => !(r.status === "CANCELLED" && r.cancelledBy === "ولي الأمر"));
     return {
       perStaff,
       byRole: STAFF_ROLES.map((role) => ({ role, asked: active.filter((r) => r.staffRole === role).length, done: active.filter((r) => r.staffRole === role && r.status === "DONE").length })),
-      purposes: active.filter((r) => r.purpose).map((r) => ({ staff: r.staffName, role: r.staffRole, student: r.studentName, purpose: r.purpose, status: r.status })),
+      purposes: active.filter((r) => r.purpose).map((r) => ({ staff: r.staffName, role: r.staffRole, student: r.studentName, purpose: r.purpose, status: shownStatus(r), rejectReason: isRejected(r) ? r.rejectReason || "" : "" })),
     };
   }
   out.getMeetingReport = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
@@ -1844,7 +1871,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
           type: x.data().type, attendee: inv.attendee || null,
           minutes: mins.filter((y) => y.meetingId === x.id && !y.requestId).map((y) => ({ teacherName: y.teacherName, subject: y.subject, points: y.points, recommendations: y.recommendations, agreements: y.agreements, followUp: y.followUp || null })),
           requests: reqLists[i].filter((r) => r.status !== "CANCELLED" || r.cancelledBy !== "ولي الأمر").map((r) => ({
-            staffName: r.staffName, staffRole: r.staffRole, purpose: r.purpose || "", status: r.status, result: r.result || "", recommendations: r.recommendations || "",
+            staffName: r.staffName, staffRole: r.staffRole, purpose: r.purpose || "", status: shownStatus(r), result: r.result || "", recommendations: r.recommendations || "", rejectReason: isRejected(r) ? r.rejectReason || "" : "",
             startedAt: ms(r.startedAt), endedAt: ms(r.endedAt), followUp: r.followUp || null,
           })),
         };

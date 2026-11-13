@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Loader2, KeyRound, RefreshCw, Play, FileText, CheckCircle2, UserCheck, X, Save, AlertTriangle, Clock } from 'lucide-react';
+import { Loader2, KeyRound, RefreshCw, Play, FileText, CheckCircle2, UserCheck, X, Save, AlertTriangle, Clock, Ban, Undo2 } from 'lucide-react';
 import { PublicShell } from './MeetingParent';
 import { callMeeting, meetingTime, savedPin, savePin, FOLLOW_TYPES } from '../config/meetings';
 
@@ -141,10 +141,13 @@ const GROUPS = [
   ['waiting', (r) => r.status === 'REQUESTED' && r.arrived],
   ['notArrived', (r) => r.status === 'REQUESTED' && !r.arrived],
   ['done', (r) => r.status === 'DONE'],
+  ['rejected', (r) => r.status === 'REJECTED'],
 ];
+const OPEN = ['REQUESTED', 'DIRECTED'];
 export function RequestsBoard({ requests, act, onError }) {
   const { t, i18n } = useTranslation();
   const [ending, setEnding] = useState(null);
+  const [rejecting, setRejecting] = useState(null);
   const [busy, setBusy] = useState('');
   const run = async (payload, key) => {
     setBusy(key);
@@ -165,26 +168,34 @@ export function RequestsBoard({ requests, act, onError }) {
           <div key={g} className={`${card} space-y-2`}>
             <p className="font-bold text-slate-900">{t(`meetings.staffReq.group.${g}`)} <span className="text-slate-400 font-normal">({list.length})</span></p>
             {list.map((r) => (
-              <div key={r.id} className={`border rounded-xl p-3 ${g === 'now' ? 'border-sky-300 bg-sky-50/50' : g === 'directed' ? 'border-amber-300 bg-amber-50/50' : 'border-slate-200'}`}>
+              <div key={r.id} className={`border rounded-xl p-3 ${g === 'now' ? 'border-sky-300 bg-sky-50/50' : g === 'directed' ? 'border-amber-300 bg-amber-50/50' : g === 'rejected' ? 'border-rose-200 bg-rose-50/40' : 'border-slate-200'}`}>
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-bold text-slate-900">{r.studentName} <span className="text-xs font-normal text-slate-500" dir="ltr">{r.grade} {r.className}</span></p>
-                    <p className="text-xs text-slate-500">
+                    <p className={`text-xs text-slate-500 ${r.status === 'REJECTED' ? 'hidden' : ''}`}>
                       {r.arrived ? t('meetings.staffReq.arrivedTicket', { n: r.ticketNo ?? '—', time: time(r.checkedInAt) }) : t('meetings.teacher.notArrived')}
                       {r.startedAt && ` · ${t('meetings.staffReq.startedAt', { time: time(r.startedAt) })}`}
                     </p>
                     {r.attendee && <p className="text-xs text-slate-700 mt-0.5">{t('meetings.family.attendee', { name: r.attendee.name, relation: t(`meetings.family.relations.${r.attendee.relation}`) })}</p>}
                   </div>
-                  <div className="flex gap-1.5 shrink-0">
-                    {['REQUESTED', 'DIRECTED'].includes(r.status) && r.arrived && <button type="button" disabled={!!busy} onClick={() => run({ action: 'startRequest', requestId: r.id }, r.id)} className="px-2.5 py-1.5 text-xs bg-primary text-white rounded-lg flex items-center gap-1">{busy === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}{t('meetings.staffReq.start')}</button>}
+                  <div className="flex flex-wrap justify-end gap-1.5 shrink-0">
+                    {OPEN.includes(r.status) && r.arrived && <button type="button" disabled={!!busy} onClick={() => run({ action: 'startRequest', requestId: r.id }, r.id)} className="px-2.5 py-1.5 text-xs bg-primary text-white rounded-lg flex items-center gap-1">{busy === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}{t('meetings.staffReq.start')}</button>}
                     {r.status === 'IN_PROGRESS' && <button type="button" onClick={() => setEnding(r)} className="px-2.5 py-1.5 text-xs bg-emerald-600 text-white rounded-lg flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />{t('meetings.staffReq.end')}</button>}
-                    {r.status !== 'DONE' && <button type="button" disabled={!!busy} onClick={() => skip(r)} className="px-2 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg">{t('meetings.staffReq.skip')}</button>}
+                    {OPEN.includes(r.status) && <button type="button" disabled={!!busy} onClick={() => setRejecting(r)} className="px-2.5 py-1.5 text-xs text-rose-700 border border-rose-200 bg-white hover:bg-rose-50 rounded-lg flex items-center gap-1"><Ban className="w-3.5 h-3.5" />{t('meetings.staffReq.reject')}</button>}
+                    {!['DONE', 'REJECTED'].includes(r.status) && <button type="button" disabled={!!busy} onClick={() => skip(r)} className="px-2 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg">{t('meetings.staffReq.skip')}</button>}
+                    {r.status === 'REJECTED' && <button type="button" disabled={!!busy} onClick={() => run({ action: 'restoreRequest', requestId: r.id }, r.id)} className="px-2.5 py-1.5 text-xs text-slate-600 border border-slate-200 bg-white rounded-lg flex items-center gap-1">{busy === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}{t('meetings.staffReq.restore')}</button>}
                   </div>
                 </div>
                 <div className="bg-amber-50 border border-amber-100 rounded-lg p-2 mt-2 text-sm text-slate-700">
                   <p className="text-xs font-medium text-amber-800">{t('meetings.staffReq.purpose')}</p>
                   <p className="whitespace-pre-wrap">{r.purpose}</p>
                 </div>
+                {r.status === 'REJECTED' && (
+                  <div className="text-sm mt-2 bg-rose-50 border border-rose-200 rounded-lg p-2">
+                    <p className="text-xs font-medium text-rose-800">{t('meetings.staffReq.rejectReason')}{r.rejectedBy ? ` · ${r.rejectedBy}` : ''}{r.rejectedAt ? ` · ${time(r.rejectedAt)}` : ''}</p>
+                    <p className="whitespace-pre-wrap text-slate-800">{r.rejectReason}</p>
+                  </div>
+                )}
                 {r.others.length > 0 && <p className="text-xs text-slate-500 mt-1">{t('meetings.staffReq.alsoMeeting', { list: r.others.join('، ') })}</p>}
                 {r.status === 'DONE' && r.autoClosed && (
                   <div className="text-sm mt-2 bg-amber-50 border border-amber-200 rounded-lg p-2 flex flex-wrap items-center justify-between gap-2">
@@ -205,7 +216,50 @@ export function RequestsBoard({ requests, act, onError }) {
         );
       })}
       {ending && <ResultEditor request={ending} onClose={() => setEnding(null)} onSave={async (minute) => { await act({ action: 'endRequest', requestId: ending.id, minute }); setEnding(null); }} />}
+      {rejecting && <RejectDialog request={rejecting} onClose={() => setRejecting(null)} onSave={async (reason) => { await act({ action: 'rejectRequest', requestId: rejecting.id, reason }); setRejecting(null); }} />}
     </>
+  );
+}
+
+// Declining a request before it starts: a reason is required (the family
+// sees it on their page), with a few ready reasons to pick from.
+function RejectDialog({ request, onClose, onSave }) {
+  const { t } = useTranslation();
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const quick = t('meetings.staffReq.rejectQuick', { returnObjects: true });
+  const submit = async (e) => {
+    e.preventDefault();
+    setError(null);
+    if (reason.trim().length < 3) { setError(t('meetings.staffReq.rejectRequired')); return; }
+    setBusy(true);
+    try { await onSave(reason.trim()); } catch (err) { setError(err.message); setBusy(false); }
+  };
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+      <form onSubmit={submit} className="bg-white w-full max-w-lg rounded-t-2xl sm:rounded-2xl max-h-[92vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-4 border-b border-slate-100 sticky top-0 bg-white">
+          <div><p className="font-bold text-slate-900 flex items-center gap-1.5"><Ban className="w-4 h-4 text-rose-600" />{t('meetings.staffReq.rejectTitle')}</p><p className="text-sm text-slate-500">{request.studentName} <span dir="ltr">{request.grade} {request.className}</span></p></div>
+          <button type="button" onClick={onClose} className="p-1 text-slate-400" aria-label={t('common.close')}><X className="w-5 h-5" /></button>
+        </div>
+        <div className="p-4 space-y-3">
+          <p className="text-xs text-slate-500 bg-slate-50 rounded-lg p-2">{t('meetings.staffReq.purpose')}: {request.purpose}</p>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('meetings.staffReq.rejectReason')} <span className="text-red-500">*</span></label>
+            {Array.isArray(quick) && (
+              <div className="flex flex-wrap gap-1.5 mb-2">
+                {quick.map((q) => <button key={q} type="button" onClick={() => setReason(q)} className={`px-2.5 py-1 text-xs rounded-full border ${reason === q ? 'border-rose-400 bg-rose-50 text-rose-800' : 'border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{q}</button>)}
+              </div>
+            )}
+            <textarea autoFocus rows={3} maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={t('meetings.staffReq.rejectPh')} className={inputCls} />
+          </div>
+          <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-2">{t('meetings.staffReq.rejectNote')}</p>
+          {error && <p className="text-sm text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" />{error}</p>}
+          <button disabled={busy} className="w-full py-2.5 bg-rose-600 text-white rounded-xl text-sm flex items-center justify-center gap-2 disabled:opacity-60">{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ban className="w-4 h-4" />}{t('meetings.staffReq.rejectSave')}</button>
+        </div>
+      </form>
+    </div>
   );
 }
 

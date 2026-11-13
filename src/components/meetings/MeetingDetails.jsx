@@ -416,7 +416,7 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
                       </td>
                       <td className="p-2 text-xs text-slate-600">
                         {(inv.slots || []).map((sl) => <p key={sl.teacherId}>{meetingTime(sl.time, lang)} · {teachersById[sl.teacherId]?.name}</p>)}
-                        {(requestsBy[inv.id] || []).map((r) => <p key={r.id} title={r.purpose}><span className={`inline-block px-1.5 rounded border text-[10px] ${REQUEST_STATUS_STYLES[r.status]}`}>{t(`meetings.request.${r.status}`)}</span> {r.staffName} <span className="text-slate-400">({r.studentName.split(' ')[0]})</span></p>)}
+                        {(requestsBy[inv.id] || []).map((r) => <p key={r.id} title={r.rejectReason ? `${r.purpose}\n— ${t('meetings.staffReq.rejectReason')}: ${r.rejectReason}` : r.purpose}><span className={`inline-block px-1.5 rounded border text-[10px] ${REQUEST_STATUS_STYLES[r.status]}`}>{t(`meetings.request.${r.status}`)}</span> {r.staffName} <span className="text-slate-400">({r.studentName.split(' ')[0]})</span></p>)}
                         {inv.ticketNo && <p className="text-primary font-medium">{t('meetings.desk.ticketN', { n: inv.ticketNo })}</p>}
                       </td>
                       <td className="p-2 text-xs">{inv.attended ? <span className="text-emerald-700 flex items-center gap-1"><UserCheck className="w-3.5 h-3.5" />{t('meetings.invites.came')}</span> : '—'}</td>

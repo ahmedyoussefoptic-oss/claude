@@ -94,8 +94,8 @@ export default function MeetingReport({ id }) {
     add(h('sheetTopics'), data.topics.map((x) => ({ [h('subject')]: x.subject, [h('teacher')]: x.teacher, [h('parent')]: x.students, [h('topic')]: x.topic })));
     add(h('sheetFollowUps'), data.followUps.map((x) => ({ '#': x.number, [h('student')]: x.studentName, [h('type')]: t(`businessData.complaintTypes.${x.type}`, x.type), [t('common.status')]: t(`statuses.complaint.${x.status}`, x.status) })));
     if (data.requests) {
-      add(h('sheetRequests'), data.requests.perStaff.map((x) => ({ [h('person')]: x.name, [h('role')]: t(`meetings.roles.${x.role}`), [h('asked')]: x.asked, [h('done')]: x.done, [h('notMet')]: x.notMet, [h('avgWait')]: x.avgWait, [h('avgLength')]: x.avgLength })));
-      add(h('sheetPurposes'), data.requests.purposes.map((x) => ({ [h('person')]: x.staff, [h('role')]: t(`meetings.roles.${x.role}`), [h('student')]: x.student, [h('purpose')]: x.purpose, [t('common.status')]: t(`meetings.request.${x.status}`) })));
+      add(h('sheetRequests'), data.requests.perStaff.map((x) => ({ [h('person')]: x.name, [h('role')]: t(`meetings.roles.${x.role}`), [h('asked')]: x.asked, [h('done')]: x.done, [h('notMet')]: x.notMet, [h('rejected')]: x.rejected || 0, [h('avgWait')]: x.avgWait, [h('avgLength')]: x.avgLength })));
+      add(h('sheetPurposes'), data.requests.purposes.map((x) => ({ [h('person')]: x.staff, [h('role')]: t(`meetings.roles.${x.role}`), [h('student')]: x.student, [h('purpose')]: x.purpose, [t('common.status')]: t(`meetings.request.${x.status}`), [h('rejectReason')]: x.rejectReason || '' })));
     }
     add(h('sheetAbsent'), data.absent.map((x) => ({ [h('parent')]: x.names, [h('class')]: x.classes, [h('response')]: t(`meetings.response.${x.response || 'NONE'}`), [h('call')]: x.callStatus ? t(`meetings.report.callStatus.${x.callStatus}`, x.callStatus) : '', [h('callResult')]: x.callResult })));
     XLSX.writeFile(wb, `${m.code}-report.xlsx`);
@@ -145,9 +145,9 @@ export default function MeetingReport({ id }) {
               ))}
             </div>
             <div className="overflow-x-auto"><table className="w-full text-sm">
-              <thead><tr className="text-xs text-slate-500 border-b border-slate-100">{['person', 'role', 'asked', 'done', 'notMet', 'avgWait', 'avgLength'].map((k) => <th key={k} className="p-2 text-start font-medium">{t(`meetings.report.${k}`)}</th>)}</tr></thead>
+              <thead><tr className="text-xs text-slate-500 border-b border-slate-100">{['person', 'role', 'asked', 'done', 'notMet', 'rejected', 'avgWait', 'avgLength'].map((k) => <th key={k} className="p-2 text-start font-medium">{t(`meetings.report.${k}`)}</th>)}</tr></thead>
               <tbody>{data.requests.perStaff.filter((x) => x.asked).map((x) => (
-                <tr key={x.id} className="border-b border-slate-50"><td className="p-2">{x.name}<p className="text-xs text-slate-400">{x.subject}</p></td><td className="p-2">{t(`meetings.roles.${x.role}`)}</td><td className="p-2">{x.asked}</td><td className="p-2">{x.done}</td><td className="p-2">{x.notMet}</td><td className="p-2">{x.avgWait}</td><td className="p-2">{x.avgLength}</td></tr>
+                <tr key={x.id} className="border-b border-slate-50"><td className="p-2">{x.name}<p className="text-xs text-slate-400">{x.subject}</p></td><td className="p-2">{t(`meetings.roles.${x.role}`)}</td><td className="p-2">{x.asked}</td><td className="p-2">{x.done}</td><td className="p-2">{x.notMet}</td><td className="p-2">{x.rejected || 0}</td><td className="p-2">{x.avgWait}</td><td className="p-2">{x.avgLength}</td></tr>
               ))}</tbody>
             </table></div>
             {data.requests.purposes.length > 0 && (

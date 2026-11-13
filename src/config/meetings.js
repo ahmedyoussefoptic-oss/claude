@@ -35,6 +35,7 @@ export const REQUEST_STATUS_STYLES = {
   IN_PROGRESS: 'bg-sky-50 text-sky-700 border-sky-200',
   DONE: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   CANCELLED: 'bg-rose-50 text-rose-600 border-rose-200',
+  REJECTED: 'bg-rose-100 text-rose-800 border-rose-300',
 };
 export const MEETING_STATUSES = ['DRAFT', 'OPEN', 'CLOSED', 'COMPLETED', 'CANCELLED'];
 export const MEETING_STATUS_STYLES = {
