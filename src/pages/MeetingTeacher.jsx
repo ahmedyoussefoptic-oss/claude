@@ -169,8 +169,8 @@ export function RequestsBoard({ requests, act, onError }) {
             <p className="font-bold text-slate-900">{t(`meetings.staffReq.group.${g}`)} <span className="text-slate-400 font-normal">({list.length})</span></p>
             {list.map((r) => (
               <div key={r.id} className={`border rounded-xl p-3 ${g === 'now' ? 'border-sky-300 bg-sky-50/50' : g === 'directed' ? 'border-amber-300 bg-amber-50/50' : g === 'rejected' ? 'border-rose-200 bg-rose-50/40' : 'border-slate-200'}`}>
-                <div className="flex items-start justify-between gap-2">
-                  <div>
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-[10rem] flex-1">
                     <p className="text-sm font-bold text-slate-900">{r.studentName} <span className="text-xs font-normal text-slate-500" dir="ltr">{r.grade} {r.className}</span></p>
                     <p className={`text-xs text-slate-500 ${r.status === 'REJECTED' ? 'hidden' : ''}`}>
                       {r.arrived ? t('meetings.staffReq.arrivedTicket', { n: r.ticketNo ?? '—', time: time(r.checkedInAt) }) : t('meetings.teacher.notArrived')}
@@ -178,7 +178,7 @@ export function RequestsBoard({ requests, act, onError }) {
                     </p>
                     {r.attendee && <p className="text-xs text-slate-700 mt-0.5">{t('meetings.family.attendee', { name: r.attendee.name, relation: t(`meetings.family.relations.${r.attendee.relation}`) })}</p>}
                   </div>
-                  <div className="flex flex-wrap justify-end gap-1.5 shrink-0">
+                  <div className="flex flex-wrap justify-end gap-1.5 ms-auto">
                     {OPEN.includes(r.status) && r.arrived && <button type="button" disabled={!!busy} onClick={() => run({ action: 'startRequest', requestId: r.id }, r.id)} className="px-2.5 py-1.5 text-xs bg-primary text-white rounded-lg flex items-center gap-1">{busy === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}{t('meetings.staffReq.start')}</button>}
                     {r.status === 'IN_PROGRESS' && <button type="button" onClick={() => setEnding(r)} className="px-2.5 py-1.5 text-xs bg-emerald-600 text-white rounded-lg flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />{t('meetings.staffReq.end')}</button>}
                     {OPEN.includes(r.status) && <button type="button" disabled={!!busy} onClick={() => setRejecting(r)} className="px-2.5 py-1.5 text-xs text-rose-700 border border-rose-200 bg-white hover:bg-rose-50 rounded-lg flex items-center gap-1"><Ban className="w-3.5 h-3.5" />{t('meetings.staffReq.reject')}</button>}
