@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Presentation, Users, MessageSquareReply, UserCheck, CheckCircle2, Star, AlertTriangle, CalendarDays, Send } from 'lucide-react';
+import { Loader2, MessageCircleQuestion, Presentation, Users, MessageSquareReply, UserCheck, CheckCircle2, Star, AlertTriangle, CalendarDays, Send } from 'lucide-react';
 import { callMeeting } from '../../config/meetings';
 import { pct, meetingsTotals, meetingsByBranch } from '../../utils/meetingsStats';
 
 // «اجتماعات أولياء الأمور» in «التقارير»: a short report in numbers of every
 // meeting of every branch in the period, for the administration. The main
 // part is always shown; the sections in OPTIONAL are added when ticked.
-export const OPTIONAL = ['messages', 'staff', 'grades', 'survey', 'attendees', 'followUps', 'topStaff'];
-const SERVER_SECTIONS = ['staff', 'grades', 'survey', 'attendees', 'followUps', 'topStaff'];
+export const OPTIONAL = ['purposes', 'messages', 'staff', 'grades', 'survey', 'attendees', 'followUps', 'topStaff'];
+const SERVER_SECTIONS = ['purposes', 'staff', 'grades', 'survey', 'attendees', 'followUps', 'topStaff'];
 const PICK_KEY = 'reports:meetings:sections';
 const readPicked = () => {
   try { const v = JSON.parse(localStorage.getItem(PICK_KEY)); return Array.isArray(v) ? v.filter((x) => OPTIONAL.includes(x)) : []; } catch { return []; }
@@ -203,6 +203,45 @@ export default function MeetingsSummaryReport({ filters, branches, onData }) {
                 </div>
               </Section>
 
+              {on('purposes') && x.purposes && (
+                <Section title={k('sections.purposes')} tone="border-indigo-500">
+                  {!x.purposes.total ? <p className="text-sm text-slate-500">{k('purposes.none')}</p> : (
+                    <div className="space-y-6">
+                      <p className="text-sm text-slate-600 flex items-center gap-2"><MessageCircleQuestion className="w-4 h-4 text-indigo-500" />{k('purposes.lead', { count: x.purposes.total })}</p>
+                      <Bars tone="bg-indigo-500" total={x.purposes.total} rows={x.purposes.topics.map((c) => ({ label: k(`purposes.topic.${c.id}`), value: c.count, tone: c.id === 'OTHER' ? 'bg-slate-300' : undefined }))} />
+                      <p className="text-xs text-slate-500 -mt-3">{k('purposes.multi')}</p>
+                      <div className="grid md:grid-cols-2 gap-4">
+                        {x.purposes.topics.filter((c) => c.id !== 'OTHER' && c.samples.length).slice(0, 4).map((c) => (
+                          <div key={c.id} className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-3 break-inside-avoid">
+                            <p className="text-sm font-bold text-indigo-900 mb-1.5">{k(`purposes.topic.${c.id}`)} <span className="font-normal text-indigo-500 tabular-nums">({c.count})</span></p>
+                            {c.samples.slice(0, 3).map((q) => <p key={q} className="text-xs text-slate-700 border-s-2 border-indigo-200 ps-2 my-1 leading-relaxed">«{q}»</p>)}
+                          </div>
+                        ))}
+                      </div>
+                      {x.purposes.bySubject.length > 0 && (
+                        <div>
+                          <p className="text-sm font-bold text-slate-700 mb-2">{k('purposes.bySubject')}</p>
+                          <div className="overflow-x-auto rounded-xl border border-slate-200">
+                            <table className="w-full text-sm">
+                              <thead><tr><th className={th}>{k('col.subject')}</th><th className={th}>{k('purposes.requests')}</th><th className={th}>{k('purposes.topTopics')}</th></tr></thead>
+                              <tbody>
+                                {x.purposes.bySubject.map((sb) => (
+                                  <tr key={sb.subject}>
+                                    <td className={`${td} font-medium text-slate-800`}>{sb.subject === '—' ? k('purposes.noSubject') : sb.subject}</td>
+                                    <td className={td}>{sb.total}</td>
+                                    <td className={td}><div className="flex flex-wrap gap-1">{sb.top.map((tp) => <span key={tp.id} className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 text-xs whitespace-nowrap">{k(`purposes.topic.${tp.id}`)} <b className="tabular-nums">{tp.count}</b></span>)}</div></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </Section>
+              )}
+
               {on('messages') && (
                 <Section title={k('sections.messages')} tone="border-sky-500">
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -318,6 +357,10 @@ export function addMeetingsSheets(XLSX, addSheet, d, t, branchName) {
     };
   })), k('list'));
   const x = d.extra || {};
+  if (x.purposes) {
+    addSheet(XLSX.utils.json_to_sheet(x.purposes.topics.map((c) => ({ [k('purposes.topicCol')]: k(`purposes.topic.${c.id}`), [k('purposes.requests')]: c.count, '%': `${pct(c.count, x.purposes.total)}%`, [k('purposes.examples')]: c.samples.join(' | ') }))), k('sections.purposes'));
+    addSheet(XLSX.utils.json_to_sheet(x.purposes.bySubject.map((sb) => ({ [k('col.subject')]: sb.subject, [k('purposes.requests')]: sb.total, [k('purposes.topTopics')]: sb.top.map((tp) => `${k(`purposes.topic.${tp.id}`)} (${tp.count})`).join('، ') }))), k('purposes.bySubject'));
+  }
   if (x.staff) addSheet(XLSX.utils.aoa_to_sheet([[k('col.who'), k('col.requested'), k('col.done')], ...['TEACHER', 'ADMIN', 'ACADEMIC'].map((r) => [k(`staffRole.${r}`), x.staff.byRole[r].requests, x.staff.byRole[r].done]), ...x.staff.positions.map((p) => [p.name, p.requests, p.done])]), k('sections.staff'));
   if (x.grades) addSheet(XLSX.utils.aoa_to_sheet([[k('col.grade'), k('col.invited'), k('col.confirmed'), k('col.attended')], ...Object.entries(x.grades).map(([g, v]) => [g, v.families, v.attend, v.attended])]), k('sections.grades'));
   if (x.survey) addSheet(XLSX.utils.aoa_to_sheet([[k('surveysLabel'), x.survey.count], ...['overall', 'organization', 'usefulness'].map((f) => [t(`meetings.survey.${f}`), x.survey[f]]), ...['YES', 'PARTLY', 'NO'].map((a) => [t(`meetings.survey.answers.${a}`), x.survey.answered[a] || 0]), [k('lowRatings'), x.survey.low]]), k('sections.survey'));

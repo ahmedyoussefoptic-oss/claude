@@ -22,6 +22,8 @@
 //   meetings/{id}/activityLog
 //   meetingTokens/{token}         link → meeting (parent / teacher / desk / checkin)
 //   meetingMinutes/{m_t_student}  a teacher's minute (shown in the student record)
+const { tallyPurposes } = require("./meetingPurposes");
+
 module.exports = function meetingsModule(d) {
   const {
     db, Timestamp, FieldValue, HttpsError, onCall, onSchedule, crypto,
@@ -452,24 +454,34 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       const attendees = {};
       const followUps = {};
       const top = {};
+      const purposeItems = [];
       for (const { id, m } of live) {
         const ref = db.collection("meetings").doc(id);
         const roleOf = (staffId) => slotOf(staffId)?.role || (m.teachers || []).find((t) => t.id === staffId)?.role || "TEACHER";
         const [inv, reqs, slots, surveys, minutes] = await Promise.all([
           include.has("grades") || include.has("attendees") ? ref.collection("invites").get() : null,
-          include.has("staff") ? ref.collection("requests").get() : null,
-          include.has("staff") ? ref.collection("slots").get() : null,
+          include.has("staff") || include.has("purposes") ? ref.collection("requests").get() : null,
+          include.has("staff") || include.has("purposes") ? ref.collection("slots").get() : null,
           include.has("survey") ? ref.collection("surveys").get() : null,
           include.has("followUps") || include.has("topStaff") ? db.collection("meetingMinutes").where("meetingId", "==", id).get() : null,
         ]);
-        reqs?.docs.map((x) => x.data()).filter((r) => r.status !== "CANCELLED").forEach((r) => {
+        if (include.has("purposes")) {
+          // Teachers only: what parents wrote they want to discuss.
+          const teacherOf = (id) => (m.teachers || []).find((t) => t.id === id && (t.role || "TEACHER") === "TEACHER");
+          reqs.docs.map((x) => x.data()).filter((r) => !(r.status === "CANCELLED" && r.cancelledBy === "ولي الأمر")).forEach((r) => {
+            const t = teacherOf(r.staffId);
+            if (t && r.purpose) purposeItems.push({ purpose: r.purpose, subject: t.subject });
+          });
+          slots.docs.map((x) => x.data()).forEach((sl) => { const t = teacherOf(sl.teacherId); if (t && sl.topic) purposeItems.push({ purpose: sl.topic, subject: t.subject }); });
+        }
+        if (include.has("staff")) reqs.docs.map((x) => x.data()).filter((r) => r.status !== "CANCELLED").forEach((r) => {
           const role = roleOf(r.staffId);
           staff[role].requests++;
           if (r.status === "DONE") staff[role].done++;
           const slot = slotOf(r.staffId);
           if (slot) { positions[slot.id] = positions[slot.id] || { name: slot.name, role: slot.role, requests: 0, done: 0 }; positions[slot.id].requests++; if (r.status === "DONE") positions[slot.id].done++; }
         });
-        slots?.docs.map((x) => x.data()).forEach((s) => { const role = roleOf(s.teacherId); staff[role].requests++; if (s.doneAt) staff[role].done++; });
+        if (include.has("staff")) slots.docs.map((x) => x.data()).forEach((s) => { const role = roleOf(s.teacherId); staff[role].requests++; if (s.doneAt) staff[role].done++; });
         inv?.docs.map((x) => x.data()).forEach((i) => {
           if (include.has("grades")) {
             new Set((i.students || []).map((s) => s.grade || "—")).forEach((g) => {
@@ -504,6 +516,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       if (include.has("survey")) extra.survey = { count: survey.count, overall: avg(survey.overall), organization: avg(survey.organization), usefulness: avg(survey.usefulness), answered: survey.answered, low: survey.low };
       if (include.has("attendees")) extra.attendees = attendees;
       if (include.has("followUps")) extra.followUps = followUps;
+      if (include.has("purposes")) extra.purposes = tallyPurposes(purposeItems);
       if (include.has("topStaff")) extra.topStaff = Object.values(top).sort((a, b) => b.count - a.count).slice(0, 15);
     }
     return { meetings, extra, generatedAt: Date.now() };

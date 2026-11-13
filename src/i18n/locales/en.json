@@ -4699,7 +4699,8 @@
       "survey": "Parents' satisfaction details",
       "attendees": "Attendee's relation to the student",
       "followUps": "Follow-ups raised",
-      "topStaff": "Most interviews held"
+      "topStaff": "Most interviews held",
+      "purposes": "Interview purposes (what parents ask about)"
     },
     "empty": "No meetings in this period.",
     "updating": "Updating the numbers…",
@@ -4761,6 +4762,33 @@
       "done": "Interviews held",
       "who": "Who",
       "requested": "Requested"
+    },
+    "purposes": {
+      "none": "No written purposes for teacher interviews in this period.",
+      "lead": "What parents wrote in {{count}} teacher interview requests, by topic:",
+      "multi": "A request may mention several topics and counts under each; percentages are of the requests.",
+      "bySubject": "Top topics by subject",
+      "requests": "Requests",
+      "topTopics": "Top topics",
+      "topicCol": "Topic",
+      "examples": "Examples parents wrote",
+      "noSubject": "No subject",
+      "topic": {
+        "LEVEL": "Academic level & grades",
+        "EXAMS": "Tests & assessment",
+        "HOMEWORK": "Homework & projects",
+        "BEHAVIOR": "Behaviour & discipline",
+        "LITERACY": "Reading, writing & spelling",
+        "FOCUS": "Participation & focus in class",
+        "ATTENDANCE": "Absence & lateness",
+        "SUPPORT": "Support & how to help at home",
+        "SOCIAL": "Emotional & social",
+        "SPECIAL": "Inclusion & learning difficulties",
+        "TEACHING": "Teaching method & curriculum",
+        "ADMIN": "Admin matters (bus, timetable, transfer…)",
+        "GENERAL": "General follow-up",
+        "OTHER": "Other / unspecified"
+      }
     }
   },
   "meetingsAccess": {
