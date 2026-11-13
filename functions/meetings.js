@@ -390,6 +390,94 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     return { meetings: snap.docs.filter((x) => inScope(caller, x.data())).map((x) => meetingOut(x.id, x.data())) };
   });
 
+  // «التقارير» → اجتماعات أولياء الأمور: every meeting in the period (the
+  // caller's branches) with its numbers; `include` adds optional sections
+  // read from the meetings' records:
+  //   staff (by teachers / branch administration / academic administration),
+  //   grades, survey, attendees (relation of who attended), followUps, topStaff.
+  out.meetingsSummaryReport = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
+    const caller = await meetingCaller(request);
+    const d = request.data || {};
+    const day = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || "")) ? String(v) : "");
+    const from = day(d.from);
+    const to = day(d.to);
+    const branch = str(d.branch, 60);
+    const include = new Set((Array.isArray(d.include) ? d.include : []).map(String));
+    const snap = await db.collection("meetings").orderBy("date", "desc").limit(400).get();
+    const list = snap.docs.map((x) => ({ id: x.id, m: x.data() })).filter(({ m }) => inScope(caller, m)
+      && (!from || m.date >= from) && (!to || m.date <= to) && (!branch || (m.branches || []).includes(branch)));
+    const meetings = list.map(({ id, m }) => {
+      const o = meetingOut(id, m);
+      return { id, code: o.code, title: o.title, type: o.type, status: o.status, date: o.date, branches: o.branches, stages: o.stages, stats: o.stats, teachers: (m.teachers || []).length };
+    });
+    const extra = {};
+    const live = list.filter(({ m }) => m.status !== "DRAFT" && m.status !== "CANCELLED");
+    if (include.size && live.length) {
+      const add = (o, k, n = 1) => { o[k] = (o[k] || 0) + n; };
+      const staff = { TEACHER: { requests: 0, done: 0 }, ADMIN: { requests: 0, done: 0 }, ACADEMIC: { requests: 0, done: 0 } };
+      const positions = {};
+      const grades = {};
+      const survey = { count: 0, overall: 0, organization: 0, usefulness: 0, answered: {}, low: 0 };
+      const attendees = {};
+      const followUps = {};
+      const top = {};
+      for (const { id, m } of live) {
+        const ref = db.collection("meetings").doc(id);
+        const roleOf = (staffId) => slotOf(staffId)?.role || (m.teachers || []).find((t) => t.id === staffId)?.role || "TEACHER";
+        const [inv, reqs, slots, surveys, minutes] = await Promise.all([
+          include.has("grades") || include.has("attendees") ? ref.collection("invites").get() : null,
+          include.has("staff") ? ref.collection("requests").get() : null,
+          include.has("staff") ? ref.collection("slots").get() : null,
+          include.has("survey") ? ref.collection("surveys").get() : null,
+          include.has("followUps") || include.has("topStaff") ? db.collection("meetingMinutes").where("meetingId", "==", id).get() : null,
+        ]);
+        reqs?.docs.map((x) => x.data()).filter((r) => r.status !== "CANCELLED").forEach((r) => {
+          const role = roleOf(r.staffId);
+          staff[role].requests++;
+          if (r.status === "DONE") staff[role].done++;
+          const slot = slotOf(r.staffId);
+          if (slot) { positions[slot.id] = positions[slot.id] || { name: slot.name, role: slot.role, requests: 0, done: 0 }; positions[slot.id].requests++; if (r.status === "DONE") positions[slot.id].done++; }
+        });
+        slots?.docs.map((x) => x.data()).forEach((s) => { const role = roleOf(s.teacherId); staff[role].requests++; if (s.doneAt) staff[role].done++; });
+        inv?.docs.map((x) => x.data()).forEach((i) => {
+          if (include.has("grades")) {
+            new Set((i.students || []).map((s) => s.grade || "—")).forEach((g) => {
+              grades[g] = grades[g] || { families: 0, attend: 0, attended: 0 };
+              grades[g].families++;
+              if (i.response === "ATTEND") grades[g].attend++;
+              if (i.attended === true) grades[g].attended++;
+            });
+          }
+          if (include.has("attendees") && i.attended === true) add(attendees, i.attendee?.relation || "UNKNOWN");
+        });
+        surveys?.docs.map((x) => x.data()).forEach((s) => {
+          survey.count++;
+          survey.overall += s.overall || 0;
+          survey.organization += s.organization || 0;
+          survey.usefulness += s.usefulness || 0;
+          if (s.answered) add(survey.answered, s.answered);
+          if (s.low) survey.low++;
+        });
+        minutes?.docs.map((x) => x.data()).forEach((x) => {
+          if (x.followUp?.type) add(followUps, x.followUp.type);
+          if (include.has("topStaff") && x.teacherName) {
+            const k = `${x.teacherName}|${(m.branches || []).join(",")}`;
+            top[k] = top[k] || { name: x.teacherName, subject: x.subject || "", role: x.role || "TEACHER", branches: m.branches || [], count: 0 };
+            top[k].count++;
+          }
+        });
+      }
+      const avg = (v) => (survey.count ? Math.round((v / survey.count) * 100) / 100 : 0);
+      if (include.has("staff")) extra.staff = { byRole: staff, positions: Object.values(positions).sort((a, b) => b.requests - a.requests) };
+      if (include.has("grades")) extra.grades = grades;
+      if (include.has("survey")) extra.survey = { count: survey.count, overall: avg(survey.overall), organization: avg(survey.organization), usefulness: avg(survey.usefulness), answered: survey.answered, low: survey.low };
+      if (include.has("attendees")) extra.attendees = attendees;
+      if (include.has("followUps")) extra.followUps = followUps;
+      if (include.has("topStaff")) extra.topStaff = Object.values(top).sort((a, b) => b.count - a.count).slice(0, 15);
+    }
+    return { meetings, extra, generatedAt: Date.now() };
+  });
+
   out.saveMeeting = onCall({ secrets: WA_SECRETS, timeoutSeconds: 300 }, async (request) => {
     const caller = await meetingCaller(request);
     const id = request.data?.id;

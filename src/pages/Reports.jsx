@@ -30,6 +30,7 @@ import { matchesClass, classOptions, stageClassLabel } from '../utils/classFilte
 import { STAGES } from '../config/complaintTypes';
 import { classOptionsForStage } from '../config/techSupport';
 import PageHero from '../components/common/PageHero';
+import MeetingsSummaryReport, { addMeetingsSheets } from '../components/reports/MeetingsSummaryReport';
 
 // Excel sheet names are capped at 31 chars and can't contain \ / ? * [ ] : —
 // our translated labels are short enough in practice, but trim defensively.
@@ -37,7 +38,7 @@ function sheetName(label) {
   return label.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31);
 }
 
-const REPORT_TYPE_IDS = ['COMPLAINTS', 'TECH_SUPPORT', 'VISITS', 'SURVEY', 'LOST_FOUND'];
+const REPORT_TYPE_IDS = ['COMPLAINTS', 'TECH_SUPPORT', 'VISITS', 'SURVEY', 'LOST_FOUND', 'MEETINGS'];
 const RATING_KEYS = ['resolutionSpeed', 'solutionQuality', 'staffProfessionalism'];
 
 function average(list, getValue) {
@@ -78,6 +79,8 @@ export default function Reports() {
   const [selectedLost, setSelectedLost] = useState(null);
   const itemCategories = useItemCategories();
   const canSeeLost = canSeeModule(userData, 'lostFound');
+  const canSeeMeetings = canSeeModule(userData, 'meetings');
+  const [meetingsData, setMeetingsData] = useState(null);
   // Complaints-report options: merging tech tickets in, and the full
   // per-record listing at the end, are both opt-in (the default report is
   // numbers only).
@@ -705,6 +708,9 @@ export default function Reports() {
         ...(showContent ? { [t('reports.content.complaint')]: ticketContent(tk).content, [t('reports.content.reply')]: ticketContent(tk).reply } : {}),
       })));
       XLSX.utils.book_append_sheet(wb, detailSheet, sheetName(t('reports.detailsLabel')));
+    } else if (reportType === 'MEETINGS') {
+      if (!meetingsData) return;
+      addMeetingsSheets(XLSX, addSheet, meetingsData, t, branchName);
     } else if (reportType === 'SURVEY') {
       addSurveySheets();
     } else if (reportType === 'LOST_FOUND') {
@@ -748,7 +754,7 @@ export default function Reports() {
 
       {/* Report type */}
       <div className="flex flex-wrap gap-2 no-print">
-        {REPORT_TYPE_IDS.filter((id) => id !== 'LOST_FOUND' || canSeeLost).map((id) => (
+        {REPORT_TYPE_IDS.filter((id) => (id !== 'LOST_FOUND' || canSeeLost) && (id !== 'MEETINGS' || canSeeMeetings)).map((id) => (
           <button
             key={id}
             onClick={() => setReportType(id)}
@@ -781,7 +787,7 @@ export default function Reports() {
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('common.toDate')}</label>
             <input type="date" name="to" value={filters.to} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary" />
           </div>
-          {!['TECH_SUPPORT', 'VISITS', 'LOST_FOUND'].includes(reportType) && (
+          {!['TECH_SUPPORT', 'VISITS', 'LOST_FOUND', 'MEETINGS'].includes(reportType) && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('reports.complaintTypeLabel')}</label>
               <select name="complaintType" value={filters.complaintType} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
@@ -790,7 +796,7 @@ export default function Reports() {
               </select>
             </div>
           )}
-          {!['TECH_SUPPORT', 'VISITS', 'LOST_FOUND'].includes(reportType) && (
+          {!['TECH_SUPPORT', 'VISITS', 'LOST_FOUND', 'MEETINGS'].includes(reportType) && (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.subTypeLabel')}</label>
               <select name="subType" value={filters.subType} onChange={handleChange} disabled={!filters.complaintType} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white disabled:text-slate-400 disabled:bg-slate-50">
@@ -806,6 +812,7 @@ export default function Reports() {
               {branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
+          {reportType !== 'MEETINGS' && <>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('complaintForm.stageLabel')}</label>
             <select name="stage" value={filters.stage} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
@@ -820,7 +827,8 @@ export default function Reports() {
               {gradeChoices.map((g) => <option key={g} value={g}>{g}</option>)}
             </select>
           </div>
-          {reportType !== 'VISITS' && <div>
+          </>}
+          {!['VISITS', 'MEETINGS'].includes(reportType) && <div>
             <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('reports.specialistLabel')}</label>
             <select name="assignedTo" value={filters.assignedTo} onChange={handleChange} className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary bg-white">
               <option value="">{t('reports.allSpecialists')}</option>
@@ -924,6 +932,8 @@ export default function Reports() {
             problemTypeName={problemTypeName}
           />
         )}
+
+        {reportType === 'MEETINGS' && <MeetingsSummaryReport filters={filters} branches={branches} onData={setMeetingsData} />}
 
         {reportType === 'COMPLAINTS' && mergeTech && <TechResolutionReport tickets={ticketResults} itIds={itIds} sla={sla} />}
 

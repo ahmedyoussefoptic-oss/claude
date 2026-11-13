@@ -10,6 +10,7 @@ import MeetingForm from '../components/meetings/MeetingForm';
 import MeetingDetails from '../components/meetings/MeetingDetails';
 import { MEETING_STATUSES, MEETING_STATUS_STYLES, callMeeting, meetingTime, pct } from '../config/meetings';
 import PageHero from '../components/common/PageHero';
+import MeetingsDashboard from '../components/meetings/MeetingsDashboard';
 
 // «اجتماعات أولياء الأمور»: the meetings of the user's branches; one opens
 // in its details (invitations, schedule, the day, the report).
@@ -79,6 +80,8 @@ export default function Meetings() {
           </>
         )}
       />
+
+      {!loading && !error && <MeetingsDashboard meetings={meetings} branchName={branchName} />}
 
       <div className="flex gap-1 overflow-x-auto">
         {['ACTIVE', ...MEETING_STATUSES, 'ALL'].map((s) => (

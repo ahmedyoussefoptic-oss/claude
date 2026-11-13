@@ -1125,7 +1125,8 @@
       "TECH_SUPPORT": "Tech support report",
       "SURVEY": "Parent satisfaction survey report",
       "VISITS": "Branch visits",
-      "LOST_FOUND": "Lost & found"
+      "LOST_FOUND": "Lost & found",
+      "MEETINGS": "Parent meetings"
     },
     "criteriaTitle": "Report criteria",
     "complaintTypeLabel": "Complaint type",
@@ -4631,6 +4632,14 @@
           "Every meeting has a new link and code; this file is valid only for the meetings in it."
         ]
       }
+    },
+    "dash": {
+      "ofInvited": "{{p}}% of invited",
+      "declined": "Declined {{n}} · Remote {{remote}}",
+      "next": "Next meeting",
+      "noNext": "No upcoming meeting",
+      "topBranches": "Most active branches (by confirmed)",
+      "branchLine": "{{confirmed}} of {{invited}} confirmed ({{p}}%) · {{attended}} attended"
     }
   },
   "design": {
@@ -4657,5 +4666,79 @@
     "title": "Public links design",
     "hint": "Applies to every link parents and visitors open: the complaint form and tracking, trip approval, leave requests, branch visits, school visit requests, admission inquiries, special education forms, and the teachers' and reception links. The parents' meeting pages always keep the navy design.",
     "saved": "Saved. Visitors see the new design right away."
+  },
+  "meetingsReport": {
+    "optionalTitle": "Extra categories (optional)",
+    "optionalHint": "Choose what to add to the report; your choice is kept on this device and appears in print and Excel.",
+    "sections": {
+      "messages": "Invitation messages (WhatsApp)",
+      "staff": "Interviews by who",
+      "grades": "Attendance by grade",
+      "survey": "Parents' satisfaction details",
+      "attendees": "Attendee's relation to the student",
+      "followUps": "Follow-ups raised",
+      "topStaff": "Most interviews held"
+    },
+    "empty": "No meetings in this period.",
+    "updating": "Updating the numbers…",
+    "summary": "Summary",
+    "meetings": "Meetings",
+    "invited": "Families invited",
+    "studentsN": "{{count}} students",
+    "responseRate": "Response rate",
+    "respondedOf": "{{n}} of {{total}} replied",
+    "confirmed": "Confirmed",
+    "remoteDecline": "Remote {{remote}} · Declined {{decline}}",
+    "attended": "Attended",
+    "ofConfirmed": "{{p}}% of confirmed",
+    "interviews": "Interviews held",
+    "ofRequested": "of {{total}} requested ({{p}}%)",
+    "satisfaction": "Average satisfaction",
+    "surveysN": "{{count}} ratings",
+    "surveysLabel": "Ratings",
+    "lowRatings": "Low ratings",
+    "lowHint": "Rated 2 of 5 or less",
+    "byBranch": "By branch",
+    "list": "Meetings in detail",
+    "total": "Total",
+    "ofInvited": "{{p}}% of invited",
+    "ofSent": "{{p}}% of sent",
+    "msg": {
+      "sent": "Sent",
+      "delivered": "Delivered",
+      "read": "Read",
+      "failed": "Failed",
+      "noPhone": "No mobile"
+    },
+    "staffRole": {
+      "TEACHER": "Teachers",
+      "ADMIN": "Branch administration",
+      "ACADEMIC": "Academic administration"
+    },
+    "noSurveys": "No ratings in this period.",
+    "noData": "No data.",
+    "noFollowUps": "No follow-ups were raised from the interviews.",
+    "unknownRelation": "Not given",
+    "col": {
+      "branch": "Branch",
+      "meetings": "Meetings",
+      "invited": "Invited",
+      "responseRate": "Response",
+      "confirmed": "Confirmed",
+      "attended": "Attended",
+      "attendanceRate": "Attendance",
+      "interviews": "Interviews",
+      "satisfaction": "Satisfaction",
+      "date": "Date",
+      "meeting": "Meeting",
+      "type": "Type",
+      "status": "Status",
+      "grade": "Grade",
+      "name": "Name",
+      "subject": "Subject / position",
+      "done": "Interviews held",
+      "who": "Who",
+      "requested": "Requested"
+    }
   }
 }
