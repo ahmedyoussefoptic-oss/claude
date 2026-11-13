@@ -181,8 +181,13 @@ export function parseStudentRows(rows, branches) {
 export async function upsertStudents(records, onProgress, deactivateIds = []) {
   const BATCH_SIZE = 400;
   const importedAt = new Date().toISOString();
+  // An empty cell never erases what is saved (a mobile or parent ID entered
+  // in the system, a gender, a branch the file doesn't name...).
+  // A mobile too short to be a number (a typo in the file) doesn't replace one either.
+  const keep = (k, v) => v !== '' && v != null && !(Array.isArray(v) && !v.length) && !(k === 'mobile' && String(v).replace(/\D/g, '').length < 9);
+  const filled = (record) => Object.fromEntries(Object.entries(record).filter(([k, v]) => keep(k, v)));
   const ops = [
-    ...records.map((record) => [record.nationalId, { ...record, importedAt }]),
+    ...records.map((record) => [record.nationalId, { ...filled(record), importedAt }]),
     ...deactivateIds.map((id) => [id, { active: false, deactivatedAt: importedAt }]),
   ];
   let written = 0;

@@ -1040,7 +1040,7 @@
     "noSubTypesYet": "No sub-types for this type yet",
     "studentImportTitle": "Student data import",
     "studentImportDescription": "Upload the student roster Excel with columns: id_num, name, name_ar, branch_name, stage_name, grade_name, class_name, mobile, father_id (parent national ID). Existing students are updated, new ones added; forms then auto-fill from a student name, student ID, parent mobile or parent ID.",
-    "chooseExcelFile": "Choose an Excel file",
+    "chooseExcelFile": "Choose an Excel or CSV file",
     "foundRecords": "Found {{count}} valid student record(s) to import.",
     "skippedRows": "Skipped {{count}} row(s) due to a missing ID or name (rows: {{rows}}).",
     "confirmImportMerge": "Confirm import and merge",
@@ -1083,7 +1083,8 @@
     "accountsNone": "No Username / Password columns found in the file.",
     "accountsFound": "{{count}} students from {{sheets}} sheets",
     "accountsStats": "Both systems: {{both}} · Classera only: {{classera}} · Portal only: {{portal}} · No portal password: {{noPortalPw}}",
-    "accountsDone": "Imported accounts for {{count}} students."
+    "accountsDone": "Imported accounts for {{count}} students.",
+    "importKeepsSaved": "An empty cell in the file does not erase what is saved (mobile, parent ID, gender…); the student's records stay as they are."
   },
   "flowMap": {
     "title": "Complaint Flow Map",

@@ -1035,7 +1035,7 @@
     "noSubTypesYet": "لا توجد تصنيفات فرعية لهذا النوع بعد",
     "studentImportTitle": "استيراد بيانات الطلاب",
     "studentImportDescription": "ارفع ملف Excel لسجل الطلاب بالأعمدة: id_num، name، name_ar، branch_name، stage_name، grade_name، class_name، mobile، father_id (رقم هوية ولي الأمر). تُحدَّث بيانات الطلاب الموجودين ويُضاف الجدد، وتُستخدم البيانات في تعبئة النماذج تلقائياً عند كتابة اسم الطالب أو رقم هويته أو جوال ولي الأمر أو رقم هويته.",
-    "chooseExcelFile": "اختر ملف Excel",
+    "chooseExcelFile": "اختر ملف Excel أو CSV",
     "foundRecords": "تم العثور على {{count}} سجل طالب صالح للاستيراد.",
     "skippedRows": "تم تجاهل {{count}} صف بسبب نقص رقم الهوية أو الاسم (الصفوف: {{rows}}).",
     "confirmImportMerge": "تأكيد الاستيراد والدمج",
@@ -1078,7 +1078,8 @@
     "accountsNone": "لم يتم العثور على أعمدة Username / Password في الملف.",
     "accountsFound": "{{count}} طالباً من {{sheets}} ورقة",
     "accountsStats": "في النظامين: {{both}} · كلاسيرا فقط: {{classera}} · البوابة فقط: {{portal}} · بدون كلمة مرور للبوابة: {{noPortalPw}}",
-    "accountsDone": "تم استيراد حسابات {{count}} طالباً."
+    "accountsDone": "تم استيراد حسابات {{count}} طالباً.",
+    "importKeepsSaved": "الخلية الفارغة في الملف لا تمسح ما هو محفوظ في النظام (الجوال، هوية ولي الأمر، الجنس…)، وتبقى الملاحظات والسجلات المرتبطة بالطالب كما هي."
   },
   "flowMap": {
     "title": "خريطة مسار الملاحظات",

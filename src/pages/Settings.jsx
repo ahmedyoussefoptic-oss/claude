@@ -194,7 +194,11 @@ function StudentImport() {
     try {
       const XLSX = await import('xlsx');
       const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array' });
+      // CSV (the school's export) is read as UTF-8 text, every cell as text
+      // (IDs and mobiles keep their digits as written).
+      const workbook = /\.csv$/i.test(file.name)
+        ? XLSX.read(new TextDecoder('utf-8').decode(buffer).replace(/^\uFEFF/, ''), { type: 'string', raw: true })
+        : XLSX.read(buffer, { type: 'array' });
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
       const parsedRows = parseStudentRows(rows, branches);
@@ -239,7 +243,7 @@ function StudentImport() {
         {t('settings.studentImportDescription')}
       </p>
 
-      <input ref={fileInputRef} type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" id="student-file-input" />
+      <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFile} className="hidden" id="student-file-input" />
       <label
         htmlFor="student-file-input"
         className="inline-flex items-center gap-2 px-4 py-2.5 border border-dashed border-slate-300 rounded-xl text-sm text-slate-600 hover:border-primary hover:text-primary cursor-pointer transition-colors"
@@ -262,6 +266,7 @@ function StudentImport() {
               <li className="text-red-600 sm:col-span-2">{t('settings.importUnmatchedBranches', { list: Object.entries(parsed.unmatchedBranches).map(([n, c]) => `${n} (${c})`).join('، ') })}</li>
             )}
           </ul>
+          <p className="mt-2 text-xs text-emerald-700">{t('settings.importKeepsSaved')}</p>
           {parsed.missing.length > 0 && (
             <label className="flex items-start gap-2 mt-3 text-xs text-slate-700">
               <input type="checkbox" checked={deactivateMissing} onChange={(e) => setDeactivateMissing(e.target.checked)} className="mt-0.5" />
