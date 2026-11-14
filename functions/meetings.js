@@ -678,6 +678,12 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       if (!settings) throw new HttpsError("failed-precondition", "فعّل واتساب API وأضف اسم قالب «إشعار اجتماع» في الإعدادات.");
       const done = new Set((await ref.collection("surveys").get()).docs.map((x) => x.id));
       result.survey = await sendMany(settings, ref, m, (await invites()).filter((i) => i.attended === true && i.phone && !done.has(i.id)), "thanks");
+    } else if (action === "unlockLink") {
+      // A staff link locked after wrong codes: open it again.
+      const k = staffKeys(m).find((x) => x.kind === request.data?.kind && x.id === String(request.data?.teacherId || ""));
+      if (!k) throw new HttpsError("not-found", "الرابط غير موجود.");
+      await verifyRef(k.key).delete();
+      Object.assign(result, { kind: k.kind, teacherId: k.id });
     } else if (action === "cancel") {
       if (["COMPLETED", "CANCELLED"].includes(m.status)) throw new HttpsError("failed-precondition", "لا يمكن إلغاء هذا الاجتماع.");
       const reason = str(request.data?.reason, 300);
@@ -752,9 +758,9 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       ref.collection("requests").get(),
     ]);
     const surveyed = new Set(surveys.docs.map((x) => x.id));
-    const access = await accessOf(ref, m, { reqs, slots, minutes });
+    const [access, locks] = await Promise.all([accessOf(ref, m, { reqs, slots, minutes }), staffLocks(m)]);
     return {
-      access, accessSince: ACCESS_SINCE,
+      access, accessSince: ACCESS_SINCE, locks,
       meeting: meetingOut(ref.id, m, { secrets: true }),
       waReady: !!settings,
       slotTimes: slotTimes(m),
@@ -868,14 +874,38 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     if (!m) throw new HttpsError("not-found", "هذا الاجتماع غير متاح.");
     return { ...x, ref, m };
   }
-  // Wrong student ID / code: 8 tries an hour per link.
-  async function guard(key, ok) {
-    const g = db.collection("meetingVerify").doc(key.slice(0, 60));
-    const cur = (await g.get()).data() || {};
-    const recent = cur.lastAt && Date.now() - cur.lastAt.toMillis() < 3600e3;
-    if (recent && (cur.failures || 0) >= 8) throw new HttpsError("resource-exhausted", "محاولات كثيرة، حاول بعد ساعة أو تواصل مع الفرع.");
-    if (ok) { if (cur.failures) await g.delete(); return; }
-    await g.set({ failures: (recent ? cur.failures || 0 : 0) + 1, lastAt: Timestamp.now() });
+  // Wrong student ID / code: 8 tries an hour per link. The staff links
+  // (teacher, managers, reception) are shared by several people on the
+  // day: 10 tries per 15 minutes, and the meeting's organisers can open a
+  // locked one from the meeting's page. Returns the tries left.
+  const verifyRef = (key) => db.collection("meetingVerify").doc(key.slice(0, 60));
+  const PARENT_LOCK = { max: 8, window: 3600e3, msg: "محاولات كثيرة، حاول بعد ساعة أو تواصل مع الفرع." };
+  const STAFF_LOCK = { max: 10, window: 15 * 60e3, msg: "محاولات خاطئة كثيرة على هذا الرابط، حاول بعد 15 دقيقة أو اطلب من منظّم الاجتماع فتحه من صفحة الاجتماع." };
+  const lockOf = (cur, lim) => {
+    const recent = !!cur?.lastAt && Date.now() - cur.lastAt.toMillis() < lim.window;
+    const failures = recent ? cur.failures || 0 : 0;
+    return { failures, locked: failures >= lim.max, until: failures >= lim.max ? cur.lastAt.toMillis() + lim.window : null };
+  };
+  async function guard(key, ok, lim = PARENT_LOCK) {
+    const g = verifyRef(key);
+    const cur = (await g.get()).data();
+    const st = lockOf(cur, lim);
+    if (st.locked) throw new HttpsError("resource-exhausted", lim.msg);
+    if (ok) { if (cur?.failures) await g.delete(); return lim.max; }
+    await g.set({ failures: st.failures + 1, lastAt: Timestamp.now() });
+    return lim.max - st.failures - 1;
+  }
+  const triesLeft = (n) => (n === 1 ? "بقيت محاولة واحدة" : n === 2 ? "بقيت محاولتان" : `بقيت ${n} محاولات`);
+  // The staff links of a meeting and their lock keys.
+  const staffKeys = (m) => [
+    ["desk", "", m.deskToken], ["manager", "", m.managerToken],
+    ...(m.teachers || []).map((t) => ["teacher", t.id, t.token]),
+  ].filter((x) => x[2]).map(([kind, id, tk]) => ({ kind, id, key: `${kind}_${tk}` }));
+  async function staffLocks(m) {
+    const keys = staffKeys(m);
+    if (!keys.length) return [];
+    const snaps = await db.getAll(...keys.map((k) => verifyRef(k.key)));
+    return keys.map((k, i) => ({ kind: k.kind, id: k.id, ...lockOf(snaps[i].data(), STAFF_LOCK) })).filter((x) => x.failures);
   }
 
   async function publicView(m) {
@@ -1283,8 +1313,8 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     const teacher = kind === "teacher" ? (x.m.teachers || []).find((t) => t.id === x.teacherId) : null;
     if (kind === "teacher" && !teacher) throw new HttpsError("not-found", "هذا الرابط لم يعد مرتبطاً بالاجتماع.");
     const ok = String(request.data?.pin || "") === (kind === "teacher" ? teacher.pin : kind === "manager" ? x.m.managerPin : x.m.deskPin);
-    await guard(`${kind}_${request.data.token}`, ok);
-    if (!ok) throw new HttpsError("permission-denied", "رمز الدخول غير صحيح.");
+    const left = await guard(`${kind}_${request.data.token}`, ok, STAFF_LOCK);
+    if (!ok) throw new HttpsError("permission-denied", left <= 0 ? "رمز الدخول غير صحيح. أُوقف الرابط 15 دقيقة بعد محاولات خاطئة كثيرة، ويستطيع منظّم الاجتماع فتحه من صفحة الاجتماع." : left <= 5 ? `رمز الدخول غير صحيح. ${triesLeft(left)} قبل إيقاف الرابط 15 دقيقة.` : "رمز الدخول غير صحيح.");
     if (x.m.status === "CANCELLED") throw new HttpsError("failed-precondition", "الاجتماع ملغى.");
     if (kind === "teacher") await noteAccess(x.ref, teacher);
     return { ...x, teacher };

@@ -180,6 +180,7 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
       if (r.survey) parts.push(t('meetings.notice.survey', r.survey));
       if (r.absent) parts.push(t('meetings.notice.absent', r.absent));
       if (r.calls) parts.push(t('meetings.notice.calls', { count: r.calls.created || 0 }));
+      if (r.kind) parts.push(t('meetings.links.unlocked'));
       setNotice({ ok: true, text: parts.join(' · ') || t('meetings.notice.done') });
       setDialog(null);
       await load();
@@ -187,6 +188,21 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
     } catch (err) {
       setNotice({ ok: false, text: err.message });
     } finally { setBusy(''); }
+  };
+  // A staff link locked after wrong codes (or with some): open it again.
+  const lockNote = (kind, tid = '') => {
+    const lk = data?.locks?.find((x) => x.kind === kind && x.id === tid);
+    if (!lk) return null;
+    const time = lk.until ? new Date(lk.until).toLocaleTimeString(i18n.language === 'ar' ? 'ar-SA' : 'en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' }) : '';
+    return (
+      <span className={`mt-1 flex flex-wrap items-center gap-1.5 text-xs ${lk.locked ? 'text-rose-700' : 'text-amber-700'}`}>
+        <Lock className="w-3.5 h-3.5 shrink-0" />
+        {lk.locked ? t('meetings.links.locked', { time }) : t('meetings.links.wrongTries', { count: lk.failures })}
+        <button type="button" disabled={!!busy} onClick={() => run('unlockLink', { kind, teacherId: tid })} className={`px-2 py-0.5 rounded-md border font-medium disabled:opacity-50 ${lk.locked ? 'border-rose-300 bg-rose-50 hover:bg-rose-100' : 'border-amber-300 bg-amber-50 hover:bg-amber-100'}`}>
+          {busy === 'unlockLink' ? <Loader2 className="w-3 h-3 animate-spin" /> : t(lk.locked ? 'meetings.links.unlock' : 'meetings.links.resetTries')}
+        </button>
+      </span>
+    );
   };
   const inviteAction = async (inv, action, extra = {}) => {
     setBusy(`${inv.id}:${action}`);
@@ -334,7 +350,7 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
               </div>
             </div>
             <div className="border border-slate-100 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2">
-              <div><p className="text-sm font-medium text-slate-800">{t('meetings.links.desk')}</p><p className="text-xs text-slate-500">{t('meetings.links.pin')}: <b dir="ltr">{m.deskPin}</b></p></div>
+              <div><p className="text-sm font-medium text-slate-800">{t('meetings.links.desk')}</p><p className="text-xs text-slate-500">{t('meetings.links.pin')}: <b dir="ltr">{m.deskPin}</b></p>{lockNote('desk')}</div>
               <div className="flex gap-2"><CopyBtn text={m.deskLink} label={t('meetings.links.copy')} /><a href={m.deskLink} target="_blank" rel="noreferrer" className="px-2 py-1 text-xs border border-slate-200 rounded-lg text-slate-600">{t('meetings.links.open')}</a></div>
             </div>
             {m.managerLink && (
@@ -342,6 +358,7 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-800">{t('meetings.links.managers')}</p>
                   <p className="text-xs text-slate-500">{t('meetings.links.pin')}: <b dir="ltr">{m.managerPin}</b> · {t('meetings.links.managersHint')}</p>
+                  {lockNote('manager')}
                 </div>
                 <div className="flex gap-2">
                   <CopyBtn text={t('meetings.links.managersMsg', { title: m.title, date: m.date, link: m.managerLink, pin: m.managerPin })} label={t('meetings.links.copyMsg', { defaultValue: t('meetings.links.copy') })} />
@@ -384,6 +401,7 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
                   <div>
                     <p className="text-sm font-medium text-slate-800">{data?.access && <span className="me-1.5 align-middle"><EnteredBadge entered={accessOf(tc)} /></span>}{tc.name} {isRequests(m) && <span className="text-xs text-primary">· {t(`meetings.roles.${tc.role || 'TEACHER'}`)}</span>} {tc.subject && <span className="text-xs text-slate-500">· {tc.subject}</span>} {tc.room && <span className="text-xs text-slate-500">· {tc.room}</span>}</p>
                     <p className="text-xs text-slate-500">{t('meetings.links.pin')}: <b dir="ltr">{tc.pin}</b>{tc.classes?.length ? ` · ${[...new Set(tc.classes.map(classLabel))].join(', ')}` : ` · ${t('meetings.links.allClasses')}`}</p>
+                    {lockNote('teacher', tc.id)}
                   </div>
                   <div className="flex gap-2">
                     <CopyBtn text={msg} label={t('meetings.links.copy')} />
