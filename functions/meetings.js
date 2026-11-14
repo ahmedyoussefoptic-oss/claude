@@ -23,6 +23,7 @@
 //   meetingTokens/{token}         link → meeting (parent / teacher / desk / checkin)
 //   meetingMinutes/{m_t_student}  a teacher's minute (shown in the student record)
 const { tallyPurposes } = require("./meetingPurposes");
+const { meetingsAllowed } = require("./meetingAccess");
 
 module.exports = function meetingsModule(d) {
   const {
@@ -115,13 +116,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     return list;
   }
 
-  // --- permissions ---------------------------------------------------------
-  // Section «اجتماعات أولياء الأمور» (users.modules.meetings), on by default
-  // for principals, upper management and customer service. Mirrors
-  // src/utils/scope.js meetingsByRole().
-  const meetingsByRole = (u) => u.isPrincipal === true || ["UPPER_MANAGEMENT", "CUSTOMER_SERVICE"].includes(u.role);
-  const meetingsAllowed = (u) => !!u && u.active !== false && u.role !== "RECEPTIONIST" && u.tripsAccess !== "tripsOnly"
-    && (u.role === "ADMIN" || (typeof u.modules?.meetings === "boolean" ? u.modules.meetings : meetingsByRole(u)));
+  // --- permissions (see ./meetingAccess.js) ---------------------------------
   async function meetingCaller(request) {
     if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
     const u = (await db.collection("users").doc(request.auth.uid).get()).data();

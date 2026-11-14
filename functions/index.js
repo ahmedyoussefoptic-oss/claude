@@ -509,6 +509,7 @@ exports.notifyTechSupportInternalComment = onDocumentCreated("techSupportTickets
 const { normalizeSla, businessMs, addBusinessMs } = require("./businessTime");
 const { cleanReportRows, mergeQueueHops, matchReportCalls, isShortNumber, phoneTail } = require("./bevatelImport");
 const meetingsModule = require("./meetings");
+const surveysModule = require("./surveys");
 const { meetingDeliveryUpdate } = meetingsModule;
 async function loadSla() {
   const snap = await db.collection("settings").doc("sla").get();
@@ -7705,3 +7706,6 @@ Object.assign(exports, meetingsModule({
   findAutoAssignees, nextRecordNumber, riyadhDay, formatTripDay, time12, str, callerHasBranch, callerAll, callPhone,
   TRIP_STAGES,
 }));
+
+// «تقييمات أولياء الأمور» — see ./surveys.js.
+Object.assign(exports, surveysModule({ db, Timestamp, FieldValue, HttpsError, onCall, crypto, str, callerHasBranch, callerAll }));
