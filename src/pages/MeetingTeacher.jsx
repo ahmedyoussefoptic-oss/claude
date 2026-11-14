@@ -99,11 +99,12 @@ export default function MeetingTeacher() {
 
       {data.slots.map((s) => (
         <div key={s.id} className={`${card} ${s.doneAt ? 'opacity-70' : ''}`}>
-          <div className="flex items-center justify-between gap-2">
-            <p className="font-bold text-slate-900 flex items-center gap-1.5"><Clock className="w-4 h-4 text-primary" />{meetingTime(s.time, lang)}</p>
-            <div className="flex items-center gap-2">
-              {s.arrived ? <span className="text-xs text-emerald-700 flex items-center gap-1"><UserCheck className="w-3.5 h-3.5" />{t('meetings.teacher.arrived')}</span> : <span className="text-xs text-slate-400">{t('meetings.teacher.notArrived')}</span>}
-              {!s.startedAt && !s.doneAt && <button type="button" onClick={() => act({ action: 'start', slotId: s.id }).catch((e) => setError(e.message))} className="px-2.5 py-1 text-xs bg-primary text-white rounded-lg flex items-center gap-1"><Play className="w-3.5 h-3.5" />{t('meetings.teacher.start')}</button>}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="font-bold text-slate-900 flex items-center gap-1.5 whitespace-nowrap"><Clock className="w-4 h-4 text-primary" />{meetingTime(s.time, lang)}</p>
+            <div className="flex flex-wrap items-center justify-end gap-2 ms-auto">
+              {s.arrived ? <span className="text-xs text-emerald-700 flex items-center gap-1 whitespace-nowrap"><UserCheck className="w-3.5 h-3.5" />{t('meetings.teacher.arrived')}</span> : <span className="text-xs text-slate-400 whitespace-nowrap">{t('meetings.teacher.notArrived')}</span>}
+              {!s.arrived && !s.doneAt && <button type="button" onClick={() => { if (window.confirm(t('meetings.teacher.markArrivedConfirm', { names: s.students.map((st) => st.name).join('، ') }))) act({ action: 'checkinSlot', slotId: s.id }).catch((e) => setError(e.message)); }} className="px-2.5 py-1 text-xs text-emerald-700 border border-emerald-300 bg-white hover:bg-emerald-50 rounded-lg flex items-center gap-1 whitespace-nowrap"><UserCheck className="w-3.5 h-3.5" />{t('meetings.teacher.markArrived')}</button>}
+              {!s.startedAt && !s.doneAt && <button type="button" onClick={() => act({ action: 'start', slotId: s.id }).catch((e) => setError(e.message))} className="px-2.5 py-1 text-xs bg-primary text-white rounded-lg flex items-center gap-1 whitespace-nowrap"><Play className="w-3.5 h-3.5" />{t('meetings.teacher.start')}</button>}
               {s.doneAt && <span className="text-xs text-emerald-700">{t('meetings.teacher.done')}</span>}
             </div>
           </div>
@@ -153,6 +154,10 @@ export function RequestsBoard({ requests, act, onError }) {
     setBusy(key);
     try { await act(payload); } catch (err) { onError(err.message); } finally { setBusy(''); }
   };
+  // The parent came straight to this teacher without passing reception.
+  const arrivedHere = (r) => {
+    if (window.confirm(t('meetings.staffReq.arrivedHereConfirm', { name: r.studentName }))) run({ action: 'startRequest', requestId: r.id, markArrived: true }, r.id);
+  };
   const skip = (r) => {
     const reason = window.prompt(t('meetings.staffReq.skipPrompt'));
     if (reason !== null) run({ action: 'skipRequest', requestId: r.id, reason }, r.id);
@@ -180,6 +185,7 @@ export function RequestsBoard({ requests, act, onError }) {
                   </div>
                   <div className="flex flex-wrap justify-end gap-1.5 ms-auto">
                     {OPEN.includes(r.status) && r.arrived && <button type="button" disabled={!!busy} onClick={() => run({ action: 'startRequest', requestId: r.id }, r.id)} className="px-2.5 py-1.5 text-xs bg-primary text-white rounded-lg flex items-center gap-1">{busy === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}{t('meetings.staffReq.start')}</button>}
+                    {OPEN.includes(r.status) && !r.arrived && <button type="button" disabled={!!busy} onClick={() => arrivedHere(r)} className="px-2.5 py-1.5 text-xs text-emerald-700 border border-emerald-300 bg-white hover:bg-emerald-50 rounded-lg flex items-center gap-1">{busy === r.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <UserCheck className="w-3.5 h-3.5" />}{t('meetings.staffReq.arrivedHere')}</button>}
                     {r.status === 'IN_PROGRESS' && <button type="button" onClick={() => setEnding(r)} className="px-2.5 py-1.5 text-xs bg-emerald-600 text-white rounded-lg flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />{t('meetings.staffReq.end')}</button>}
                     {OPEN.includes(r.status) && <button type="button" disabled={!!busy} onClick={() => setRejecting(r)} className="px-2.5 py-1.5 text-xs text-rose-700 border border-rose-200 bg-white hover:bg-rose-50 rounded-lg flex items-center gap-1"><Ban className="w-3.5 h-3.5" />{t('meetings.staffReq.reject')}</button>}
                     {!['DONE', 'REJECTED'].includes(r.status) && <button type="button" disabled={!!busy} onClick={() => skip(r)} className="px-2 py-1.5 text-xs text-slate-500 border border-slate-200 rounded-lg">{t('meetings.staffReq.skip')}</button>}

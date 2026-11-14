@@ -1449,6 +1449,13 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       const s = (await sRef.get()).data();
       if (!s || s.teacherId !== teacher.id) throw new HttpsError("not-found", "لم يتم العثور على الموعد.");
       if (!s.startedAt) await sRef.update({ startedAt: now });
+    } else if (action === "checkinSlot") {
+      // The family of this teacher's appointment came straight to them.
+      const s = (await ref.collection("slots").doc(String(request.data?.slotId || "_")).get()).data();
+      if (!s || s.teacherId !== teacher.id) throw new HttpsError("not-found", "لم يتم العثور على الموعد.");
+      const r = await checkIn(ref, s.inviteId, `${teacher.name} (المعلم)`);
+      if (!r.already) await mlog(ref, "TEACHER_CHECKIN", { name: teacher.name }, { inviteId: s.inviteId, slotId: request.data.slotId });
+      await refreshStats(ref);
     } else if (action === "saveMinute") {
       const studentId = normalizeDigits(request.data?.studentId);
       const inviteId = String(request.data?.inviteId || "");
@@ -1518,7 +1525,13 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       const inv = (await invRef.get()).data() || {};
       if (action === "startRequest") {
         if (r.status === "DONE") throw new HttpsError("failed-precondition", "انتهت هذه المقابلة.");
-        if (inv.attended !== true) throw new HttpsError("failed-precondition", "لم يُسجَّل وصول ولي الأمر بعد في الاستقبال.");
+        // A parent who came straight to the teacher: the teacher records the
+        // attendance (when they confirm the parent is with them).
+        if (inv.attended !== true && !data.markArrived) throw new HttpsError("failed-precondition", "لم يُسجَّل وصول ولي الأمر بعد في الاستقبال.");
+        if (inv.attended !== true) {
+          await checkIn(ref, r.inviteId, `${teacher.name} (${teacher.role && teacher.role !== "TEACHER" ? "المقابلة" : "المعلم"})`);
+          await mlog(ref, "TEACHER_CHECKIN", { name: teacher.name }, { inviteId: r.inviteId, requestId: rRef.id, studentName: r.studentName || "" });
+        }
         if (r.status !== "IN_PROGRESS") {
           // The person's meeting still open (they forgot to end it) closes now;
           // they can write its result afterwards.

@@ -451,13 +451,13 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
                         {(requestsBy[inv.id] || []).map((r) => <p key={r.id} title={r.rejectReason ? `${r.purpose}\n— ${t('meetings.staffReq.rejectReason')}: ${r.rejectReason}` : r.purpose}><span className={`inline-block px-1.5 rounded border text-[10px] ${REQUEST_STATUS_STYLES[r.status]}`}>{t(`meetings.request.${r.status}`)}</span> {r.staffName} <span className="text-slate-400">({r.studentName.split(' ')[0]})</span></p>)}
                         {inv.ticketNo && <p className="text-primary font-medium">{t('meetings.desk.ticketN', { n: inv.ticketNo })}</p>}
                       </td>
-                      <td className="p-2 text-xs">{inv.attended ? <span className="text-emerald-700 flex items-center gap-1"><UserCheck className="w-3.5 h-3.5" />{t('meetings.invites.came')}</span> : '—'}</td>
+                      <td className="p-2 text-xs">{inv.attended ? <><span className="text-emerald-700 flex items-center gap-1"><UserCheck className="w-3.5 h-3.5" />{t('meetings.invites.came')}</span>{inv.checkedInBy && <span className="block text-[11px] text-slate-500">{t('meetings.invites.checkedInBy', { name: inv.checkedInBy })}</span>}</> : '—'}</td>
                       <td className="p-2">
                         <div className="flex flex-wrap gap-1 justify-end">
                           {inv.hasPhone && m.status !== 'CANCELLED' && <button type="button" disabled={!!busy} onClick={() => inviteAction(inv, 'send')} className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg" title={t('meetings.invites.send')}>{busy === `${inv.id}:send` ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}</button>}
                           <CopyBtn text={inv.link} label="" />
                           {live && <button type="button" onClick={() => setDialog({ respond: inv })} className="p-1.5 text-slate-500 hover:bg-slate-50 rounded-lg" title={t('meetings.invites.recordResponse')}><Phone className="w-4 h-4" /></button>}
-                          {live && (inv.attended
+                          {(live || m.status === 'COMPLETED') && (inv.attended
                             ? <button type="button" disabled={!!busy} onClick={() => inviteAction(inv, 'undoCheckin')} className="p-1.5 text-slate-500 hover:bg-slate-50 rounded-lg" title={t('meetings.invites.undoCheckin')}><Undo2 className="w-4 h-4" /></button>
                             : <button type="button" disabled={!!busy} onClick={() => inviteAction(inv, 'checkin')} className="p-1.5 text-sky-600 hover:bg-sky-50 rounded-lg" title={t('meetings.invites.checkin')}><UserCheck className="w-4 h-4" /></button>)}
                         </div>

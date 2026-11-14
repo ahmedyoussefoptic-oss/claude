@@ -4140,6 +4140,7 @@
       },
       "walkIn": "Walk-in",
       "came": "Attended",
+      "checkedInBy": "By: {{name}}",
       "send": "Send link",
       "recordResponse": "Record the parent's reply",
       "undoCheckin": "Undo check-in",
@@ -4329,6 +4330,8 @@
       "empty": "No appointments booked with you yet.",
       "arrived": "Arrived",
       "notArrived": "Not arrived",
+      "markArrived": "With me now",
+      "markArrivedConfirm": "Record the attendance of {{names}}'s parent? Make sure they are with you now (they skipped reception).",
       "start": "Start",
       "done": "Done",
       "parentTopics": "What the parent wants to discuss",
@@ -4515,6 +4518,8 @@
     "staffReq": {
       "skipPrompt": "Why the meeting was not held (optional):",
       "empty": "No meeting requests for you yet.",
+      "arrivedHere": "With me — start the meeting",
+      "arrivedHereConfirm": "Is {{name}}'s parent with you now without passing reception? Their attendance is recorded under your name and the meeting starts.",
       "group": {
         "now": "Current meeting",
         "directed": "Directed to you now",
