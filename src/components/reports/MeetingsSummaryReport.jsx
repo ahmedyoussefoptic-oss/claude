@@ -3,12 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { Loader2, MessageCircleQuestion, Presentation, Users, MessageSquareReply, UserCheck, CheckCircle2, Star, AlertTriangle, CalendarDays, Send } from 'lucide-react';
 import { callMeeting } from '../../config/meetings';
 import { pct, meetingsTotals, meetingsByBranch } from '../../utils/meetingsStats';
+import MeetingResultsTable, { resultSheetRows } from '../meetings/MeetingResultsTable';
 
 // «اجتماعات أولياء الأمور» in «التقارير»: a short report in numbers of every
 // meeting of every branch in the period, for the administration. The main
 // part is always shown; the sections in OPTIONAL are added when ticked.
-export const OPTIONAL = ['purposes', 'messages', 'staff', 'grades', 'survey', 'attendees', 'followUps', 'topStaff'];
-const SERVER_SECTIONS = ['purposes', 'staff', 'grades', 'survey', 'attendees', 'followUps', 'topStaff'];
+export const OPTIONAL = ['results', 'purposes', 'messages', 'staff', 'grades', 'survey', 'attendees', 'followUps', 'topStaff'];
+const SERVER_SECTIONS = ['results', 'purposes', 'staff', 'grades', 'survey', 'attendees', 'followUps', 'topStaff'];
 const PICK_KEY = 'reports:meetings:sections';
 const readPicked = () => {
   try { const v = JSON.parse(localStorage.getItem(PICK_KEY)); return Array.isArray(v) ? v.filter((x) => OPTIONAL.includes(x)) : []; } catch { return []; }
@@ -203,6 +204,13 @@ export default function MeetingsSummaryReport({ filters, branches, onData }) {
                 </div>
               </Section>
 
+              {on('results') && x.results && (
+                <Section title={k('sections.results')} tone="border-emerald-500">
+                  {x.results.total > x.results.rows.length && <p className="text-xs text-amber-700 mb-2">{t('meetings.results.capped', { shown: x.results.rows.length, total: x.results.total })}</p>}
+                  <MeetingResultsTable rows={x.results.rows} branchName={branchName} withMeeting />
+                </Section>
+              )}
+
               {on('purposes') && x.purposes && (
                 <Section title={k('sections.purposes')} tone="border-indigo-500">
                   {!x.purposes.total ? <p className="text-sm text-slate-500">{k('purposes.none')}</p> : (
@@ -357,6 +365,7 @@ export function addMeetingsSheets(XLSX, addSheet, d, t, branchName) {
     };
   })), k('list'));
   const x = d.extra || {};
+  if (x.results) addSheet(XLSX.utils.json_to_sheet(resultSheetRows(x.results.rows, t, branchName, true)), k('sections.results'));
   if (x.purposes) {
     addSheet(XLSX.utils.json_to_sheet(x.purposes.topics.map((c) => ({ [k('purposes.topicCol')]: k(`purposes.topic.${c.id}`), [k('purposes.requests')]: c.count, '%': `${pct(c.count, x.purposes.total)}%`, [k('purposes.examples')]: c.samples.join(' | ') }))), k('sections.purposes'));
     addSheet(XLSX.utils.json_to_sheet(x.purposes.bySubject.map((sb) => ({ [k('col.subject')]: sb.subject, [k('purposes.requests')]: sb.total, [k('purposes.topTopics')]: sb.top.map((tp) => `${k(`purposes.topic.${tp.id}`)} (${tp.count})`).join('، ') }))), k('purposes.bySubject'));

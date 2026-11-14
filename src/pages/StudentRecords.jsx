@@ -11,9 +11,10 @@ import { ITEM_STATUS_BADGE } from '../config/lostFound';
 import { studentKey } from '../utils/studentKey';
 import StudentTrips from '../components/trips/StudentTrips';
 import StudentAttendance from '../components/attendance/StudentAttendance';
+import StudentMeetingResults from '../components/meetings/StudentMeetingResults';
 import { canSeeAttendance } from '../config/adminPermissions';
 import StudentSmartSearch from '../components/students/StudentSmartSearch';
-import { canAccessTechSupport, canSeeTrips } from '../utils/scope';
+import { canAccessTechSupport, canSeeTrips, canSeeModule } from '../utils/scope';
 import ComplaintDetails from '../components/complaints/ComplaintDetails';
 import TechSupportDetails from '../components/techSupport/TechSupportDetails';
 import LostFoundDetails from '../components/lostFound/LostFoundDetails';
@@ -318,6 +319,7 @@ export default function StudentRecords() {
 
               {selected.studentId && canSeeTrips(userData) && <StudentTrips studentId={selected.studentId} />}
               {selected.studentId && canSeeAttendance(userData) && <StudentAttendance studentId={selected.studentId} />}
+              {selected.studentId && canSeeModule(userData, 'meetings') && <StudentMeetingResults studentId={selected.studentId} />}
 
               <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
                 <table className="w-full text-right text-sm">

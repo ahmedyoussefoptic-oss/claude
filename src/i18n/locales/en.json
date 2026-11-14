@@ -4664,6 +4664,37 @@
       "noNext": "No upcoming meeting",
       "topBranches": "Most active branches (by confirmed)",
       "branchLine": "{{confirmed}} of {{invited}} confirmed ({{p}}%) · {{attended}} attended"
+    },
+    "results": {
+      "title": "Interview results ({{count}})",
+      "sheet": "Interview results",
+      "none": "No interview results written yet.",
+      "search": "Search student, teacher or result…",
+      "found": "{{count}} results",
+      "more": "Show more ({{count}})",
+      "autoClosed": "Closed automatically — the teacher has not written the result yet",
+      "capped": "Showing the latest {{shown}} of {{total}} results — narrow the period or branch to see the rest.",
+      "studentTitle": "Parent meetings and interview results",
+      "noneForStudent": "No written results in this meeting.",
+      "who": {
+        "ALL": "All",
+        "TEACHER": "Teachers",
+        "STAFF": "Management"
+      },
+      "col": {
+        "date": "Date",
+        "meeting": "Meeting",
+        "branch": "Branch",
+        "student": "Student",
+        "class": "Grade & class",
+        "teacher": "Teacher / staff",
+        "who": "Subject / title",
+        "purpose": "Purpose",
+        "result": "Result",
+        "recommendations": "Recommendations",
+        "agreements": "Agreed",
+        "followUp": "Follow-up"
+      }
     }
   },
   "design": {
@@ -4702,7 +4733,8 @@
       "attendees": "Attendee's relation to the student",
       "followUps": "Follow-ups raised",
       "topStaff": "Most interviews held",
-      "purposes": "Interview purposes (what parents ask about)"
+      "purposes": "Interview purposes (what parents ask about)",
+      "results": "Interview results"
     },
     "empty": "No meetings in this period.",
     "updating": "Updating the numbers…",

@@ -213,10 +213,19 @@ function StudentFile({ student: s, records, branchName, canEdit, onEdit, onOpen,
       sheet(t('studentRecords.smart.siblings'), (siblings || []).map((x) => Object.fromEntries(rosterRows(x, t, branchName).slice(0, 8))));
       sheet(t('studentRecords.smart.records'), mine.map(recordRow));
       sheet(t('studentRecords.smart.trips'), (trips || []).map(tripRow));
-      sheet(t('studentRecords.smart.meetings'), (meetings || []).flatMap((mt) => (mt.minutes.length ? mt.minutes : [null]).map((mn) => ({
-        [t('meetings.report.meeting')]: mt.title, [t('common.date')]: mt.date, [t('meetings.report.response')]: t(`meetings.response.${mt.response || 'NONE'}`), [t('meetings.report.attended')]: mt.attended ? '✓' : '',
-        [t('meetings.report.teacher')]: mn?.teacherName || '', [t('meetings.teacher.points')]: mn?.points || '', [t('meetings.teacher.recommendations')]: mn?.recommendations || '', [t('meetings.teacher.agreements')]: mn?.agreements || '',
-      }))));
+      // One row per written result (teachers' minutes and interviews' results).
+      sheet(t('studentRecords.smart.meetings'), (meetings || []).flatMap((mt) => {
+        const rows = [
+          ...mt.minutes.map((mn) => ({ who: mn.teacherName, role: mn.subject, purpose: '', result: mn.points, recommendations: mn.recommendations, agreements: mn.agreements, status: '', followUp: mn.followUp })),
+          ...(mt.requests || []).map((rq) => ({ who: rq.staffName, role: t(`meetings.roles.${rq.staffRole}`), purpose: rq.purpose, result: rq.result || rq.rejectReason || '', recommendations: rq.recommendations, agreements: '', status: t(`meetings.request.${rq.status}`), followUp: rq.followUp })),
+        ];
+        return (rows.length ? rows : [null]).map((r) => ({
+          [t('meetings.report.meeting')]: mt.title, [t('common.date')]: mt.date, [t('meetings.report.response')]: t(`meetings.response.${mt.response || 'NONE'}`), [t('meetings.report.attended')]: mt.attended ? '✓' : '',
+          [t('meetings.report.teacher')]: r?.who || '', [t('meetings.results.col.who')]: r?.role || '', [t('meetings.staffReq.purpose')]: r?.purpose || '', [t('common.status')]: r?.status || '',
+          [t('meetings.results.col.result')]: r?.result || '', [t('meetings.teacher.recommendations')]: r?.recommendations || '', [t('meetings.teacher.agreements')]: r?.agreements || '',
+          [t('meetings.results.col.followUp')]: r?.followUp?.complaintNo || '',
+        }));
+      }));
       sheet(t('studentRecords.smart.sped'), (extra?.sped || []).map(spedRow));
       sheet(t('studentRecords.smart.leaves'), (extra?.leaves || []).map(leaveRow));
       sheet(t('studentRecords.smart.pickups'), (extra?.pickups || []).map((p) => ({ [t('studentRecords.smart.fields.nameAr')]: p.name, [t('platform.leaves.relation')]: t(`platform.relations.${p.relation}`, p.relation || ''), [t('studentRecords.smart.fields.nationalId')]: p.nationalId || '', [t('studentRecords.smart.fields.mobile')]: p.phone || '' })));

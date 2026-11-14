@@ -457,6 +457,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       const followUps = {};
       const top = {};
       const purposeItems = [];
+      const results = [];
       for (const { id, m } of live) {
         const ref = db.collection("meetings").doc(id);
         const roleOf = (staffId) => slotOf(staffId)?.role || (m.teachers || []).find((t) => t.id === staffId)?.role || "TEACHER";
@@ -465,7 +466,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
           include.has("staff") || include.has("purposes") ? ref.collection("requests").get() : null,
           include.has("staff") || include.has("purposes") ? ref.collection("slots").get() : null,
           include.has("survey") ? ref.collection("surveys").get() : null,
-          include.has("followUps") || include.has("topStaff") ? db.collection("meetingMinutes").where("meetingId", "==", id).get() : null,
+          include.has("followUps") || include.has("topStaff") || include.has("results") ? db.collection("meetingMinutes").where("meetingId", "==", id).get() : null,
         ]);
         if (include.has("purposes")) {
           // Teachers only: what parents wrote they want to discuss.
@@ -503,6 +504,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
           if (s.answered) add(survey.answered, s.answered);
           if (s.low) survey.low++;
         });
+        if (include.has("results")) minutes.docs.forEach((x) => results.push(resultRow(x.data(), m)));
         minutes?.docs.map((x) => x.data()).forEach((x) => {
           if (x.followUp?.type) add(followUps, x.followUp.type);
           if (include.has("topStaff") && x.teacherName) {
@@ -519,6 +521,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       if (include.has("attendees")) extra.attendees = attendees;
       if (include.has("followUps")) extra.followUps = followUps;
       if (include.has("purposes")) extra.purposes = tallyPurposes(purposeItems);
+      if (include.has("results")) extra.results = { total: results.length, rows: results.sort((a, b) => String(b.date).localeCompare(String(a.date)) || byResult(a, b)).slice(0, 4000) };
       if (include.has("topStaff")) extra.topStaff = Object.values(top).sort((a, b) => b.count - a.count).slice(0, 15);
     }
     return { meetings, extra, generatedAt: Date.now() };
@@ -1305,6 +1308,18 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     } catch (err) { console.error("noteAccess", err.message); }
   }
 
+  // A written result (a teacher's minute or an interview's result) as a row
+  // for the reports.
+  const resultRow = (x, m) => ({
+    meetingId: x.meetingId, meetingTitle: m?.title || x.meetingTitle || "", date: x.date || m?.date || "", branch: x.branch || "",
+    studentName: x.studentName || "", grade: x.grade || "", className: x.className || "",
+    teacherName: x.teacherName || "", subject: x.subject || "", role: x.role || "TEACHER", purpose: x.purpose || "",
+    result: x.points || "", recommendations: x.recommendations || "", agreements: x.agreements || "",
+    followUpNo: x.followUp?.complaintNo || "", followUpType: x.followUp?.type || "", autoClosed: x.points === AUTO_CLOSED_NOTE, at: ms(x.updatedAt || x.createdAt),
+  });
+  const byResult = (a, b) => String(a.branch).localeCompare(String(b.branch)) || String(a.grade).localeCompare(String(b.grade), undefined, { numeric: true })
+    || String(a.className).localeCompare(String(b.className)) || String(a.studentName).localeCompare(String(b.studentName), "ar");
+
   // Who of a meeting's teachers signed in: {teacherId: {entered: "login" |
   // "activity" | "", firstAt, lastAt, asked, done}}.
   async function accessOf(ref, m, pre = {}) {
@@ -1817,6 +1832,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
         return { id: i.id, names: names(i), classes: (i.students || []).map((s) => [s.grade, s.className].filter(Boolean).join(" ")).join("، "), phone: maskPhone(i.phone), response: i.response || "", callStatus: c?.status || "", callResult: c?.outcome || c?.result || "" };
       }),
       minutesCount: minutes.size,
+      results: minutes.docs.map((x) => resultRow(x.data(), m)).sort(byResult),
       requests: await requestsReport(ref, m, invites),
     };
   });

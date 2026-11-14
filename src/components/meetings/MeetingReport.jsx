@@ -4,6 +4,7 @@ import { Loader2, Printer, FileDown, Star, Filter } from 'lucide-react';
 import { useBranches } from '../../hooks/useOrgData';
 import { printPage } from '../../utils/printPage';
 import { callMeeting, pct } from '../../config/meetings';
+import MeetingResultsTable, { resultSheetRows } from './MeetingResultsTable';
 
 function Card({ title, children, className = '' }) {
   return (
@@ -92,6 +93,7 @@ export default function MeetingReport({ id }) {
     add(h('sheetTeachers'), data.teachers.map((x) => ({ [h('teacher')]: x.name, [h('subject')]: x.subject, [h('booked')]: x.booked, [h('done')]: x.done, [h('minutes')]: x.minutes, [h('rating')]: x.rating, [h('ratings')]: x.ratings })));
     add(h('sheetSurveys'), surveys.map((x) => ({ [h('parent')]: x.studentNames, [t('meetings.survey.overall')]: x.overall, [t('meetings.survey.organization')]: x.organization, [t('meetings.survey.usefulness')]: x.usefulness, [t('meetings.survey.answered')]: t(`meetings.survey.answers.${x.answered}`), [h('comment')]: x.comment })));
     add(h('sheetTopics'), data.topics.map((x) => ({ [h('subject')]: x.subject, [h('teacher')]: x.teacher, [h('parent')]: x.students, [h('topic')]: x.topic })));
+    add(t('meetings.results.sheet'), resultSheetRows(data.results || [], t, branchName, false));
     add(h('sheetFollowUps'), data.followUps.map((x) => ({ '#': x.number, [h('student')]: x.studentName, [h('type')]: t(`businessData.complaintTypes.${x.type}`, x.type), [t('common.status')]: t(`statuses.complaint.${x.status}`, x.status) })));
     if (data.requests) {
       add(h('sheetRequests'), data.requests.perStaff.map((x) => ({ [h('person')]: x.name, [h('role')]: t(`meetings.roles.${x.role}`), [h('asked')]: x.asked, [h('done')]: x.done, [h('notMet')]: x.notMet, [h('rejected')]: x.rejected || 0, [h('avgWait')]: x.avgWait, [h('avgLength')]: x.avgLength })));
@@ -158,6 +160,10 @@ export default function MeetingReport({ id }) {
             )}
           </Card>
         )}
+
+        <Card title={t('meetings.results.title', { count: (data.results || []).length })} className="lg:col-span-2">
+          <MeetingResultsTable rows={data.results || []} branchName={branchName} />
+        </Card>
 
         <Card title={t('meetings.report.teachersTitle')}>
           {data.teachers.length ? <table className="w-full text-sm">
