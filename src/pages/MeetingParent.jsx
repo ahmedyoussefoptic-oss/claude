@@ -7,6 +7,7 @@ import Watermark from '../components/common/Watermark';
 import LanguageSwitcher from '../components/common/LanguageSwitcher';
 import logo from '../assets/logo.png';
 import { callMeeting, meetingTime, isIndividual, isRequests } from '../config/meetings';
+import MeetingFeedback from '../components/surveys/MeetingFeedback';
 import MeetingFamily from './MeetingFamily';
 import PublicHeader from '../components/common/PublicHeader';
 
@@ -148,7 +149,7 @@ export default function MeetingParent() {
                   <button disabled={busy} className="w-full py-3 bg-primary text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-60">{busy && <Loader2 className="w-4 h-4 animate-spin" />}{t('tripConsent.continue')}</button>
                 </form>
               ) : state.surveyOpen ? (
-                state.surveyDone ? <Done title={t('meetings.parent.surveyThanks')} /> : <Survey token={token} studentId={studentId} state={state} onDone={() => setState({ ...state, surveyDone: true })} />
+                state.surveyDone ? <Done title={t('meetings.parent.surveyThanks')} /> : state.feedback ? <MeetingFeedback feedback={state.feedback} send={(p) => callMeeting('meetingParentFeedback', { token, studentId, ...p })} onSent={async () => setState(await callMeeting('meetingParentVerify', { token, studentId }))} /> : <Survey token={token} studentId={studentId} state={state} onDone={() => setState({ ...state, surveyDone: true })} />
               ) : view.status === 'COMPLETED' ? (
                 <div className={`${card} text-center text-slate-700`}>{t('meetings.parent.ended')}</div>
               ) : editing && view.registrationOpen ? (

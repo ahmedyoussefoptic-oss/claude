@@ -15,6 +15,7 @@ import {
 } from '../../config/meetings';
 import MeetingForm from './MeetingForm';
 import MeetingReport from './MeetingReport';
+import MeetingSurveyPicker from '../surveys/MeetingSurveyPicker';
 import { EnteredBadge } from '../reports/MeetingsAccessReport';
 
 function CopyBtn({ text, label }) {
@@ -318,6 +319,7 @@ export default function MeetingDetails({ id, onBack, onChanged }) {
             <Stat label={t('meetings.stats.attended')} value={s.attended || 0} sub={`${pct(s.attended, s.families)}% · ${pct(s.attended, s.attend)}% ${t('meetings.stats.ofConfirmed')}`} tone="text-sky-700" />
             <Stat label={t('meetings.stats.satisfaction')} value={s.avgOverall ? `${s.avgOverall}/5` : '—'} sub={t('meetings.stats.surveysN', { count: s.surveys || 0, low: s.low || 0 })} tone="text-amber-600" />
           </div>
+          {m.status !== 'CANCELLED' && <MeetingSurveyPicker meeting={m} run={run} busy={busy} />}
           {m.agenda && <div className="bg-white border border-slate-200 rounded-2xl p-4"><p className="text-sm font-bold text-slate-800 mb-1">{t('meetings.form.agenda')}</p><p className="text-sm text-slate-600 whitespace-pre-wrap">{m.agenda}</p></div>}
 
           {isRequests(m) && m.publicLink && (

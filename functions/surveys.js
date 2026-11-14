@@ -19,8 +19,34 @@ const CURRICULA = ["AMERICAN", "BRITISH"];
 const MAX_ITEMS = 60;
 const THROTTLE = { max: 40, window: 10 * 60e3 };
 const CODE_CHARS = "abcdefghjkmnpqrstuvwxyz23456789";
+const clip = (v, max) => String(v == null ? "" : v).trim().slice(0, max);
 
-module.exports = function surveysModule(d) {
+// A parent's answers to a form's questions: only valid values are kept
+// (1–5, «NA» where allowed, a listed option, text); `missing` = required
+// questions left out; `low` = any rating of 1 or 2. Also used by the
+// meeting pages (functions/meetings.js) when a meeting links a form.
+function cleanAnswers(f, raw) {
+  const answers = {};
+  const missing = [];
+  for (const it of f.items) {
+    const v = raw?.[it.id];
+    let a = null;
+    if (RATED.has(it.type)) {
+      const n = Math.floor(Number(v));
+      if (v === "NA" && it.na) a = "NA";
+      else if (n >= 1 && n <= 5) a = n;
+    } else if (it.type === "choice") {
+      if ((it.options || []).some((o) => o.id === v)) a = v;
+    } else {
+      a = clip(v, 1500) || null;
+    }
+    if (a === null) { if (it.required) missing.push(it.id); } else answers[it.id] = a;
+  }
+  const low = f.items.some((it) => RATED.has(it.type) && typeof answers[it.id] === "number" && answers[it.id] <= 2);
+  return { answers, low, missing };
+}
+
+function surveysModule(d) {
   const { db, Timestamp, FieldValue, HttpsError, onCall, crypto, str, callerHasBranch, callerAll } = d;
   const out = {};
   const ms = (ts) => (ts?.toMillis ? ts.toMillis() : 0);
@@ -195,26 +221,10 @@ module.exports = function surveysModule(d) {
     };
     const branchOk = /^[A-Z0-9_]{2,40}$/.test(info.branch) && (!(f.branches || []).length || f.branches.includes(info.branch));
     if (info.studentName.length < 2 || !branchOk || !info.curriculum || !info.grade) throw new HttpsError("invalid-argument", "أكمل بيانات الطالب/ة (الاسم، الفرع، المنهج، الصف).");
-    const answers = {};
-    const missing = [];
-    for (const it of f.items) {
-      const v = dd.answers?.[it.id];
-      let a = null;
-      if (RATED.has(it.type)) {
-        const n = Math.floor(Number(v));
-        if (v === "NA" && it.na) a = "NA";
-        else if (n >= 1 && n <= 5) a = n;
-      } else if (it.type === "choice") {
-        if ((it.options || []).some((o) => o.id === v)) a = v;
-      } else {
-        a = str(v, 1500) || null;
-      }
-      if (a === null) { if (it.required) missing.push(it.id); } else answers[it.id] = a;
-    }
+    const { answers, low, missing } = cleanAnswers(f, dd.answers);
     if (missing.length) throw new HttpsError("invalid-argument", "أجب عن الأسئلة المطلوبة (*).");
     if (!Object.keys(answers).length) throw new HttpsError("invalid-argument", "أجب عن سؤال واحد على الأقل.");
     await throttle(request);
-    const low = f.items.some((it) => RATED.has(it.type) && typeof answers[it.id] === "number" && answers[it.id] <= 2);
     const now = Timestamp.now();
     const batch = db.batch();
     batch.set(ref.collection("responses").doc(), { info, answers, low, lang: dd.lang === "en" ? "en" : "ar", createdAt: now });
@@ -224,4 +234,7 @@ module.exports = function surveysModule(d) {
   });
 
   return out;
-};
+}
+
+module.exports = surveysModule;
+Object.assign(module.exports, { cleanAnswers, GRADES, CURRICULA });

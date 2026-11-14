@@ -5037,6 +5037,16 @@
         "na": "N/A / did not meet",
         "spread": "Spread 1–5"
       }
+    },
+    "meeting": {
+      "pickerTitle": "Parent feedback after the meeting",
+      "pickerHint": "Shown to the families who came on the meeting's page once it ends, and linked in the thank-you message. The student's details are filled in from the invitation; each child is rated separately.",
+      "builtIn": "The short built-in survey (3 questions)",
+      "results": "Feedback results ({{count}} families)",
+      "closedNote": "This form is closed — families see the short survey until you reopen it in «Parent feedback».",
+      "whichChild": "Choose the child to rate",
+      "sent": "Feedback for {{name}} received. Thank you.",
+      "submitFor": "Send feedback for {{name}}"
     }
   }
 }

@@ -4,6 +4,7 @@ import QRCode from 'qrcode';
 import { Loader2, CheckCircle2, Star, AlertTriangle, Pencil, Ticket, ArrowLeftRight, LogOut, Sparkles, HeartHandshake, Check, Printer, ChevronDown } from 'lucide-react';
 import logo from '../assets/logo.png';
 import { callMeeting, relationsFor, MALE_RELATIONS, STAFF_POSITIONS, SECTION_POSITIONS, SUBJECTS, positionLabel } from '../config/meetings';
+import MeetingFeedback from '../components/surveys/MeetingFeedback';
 
 // The parents' pages share one look: a navy card (like a student card) with
 // the school's logo, then white cards with coloured initials for the people.
@@ -177,7 +178,11 @@ export function FamilyPanel({ sess, initial, others = [], onExpired, showSteps =
   const { meeting, invite } = state;
   const steps = (at) => (showSteps ? <Steps at={at} /> : null);
   if (meeting.status === 'CANCELLED') return <div className={`${card} text-center text-slate-700`}>{t('meetings.parent.cancelled')}</div>;
-  if (state.surveyOpen) return state.surveyDone ? <Done title={t('meetings.parent.surveyThanks')} /> : <FamilySurvey sess={sess} state={state} onDone={() => refresh()} />;
+  if (state.surveyOpen) {
+    if (state.surveyDone) return <Done title={t('meetings.parent.surveyThanks')} />;
+    if (state.feedback) return <MeetingFeedback feedback={state.feedback} send={(p) => callMeeting('meetingFamilyFeedback', { token: sess.familyToken, session: sess.session, ...p })} onSent={() => refresh(true)} />;
+    return <FamilySurvey sess={sess} state={state} onDone={() => refresh()} />;
+  }
   if (invite.attended) return <TicketView state={state} onRefresh={() => refresh()} />;
   if (meeting.status === 'COMPLETED') return <div className={`${card} text-center text-slate-700`}>{t('meetings.parent.ended')}</div>;
   if ((editing || !invite.response) && meeting.registrationOpen) {

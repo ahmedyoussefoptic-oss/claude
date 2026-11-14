@@ -24,6 +24,7 @@
 //   meetingMinutes/{m_t_student}  a teacher's minute (shown in the student record)
 const { tallyPurposes } = require("./meetingPurposes");
 const { meetingsAllowed } = require("./meetingAccess");
+const { cleanAnswers, GRADES: FEEDBACK_GRADES, CURRICULA: FEEDBACK_CURRICULA } = require("./surveys");
 
 module.exports = function meetingsModule(d) {
   const {
@@ -285,9 +286,9 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     changed: () => "تم تحديث موعد الاجتماع أو مكانه، وتجدون التفاصيل المحدّثة في الرابط.",
     slotCancelled: (m, inv, extra) => `نعتذر عن إلغاء موعدكم مع ${extra.teacher} (${time12(extra.time)}). يمكنكم حجز موعد آخر من الرابط.`,
     cancelled: (m, inv, extra) => `نعتذر عن إلغاء الاجتماع${extra?.reason ? `: ${extra.reason}` : ""}.`,
-    thanks: () => "شكراً لحضوركم. يسعدنا تقييمكم للقاء في أقل من دقيقة من الرابط.",
+    thanks: (m) => `شكراً لحضوركم. يسعدنا تقييمكم للقاء ${m.surveyFormId ? "في دقائق قليلة" : "في أقل من دقيقة"} من الرابط.`,
     // Interviews on request: the family's meetings are all done.
-    thanksDone: () => "شكراً لحضوركم، انتهت مقابلاتكم. يسعدنا تقييمكم للقاء في أقل من دقيقة من الرابط.",
+    thanksDone: (m) => `شكراً لحضوركم، انتهت مقابلاتكم. يسعدنا تقييمكم للقاء ${m.surveyFormId ? "في دقائق قليلة" : "في أقل من دقيقة"} من الرابط.`,
     absent: (m, inv, extra) => `افتقدنا حضوركم الاجتماع.${extra?.summary ? ` ${extra.summary}` : ""} لطلب موعد بديل يرجى التواصل مع الفرع.`,
     invitePlain: (m) => `ندعوكم لحضور الاجتماع، يرجى تأكيد الحضور من الرابط.`,
   };
@@ -353,6 +354,8 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       booked: slots.size,
       done: slots.docs.filter((x) => x.data().doneAt).length,
       surveys: surveys.size,
+      // Families who answered the linked feedback form (for at least one child).
+      feedback: count((i) => (i.feedbackDone || []).length > 0),
       avgOverall: overall.length ? Math.round((overall.reduce((a, b) => a + b, 0) / overall.length) * 100) / 100 : 0,
       low: surveys.docs.filter((x) => x.data().low).length,
       requests: reqs.docs.filter((x) => x.data().status !== "CANCELLED").length,
@@ -375,6 +378,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       ...(secrets ? { deskLink: `${PUBLIC_APP_URL}/meeting-desk/${m.deskToken}`, deskPin: m.deskPin, publicLink: m.publicToken ? `${PUBLIC_APP_URL}/meeting/${m.publicToken}` : "" } : {}),
       stats: m.stats || {}, createdByName: m.createdByName || "", createdAt: ms(m.createdAt), invitedAt: ms(m.invitedAt), completedAt: ms(m.completedAt),
       cancelReason: m.cancelReason || "", summary: m.summary || "", callCampaignId: m.callCampaignId || null,
+      surveyFormId: m.surveyFormId || "", surveyFormTitle: m.surveyFormTitle || "",
     };
   }
 
@@ -672,7 +676,21 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       if (m.status !== "COMPLETED") throw new HttpsError("failed-precondition", "يُرسل الاستبيان بعد إنهاء الاجتماع.");
       if (!settings) throw new HttpsError("failed-precondition", "فعّل واتساب API وأضف اسم قالب «إشعار اجتماع» في الإعدادات.");
       const done = new Set((await ref.collection("surveys").get()).docs.map((x) => x.id));
-      result.survey = await sendMany(settings, ref, m, (await invites()).filter((i) => i.attended === true && i.phone && !done.has(i.id)), "thanks");
+      result.survey = await sendMany(settings, ref, m, (await invites()).filter((i) => i.attended === true && i.phone && !done.has(i.id) && !(m.surveyFormId && feedbackComplete(i))), "thanks");
+    } else if (action === "setSurveyForm") {
+      // The feedback form («تقييمات أولياء الأمور») the families answer after
+      // the meeting instead of the short built-in survey ('' = the built-in one).
+      const formId = String(request.data?.formId || "");
+      if (!formId) await ref.update({ surveyFormId: FieldValue.delete(), surveyFormTitle: FieldValue.delete(), updatedAt: now });
+      else {
+        if (!/^[A-Za-z0-9]{6,40}$/.test(formId)) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+        const fs = await db.collection("surveyForms").doc(formId).get();
+        const f = fs.data();
+        const visible = f && (callerAll(caller) || f.createdBy === caller.uid || !(f.branches || []).length || f.branches.some((b) => callerHasBranch(caller, b)));
+        if (!visible) throw new HttpsError("not-found", "التقييم غير موجود.");
+        await ref.update({ surveyFormId: formId, surveyFormTitle: f.title, updatedAt: now });
+        Object.assign(result, { formId, open: f.status === "OPEN" });
+      }
     } else if (action === "unlockLink") {
       // A staff link locked after wrong codes: open it again.
       const k = staffKeys(m).find((x) => x.kind === request.data?.kind && x.id === String(request.data?.teacherId || ""));
@@ -943,7 +961,11 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
         slots: times.map((time) => { const who = taken.get(`${t.id}_${time.replace(":", "")}`); return { time, free: !who || who === inv.id }; }),
       }));
     }
-    if (out2.surveyOpen) {
+    const fb = out2.surveyOpen ? await linkedForm(m) : null;
+    if (fb) {
+      out2.feedback = feedbackView(fb.f, inv);
+      out2.surveyDone = feedbackComplete(inv);
+    } else if (out2.surveyOpen) {
       out2.surveyDone = (await ref.collection("surveys").doc(inv.id).get()).exists;
       const met = new Set((inv.slots || []).map((s) => s.teacherId));
       (await db.collection("meetingMinutes").where("meetingId", "==", ref.id).where("inviteId", "==", inv.id).get()).docs.forEach((x) => met.add(x.data().teacherId));
@@ -1057,6 +1079,65 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     return { ok: true };
   }
 
+  // --- the linked feedback form ----------------------------------------------
+  // A meeting can link a form of «تقييمات أولياء الأمور» (meetingAction
+  // setSurveyForm): the families who came answer it on their meeting page,
+  // once per child, with the child's details filled in from the invitation.
+  // While the form is closed (or unlinked) the short built-in survey shows.
+  async function linkedForm(m) {
+    if (!m.surveyFormId) return null;
+    const snap = await db.collection("surveyForms").doc(m.surveyFormId).get();
+    return snap.exists && snap.data().status === "OPEN" ? { ref: snap.ref, f: snap.data() } : null;
+  }
+  const feedbackInfo = (s) => ({
+    studentName: s.name || "", branch: s.branch || "", className: s.className || "",
+    curriculum: FEEDBACK_CURRICULA.includes(s.section) ? s.section : "", grade: FEEDBACK_GRADES.includes(s.grade) ? s.grade : "",
+  });
+  const feedbackComplete = (inv) => (inv.students || []).length > 0 && (inv.students || []).every((s) => (inv.feedbackDone || []).includes(s.id));
+  const feedbackView = (f, inv) => ({
+    title: f.title, intro: f.intro || { ar: "", en: "" }, items: f.items,
+    students: (inv.students || []).map((s) => ({ id: s.id, ...feedbackInfo(s), done: (inv.feedbackDone || []).includes(s.id) })),
+  });
+
+  async function saveFeedback(ref, m, inv, d2) {
+    const fb = await linkedForm(m);
+    if (!fb) throw new HttpsError("failed-precondition", "التقييم غير متاح حالياً.");
+    const s = (inv.students || []).find((x) => x.id === String(d2.forStudent || ""));
+    if (!s) throw new HttpsError("invalid-argument", "اختر الطالب/ة.");
+    const base = feedbackInfo(s);
+    const info = {
+      ...base,
+      curriculum: base.curriculum || (FEEDBACK_CURRICULA.includes(d2.curriculum) ? d2.curriculum : ""),
+      grade: base.grade || (FEEDBACK_GRADES.includes(d2.grade) ? d2.grade : ""),
+    };
+    if (!info.curriculum || !info.grade) throw new HttpsError("invalid-argument", "اختر المنهج والصف.");
+    const { answers, low, missing } = cleanAnswers(fb.f, d2.answers);
+    if (missing.length) throw new HttpsError("invalid-argument", "أجب عن الأسئلة المطلوبة (*).");
+    if (!Object.keys(answers).length) throw new HttpsError("invalid-argument", "أجب عن سؤال واحد على الأقل.");
+    const invRef = ref.collection("invites").doc(inv.id);
+    const now = Timestamp.now();
+    await db.runTransaction(async (tx) => {
+      const cur = (await tx.get(invRef)).data() || {};
+      if ((cur.feedbackDone || []).includes(s.id)) throw new HttpsError("already-exists", "تم استلام تقييم هذا الطالب مسبقاً، شكراً لكم.");
+      tx.set(fb.ref.collection("responses").doc(), { info, answers, low, lang: d2.lang === "en" ? "en" : "ar", meetingId: ref.id, inviteId: inv.id, studentId: s.id, createdAt: now });
+      tx.update(fb.ref, { responses: FieldValue.increment(1), lastResponseAt: now });
+      tx.update(invRef, { feedbackDone: FieldValue.arrayUnion(s.id), feedbackAt: now });
+    });
+    if (low) {
+      const users = await loadActiveUsers();
+      const ids = [m.createdBy, fb.f.createdBy, ...users.filter((u) => meetingsAllowed(u) && u.isPrincipal === true && callerHasBranch(u, s.branch)).map((u) => u.id)];
+      await notifyUsers(ids, { title: "تقييم منخفض لاجتماع أولياء الأمور", body: `${m.title}: ولي أمر ${s.name} أعطى تقييماً منخفضاً (1–2) — يُرجى التواصل معه.`, complaintId: ref.id, type: "MEETING_LOW_RATING" });
+    }
+    await refreshStats(ref);
+    return { ok: true };
+  }
+
+  out.meetingParentFeedback = onCall(async (request) => {
+    const { ref, m, inv } = await verifiedParent(request);
+    if (m.status !== "COMPLETED" || inv.attended !== true) throw new HttpsError("failed-precondition", "التقييم متاح لمن حضر الاجتماع بعد انتهائه.");
+    return saveFeedback(ref, m, inv, request.data || {});
+  });
+
   // --- interviews on request: the family's page ----------------------------
   // From the meeting's general link (or a family's own link) the parent signs
   // in with their national ID (or a child's ID); the
@@ -1090,6 +1171,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     const done = live.length > 0 && live.every((r) => r.status === "DONE");
     const surveyOpen = inv.attended === true && (done || m.status === "COMPLETED");
     const met = new Set(reqs.filter((r) => r.status === "DONE").map((r) => r.staffId));
+    const fb = surveyOpen ? await linkedForm(m) : null;
     return {
       meeting: view,
       mode: "REQUESTS",
@@ -1109,7 +1191,8 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       })),
       allDone: done,
       surveyOpen,
-      surveyDone: surveyOpen ? (await ref.collection("surveys").doc(inv.id).get()).exists : false,
+      surveyDone: fb ? feedbackComplete(inv) : surveyOpen ? (await ref.collection("surveys").doc(inv.id).get()).exists : false,
+      ...(fb ? { feedback: feedbackView(fb.f, inv) } : {}),
       surveyTeachers: [...(m.teachers || []), ...POSITION_SLOTS].filter((t) => met.has(t.id)).map((t) => ({ ...staffOut(t), name: t.slot ? `${t.name}${onDutyOf(m, t.id)?.name ? ` — ${onDutyOf(m, t.id).name}` : ""}` : t.name })),
       teamsLink: "",
     };
@@ -1289,6 +1372,13 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     const st = await familyState(ref, m, inv);
     if (!st.surveyOpen) throw new HttpsError("failed-precondition", "التقييم متاح بعد انتهاء مقابلاتكم.");
     return saveSurvey(ref, m, inv, request.data || {});
+  });
+
+  out.meetingFamilyFeedback = onCall(async (request) => {
+    const { ref, m, inv } = await familySession(request);
+    const st = await familyState(ref, m, inv);
+    if (!st.surveyOpen) throw new HttpsError("failed-precondition", "التقييم متاح بعد انتهاء مقابلاتكم.");
+    return saveFeedback(ref, m, inv, request.data || {});
   });
 
   // When a family's last open interview ends: thanks + survey (once).
