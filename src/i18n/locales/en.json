@@ -4353,7 +4353,16 @@
       "doneOf": "{{done}} of {{asked}} done",
       "purposes": "Meeting purposes ({{count}})",
       "rejected": "Declined",
-      "rejectReason": "Decline reason"
+      "rejectReason": "Decline reason",
+      "attendance": {
+        "button": "Attendance file ({{attended}} came · {{noShow}} confirmed, didn't come)",
+        "attendedSheet": "Attended",
+        "noShowSheet": "Confirmed - no show",
+        "who": "Who came",
+        "time": "Check-in time",
+        "walkIn": "Came without confirming",
+        "none": "None"
+      }
     },
     "staff": {
       "pinHint": "Enter the 4-digit access code you received with the link.",

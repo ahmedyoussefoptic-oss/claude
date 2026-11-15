@@ -1945,6 +1945,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
       students: invites.flatMap((i) => (i.students || []).map((s) => ({
         id: s.id, name: s.name, branch: s.branch, grade: s.grade, className: s.className,
         invited: !!(i.waEvents?.invite || i.wa?.status === "manual" || i.walkIn), wa: i.wa?.status || "", response: i.response || "", attended: i.attended === true, walkIn: i.walkIn === true,
+        checkedInAt: ms(i.checkedInAt), attendee: i.attendee ? { name: i.attendee.name || "", relation: i.attendee.relation || "" } : null,
       }))),
       surveys: surveys.docs.map((x) => ({ ...x.data(), createdAt: ms(x.data().createdAt) })),
       teachers: (m.teachers || []).map((t) => {

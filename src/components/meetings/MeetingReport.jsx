@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Printer, FileDown, Star, Filter } from 'lucide-react';
+import { Loader2, Printer, FileDown, Star, Filter, UserCheck } from 'lucide-react';
 import { useBranches } from '../../hooks/useOrgData';
 import { printPage } from '../../utils/printPage';
 import { callMeeting, pct } from '../../config/meetings';
@@ -74,6 +74,28 @@ export default function MeetingReport({ id }) {
   const bySubject = data.topics.reduce((acc, x) => { const k = x.subject || x.teacher || t('meetings.report.general'); (acc[k] = acc[k] || []).push(x); return acc; }, {});
   const compare = others.filter((o) => o.status === 'COMPLETED' || o.id === id).sort((a, b) => b.date.localeCompare(a.date)).slice(0, 12);
 
+  // The students whose parents came, and those confirmed who didn't come.
+  const confirmedSt = (x) => x.response === 'ATTEND' || x.response === 'REMOTE';
+  const attendanceRow = (x) => ({
+    [t('meetings.report.student')]: x.name, ID: x.id, [t('common.branch')]: branchName(x.branch), [t('meetings.report.grade')]: x.grade, [t('meetings.report.class')]: x.className,
+    [t('meetings.report.response')]: t(`meetings.response.${x.response || 'NONE'}`),
+  });
+  const attendedRows = () => data.students.filter((x) => x.attended).map((x) => ({
+    ...attendanceRow(x),
+    [t('meetings.report.attendance.who')]: x.attendee ? `${x.attendee.name}${x.attendee.relation ? ` (${t(`meetings.family.relations.${x.attendee.relation}`, x.attendee.relation)})` : ''}` : '',
+    [t('meetings.report.attendance.time')]: x.checkedInAt ? new Date(x.checkedInAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Riyadh' }) : '',
+    [t('meetings.report.attendance.walkIn')]: x.walkIn ? '✓' : '',
+  }));
+  const noShowRows = () => data.students.filter((x) => confirmedSt(x) && !x.attended).map(attendanceRow);
+  const exportAttendance = async () => {
+    const XLSX = await import('xlsx');
+    const wb = XLSX.utils.book_new();
+    const add = (name, rows, empty) => XLSX.utils.book_append_sheet(wb, rows.length ? XLSX.utils.json_to_sheet(rows) : XLSX.utils.aoa_to_sheet([[empty]]), name.slice(0, 31));
+    add(t('meetings.report.attendance.attendedSheet'), attendedRows(), t('meetings.report.attendance.none'));
+    add(t('meetings.report.attendance.noShowSheet'), noShowRows(), t('meetings.report.attendance.none'));
+    XLSX.writeFile(wb, `${m.code}-attendance.xlsx`);
+  };
+
   const exportExcel = async () => {
     const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
@@ -90,6 +112,8 @@ export default function MeetingReport({ id }) {
       [t('meetings.report.student')]: x.name, ID: x.id, [t('common.branch')]: branchName(x.branch), [t('meetings.report.grade')]: x.grade, [t('meetings.report.class')]: x.className,
       [t('meetings.report.response')]: t(`meetings.response.${x.response || 'NONE'}`), [t('meetings.report.attended')]: x.attended ? '✓' : '',
     })));
+    add(t('meetings.report.attendance.attendedSheet'), attendedRows());
+    add(t('meetings.report.attendance.noShowSheet'), noShowRows());
     add(h('sheetTeachers'), data.teachers.map((x) => ({ [h('teacher')]: x.name, [h('subject')]: x.subject, [h('booked')]: x.booked, [h('done')]: x.done, [h('minutes')]: x.minutes, [h('rating')]: x.rating, [h('ratings')]: x.ratings })));
     add(h('sheetSurveys'), surveys.map((x) => ({ [h('parent')]: x.studentNames, [t('meetings.survey.overall')]: x.overall, [t('meetings.survey.organization')]: x.organization, [t('meetings.survey.usefulness')]: x.usefulness, [t('meetings.survey.answered')]: t(`meetings.survey.answers.${x.answered}`), [h('comment')]: x.comment })));
     add(h('sheetTopics'), data.topics.map((x) => ({ [h('subject')]: x.subject, [h('teacher')]: x.teacher, [h('parent')]: x.students, [h('topic')]: x.topic })));
@@ -110,6 +134,7 @@ export default function MeetingReport({ id }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap justify-end gap-2">
+        <button type="button" onClick={exportAttendance} className="px-3 py-2 text-sm border border-emerald-200 bg-emerald-50 text-emerald-800 rounded-xl flex items-center gap-1.5"><UserCheck className="w-4 h-4" />{t('meetings.report.attendance.button', { attended: data.students.filter((x) => x.attended).length, noShow: data.students.filter((x) => confirmedSt(x) && !x.attended).length })}</button>
         <button type="button" onClick={exportExcel} className="px-3 py-2 text-sm border border-slate-200 bg-white rounded-xl flex items-center gap-1.5"><FileDown className="w-4 h-4" />Excel</button>
         <button type="button" onClick={print} className="px-3 py-2 text-sm border border-slate-200 bg-white rounded-xl flex items-center gap-1.5"><Printer className="w-4 h-4" />{t('common.print')}</button>
       </div>

@@ -4358,7 +4358,16 @@
       "doneOf": "تمت {{done}} من {{asked}}",
       "purposes": "أغراض المقابلات ({{count}})",
       "rejected": "مرفوضة",
-      "rejectReason": "سبب الرفض"
+      "rejectReason": "سبب الرفض",
+      "attendance": {
+        "button": "ملف الحضور ({{attended}} حضروا · {{noShow}} أكدوا ولم يحضروا)",
+        "attendedSheet": "حضروا",
+        "noShowSheet": "أكدوا ولم يحضروا",
+        "who": "من حضر",
+        "time": "وقت الحضور",
+        "walkIn": "حضر دون تأكيد",
+        "none": "لا يوجد"
+      }
     },
     "staff": {
       "pinHint": "أدخل رمز الدخول المكوّن من 4 أرقام الذي وصلك مع الرابط.",
