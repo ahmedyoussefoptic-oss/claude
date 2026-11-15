@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
-import { Plus, Loader2, X, FileDown, Printer, Pause, Play, Lock, Upload, Users as UsersIcon, ShieldCheck, ShieldAlert, ShieldQuestion, Flame, ArrowRight } from 'lucide-react';
+import { Plus, Loader2, X, FileDown, Printer, Pause, Play, Lock, Upload, Users as UsersIcon, ShieldCheck, ShieldAlert, ShieldQuestion, Flame, ArrowRight, Pencil } from 'lucide-react';
 import { functions } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches } from '../../hooks/useOrgData';
@@ -224,6 +224,50 @@ function CampaignForm({ onClose, onSaved }) {
   );
 }
 
+// Editing a campaign's details (its targets and calls stay as they are).
+function EditCampaign({ campaign: c, onClose, onSaved }) {
+  const { t } = useTranslation();
+  const [f, setF] = useState({ title: c.title, goal: c.goal || '', script: c.script || '', outcomes: (c.outcomes || []).join('\n'), priority: c.priority, endDay: c.endDay, dailyQuota: c.dailyQuota });
+  const [reschedule, setReschedule] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const chip = (active) => `px-3 py-1.5 rounded-lg text-sm border ${active ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'}`;
+  const save = async () => {
+    setError(null);
+    if (!f.title.trim()) { setError(t('callTasks.form.titleRequired')); return; }
+    setBusy(true);
+    try {
+      const r = await call('updateCallCampaign', { id: c.id, ...f, outcomes: f.outcomes.split(/[\n،,]/).map((x) => x.trim()).filter(Boolean), dailyQuota: Number(f.dailyQuota), reschedule });
+      onSaved(r);
+    } catch (err) { setError(err.message); setBusy(false); }
+  };
+  return (
+    <Modal title={t('callTasks.edit.title')} onClose={onClose} size="max-w-2xl"
+      footer={<>
+        <button onClick={onClose} className={btn.ghost}>{t('common.cancel')}</button>
+        <button disabled={busy} onClick={save} className={btn.primary}>{busy && <Loader2 className="w-4 h-4 animate-spin" />}{t('common.save')}</button>
+      </>}>
+      {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl p-3">{error}</div>}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Field label={t('callTasks.form.name')} required className="md:col-span-2"><input value={f.title} onChange={set('title')} className={inputCls} /></Field>
+        <Field label={t('callTasks.form.priority')}>
+          <div className="flex gap-2">{['NORMAL', 'URGENT'].map((p) => <button type="button" key={p} onClick={() => setF((x) => ({ ...x, priority: p }))} className={chip(f.priority === p)}>{t(`callTasks.priority.${p}`)}</button>)}</div>
+        </Field>
+      </div>
+      <Field label={t('callTasks.goal')}><input value={f.goal} onChange={set('goal')} className={inputCls} /></Field>
+      <Field label={t('callTasks.script')} hint={t('callTasks.form.scriptHint')}><textarea rows={4} value={f.script} onChange={set('script')} className={inputCls} /></Field>
+      <Field label={t('callTasks.form.outcomes')} hint={t('callTasks.form.outcomesHint')}><textarea rows={3} value={f.outcomes} onChange={set('outcomes')} className={inputCls} placeholder={t('callTasks.form.outcomesPlaceholder')} /></Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label={t('callTasks.form.endDay')}><input type="date" min={c.startDay} value={f.endDay} onChange={set('endDay')} className={inputCls} /></Field>
+        <Field label={t('callTasks.form.quota')}><input type="number" min={1} max={500} value={f.dailyQuota} onChange={set('dailyQuota')} className={inputCls} /></Field>
+      </div>
+      <label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" className="mt-1" checked={reschedule} onChange={(e) => setReschedule(e.target.checked)} /><span>{t('callTasks.edit.reschedule')}<span className="block text-xs text-slate-500">{t('callTasks.edit.rescheduleHint')}</span></span></label>
+      <p className="text-xs text-slate-500">{t('callTasks.edit.note')}</p>
+    </Modal>
+  );
+}
+
 function CampaignDetails({ id, onBack }) {
   const { t, i18n } = useTranslation();
   const branches = useBranches();
@@ -236,6 +280,8 @@ function CampaignDetails({ id, onBack }) {
   const [selected, setSelected] = useState([]);
   const [assignTo, setAssignTo] = useState('');
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [notice, setNotice] = useState('');
   const today = riyadhDay();
 
   const load = useCallback(() => call('getCallCampaign', { id }).then(setData).catch((err) => setError(err.message)), [id]);
@@ -310,6 +356,7 @@ function CampaignDetails({ id, onBack }) {
           <p className="text-sm text-slate-500">{c.startDay} — {c.endDay} · {t('callTasks.quotaLine', { n: c.dailyQuota })} · {t(`callTasks.form.dist.${c.distribution}`)} · {c.target}</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button disabled={busy} onClick={() => setEditing(true)} className={btn.ghost}><Pencil className="w-4 h-4" />{t('callTasks.edit.button')}</button>
           {c.status === 'ACTIVE' && <button disabled={busy} onClick={() => setStatus('PAUSED')} className={btn.ghost}><Pause className="w-4 h-4" />{t('callTasks.pause')}</button>}
           {c.status === 'PAUSED' && <button disabled={busy} onClick={() => setStatus('ACTIVE')} className={btn.ghost}><Play className="w-4 h-4" />{t('callTasks.resume')}</button>}
           {c.status !== 'CLOSED' && <button disabled={busy} onClick={() => { if (window.confirm(t('callTasks.closeConfirm'))) setStatus('CLOSED'); }} className={btn.ghost}><Lock className="w-4 h-4" />{t('callTasks.close')}</button>}
@@ -318,6 +365,8 @@ function CampaignDetails({ id, onBack }) {
         </div>
       </div>
 
+      {notice && <p className="text-sm bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-xl p-3">{notice}</p>}
+      {editing && <EditCampaign campaign={c} onClose={() => setEditing(false)} onSaved={async (r) => { setEditing(false); setNotice(r.moved ? t('callTasks.edit.savedMoved', { n: r.moved }) : t('callTasks.edit.saved')); await load(); }} />}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Tile label={t('callTasks.stat.progress')} value={`${pct(n.done + n.failed, n.total)}%`} sub={t('callTasks.stat.progressSub', { done: (n.done || 0) + (n.failed || 0), total: n.total || 0 })} tone="text-slate-900" />
         <Tile label={t('callTasks.stat.answered')} value={n.answered || 0} sub={`${pct(n.answered, (n.done || 0) + (n.failed || 0))}%`} tone="text-emerald-700" onClick={() => setFilter('DONE')} active={filter === 'DONE'} />

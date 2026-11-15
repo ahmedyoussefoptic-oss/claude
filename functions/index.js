@@ -6897,6 +6897,54 @@ exports.setCallCampaignStatus = onCall(async (request) => {
   return { ok: true };
 });
 
+// Supervisor: edit a campaign's details — name, goal, script, outcomes,
+// priority, end day and daily quota. The name and priority are copied onto
+// its calls; `reschedule` spreads each agent's remaining calls again from
+// today at the (new) daily quota (calls with a set callback time keep it).
+exports.updateCallCampaign = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
+  const caller = await callCaller(request, "supervisor");
+  const { ref, c } = await loadCallCampaign(caller, request.data?.id);
+  const d = request.data || {};
+  const title = str(d.title, 120);
+  if (!title) throw new HttpsError("invalid-argument", "اكتب عنوان الحملة.");
+  const endDay = /^\d{4}-\d{2}-\d{2}$/.test(d.endDay || "") && d.endDay >= c.startDay ? d.endDay : c.endDay;
+  const quota = Math.min(500, Math.max(1, Math.floor(Number(d.dailyQuota) || c.dailyQuota || 30)));
+  const priority = d.priority === "URGENT" ? "URGENT" : "NORMAL";
+  const outcomes = [...new Set((Array.isArray(d.outcomes) ? d.outcomes : []).map((o) => str(o, 60)).filter(Boolean))].slice(0, 12);
+  await ref.update({ title, goal: str(d.goal, 500), script: str(d.script, 3000), outcomes, priority, endDay, dailyQuota: quota, updatedAt: Timestamp.now(), updatedBy: caller.uid });
+  const copy = title !== c.title || priority !== c.priority;
+  if (!copy && !d.reschedule) return { ok: true, moved: 0 };
+  const tasks = (await db.collection("callTasks").where("campaignId", "==", ref.id).get()).docs;
+  const updates = new Map();
+  if (copy) tasks.forEach((x) => updates.set(x.id, { ref: x.ref, data: { campaignTitle: title, priority } }));
+  let moved = 0;
+  if (d.reschedule) {
+    const today = riyadhDay();
+    const from = c.startDay > today ? c.startDay : today;
+    const byAgent = {};
+    tasks.filter((x) => x.data().status === "PENDING" && x.data().assignedTo && !x.data().dueAt)
+      .forEach((x) => { (byAgent[x.data().assignedTo] ||= []).push(x); });
+    Object.values(byAgent).forEach((list) => {
+      list.sort((a, b) => String(a.data().dueDay).localeCompare(String(b.data().dueDay)) || (a.data().createdAt?.toMillis?.() || 0) - (b.data().createdAt?.toMillis?.() || 0));
+      list.forEach((x, i) => {
+        const dueDay = addWorkDays(from, Math.floor(i / quota));
+        if (dueDay === x.data().dueDay) return;
+        const u = updates.get(x.id) || { ref: x.ref, data: {} };
+        u.data.dueDay = dueDay;
+        updates.set(x.id, u);
+        moved++;
+      });
+    });
+  }
+  const list = [...updates.values()];
+  for (let i = 0; i < list.length; i += 450) {
+    const batch = db.batch();
+    list.slice(i, i + 450).forEach((u) => batch.update(u.ref, u.data));
+    await batch.commit();
+  }
+  return { ok: true, moved };
+});
+
 // Each attempt against Bevatel's outbound calls to the parent's number: a
 // call between 90 minutes before and 10 minutes after the attempt was saved
 // verifies it (with its talk time). Without one, the attempt is marked

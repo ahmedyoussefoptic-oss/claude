@@ -3791,6 +3791,15 @@
         "OUT_OF_SCOPE": "Outside your branches",
         "DUPLICATE": "Duplicate row"
       }
+    },
+    "edit": {
+      "button": "Edit",
+      "title": "Edit campaign",
+      "reschedule": "Reschedule the remaining calls from today at the daily quota",
+      "rescheduleHint": "Each agent's remaining calls are spread over working days from today at the daily quota. Calls with a set callback time keep it.",
+      "note": "The targets and existing calls stay as they are. The name and priority update on every call, and the script and goal show to agents right away.",
+      "saved": "Changes saved.",
+      "savedMoved": "Changes saved; {{n}} calls rescheduled."
     }
   },
   "spedForm": {
