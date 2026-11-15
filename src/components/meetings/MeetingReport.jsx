@@ -80,6 +80,7 @@ export default function MeetingReport({ id }) {
     [t('meetings.report.student')]: x.name, ID: x.id, [t('common.branch')]: branchName(x.branch), [t('meetings.report.grade')]: x.grade, [t('meetings.report.class')]: x.className,
     [t('meetings.report.response')]: t(`meetings.response.${x.response || 'NONE'}`),
     [t('meetings.report.attendance.phone')]: x.phone || '',
+    [t('meetings.report.attendance.purpose')]: x.purpose || '',
   });
   const attendedRows = () => data.students.filter((x) => x.attended).map((x) => ({
     ...attendanceRow(x),

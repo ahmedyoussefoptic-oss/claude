@@ -1937,6 +1937,14 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     const invites = inv.docs.map((x) => ({ id: x.id, ...x.data() }));
     const tName = (id) => (m.teachers || []).find((t) => t.id === id);
     const callByInvite = new Map(calls.docs.map((x) => [x.data().meetingInviteId, x.data()]));
+    // Why the family came, per student: the topics they wrote, each booked
+    // teacher's topic, and each interview asked for (with whom).
+    const reqList = requestsMode(m) ? (await ref.collection("requests").get()).docs.map((x) => x.data()).filter((r) => r.purpose && !(r.status === "CANCELLED" && r.cancelledBy === "ولي الأمر")) : [];
+    const purposeOf = (i, s) => [
+      ...(i.topics ? [i.topics] : []),
+      ...(i.slots || []).filter((x) => x.topic).map((x) => { const t = tName(x.teacherId); return `${t?.name || ""}${t?.subject ? ` (${t.subject})` : ""}: ${x.topic}`; }),
+      ...reqList.filter((r) => r.studentId === s.id || (!r.studentId && r.inviteId === i.id)).map((r) => `${r.staffName || ""}: ${r.purpose}`),
+    ].map((x) => String(x).trim()).filter(Boolean).join(" | ");
     const delays = slots.docs.map((x) => x.data()).filter((s) => s.startedAt).map((s) => {
       const start = new Date(`${m.date}T${s.time}:00+03:00`).getTime();
       return Math.round((s.startedAt.toMillis() - start) / 60e3);
@@ -1948,7 +1956,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
         id: s.id, name: s.name, branch: s.branch, grade: s.grade, className: s.className,
         invited: !!(i.waEvents?.invite || i.wa?.status === "manual" || i.walkIn), wa: i.wa?.status || "", response: i.response || "", attended: i.attended === true, walkIn: i.walkIn === true,
         checkedInAt: ms(i.checkedInAt), attendee: i.attendee ? { name: i.attendee.name || "", relation: i.attendee.relation || "" } : null,
-        phone: localPhone(i.phone),
+        phone: localPhone(i.phone), purpose: purposeOf(i, s),
       }))),
       surveys: surveys.docs.map((x) => ({ ...x.data(), createdAt: ms(x.data().createdAt) })),
       teachers: (m.teachers || []).map((t) => {

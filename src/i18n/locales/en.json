@@ -4362,7 +4362,8 @@
         "time": "Check-in time",
         "walkIn": "Came without confirming",
         "none": "None",
-        "phone": "Parent mobile"
+        "phone": "Parent mobile",
+        "purpose": "Purpose of the meeting"
       }
     },
     "staff": {
