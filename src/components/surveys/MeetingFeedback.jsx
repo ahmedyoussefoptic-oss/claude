@@ -95,7 +95,7 @@ export default function MeetingFeedback({ feedback, send, onSent }) {
       <SurveyQuestions items={feedback.items} answers={answers} setA={setA} missing={missing} lang={lang} />
 
       {error && <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">{error}</p>}
-      <button disabled={busy} className="w-full py-4 rounded-2xl font-extrabold text-lg text-white bg-gradient-to-r from-sky-500 via-violet-500 to-fuchsia-500 shadow-lg shadow-fuchsia-200 flex items-center justify-center gap-2 transition hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-60">
+      <button disabled={busy} className="w-full py-3 bg-primary text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-60">
         {busy && <Loader2 className="w-4 h-4 animate-spin" />}{feedback.students.length > 1 ? t('surveys.meeting.submitFor', { name: st.studentName }) : t('surveys.public.submit')}
       </button>
     </form>
