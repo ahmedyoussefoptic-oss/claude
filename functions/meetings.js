@@ -99,6 +99,8 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
   const pin = () => String(crypto.randomInt(1000, 10000));
   const classKey = (s) => `${studentGrade(s)}|${String(s.className || "").trim()}`;
   const maskPhone = (p) => (p ? `•••${String(p).slice(-4)}` : "");
+  // A stored number (966…) as staff dial it: 05… for Saudi mobiles, else +….
+  const localPhone = (p) => { const d = String(p || "").replace(/\D/g, ""); return /^9665\d{8}$/.test(d) ? `0${d.slice(3)}` : /^05\d{8}$/.test(d) ? d : d ? `+${d}` : ""; };
 
   // The slot start times of a meeting (same grid for every teacher).
   function slotTimes(m) {
@@ -1946,6 +1948,7 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
         id: s.id, name: s.name, branch: s.branch, grade: s.grade, className: s.className,
         invited: !!(i.waEvents?.invite || i.wa?.status === "manual" || i.walkIn), wa: i.wa?.status || "", response: i.response || "", attended: i.attended === true, walkIn: i.walkIn === true,
         checkedInAt: ms(i.checkedInAt), attendee: i.attendee ? { name: i.attendee.name || "", relation: i.attendee.relation || "" } : null,
+        phone: localPhone(i.phone),
       }))),
       surveys: surveys.docs.map((x) => ({ ...x.data(), createdAt: ms(x.data().createdAt) })),
       teachers: (m.teachers || []).map((t) => {

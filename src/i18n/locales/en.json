@@ -4361,7 +4361,8 @@
         "who": "Who came",
         "time": "Check-in time",
         "walkIn": "Came without confirming",
-        "none": "None"
+        "none": "None",
+        "phone": "Parent mobile"
       }
     },
     "staff": {
