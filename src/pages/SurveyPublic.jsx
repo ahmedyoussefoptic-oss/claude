@@ -8,6 +8,9 @@ import { callSurvey, surveyBranchList, CURRICULA, GRADES, CLASSES, gradeLabel, p
 import SurveyQuestions, { Bi, card, inputCls, pill, missBox, missingOf } from '../components/surveys/SurveyQuestions';
 
 const doneKey = (code) => `survey:done:${code}`;
+const LANG_KEY = 'survey-language';
+const APP_LANG_KEY = 'mis-language';
+const store = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch { /* storage unavailable */ } } };
 const digits = (v) => String(v || '').replace(/[٠-٩۰-۹]/g, (d) => String(d.charCodeAt(0) & 0xf)).replace(/\D/g, '');
 
 // «/survey/:code» — the parents' feedback form (no sign-in). The parent types
@@ -39,6 +42,23 @@ export default function SurveyPublic() {
   const [looking, setLooking] = useState(false);
   const [idError, setIdError] = useState(null);
   const idMode = form?.identify !== 'NAME';
+
+  // The page opens in English unless the link says ?lang=ar or the parent
+  // switched language here before (remembered apart from the CRM's own
+  // choice, which is put back on leaving so staff testing the link keep theirs).
+  useEffect(() => {
+    const prev = store.get(APP_LANG_KEY);
+    const q = params.get('lang');
+    const want = q === 'ar' || q === 'en' ? q : store.get(LANG_KEY) === 'ar' ? 'ar' : 'en';
+    let ready = false;
+    Promise.resolve(i18n.language === want || i18n.changeLanguage(want)).then(() => { ready = true; });
+    const remember = (l) => { if (ready) store.set(LANG_KEY, l); };
+    const restore = () => store.set(APP_LANG_KEY, prev);
+    i18n.on('languageChanged', remember);
+    window.addEventListener('pagehide', restore);
+    return () => { i18n.off('languageChanged', remember); window.removeEventListener('pagehide', restore); restore(); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     callSurvey('surveyFormPublic', { code }).then((f) => {
