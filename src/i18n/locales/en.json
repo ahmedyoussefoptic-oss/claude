@@ -4987,7 +4987,7 @@
       "sentBefore": "From this device you have sent feedback for: {{names}}. To rate another child, fill in the form again.",
       "branch": "Branch",
       "otherClass": "Other",
-      "teachersHint": "On a scale of 1 to 5 (1 lowest, 5 highest) — rate the meeting with each teacher you met, and choose «Did not meet» for the others.",
+      "teachersHint": "On a scale of 1 to 5 (1 = lowest, 5 = highest), please rate your meeting with each teacher. Select “Did not meet” for any teachers you did not meet.",
       "didNotMeet": "Did not meet",
       "na": "N/A",
       "lowest": "1 lowest",
