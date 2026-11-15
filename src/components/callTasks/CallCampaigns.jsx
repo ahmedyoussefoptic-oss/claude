@@ -229,16 +229,22 @@ function EditCampaign({ campaign: c, onClose, onSaved }) {
   const { t } = useTranslation();
   const [f, setF] = useState({ title: c.title, goal: c.goal || '', script: c.script || '', outcomes: (c.outcomes || []).join('\n'), priority: c.priority, endDay: c.endDay, dailyQuota: c.dailyQuota });
   const [reschedule, setReschedule] = useState(false);
+  const users = useUsers();
+  const allAgents = users.filter((u) => u.active !== false && u.callRoles?.agent === true);
+  const [agents, setAgents] = useState(c.agents || []);
+  const [redistribute, setRedistribute] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const toggleAgent = (id) => { setAgents((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id])); setRedistribute(true); };
   const chip = (active) => `px-3 py-1.5 rounded-lg text-sm border ${active ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'}`;
   const save = async () => {
     setError(null);
     if (!f.title.trim()) { setError(t('callTasks.form.titleRequired')); return; }
+    if (redistribute && !agents.length) { setError(t('callTasks.form.agentsRequired')); return; }
     setBusy(true);
     try {
-      const r = await call('updateCallCampaign', { id: c.id, ...f, outcomes: f.outcomes.split(/[\n،,]/).map((x) => x.trim()).filter(Boolean), dailyQuota: Number(f.dailyQuota), reschedule });
+      const r = await call('updateCallCampaign', { id: c.id, ...f, outcomes: f.outcomes.split(/[\n،,]/).map((x) => x.trim()).filter(Boolean), dailyQuota: Number(f.dailyQuota), agents, redistribute, reschedule: !redistribute && reschedule });
       onSaved(r);
     } catch (err) { setError(err.message); setBusy(false); }
   };
@@ -262,7 +268,15 @@ function EditCampaign({ campaign: c, onClose, onSaved }) {
         <Field label={t('callTasks.form.endDay')}><input type="date" min={c.startDay} value={f.endDay} onChange={set('endDay')} className={inputCls} /></Field>
         <Field label={t('callTasks.form.quota')}><input type="number" min={1} max={500} value={f.dailyQuota} onChange={set('dailyQuota')} className={inputCls} /></Field>
       </div>
-      <label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" className="mt-1" checked={reschedule} onChange={(e) => setReschedule(e.target.checked)} /><span>{t('callTasks.edit.reschedule')}<span className="block text-xs text-slate-500">{t('callTasks.edit.rescheduleHint')}</span></span></label>
+      <div className="border border-slate-200 rounded-xl p-3 space-y-2">
+        <p className="text-sm font-bold text-slate-800">{t('callTasks.edit.agents')}</p>
+        <div className="flex flex-wrap gap-1.5">
+          {allAgents.map((a) => <button type="button" key={a.id} onClick={() => toggleAgent(a.id)} className={chip(agents.includes(a.id))}>{a.name}</button>)}
+          {!allAgents.length && <p className="text-xs text-amber-700">{t('callTasks.form.noAgents')}</p>}
+        </div>
+        <label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" className="mt-1" checked={redistribute} onChange={(e) => setRedistribute(e.target.checked)} /><span>{t('callTasks.edit.redistribute')}<span className="block text-xs text-slate-500">{t('callTasks.edit.redistributeHint')}</span></span></label>
+      </div>
+      {!redistribute && <label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" className="mt-1" checked={reschedule} onChange={(e) => setReschedule(e.target.checked)} /><span>{t('callTasks.edit.reschedule')}<span className="block text-xs text-slate-500">{t('callTasks.edit.rescheduleHint')}</span></span></label>}
       <p className="text-xs text-slate-500">{t('callTasks.edit.note')}</p>
     </Modal>
   );

@@ -6898,9 +6898,12 @@ exports.setCallCampaignStatus = onCall(async (request) => {
 });
 
 // Supervisor: edit a campaign's details — name, goal, script, outcomes,
-// priority, end day and daily quota. The name and priority are copied onto
-// its calls; `reschedule` spreads each agent's remaining calls again from
-// today at the (new) daily quota (calls with a set callback time keep it).
+// priority, end day, daily quota and its agents. The name and priority are
+// copied onto its calls; `reschedule` spreads each agent's remaining calls
+// again from today at the (new) daily quota (calls with a set callback time
+// keep it); `redistribute` deals all remaining calls again over the chosen
+// agents (by branch, least loaded first) from today at the daily quota — a
+// callback keeps its agent when still chosen, else moves with its time.
 exports.updateCallCampaign = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
   const caller = await callCaller(request, "supervisor");
   const { ref, c } = await loadCallCampaign(caller, request.data?.id);
@@ -6911,14 +6914,48 @@ exports.updateCallCampaign = onCall({ timeoutSeconds: 300, memory: "512MiB" }, a
   const quota = Math.min(500, Math.max(1, Math.floor(Number(d.dailyQuota) || c.dailyQuota || 30)));
   const priority = d.priority === "URGENT" ? "URGENT" : "NORMAL";
   const outcomes = [...new Set((Array.isArray(d.outcomes) ? d.outcomes : []).map((o) => str(o, 60)).filter(Boolean))].slice(0, 12);
-  await ref.update({ title, goal: str(d.goal, 500), script: str(d.script, 3000), outcomes, priority, endDay, dailyQuota: quota, updatedAt: Timestamp.now(), updatedBy: caller.uid });
+  const patch = { title, goal: str(d.goal, 500), script: str(d.script, 3000), outcomes, priority, endDay, dailyQuota: quota, updatedAt: Timestamp.now(), updatedBy: caller.uid };
+  let agents = null;
+  if (Array.isArray(d.agents)) {
+    const wanted = new Set(d.agents.map(String));
+    agents = (await loadActiveUsers()).filter((u) => wanted.has(u.id) && callRoleOf(u, "agent"));
+    patch.agents = agents.map((a) => a.id);
+    patch.agentNames = Object.fromEntries(agents.map((a) => [a.id, a.name || ""]));
+  }
+  if (d.redistribute && !agents?.length) throw new HttpsError("invalid-argument", "اختر موظف اتصال واحداً على الأقل لإعادة التوزيع.");
+  if (d.redistribute) patch.distribution = "AUTO";
+  await ref.update(patch);
   const copy = title !== c.title || priority !== c.priority;
-  if (!copy && !d.reschedule) return { ok: true, moved: 0 };
+  if (!copy && !d.reschedule && !d.redistribute) return { ok: true, moved: 0 };
   const tasks = (await db.collection("callTasks").where("campaignId", "==", ref.id).get()).docs;
   const updates = new Map();
-  if (copy) tasks.forEach((x) => updates.set(x.id, { ref: x.ref, data: { campaignTitle: title, priority } }));
+  const touch = (x, data) => { const u = updates.get(x.id) || { ref: x.ref, data: {} }; Object.assign(u.data, data); updates.set(x.id, u); };
+  if (copy) tasks.forEach((x) => touch(x, { campaignTitle: title, priority }));
   let moved = 0;
-  if (d.reschedule) {
+  if (d.redistribute) {
+    const today = riyadhDay();
+    const from = c.startDay > today ? c.startDay : today;
+    const ids = new Set(agents.map((a) => a.id));
+    const order = (a, b) => String(a.data().dueDay).localeCompare(String(b.data().dueDay)) || (a.data().createdAt?.toMillis?.() || 0) - (b.data().createdAt?.toMillis?.() || 0);
+    const pending = tasks.filter((x) => x.data().status === "PENDING").sort(order);
+    // Callbacks with a set time stay with their agent when still chosen.
+    const keep = pending.filter((x) => x.data().dueAt && ids.has(x.data().assignedTo));
+    const deal = pending.filter((x) => !keep.includes(x)).map((x) => ({ x, branch: x.data().branch || "" }));
+    dealCallTasks(deal, agents, { startDay: from, quota });
+    const perAgent = {};
+    deal.forEach((tk) => {
+      const k = tk.x.data();
+      const data = k.dueAt ? { assignedTo: tk.assignedTo, assignedName: tk.assignedName } : { assignedTo: tk.assignedTo, assignedName: tk.assignedName, dueDay: tk.dueDay };
+      if (data.assignedTo === k.assignedTo && (k.dueAt || data.dueDay === k.dueDay)) return;
+      touch(tk.x, data);
+      moved++;
+      if (data.assignedTo !== k.assignedTo) perAgent[tk.assignedTo] = (perAgent[tk.assignedTo] || 0) + 1;
+    });
+    await ref.update({ "counts.unassigned": 0 });
+    for (const [uid, n] of Object.entries(perAgent)) {
+      await notifyUsers([uid], { title: `حملة اتصال: ${title}`, body: `أُسند إليك ${n} اتصالاً إضافياً، بمعدل ${quota} يومياً من ${from}.`, complaintId: ref.id, type: "CALL_ASSIGNED" });
+    }
+  } else if (d.reschedule) {
     const today = riyadhDay();
     const from = c.startDay > today ? c.startDay : today;
     const byAgent = {};
@@ -6929,9 +6966,7 @@ exports.updateCallCampaign = onCall({ timeoutSeconds: 300, memory: "512MiB" }, a
       list.forEach((x, i) => {
         const dueDay = addWorkDays(from, Math.floor(i / quota));
         if (dueDay === x.data().dueDay) return;
-        const u = updates.get(x.id) || { ref: x.ref, data: {} };
-        u.data.dueDay = dueDay;
-        updates.set(x.id, u);
+        touch(x, { dueDay });
         moved++;
       });
     });

@@ -3799,7 +3799,10 @@
       "rescheduleHint": "Each agent's remaining calls are spread over working days from today at the daily quota. Calls with a set callback time keep it.",
       "note": "The targets and existing calls stay as they are. The name and priority update on every call, and the script and goal show to agents right away.",
       "saved": "Changes saved.",
-      "savedMoved": "Changes saved; {{n}} calls rescheduled."
+      "savedMoved": "Changes saved; {{n}} calls moved or rescheduled.",
+      "agents": "Call agents on this campaign",
+      "redistribute": "Redistribute the remaining calls over the chosen agents",
+      "redistributeHint": "All calls not yet done are dealt evenly (by each agent's branch) from today at the daily quota, and agents given new calls are notified. A callback stays with its agent if still chosen."
     }
   },
   "spedForm": {
