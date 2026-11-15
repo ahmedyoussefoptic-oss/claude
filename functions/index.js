@@ -1786,6 +1786,59 @@ exports.convertComplaintToTechTicket = onCall(async (request) => {
   return { ticketId, ticketDocId: ticketRef.id };
 });
 
+// A complaint that is really about money (fees, invoices, refunds): it
+// becomes a financial note — same record and number (the parent's link keeps
+// working), main category «مالية» with the chosen sub-category — and moves to
+// the finance section: it is handed to the finance staff in place of its
+// current assignees, in one update so the onUpdate trigger (which adds the
+// finance department when the category appears) finds nothing to add and
+// only notifies the newly assigned.
+exports.convertComplaintToFinance = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const { complaintDocId, subType, note } = request.data || {};
+  if (typeof complaintDocId !== "string" || !complaintDocId || typeof subType !== "string" || !subType.trim()) {
+    throw new HttpsError("invalid-argument", "اختر التصنيف المالي.");
+  }
+  const callerDoc = await db.collection("users").doc(request.auth.uid).get();
+  const caller = callerDoc.data();
+  if (!callerDoc.exists || caller.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  const ref = db.collection("complaints").doc(complaintDocId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "لم يتم العثور على الملاحظة.");
+  const complaint = snap.data();
+  const isAdminCaller = caller.role === "ADMIN";
+  const inScope = caller.access === "all" || (caller.branches || []).includes(complaint.branch) || caller.branch === complaint.branch;
+  if (!(isAdminCaller || (caller.perms?.edit === true && inScope))) throw new HttpsError("permission-denied", "لا تملك صلاحية تحويل هذه الملاحظة.");
+  if (["SOLVED", "CLOSED", "REJECTED"].includes(complaint.status)) throw new HttpsError("failed-precondition", "لا يمكن تحويل ملاحظة منتهية.");
+  if (complaint.complaintType === FINANCE_TYPE) throw new HttpsError("failed-precondition", "هذه الملاحظة مالية بالفعل.");
+
+  const next = { ...complaint, complaintType: FINANCE_TYPE, subType: str(subType, 120), extraTypes: [] };
+  const auto = await autoAssigneesFor("complaint", next);
+  const now = Timestamp.now();
+  const actorName = caller.name || "مستخدم";
+  const fromType = complaint.complaintType || "";
+  const patch = {
+    complaintType: FINANCE_TYPE, subType: next.subType, extraTypes: [],
+    convertedToFinance: { at: now, by: request.auth.uid, byName: actorName, fromType, fromSubType: complaint.subType || "" },
+    updatedAt: now,
+    ...(auto.length ? { assignedTo: auto.map((a) => a.id), assignedToNames: auto.map((a) => a.name), assignedAt: now } : {}),
+  };
+  const batch = db.batch();
+  batch.update(ref, patch);
+  batch.set(ref.collection("activityLog").doc(), {
+    action: "CONVERTED_TO_FINANCE",
+    actorId: request.auth.uid,
+    actorName,
+    metadata: {
+      note: [`من: ${fromType}${complaint.subType ? ` — ${complaint.subType}` : ""}`, str(note, 500)].filter(Boolean).join(" · "),
+      ...(auto.length ? { toUserIds: auto.map((a) => a.id), toUserNames: auto.map((a) => a.name), removedNames: (complaint.assignedToNames || []).filter((n) => !auto.some((a) => a.name === n)) } : {}),
+    },
+    createdAt: now,
+  });
+  await batch.commit();
+  return { ok: true, complaintId: complaint.complaintId || "", assigned: auto.map((a) => a.name) };
+});
+
 // The reverse move: a tech-support ticket that is really a general
 // complaint (a parent writing about grades or transport through the tech
 // form). Same all-or-nothing shape as above: the complaint is created with
@@ -1824,14 +1877,16 @@ exports.convertTechTicketToComplaint = onCall(async (request) => {
   const canEdit = isAdminCaller || (caller.perms?.edit === true && inScope);
   const techMod = caller.modules ? caller.modules.techSupport : undefined;
   const canAccessTech = isAdminCaller || (caller.tripsAccess !== "tripsOnly" && (techMod === true || (techMod === undefined && (caller.department === "IT" || caller.role === "CUSTOMER_SERVICE" || caller.isPrincipal === true || caller.isQuality === true))));
-  if (!canEdit || !canAccessTech || (moduleOff(caller, "complaints") && caller.department !== "IT")) {
+  const toFinance = complaintType === FINANCE_TYPE;
+  if (!canEdit || !canAccessTech || (moduleOff(caller, toFinance ? "finance" : "complaints") && caller.department !== "IT")) {
     throw new HttpsError("permission-denied", "لا تملك صلاحية تحويل هذا البلاغ.");
   }
   if (["SOLVED", "WAITING_CONFIRMATION", "CLOSED"].includes(ticket.status)) {
     throw new HttpsError("failed-precondition", "لا يمكن تحويل بلاغ منتهٍ.");
   }
-  const typeSnap = await db.collection("complaintTypes").doc(complaintType).get();
-  if (!typeSnap.exists) {
+  // «مالية» is built in (listed even before it is saved in Settings).
+  const typeSnap = toFinance ? null : await db.collection("complaintTypes").doc(complaintType).get();
+  if (typeSnap && !typeSnap.exists) {
     throw new HttpsError("invalid-argument", "نوع الملاحظة غير صحيح.");
   }
 

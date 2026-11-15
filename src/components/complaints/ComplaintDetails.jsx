@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAdminPermissions, adminCan } from '../../config/adminPermissions';
 import { useNavigate } from 'react-router-dom';
-import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, MessageSquare, Trash2, Star, Link2, Mic, Square, Share2, Pencil, Wrench, Armchair, Handshake } from 'lucide-react';
+import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, MessageSquare, Trash2, Star, Link2, Mic, Square, Share2, Pencil, Wrench, Armchair, Handshake, Wallet } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db, functions } from '../../config/firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -16,11 +16,12 @@ import { MAX_PUBLIC_FILES, MAX_PUBLIC_FILE_BYTES } from '../../utils/publicSubmi
 import { useMessageTemplates } from '../../hooks/useMessageTemplates';
 import { useWhatsAppApi } from '../../hooks/useWhatsAppApi';
 import { ROLES } from '../../config/roles';
-import { userBranches, canAccessTechSupport } from '../../utils/scope';
+import { userBranches, canAccessTechSupport, canSeeModule } from '../../utils/scope';
 import AssigneeMultiSelect, { eligibleAssignees } from '../common/AssigneeMultiSelect';
 import ErrorBoundary from '../common/ErrorBoundary';
 import ComplaintEditForm from './ComplaintEditForm';
 import ComplaintConvertModal from './ComplaintConvertModal';
+import FinanceConvertModal from './FinanceConvertModal';
 import VisitDeclineDialog from '../visits/VisitDeclineDialog';
 import RecordViewers from '../common/RecordViewers';
 import AppointmentPanel from '../appointments/AppointmentPanel';
@@ -225,7 +226,10 @@ function ComplaintDetailsInner({ complaint, onClose }) {
   const navigate = useNavigate();
   const [showEdit, setShowEdit] = useState(false);
   const [showConvert, setShowConvert] = useState(false);
+  const [showFinance, setShowFinance] = useState(false);
   const [showDecline, setShowDecline] = useState(false);
+  // To a financial note: same record, moved to the finance section.
+  const canFinance = canEdit && complaint.complaintType !== 'FINANCE' && !['SOLVED', 'CLOSED', 'REJECTED'].includes(complaint.status);
 
   // Branch QR check-in (see BranchVisit.jsx): a parent waiting at the
   // branch. Confirming goes through the confirmBranchVisit Cloud Function so
@@ -260,6 +264,12 @@ function ComplaintDetailsInner({ complaint, onClose }) {
     }
   };
 
+  const handleFinance = ({ complaintId }) => {
+    setShowFinance(false);
+    alert(t('financeConvert.success', { id: complaintId }));
+    onClose();
+    if (canSeeModule(userData, 'finance')) navigate(`/finance?openId=${complaint.id}`);
+  };
   const handleConverted = ({ ticketId, ticketDocId }) => {
     setShowConvert(false);
     alert(t('complaintConvert.successAlert', { id: ticketId }));
@@ -637,6 +647,12 @@ function ComplaintDetailsInner({ complaint, onClose }) {
               <button disabled={loading} onClick={() => setShowConvert(true)} className="px-4 py-2 bg-white border border-primary/40 text-primary rounded-lg text-sm font-medium hover:bg-primary/5 transition-colors flex items-center gap-2">
                 <Wrench className="w-4 h-4" />
                 {t('complaintDetails.convertToTechBtn')}
+              </button>
+            )}
+            {canFinance && (
+              <button disabled={loading} onClick={() => setShowFinance(true)} className="px-4 py-2 bg-white border border-emerald-300 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-50 transition-colors flex items-center gap-2">
+                <Wallet className="w-4 h-4" />
+                {t('financeConvert.button')}
               </button>
             )}
             {canEdit && complaint.status === 'RECEIVED' && (
@@ -1115,6 +1131,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
       {showEdit && <ComplaintEditForm complaint={complaint} onClose={() => setShowEdit(false)} />}
       {showDecline && <VisitDeclineDialog visit={complaint} branchName={branchName} onClose={() => setShowDecline(false)} />}
       {showConvert && <ComplaintConvertModal complaint={complaint} onClose={() => setShowConvert(false)} onConverted={handleConverted} />}
+      {showFinance && <FinanceConvertModal complaint={complaint} onClose={() => setShowFinance(false)} onConverted={handleFinance} />}
     </div>
   );
 }

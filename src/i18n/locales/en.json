@@ -646,7 +646,8 @@
       "APPOINTMENT_INVITED": "You are invited to visit the school",
       "APPOINTMENT_REMINDER": "Visit reminder",
       "ITEM_ACKNOWLEDGED": "Your report was received; search started",
-      "ITEM_TYPE_CHANGED": "Report type changed"
+      "ITEM_TYPE_CHANGED": "Report type changed",
+      "CONVERTED_TO_FINANCE": "Your request was transferred to the finance department"
     },
     "pageTitle": "Feedback & Reports Tracking Portal",
     "pageSubtitle": "Enter your feedback or report number to check its current status.",
@@ -1360,7 +1361,8 @@
       "REMINDER_SENT": "Reminder sent",
       "CONVERTED_FROM_TICKET": "Converted from a tech-support ticket",
       "APPOINTMENT_INVITED": "Parent invited to visit",
-      "APPOINTMENT_REMINDER": "Visit reminder sent to parent"
+      "APPOINTMENT_REMINDER": "Visit reminder sent to parent",
+      "CONVERTED_TO_FINANCE": "Converted to a financial note"
     },
     "lostFound": {
       "ITEM_REGISTERED": "Item registered",
@@ -5123,5 +5125,16 @@
       "avg": "Average",
       "openForm": "Open the results"
     }
+  },
+  "financeConvert": {
+    "button": "Convert to financial note",
+    "title": "Convert to a financial note",
+    "ticketTitle": "Convert the tech ticket to a financial note",
+    "description": "Note {{id}} becomes a financial note with the same number (the parent's link keeps working), moves to the finance section, and is handed to the finance staff in place of its current assignees.",
+    "subType": "Financial sub-category",
+    "note": "Note (optional)",
+    "confirm": "Convert",
+    "success": "Converted to a financial note: {{id}}",
+    "error": "Couldn't convert, try again."
   }
 }

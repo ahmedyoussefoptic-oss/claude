@@ -10,12 +10,12 @@ const selectCls = 'w-full border border-slate-200 rounded-xl px-4 py-2.5 focus:r
 // The reverse of ComplaintConvertModal: asks only for what a complaint needs
 // beyond the ticket's own data (category, sub-category, a short title,
 // priority); the move itself runs server-side in convertTechTicketToComplaint.
-export default function TicketConvertModal({ ticket, onClose, onConverted }) {
+export default function TicketConvertModal({ ticket, onClose, onConverted, fixedType = '' }) {
   const { t } = useTranslation();
   const complaintTypes = useComplaintTypes();
   const subTypes = useSubTypes();
   const firstLine = String(ticket.details || '').split('\n').find((l) => l.trim()) || '';
-  const [form, setForm] = useState({ complaintType: '', subType: '', subject: firstLine.slice(0, 120), priority: 'NORMAL' });
+  const [form, setForm] = useState({ complaintType: fixedType, subType: '', subject: firstLine.slice(0, 120), priority: 'NORMAL' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -44,7 +44,7 @@ export default function TicketConvertModal({ ticket, onClose, onConverted }) {
         <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-slate-50">
           <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
             <FileText className="w-5 h-5 text-primary" />
-            {t('ticketConvert.title')}
+            {fixedType === 'FINANCE' ? t('financeConvert.ticketTitle') : t('ticketConvert.title')}
           </h2>
           <button type="button" onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-200 rounded-xl transition-colors">
             <X className="w-5 h-5" />
@@ -63,7 +63,7 @@ export default function TicketConvertModal({ ticket, onClose, onConverted }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">{t('ticketConvert.typeLabel')} <span className="text-red-500">*</span></label>
-              <select name="complaintType" value={form.complaintType} onChange={handleChange} required className={selectCls}>
+              <select name="complaintType" value={form.complaintType} onChange={handleChange} required disabled={!!fixedType} className={`${selectCls} disabled:bg-slate-50`}>
                 <option value="">{t('complaintForm.selectType')}</option>
                 {complaintTypes.map((ct) => <option key={ct.id} value={ct.id}>{ct.name}</option>)}
               </select>

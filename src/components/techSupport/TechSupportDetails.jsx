@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAdminPermissions, adminCan } from '../../config/adminPermissions';
-import { X, Clock, CheckCircle2, User, Phone, MapPin, Loader2, Trash2, UserPlus, MessageCircle, MessageSquare, ShieldCheck, Link2, Share2, Pencil, Paperclip, Plus, FileText } from 'lucide-react';
+import { X, Clock, CheckCircle2, User, Phone, MapPin, Loader2, Trash2, UserPlus, MessageCircle, MessageSquare, ShieldCheck, Link2, Share2, Pencil, Paperclip, Plus, FileText, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc, deleteField } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
@@ -79,12 +79,21 @@ function TechSupportDetailsInner({ ticket, onClose }) {
   const seesComplaints = canSeeModule(userData, 'complaints');
   const canConvert = canEdit && (seesComplaints || userData?.department === 'IT') && !['SOLVED', 'WAITING_CONFIRMATION', 'CLOSED'].includes(ticket.status);
   const [showConvert, setShowConvert] = useState(false);
+  const seesFinance = canSeeModule(userData, 'finance');
+  const canFinance = canEdit && (seesFinance || userData?.department === 'IT') && !['SOLVED', 'WAITING_CONFIRMATION', 'CLOSED'].includes(ticket.status);
+  const [showFinance, setShowFinance] = useState(false);
   const navigate = useNavigate();
   const handleConverted = ({ complaintId, complaintDocId }) => {
     setShowConvert(false);
     alert(t('ticketConvert.successAlert', { id: complaintId }));
     onClose();
     if (seesComplaints) navigate(`/complaints?openId=${complaintDocId}`);
+  };
+  const handleFinance = ({ complaintId, complaintDocId }) => {
+    setShowFinance(false);
+    alert(t('financeConvert.success', { id: complaintId }));
+    onClose();
+    if (seesFinance) navigate(`/finance?openId=${complaintDocId}`);
   };
 
   useEffect(() => {
@@ -455,6 +464,12 @@ function TechSupportDetailsInner({ ticket, onClose }) {
                 {t('techSupportDetails.convertToComplaintBtn')}
               </button>
             )}
+            {canFinance && (
+              <button disabled={loading} onClick={() => setShowFinance(true)} className="px-4 py-2 bg-white border border-emerald-300 text-emerald-700 rounded-lg text-sm font-medium hover:bg-emerald-50 transition-colors flex items-center gap-2">
+                <Wallet className="w-4 h-4" />
+                {t('financeConvert.button')}
+              </button>
+            )}
             {canDelete && (
               <button disabled={loading} onClick={handleDelete} className="px-4 py-2 bg-white border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors flex items-center gap-2 mr-auto">
                 <Trash2 className="w-4 h-4" />
@@ -721,6 +736,7 @@ function TechSupportDetailsInner({ ticket, onClose }) {
       </div>
       {showEdit && <TechSupportEditForm ticket={ticket} onClose={() => setShowEdit(false)} />}
       {showConvert && <TicketConvertModal ticket={ticket} onClose={() => setShowConvert(false)} onConverted={handleConverted} />}
+      {showFinance && <TicketConvertModal ticket={ticket} fixedType="FINANCE" onClose={() => setShowFinance(false)} onConverted={handleFinance} />}
     </div>
   );
 }
