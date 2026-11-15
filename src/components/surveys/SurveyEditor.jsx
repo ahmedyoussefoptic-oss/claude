@@ -28,8 +28,8 @@ export default function SurveyEditor({ initial, onClose, onSaved }) {
   };
   const [template, setTemplate] = useState(initial ? '' : SURVEY_TEMPLATES[0].id);
   const [f, setF] = useState(() => (initial
-    ? { title: initial.title, date: initial.date, branches: initial.branches, intro: initial.intro, items: initial.items, askClass: initial.askClass }
-    : { ...start(SURVEY_TEMPLATES[0]), date: today(), branches: [], askClass: true }));
+    ? { title: initial.title, date: initial.date, branches: initial.branches, intro: initial.intro, items: initial.items, askClass: initial.askClass, identify: initial.identify || 'ID' }
+    : { ...start(SURVEY_TEMPLATES[0]), date: today(), branches: [], askClass: true, identify: 'ID' }));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const set = (k, v) => setF((x) => ({ ...x, [k]: v }));
@@ -108,6 +108,15 @@ export default function SurveyEditor({ initial, onClose, onSaved }) {
           <div className="grid md:grid-cols-2 gap-3">
             <label className="text-sm"><span className="text-slate-600">{t('surveys.editor.introAr')}</span><textarea rows={6} dir="rtl" value={f.intro.ar} onChange={(e) => set('intro', { ...f.intro, ar: e.target.value })} className={`${inputCls} mt-1`} /></label>
             <label className="text-sm"><span className="text-slate-600">{t('surveys.editor.introEn')}</span><textarea rows={6} dir="ltr" value={f.intro.en} onChange={(e) => set('intro', { ...f.intro, en: e.target.value })} className={`${inputCls} mt-1`} /></label>
+          </div>
+          <div className="text-sm">
+            <p className="text-slate-600 mb-1.5">{t('surveys.editor.identify')}</p>
+            <div className="flex flex-wrap gap-2">
+              {['ID', 'NAME'].map((k) => (
+                <button key={k} type="button" onClick={() => set('identify', k)} className={`px-3 py-1.5 rounded-lg border text-sm ${f.identify === k ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-300'}`}>{t(`surveys.editor.identifyBy.${k}`)}</button>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 mt-1">{t(`surveys.editor.identifyHint.${f.identify}`)}</p>
           </div>
           <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={f.askClass} onChange={(e) => set('askClass', e.target.checked)} />{t('surveys.editor.askClass')}</label>
 

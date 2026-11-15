@@ -95,7 +95,7 @@ export default function SurveyResults({ id, onBack }) {
   const comments = useMemo(() => rows.flatMap((r) => texts.filter((it) => r.answers[it.id]).map((it) => ({ r, it, text: r.answers[it.id] }))), [rows, texts]);
   const listed = useMemo(() => {
     const f = fold(q);
-    return rows.filter((r) => (!onlyLow || r.low) && (!f || fold(`${r.info.studentName} ${r.info.className} ${Object.values(r.answers).filter((v) => typeof v === 'string').join(' ')}`).includes(f)));
+    return rows.filter((r) => (!onlyLow || r.low) && (!f || fold(`${r.info.studentName} ${r.studentId || ''} ${r.info.className} ${Object.values(r.answers).filter((v) => typeof v === 'string').join(' ')}`).includes(f)));
   }, [rows, q, onlyLow]);
 
   const answerText = (it, v) => {
@@ -124,6 +124,8 @@ export default function SurveyResults({ id, onBack }) {
     const col = (it) => (it.type === 'teacher' ? `${t('surveys.results.teacherOf')} ${pick(it, 'ar')}` : pick(it, 'ar')).slice(0, 120);
     const sheetRows = rows.map((r) => ({
       [t('surveys.results.col.date')]: when(r.createdAt), [t('surveys.results.col.student')]: r.info.studentName,
+      [t('surveys.results.col.nationalId')]: r.studentId || '', [t('surveys.results.col.matched')]: r.matched === true ? '✓' : r.matched === false ? '✗' : '',
+      [t('surveys.results.col.source')]: r.fromMeeting ? t('surveys.results.fromMeeting') : t('surveys.results.fromLink'),
       [t('surveys.results.col.branch')]: branchName(r.info.branch), [t('surveys.results.col.curriculum')]: pick(CURRICULA.find((c) => c.id === r.info.curriculum), lang),
       [t('surveys.results.col.grade')]: gradeLabel(r.info.grade, lang), [t('surveys.results.col.class')]: r.info.className || '',
       ...Object.fromEntries(items.map((it) => [col(it), answerText(it, r.answers[it.id])])),
@@ -271,6 +273,10 @@ export default function SurveyResults({ id, onBack }) {
                     <button type="button" onClick={() => setOpen(isOpen ? '' : r.id)} className="w-full text-start p-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm hover:bg-slate-50">
                       <ChevronDown className={`w-4 h-4 text-slate-400 transition ${isOpen ? 'rotate-180' : ''}`} />
                       <b className="text-slate-900">{r.info.studentName}</b>
+                      {r.studentId && <span className="text-[11px] text-slate-400 tabular-nums" dir="ltr">{r.studentId}</span>}
+                      {r.matched === true && <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px]">{t('surveys.results.matchedBadge')}</span>}
+                      {r.matched === false && <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 border border-slate-200 text-[11px]">{t('surveys.results.unmatchedBadge')}</span>}
+                      {r.fromMeeting && <span className="px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200 text-[11px]">{t('surveys.results.fromMeeting')}</span>}
                       <span className="text-xs text-slate-500">{branchName(r.info.branch)} · {pick(CURRICULA.find((c) => c.id === r.info.curriculum), lang)} · {gradeLabel(r.info.grade, lang)}{r.info.className ? ` ${r.info.className}` : ''}</span>
                       {a.teachers > 0 && <span className={`text-xs tabular-nums ${scoreTone(a.teachers)}`}>{t('surveys.results.teachersShort')} {a.teachers.toFixed(1)}</span>}
                       {a.school > 0 && <span className={`text-xs tabular-nums ${scoreTone(a.school)}`}>{t('surveys.results.schoolShort')} {a.school.toFixed(1)}</span>}

@@ -9,7 +9,8 @@ import { db, functions } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches } from '../../hooks/useOrgData';
 import { useAdminPermissions, adminCan, canSeePlatform } from '../../config/adminPermissions';
-import { canSeeTrips } from '../../utils/scope';
+import { canSeeTrips, canSeeModule } from '../../utils/scope';
+import StudentSurveys from '../surveys/StudentSurveys';
 import { searchStudents, lookupStudentById, buildStudentRecord, studentDisplayName, normalizeStudentId } from '../../utils/students';
 import { studentKey } from '../../utils/studentKey';
 import { Modal, Field, inputCls } from '../platform/ui';
@@ -313,6 +314,7 @@ function StudentFile({ student: s, records, branchName, canEdit, onEdit, onOpen,
           </li>
         )))}
       </div>
+      {canSeeModule(userData, 'meetings') && <StudentSurveys studentId={s.nationalId} className="border border-slate-100 rounded-2xl p-4" />}
     </Modal>
   );
 }

@@ -1116,14 +1116,21 @@ const AUTO_CLOSED_NOTE = "أُغلقت تلقائياً عند بدء المقا
     if (!Object.keys(answers).length) throw new HttpsError("invalid-argument", "أجب عن سؤال واحد على الأقل.");
     const invRef = ref.collection("invites").doc(inv.id);
     const now = Timestamp.now();
-    await db.runTransaction(async (tx) => {
+    // One answer per student per form: one sent from the form's own link
+    // (by the student's ID) counts for the meeting too.
+    const before = fb.ref.collection("responses").where("studentId", "==", s.id).limit(1);
+    const saved = await db.runTransaction(async (tx) => {
       const cur = (await tx.get(invRef)).data() || {};
       if ((cur.feedbackDone || []).includes(s.id)) throw new HttpsError("already-exists", "تم استلام تقييم هذا الطالب مسبقاً، شكراً لكم.");
-      tx.set(fb.ref.collection("responses").doc(), { info, answers, low, lang: d2.lang === "en" ? "en" : "ar", meetingId: ref.id, inviteId: inv.id, studentId: s.id, createdAt: now });
-      tx.update(fb.ref, { responses: FieldValue.increment(1), lastResponseAt: now });
+      const exists = !(await tx.get(before)).empty;
+      if (!exists) {
+        tx.set(fb.ref.collection("responses").doc(), { info, answers, low, lang: d2.lang === "en" ? "en" : "ar", meetingId: ref.id, inviteId: inv.id, studentId: s.id, matched: true, createdAt: now });
+        tx.update(fb.ref, { responses: FieldValue.increment(1), lastResponseAt: now });
+      }
       tx.update(invRef, { feedbackDone: FieldValue.arrayUnion(s.id), feedbackAt: now });
+      return !exists;
     });
-    if (low) {
+    if (saved && low) {
       const users = await loadActiveUsers();
       const ids = [m.createdBy, fb.f.createdBy, ...users.filter((u) => meetingsAllowed(u) && u.isPrincipal === true && callerHasBranch(u, s.branch)).map((u) => u.id)];
       await notifyUsers(ids, { title: "تقييم منخفض لاجتماع أولياء الأمور", body: `${m.title}: ولي أمر ${s.name} أعطى تقييماً منخفضاً (1–2) — يُرجى التواصل معه.`, complaintId: ref.id, type: "MEETING_LOW_RATING" });

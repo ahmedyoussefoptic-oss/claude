@@ -7708,4 +7708,4 @@ Object.assign(exports, meetingsModule({
 }));
 
 // «تقييمات أولياء الأمور» — see ./surveys.js.
-Object.assign(exports, surveysModule({ db, Timestamp, FieldValue, HttpsError, onCall, crypto, str, callerHasBranch, callerAll }));
+Object.assign(exports, surveysModule({ db, Timestamp, FieldValue, HttpsError, onCall, crypto, str, callerHasBranch, callerAll, normalizeDigits, studentGrade, studentSection, branchResolver }));

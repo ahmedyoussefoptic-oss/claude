@@ -4934,7 +4934,7 @@
       "introEn": "Introduction (English)",
       "askClass": "Ask for the class (A, B, 1, 2 …)",
       "questions": "Questions ({{count}})",
-      "fixedInfo": "The student's details (name, branch, curriculum, grade) are always asked first.",
+      "fixedInfo": "The student's details (ID number or name, branch, curriculum, grade) are always asked first.",
       "required": "Required",
       "allowNa": "«N/A» option",
       "up": "Up",
@@ -4952,7 +4952,16 @@
       "needTitle": "Write the form's title.",
       "needItem": "Add at least one question.",
       "save": "Save changes",
-      "create": "Create form and link"
+      "create": "Create form and link",
+      "identify": "How does the parent identify the student?",
+      "identifyBy": {
+        "ID": "Student's ID number (recommended)",
+        "NAME": "Student's name"
+      },
+      "identifyHint": {
+        "ID": "The student's name is shown from the school record to confirm, the answer is linked to the student record, one answer per student.",
+        "NAME": "The parent types the name, branch, curriculum and grade; the answer is not linked to the student record."
+      }
     },
     "share": {
       "button": "Link for parents",
@@ -4985,7 +4994,13 @@
       "highest": "5 highest",
       "disagree": "1 disagree",
       "agree": "5 strongly agree",
-      "submit": "Send feedback"
+      "submit": "Send feedback",
+      "idInvalid": "Enter the student's ID number correctly (digits only).",
+      "idHint": "Type the student's national ID (or iqama) number, then press «Continue».",
+      "continue": "Continue",
+      "changeId": "Change number",
+      "alreadyDone": "We have already received this student's feedback. Thank you.",
+      "idNotFound": "We couldn't find this number in the school's records. Check it, or complete the student's details below."
     },
     "results": {
       "teacherOf": "Teacher of",
@@ -5035,8 +5050,15 @@
         "avg": "Average",
         "n": "Count",
         "na": "N/A / did not meet",
-        "spread": "Spread 1–5"
-      }
+        "spread": "Spread 1–5",
+        "nationalId": "ID number",
+        "matched": "Matches record",
+        "source": "Source"
+      },
+      "matchedBadge": "Matched ✓",
+      "unmatchedBadge": "ID not found",
+      "fromMeeting": "From the meeting",
+      "fromLink": "From the link"
     },
     "meeting": {
       "pickerTitle": "Parent feedback after the meeting",
@@ -5047,6 +5069,11 @@
       "whichChild": "Choose the child to rate",
       "sent": "Feedback for {{name}} received. Thank you.",
       "submitFor": "Send feedback for {{name}}"
+    },
+    "student": {
+      "title": "Parent feedback",
+      "avg": "Average",
+      "openForm": "Open the results"
     }
   }
 }

@@ -12,6 +12,7 @@ import { studentKey } from '../utils/studentKey';
 import StudentTrips from '../components/trips/StudentTrips';
 import StudentAttendance from '../components/attendance/StudentAttendance';
 import StudentMeetingResults from '../components/meetings/StudentMeetingResults';
+import StudentSurveys from '../components/surveys/StudentSurveys';
 import { canSeeAttendance } from '../config/adminPermissions';
 import StudentSmartSearch from '../components/students/StudentSmartSearch';
 import { canAccessTechSupport, canSeeTrips, canSeeModule } from '../utils/scope';
@@ -320,6 +321,7 @@ export default function StudentRecords() {
               {selected.studentId && canSeeTrips(userData) && <StudentTrips studentId={selected.studentId} />}
               {selected.studentId && canSeeAttendance(userData) && <StudentAttendance studentId={selected.studentId} />}
               {selected.studentId && canSeeModule(userData, 'meetings') && <StudentMeetingResults studentId={selected.studentId} />}
+              {selected.studentId && canSeeModule(userData, 'meetings') && <StudentSurveys studentId={selected.studentId} />}
 
               <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
                 <table className="w-full text-right text-sm">

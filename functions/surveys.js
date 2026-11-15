@@ -5,7 +5,14 @@
 // here with the averages.
 //   surveyForms/{id}                  the form: title, intro, items, branches, status, code
 //   surveyForms/{id}/responses/{id}   one parent's answers for one child
-//   surveyThrottle/{hash}             submissions per network address (spam guard)
+//   surveyThrottle/{hash}             submissions / ID checks per network address (spam guard)
+// The parent identifies the child by the student's national ID (default,
+// form.identify "ID"): the name, branch, curriculum, grade and class come
+// from the student record (students/{nationalId}), the answer keeps
+// `studentId`, and the student record shows it (getStudentSurveys). One
+// answer per student per form, from the link or a meeting. An ID that isn't in
+// the record is kept with the details the parent typed (`matched: false`).
+// form.identify "NAME" = the older way (the parent types the name).
 // Read and written only here (firestore.rules deny these collections).
 const { meetingsAllowed } = require("./meetingAccess");
 
@@ -18,6 +25,7 @@ const GRADES = ["KG1", "KG2", "KG3", ...Array.from({ length: 12 }, (_, i) => `G$
 const CURRICULA = ["AMERICAN", "BRITISH"];
 const MAX_ITEMS = 60;
 const THROTTLE = { max: 40, window: 10 * 60e3 };
+const LOOKUPS = { max: 60, window: 10 * 60e3 };
 const CODE_CHARS = "abcdefghjkmnpqrstuvwxyz23456789";
 const clip = (v, max) => String(v == null ? "" : v).trim().slice(0, max);
 
@@ -47,7 +55,7 @@ function cleanAnswers(f, raw) {
 }
 
 function surveysModule(d) {
-  const { db, Timestamp, FieldValue, HttpsError, onCall, crypto, str, callerHasBranch, callerAll } = d;
+  const { db, Timestamp, FieldValue, HttpsError, onCall, crypto, str, callerHasBranch, callerAll, normalizeDigits, studentGrade, studentSection, branchResolver } = d;
   const out = {};
   const ms = (ts) => (ts?.toMillis ? ts.toMillis() : 0);
   const forms = () => db.collection("surveyForms");
@@ -100,7 +108,7 @@ function surveysModule(d) {
   const formOut = (id, f, full) => ({
     id, code: f.code, title: f.title, date: f.date || "", status: f.status, branches: f.branches || [],
     responses: f.responses || 0, lastResponseAt: ms(f.lastResponseAt), createdByName: f.createdByName || "", createdAt: ms(f.createdAt),
-    items: f.items.length,
+    items: f.items.length, identify: f.identify === "NAME" ? "NAME" : "ID",
     ...(full ? { intro: f.intro || { ar: "", en: "" }, items: f.items, askClass: f.askClass !== false } : {}),
   });
 
@@ -132,6 +140,7 @@ function surveysModule(d) {
     const data = {
       title, date: /^\d{4}-\d{2}-\d{2}$/.test(dd.date || "") ? dd.date : "",
       intro: text2(dd.intro, 2500), items: cleanItems(dd.items), branches, askClass: dd.askClass !== false,
+      identify: dd.identify === "NAME" ? "NAME" : "ID",
       updatedAt: Timestamp.now(), updatedBy: u.uid,
     };
     if (dd.id) {
@@ -150,7 +159,10 @@ function surveysModule(d) {
     const { ref, f } = await loadForm(request.data?.id, u);
     const snap = await ref.collection("responses").orderBy("createdAt", "desc").limit(6000).get();
     const responses = snap.docs.map((x) => ({ id: x.id, ...x.data() })).filter((r) => seesAnswer(u, r))
-      .map((r) => ({ id: r.id, info: r.info, answers: r.answers || {}, low: r.low === true, createdAt: ms(r.createdAt) }));
+      .map((r) => ({
+        id: r.id, info: r.info, answers: r.answers || {}, low: r.low === true, createdAt: ms(r.createdAt),
+        studentId: r.studentId || "", matched: r.studentId ? r.matched !== false : null, fromMeeting: !!r.meetingId,
+      }));
     return { form: { ...formOut(ref.id, f, true), canManage: manages(u, f) }, responses, hidden: snap.size - responses.length };
   });
 
@@ -186,39 +198,87 @@ function surveysModule(d) {
     return { ref: snap.docs[0].ref, f: snap.docs[0].data() };
   }
 
+  const byId = (f) => f.identify !== "NAME";
   out.surveyFormPublic = onCall(async (request) => {
     const { f } = await formByCode(request.data?.code);
     return {
       title: f.title, date: f.date || "", intro: f.intro || { ar: "", en: "" }, items: f.items,
       branches: f.branches || [], askClass: f.askClass !== false, open: f.status === "OPEN",
+      identify: byId(f) ? "ID" : "NAME",
     };
   });
 
-  // At most THROTTLE.max answers per network address in its window (a school
-  // network is shared by many parents on the day, hence the high number).
-  async function throttle(request) {
+  // At most `limit.max` answers (or ID checks) per network address in its
+  // window (a school network is shared by many parents on the day, hence the
+  // high numbers).
+  async function throttle(request, kind = "survey", limit = THROTTLE) {
     const ip = String(request.rawRequest?.headers?.["x-forwarded-for"] || "").split(",")[0].trim() || request.rawRequest?.ip || "";
     if (!ip) return;
-    const ref = db.collection("surveyThrottle").doc(crypto.createHash("sha256").update(`survey:${ip}`).digest("hex").slice(0, 32));
+    const ref = db.collection("surveyThrottle").doc(crypto.createHash("sha256").update(`${kind}:${ip}`).digest("hex").slice(0, 32));
     await db.runTransaction(async (tx) => {
       const cur = (await tx.get(ref)).data();
       const now = Date.now();
-      const fresh = !cur || now - ms(cur.since) > THROTTLE.window;
-      if (!fresh && (cur.count || 0) >= THROTTLE.max) throw new HttpsError("resource-exhausted", "أُرسل عدد كبير من التقييمات من هذه الشبكة، حاول بعد دقائق.");
+      const fresh = !cur || now - ms(cur.since) > limit.window;
+      if (!fresh && (cur.count || 0) >= limit.max) {
+        throw new HttpsError("resource-exhausted", kind === "survey" ? "أُرسل عدد كبير من التقييمات من هذه الشبكة، حاول بعد دقائق." : "محاولات كثيرة من هذه الشبكة، حاول بعد دقائق.");
+      }
       tx.set(ref, fresh ? { since: Timestamp.now(), count: 1 } : { since: cur.since, count: (cur.count || 0) + 1 });
     });
   }
+
+  // The student behind a national ID, as the form records it (empty fields =
+  // the record lacks them; the parent picks those).
+  const cleanId = (v) => normalizeDigits(v).replace(/\D/g, "");
+  async function studentById(f, raw) {
+    const id = cleanId(raw);
+    if (!/^\d{6,15}$/.test(id)) throw new HttpsError("invalid-argument", "أدخل رقم هوية الطالب/ة (أرقام فقط).");
+    const s = (await db.collection("students").doc(id).get()).data();
+    if (!s) return { id, rec: null };
+    const branchOf = await branchResolver();
+    const branch = branchOf(s);
+    if (branch && (f.branches || []).length && !f.branches.includes(branch)) throw new HttpsError("failed-precondition", "هذا الطالب/ة ليس ضمن فروع هذا التقييم.");
+    const sec = studentSection(s);
+    const grade = studentGrade(s);
+    return {
+      id,
+      rec: {
+        studentName: str(s.nameAr || s.name, 120).replace(/\s+/g, " "), branch: /^[A-Z0-9_]{2,40}$/.test(branch) ? branch : "",
+        curriculum: CURRICULA.includes(sec) ? sec : "", grade: GRADES.includes(grade) ? grade : "", className: str(s.className, 20),
+      },
+    };
+  }
+  const answeredBy = (formRef, id) => formRef.collection("responses").where("studentId", "==", id).limit(1);
+
+  // The ID page step: who the student is (shown to the parent to confirm),
+  // and whether the form already has their answer.
+  out.surveyStudentLookup = onCall(async (request) => {
+    const dd = request.data || {};
+    const { ref, f } = await formByCode(dd.code);
+    if (f.status !== "OPEN") throw new HttpsError("failed-precondition", "انتهت فترة هذا التقييم، شكراً لكم.");
+    await throttle(request, "lookup", LOOKUPS);
+    const { id, rec } = await studentById(f, dd.nationalId);
+    const done = !(await answeredBy(ref, id).get()).empty;
+    return rec ? { found: true, done, ...rec, className: f.askClass !== false ? rec.className : "" } : { found: false, done };
+  });
 
   out.submitSurveyResponse = onCall(async (request) => {
     const dd = request.data || {};
     const { ref, f } = await formByCode(dd.code);
     if (f.status !== "OPEN") throw new HttpsError("failed-precondition", "انتهت فترة هذا التقييم، شكراً لكم.");
     const i = dd.info || {};
-    const info = {
+    const typed = {
       studentName: str(i.studentName, 120).replace(/\s+/g, " "), branch: str(i.branch, 40),
       curriculum: CURRICULA.includes(i.curriculum) ? i.curriculum : "", grade: GRADES.includes(i.grade) ? i.grade : "",
       className: f.askClass !== false ? str(i.className, 20) : "",
     };
+    const who = byId(f) ? await studentById(f, dd.nationalId) : null;
+    const rec = who?.rec;
+    const info = rec
+      ? {
+        studentName: rec.studentName || typed.studentName, branch: rec.branch || typed.branch, curriculum: rec.curriculum || typed.curriculum,
+        grade: rec.grade || typed.grade, className: f.askClass !== false ? rec.className || typed.className : "",
+      }
+      : typed;
     const branchOk = /^[A-Z0-9_]{2,40}$/.test(info.branch) && (!(f.branches || []).length || f.branches.includes(info.branch));
     if (info.studentName.length < 2 || !branchOk || !info.curriculum || !info.grade) throw new HttpsError("invalid-argument", "أكمل بيانات الطالب/ة (الاسم، الفرع، المنهج، الصف).");
     const { answers, low, missing } = cleanAnswers(f, dd.answers);
@@ -226,11 +286,38 @@ function surveysModule(d) {
     if (!Object.keys(answers).length) throw new HttpsError("invalid-argument", "أجب عن سؤال واحد على الأقل.");
     await throttle(request);
     const now = Timestamp.now();
-    const batch = db.batch();
-    batch.set(ref.collection("responses").doc(), { info, answers, low, lang: dd.lang === "en" ? "en" : "ar", createdAt: now });
-    batch.update(ref, { responses: FieldValue.increment(1), lastResponseAt: now });
-    await batch.commit();
-    return { ok: true };
+    const doc = { info, answers, low, lang: dd.lang === "en" ? "en" : "ar", createdAt: now, ...(who ? { studentId: who.id, matched: !!rec } : {}) };
+    await db.runTransaction(async (tx) => {
+      if (who && !(await tx.get(answeredBy(ref, who.id))).empty) throw new HttpsError("already-exists", "تم استلام تقييم هذا الطالب/ة مسبقاً، شكراً لكم.");
+      tx.set(ref.collection("responses").doc(), doc);
+      tx.update(ref, { responses: FieldValue.increment(1), lastResponseAt: now });
+    });
+    return { ok: true, studentName: info.studentName };
+  });
+
+  // --- the student record: this student's answers in every form -------------
+  out.getStudentSurveys = onCall({ timeoutSeconds: 60 }, async (request) => {
+    const u = await caller(request);
+    const id = cleanId(request.data?.studentId);
+    if (!/^\d{6,15}$/.test(id)) return { surveys: [] };
+    const all = (await forms().orderBy("createdAt", "desc").limit(300).get()).docs.filter((x) => sees(u, x.data()));
+    const found = await Promise.all(all.map((x) => x.ref.collection("responses").where("studentId", "==", id).limit(5).get()));
+    const surveys = [];
+    all.forEach((x, i) => {
+      const f = x.data();
+      found[i].docs.map((r) => r.data()).filter((r) => seesAnswer(u, r)).forEach((r) => {
+        const nums = f.items.filter((it) => RATED.has(it.type) && typeof r.answers?.[it.id] === "number").map((it) => r.answers[it.id]);
+        surveys.push({
+          formId: x.id, title: f.title, createdAt: ms(r.createdAt), low: r.low === true, fromMeeting: !!r.meetingId,
+          avg: nums.length ? Math.round((nums.reduce((a, b) => a + b, 0) / nums.length) * 10) / 10 : null,
+          answers: f.items.filter((it) => r.answers?.[it.id] !== undefined).map((it) => ({
+            type: it.type, ar: it.ar, en: it.en, value: r.answers[it.id],
+            ...(it.type === "choice" ? { option: (it.options || []).find((o) => o.id === r.answers[it.id]) || null } : {}),
+          })),
+        });
+      });
+    });
+    return { surveys: surveys.sort((a, b) => b.createdAt - a.createdAt) };
   });
 
   return out;
