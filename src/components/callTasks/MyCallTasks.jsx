@@ -67,6 +67,19 @@ function TaskCard({ task, campaign, open, onToggle, onComplaint }) {
           </div>
           {campaign?.goal && <p className="text-sm text-slate-600"><b>{t('callTasks.goal')}:</b> {campaign.goal}</p>}
           {campaign?.script && <div className="bg-sky-50 border border-sky-100 rounded-xl p-3 text-sm text-slate-700 whitespace-pre-line"><p className="text-xs font-bold text-sky-800 mb-1">{t('callTasks.script')}</p>{campaign.script}</div>}
+          {(task.fileData || []).some((x) => Object.keys(x.data || {}).length) && (
+            <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-sm text-slate-700 space-y-2">
+              <p className="text-xs font-bold text-amber-800">{t('callTasks.file.fromFile')}</p>
+              {task.fileData.filter((x) => Object.keys(x.data || {}).length).map((x, i) => (
+                <div key={i}>
+                  {task.fileData.length > 1 && <p className="text-xs font-bold text-slate-800">{x.name}</p>}
+                  <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5">
+                    {Object.entries(x.data).map(([k, v]) => <div key={k} className="flex gap-1.5 min-w-0"><dt className="text-slate-500 shrink-0">{k}:</dt><dd className="font-medium text-slate-900 break-words min-w-0">{v}</dd></div>)}
+                  </dl>
+                </div>
+              ))}
+            </div>
+          )}
           {(task.history || []).length > 0 && (
             <ul className="text-xs text-slate-500 space-y-0.5">
               {task.history.map((h, i) => <li key={i}>{format(h.at.toDate(), 'yyyy-MM-dd HH:mm')} — {t(`callTasks.results.${h.result}`)}{h.note ? `: ${h.note}` : ''}</li>)}

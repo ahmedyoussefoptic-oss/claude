@@ -11,6 +11,7 @@ import { STAGES } from '../../config/complaintTypes';
 import { callRoleOf } from '../../config/adminPermissions';
 import { printPage, escapeHtml } from '../../utils/printPage';
 import { Modal, Field, Tile, Pill, inputCls, btn } from '../platform/ui';
+import { readCallSheet, callRows } from '../../utils/callExcel';
 
 const call = (name, data) => httpsCallable(functions, name)(data).then((r) => r.data);
 const riyadhDay = (d = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Riyadh' }).format(d);
@@ -19,14 +20,66 @@ const mmss = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 const STATUS_STYLE = { ACTIVE: 'bg-emerald-50 text-emerald-700 border-emerald-200', PAUSED: 'bg-amber-50 text-amber-800 border-amber-200', CLOSED: 'bg-slate-100 text-slate-500 border-slate-200' };
 const TASK_STYLE = { PENDING: 'bg-sky-50 text-sky-700 border-sky-200', DONE: 'bg-emerald-50 text-emerald-700 border-emerald-200', FAILED: 'bg-rose-50 text-rose-700 border-rose-200' };
 
-// Student IDs in the first sheet of an Excel file (any 10-digit cell).
-async function idsFromExcel(file) {
-  const XLSX = await import('xlsx');
-  const wb = XLSX.read(await file.arrayBuffer());
-  const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false });
-  const ids = new Set();
-  rows.flat().forEach((v) => { const d = String(v ?? '').replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 1632)).replace(/\D/g, ''); if (/^\d{10}$/.test(d)) ids.add(d); });
-  return [...ids];
+const ROW_STYLE = {
+  ROSTER: 'bg-emerald-50 text-emerald-700 border-emerald-200', FILE: 'bg-sky-50 text-sky-700 border-sky-200', MERGED: 'bg-slate-50 text-slate-600 border-slate-200',
+  NO_PHONE: 'bg-rose-50 text-rose-700 border-rose-200', NOT_FOUND: 'bg-rose-50 text-rose-700 border-rose-200', OUT_OF_SCOPE: 'bg-amber-50 text-amber-800 border-amber-200', DUPLICATE: 'bg-slate-50 text-slate-500 border-slate-200',
+};
+const ROW_OK = ['ROSTER', 'FILE', 'MERGED'];
+
+// The uploaded file as a table: which columns hold the ID / mobile / name,
+// and (after «معاينة») what became of each row.
+function FilePreview({ sheet, cols, setCols, merge, setMerge, status }) {
+  const { t } = useTranslation();
+  const [onlyOut, setOnlyOut] = useState(false);
+  const roles = { idCol: t('callTasks.file.idCol'), phoneCol: t('callTasks.file.phoneCol'), nameCol: t('callTasks.file.nameCol') };
+  const roleOf = (i) => Object.keys(roles).find((k) => cols[k] === i);
+  const rows = sheet.data.map((r, i) => ({ r, i, st: status?.[i] })).filter((x) => !onlyOut || (x.st && !ROW_OK.includes(x.st)));
+  const counts = {};
+  (status || []).forEach((x) => { counts[x] = (counts[x] || 0) + 1; });
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        {Object.entries(roles).map(([k, label]) => (
+          <Field key={k} label={label}>
+            <select value={cols[k]} onChange={(e) => setCols((c) => ({ ...c, [k]: Number(e.target.value) }))} className={inputCls}>
+              <option value={-1}>—</option>
+              {sheet.headers.map((h, i) => <option key={i} value={i}>{h}</option>)}
+            </select>
+          </Field>
+        ))}
+      </div>
+      <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={merge} onChange={(e) => setMerge(e.target.checked)} />{t('callTasks.file.merge')}</label>
+      {status && (
+        <div className="flex flex-wrap gap-1.5 text-xs">
+          {Object.keys(ROW_STYLE).filter((k) => counts[k]).map((k) => <Pill key={k} className={ROW_STYLE[k]}>{t(`callTasks.file.status.${k}`)}: {counts[k]}</Pill>)}
+          {Object.keys(counts).some((k) => !ROW_OK.includes(k)) && <label className="flex items-center gap-1.5 text-slate-600 ms-2"><input type="checkbox" checked={onlyOut} onChange={(e) => setOnlyOut(e.target.checked)} />{t('callTasks.file.onlyOut')}</label>}
+        </div>
+      )}
+      <div className="border border-slate-200 rounded-xl overflow-auto max-h-80">
+        <table className="w-full text-xs">
+          <thead className="bg-slate-50 text-slate-600 sticky top-0">
+            <tr>
+              <th className="px-2 py-1.5 text-start">#</th>
+              {status && <th className="px-2 py-1.5 text-start whitespace-nowrap">{t('callTasks.file.result')}</th>}
+              {sheet.headers.map((h, i) => (
+                <th key={i} className={`px-2 py-1.5 text-start whitespace-nowrap ${roleOf(i) ? 'bg-sky-100 text-sky-900' : ''}`}>{h}{roleOf(i) && <span className="block text-[10px] font-normal text-sky-700">{roles[roleOf(i)]}</span>}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {rows.slice(0, 300).map(({ r, i, st }) => (
+              <tr key={i} className={st && !ROW_OK.includes(st) ? 'bg-rose-50/40' : ''}>
+                <td className="px-2 py-1 text-slate-400 tabular-nums">{i + 1}</td>
+                {status && <td className="px-2 py-1 whitespace-nowrap">{st && <Pill className={ROW_STYLE[st]}>{t(`callTasks.file.status.${st}`)}</Pill>}</td>}
+                {sheet.headers.map((_, j) => <td key={j} className={`px-2 py-1 whitespace-nowrap max-w-56 truncate ${roleOf(j) ? 'bg-sky-50/50' : ''}`} title={r[j]}>{r[j]}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-slate-500">{rows.length > 300 ? t('callTasks.file.first', { n: rows.length }) : t('callTasks.file.count', { n: rows.length })}{!status && ` — ${t('callTasks.file.previewHint')}`}</p>
+    </div>
+  );
 }
 
 // The last attempt's Bevatel check.
@@ -51,26 +104,45 @@ function CampaignForm({ onClose, onSaved }) {
   const [rb, setRb] = useState([]);
   const [stages, setStages] = useState([]);
   const [classes, setClasses] = useState('');
-  const [ids, setIds] = useState(null);
+  const [sheet, setSheet] = useState(null);
+  const [cols, setColsRaw] = useState({ idCol: -1, phoneCol: -1, nameCol: -1 });
+  const [merge, setMergeRaw] = useState(true);
   const [fileName, setFileName] = useState('');
   const [preview, setPreview] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const set = (k) => (e) => { setF((x) => ({ ...x, [k]: e.target.value })); setPreview(null); };
   const toggle = (list, setList, v) => { setList(list.includes(v) ? list.filter((x) => x !== v) : [...list, v]); setPreview(null); };
+  const setCols = (fn) => { setColsRaw(fn); setPreview(null); };
+  const setMerge = (v) => { setMergeRaw(v); setPreview(null); };
+  const upload = async (file) => {
+    setError(null);
+    setPreview(null);
+    setFileName(file.name);
+    try {
+      const sh = await readCallSheet(file);
+      setSheet(sh);
+      setColsRaw({ idCol: sh.idCol, phoneCol: sh.phoneCol, nameCol: sh.nameCol });
+      if (!sh.data.length) setError(t('callTasks.file.empty'));
+    } catch {
+      setSheet(null);
+      setError(t('callTasks.file.unreadable'));
+    }
+  };
 
   const targetLabel = mode === 'IDS'
-    ? t('callTasks.form.fromExcel', { name: fileName, n: ids?.length || 0 })
+    ? t('callTasks.form.fromExcel', { name: fileName, n: sheet?.data.length || 0 })
     : [rb.length ? rb.map((id) => branches.find((b) => b.id === id)?.name || id).join('، ') : t('common.allBranches'), stages.join('، '), classes].filter(Boolean).join(' · ');
   const payload = (extra = {}) => ({
     ...f, outcomes: f.outcomes.split(/[\n،,]/).map((x) => x.trim()).filter(Boolean), dailyQuota: Number(f.dailyQuota),
-    target: mode === 'IDS' ? { mode, ids: ids || [] } : { mode, branches: rb, stages, classes: classes.split(/[\s،,]+/).filter(Boolean) },
+    target: mode === 'IDS' ? { mode, ...callRows(sheet, cols), merge } : { mode, branches: rb, stages, classes: classes.split(/[\s،,]+/).filter(Boolean) },
     targetLabel, ...extra,
   });
   const run = async (isPreview) => {
     setError(null);
     if (!f.title.trim()) { setError(t('callTasks.form.titleRequired')); return; }
-    if (mode === 'IDS' && !ids?.length) { setError(t('callTasks.form.excelRequired')); return; }
+    if (mode === 'IDS' && !sheet?.data.length) { setError(t('callTasks.form.excelRequired')); return; }
+    if (mode === 'IDS' && cols.idCol < 0 && cols.phoneCol < 0) { setError(t('callTasks.file.needColumn')); return; }
     if (f.distribution === 'AUTO' && !f.agents.length) { setError(t('callTasks.form.agentsRequired')); return; }
     setBusy(true);
     try {
@@ -112,10 +184,13 @@ function CampaignForm({ onClose, onSaved }) {
             <Field label={t('callTasks.form.classes')} hint={t('callTasks.form.classesHint')}><input value={classes} onChange={(e) => { setClasses(e.target.value); setPreview(null); }} className={inputCls} dir="ltr" /></Field>
           </>
         ) : (
-          <label className="flex items-center gap-2 text-sm text-primary cursor-pointer border border-dashed border-primary/40 rounded-xl p-3">
-            <Upload className="w-4 h-4" />{fileName ? t('callTasks.form.fromExcel', { name: fileName, n: ids?.length || 0 }) : t('callTasks.form.uploadExcel')}
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={async (e) => { const file = e.target.files?.[0]; if (!file) return; setFileName(file.name); setIds(await idsFromExcel(file)); setPreview(null); }} />
-          </label>
+          <>
+            <label className="flex items-center gap-2 text-sm text-primary cursor-pointer border border-dashed border-primary/40 rounded-xl p-3">
+              <Upload className="w-4 h-4" />{fileName ? t('callTasks.form.fromExcel', { name: fileName, n: sheet?.data.length || 0 }) : t('callTasks.form.uploadExcel')}
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; e.target.value = ''; if (file) upload(file); }} />
+            </label>
+            {sheet && sheet.data.length > 0 && <FilePreview sheet={sheet} cols={cols} setCols={setCols} merge={merge} setMerge={setMerge} status={preview?.rowStatus} />}
+          </>
         )}
       </div>
 
@@ -137,7 +212,9 @@ function CampaignForm({ onClose, onSaved }) {
       {preview && (
         <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3 text-sm text-emerald-900 space-y-1">
           <p className="font-bold">{t('callTasks.form.previewCalls', { n: preview.parents })}</p>
-          <p className="text-xs">{t('callTasks.form.previewDetail', { students: preview.students, noPhone: preview.noPhone, notFound: preview.notFound, outOfScope: preview.outOfScope })}</p>
+          {preview.rowStatus
+            ? <p className="text-xs">{t('callTasks.file.summary', { rows: preview.rows, calls: preview.parents, roster: preview.rowStatus.filter((x) => x === 'ROSTER').length, file: preview.fromFile, merged: preview.merged, out: preview.noPhone + preview.notFound + preview.outOfScope + preview.duplicates })}</p>
+            : <p className="text-xs">{t('callTasks.form.previewDetail', { students: preview.students, noPhone: preview.noPhone, notFound: preview.notFound, outOfScope: preview.outOfScope })}</p>}
           {f.distribution === 'AUTO' && f.agents.length > 0 && (
             <p className={`text-xs ${preview.lastDay > f.endDay ? 'text-rose-700 font-bold' : ''}`}>{t('callTasks.form.previewSpread', { per: Math.ceil(preview.parents / f.agents.length), last: preview.lastDay })}{preview.lastDay > f.endDay ? ` — ${t('callTasks.form.previewOver')}` : ''}</p>
           )}
@@ -195,11 +272,14 @@ function CampaignDetails({ id, onBack }) {
     setBusy(true);
     try { await call('assignCallTasks', { campaignId: id, taskIds: selected, agentId: assignTo }); setSelected([]); await load(); } catch (err) { setError(err.message); } finally { setBusy(false); }
   };
+  const fileCols = c.fileColumns || [];
+  const fileVal = (k, col) => (k.fileData || []).map((x) => x.data?.[col]).filter(Boolean).join(' | ');
   const row = (k) => ({
     [t('callTasks.col.student')]: k.studentName, [t('callTasks.col.ids')]: k.studentIds.join(' '), [t('callTasks.col.grade')]: k.grade, [t('common.branch')]: branchName(k.branch), [t('common.phone')]: k.phone,
     [t('callTasks.col.agent')]: k.assignedName, [t('callTasks.col.status')]: t(`callTasks.taskStatus.${k.status}`), [t('callTasks.col.outcome')]: k.outcome || (k.result ? t(`callTasks.results.${k.result}`) : ''),
     [t('callTasks.col.note')]: k.note, [t('callTasks.col.attempts')]: k.attempts, [t('callTasks.col.due')]: k.dueDay,
     [t('callTasks.col.verify')]: last(k) ? (last(k).verified === true ? `✓ ${mmss(last(k).talkSec)}` : last(k).verified === false ? '✗' : '…') : '',
+    ...Object.fromEntries(fileCols.map((col) => [col, fileVal(k, col)])),
   });
   const exportExcel = async () => {
     const XLSX = await import('xlsx');
@@ -299,6 +379,7 @@ function CampaignDetails({ id, onBack }) {
               <tr>
                 <th className={th}><input type="checkbox" checked={shown.length > 0 && shown.filter((k) => k.status === 'PENDING').every((k) => selected.includes(k.id))} onChange={(e) => setSelected(e.target.checked ? shown.filter((k) => k.status === 'PENDING').map((k) => k.id) : [])} /></th>
                 {['student', 'grade', 'agent', 'due', 'status', 'outcome', 'attempts', 'verify'].map((k) => <th key={k} className={th}>{t(`callTasks.col.${k}`)}</th>)}
+                {fileCols.map((col) => <th key={`f-${col}`} className={`${th} bg-sky-50 text-sky-800`}>{col}</th>)}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -313,6 +394,7 @@ function CampaignDetails({ id, onBack }) {
                   <td className={`${td} max-w-56 truncate`} title={k.note}>{k.outcome || (k.result ? t(`callTasks.results.${k.result}`) : '')}{k.note && <span className="block text-xs text-slate-400 truncate">{k.note}</span>}</td>
                   <td className={td}>{k.attempts || ''}</td>
                   <td className={td}><Verify h={last(k)} bevatelSyncAt={data.bevatelSyncAt} />{last(k)?.callAgent && <span className="block text-[11px] text-slate-400">{last(k).callAgent}</span>}</td>
+                  {fileCols.map((col) => <td key={`f-${col}`} className={`${td} text-xs max-w-56 truncate`} title={fileVal(k, col)}>{fileVal(k, col)}</td>)}
                 </tr>
               ))}
             </tbody>

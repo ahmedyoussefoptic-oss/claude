@@ -3742,8 +3742,8 @@
       },
       "classes": "Classes (optional)",
       "classesHint": "e.g. DA8-A DA8-B — leave empty for all classes.",
-      "uploadExcel": "Upload an Excel file with student IDs",
-      "fromExcel": "{{name}} — {{n}} IDs",
+      "uploadExcel": "Upload an Excel file (student IDs and/or parent mobiles, plus any other columns)",
+      "fromExcel": "{{name}} — {{n}} rows",
       "distribution": "Dealing to agents",
       "dist": {
         "AUTO": "Automatic",
@@ -3764,8 +3764,33 @@
       "previewSpread": "About {{per}} calls per agent, the last on {{last}}",
       "previewOver": "past the campaign's end date — raise the quota or add agents.",
       "titleRequired": "Enter a campaign title.",
-      "excelRequired": "Upload an Excel file with IDs.",
+      "excelRequired": "Upload an Excel file.",
       "agentsRequired": "Choose at least one calling agent for automatic dealing."
+    },
+    "file": {
+      "fromFile": "Details from the campaign file",
+      "idCol": "Student ID column",
+      "phoneCol": "Parent mobile column",
+      "nameCol": "Student name column",
+      "merge": "One call for siblings (same mobile)",
+      "onlyOut": "Excluded only",
+      "result": "Result",
+      "first": "Showing the first 300 of {{n}} rows",
+      "count": "{{n}} rows",
+      "previewHint": "press «Preview count» to see what happens to each row",
+      "empty": "The file has no rows.",
+      "unreadable": "Couldn't read the file — make sure it is an Excel or CSV file.",
+      "needColumn": "Choose the student ID column or the mobile column.",
+      "summary": "{{rows}} rows in the file → {{calls}} calls ({{roster}} from the roster, {{file}} from the file's details) · merged with siblings: {{merged}} · excluded: {{out}}.",
+      "status": {
+        "ROSTER": "From the roster",
+        "FILE": "From the file",
+        "MERGED": "Merged with a sibling",
+        "NO_PHONE": "No valid mobile",
+        "NOT_FOUND": "Not found, no mobile",
+        "OUT_OF_SCOPE": "Outside your branches",
+        "DUPLICATE": "Duplicate row"
+      }
     }
   },
   "spedForm": {

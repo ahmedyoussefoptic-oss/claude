@@ -6655,31 +6655,71 @@ function addWorkDays(day, n) {
 }
 const riyadhDayOf = (ms) => new Date(ms + 3 * 3600e3).toISOString().slice(0, 10);
 
+// A campaign from an Excel file: every row counts. A row's student ID finds
+// the student in the roster (name, grade, branch, mobile); the row's own
+// mobile is used when the file gives one (else the roster's), and a row whose
+// student isn't in the roster still becomes a call from the file's name and
+// mobile. The file's other columns ride along on the call (`fileData`) for the
+// agent and the campaign's export. Rows with the same mobile are one call
+// (siblings) unless `merge` is false. `rowStatus` says, per row, what became
+// of it (ROSTER, FILE, MERGED, NO_PHONE, NOT_FOUND, OUT_OF_SCOPE, DUPLICATE).
+const CALL_FILE_COLUMNS = 20;
+async function callTargetsFromFile(target, branchOf, scope) {
+  const columns = [...new Set((Array.isArray(target.columns) ? target.columns : []).map((c) => str(c, 60)).filter(Boolean))].slice(0, CALL_FILE_COLUMNS);
+  const raw = Array.isArray(target.rows) ? target.rows : (Array.isArray(target.ids) ? target.ids.map((id) => ({ id })) : []);
+  const rows = raw.slice(0, CALL_MAX_TASKS * 2).map((r) => {
+    const id = normalizeDigits(r?.id).replace(/\D/g, "");
+    const extra = {};
+    if (r?.extra && typeof r.extra === "object") columns.forEach((c) => { const v = str(r.extra[c], 300); if (v) extra[c] = v; });
+    return { id: /^\d{6,15}$/.test(id) ? id : "", phone: callPhone(r?.phone), name: str(r?.name, 120).replace(/\s+/g, " "), extra };
+  });
+  const okPhone = (p) => /^05\d{8}$/.test(p);
+  if (!rows.some((r) => r.id || okPhone(r.phone))) throw new HttpsError("invalid-argument", "لم يُعثر في الملف على أرقام هوية أو أرقام جوال.");
+  const ids = [...new Set(rows.map((r) => r.id).filter(Boolean))];
+  const found = new Map();
+  for (let i = 0; i < ids.length; i += 300) {
+    const snaps = await db.getAll(...ids.slice(i, i + 300).map((id) => db.collection("students").doc(id)));
+    snaps.forEach((x) => { if (x.exists) found.set(x.id, { id: x.id, ...x.data() }); });
+  }
+  const merge = target.merge !== false;
+  const byKey = new Map();
+  const seen = new Set();
+  const rowStatus = [];
+  const n = { notFound: 0, outOfScope: 0, noPhone: 0, fromFile: 0, merged: 0, duplicates: 0 };
+  rows.forEach((r, i) => {
+    if (r.id && seen.has(r.id)) { rowStatus[i] = "DUPLICATE"; n.duplicates++; return; }
+    if (r.id) seen.add(r.id);
+    const s = r.id ? found.get(r.id) : null;
+    const branch = s ? branchOf(s) : "";
+    if (s && scope && !scope.includes(branch)) { rowStatus[i] = "OUT_OF_SCOPE"; n.outOfScope++; return; }
+    const phone = okPhone(r.phone) ? r.phone : (s && okPhone(callPhone(s.mobile)) ? callPhone(s.mobile) : "");
+    if (!phone) { rowStatus[i] = s ? "NO_PHONE" : "NOT_FOUND"; n[s ? "noPhone" : "notFound"]++; return; }
+    const kid = {
+      id: s ? s.id : r.id, name: (s && (s.nameAr || s.name)) || r.name || r.id || phone,
+      grade: s ? studentGrade(s) : "", className: s ? s.className || "" : "", extra: r.extra,
+    };
+    const key = merge ? phone : `${phone}#${i}`;
+    if (byKey.has(key)) { byKey.get(key).students.push(kid); rowStatus[i] = "MERGED"; n.merged++; return; }
+    byKey.set(key, { phone, branch, students: [kid] });
+    rowStatus[i] = s ? "ROSTER" : "FILE";
+    if (!s) n.fromFile++;
+  });
+  return { parents: [...byKey.values()], students: found.size, ...n, rows: rows.length, rowStatus, columns };
+}
+
 // The parents a campaign calls: one task per parent mobile (siblings merged).
 async function callTargets(caller, target) {
   const branchOf = await branchResolver();
   const scope = callScope(caller);
-  let students;
-  if (target?.mode === "IDS") {
-    const ids = [...new Set((Array.isArray(target.ids) ? target.ids : []).map((x) => normalizeDigits(x).replace(/\D/g, "")).filter((x) => /^\d{6,15}$/.test(x)))].slice(0, CALL_MAX_TASKS * 2);
-    if (!ids.length) throw new HttpsError("invalid-argument", "لم يُعثر على أرقام هوية في الملف.");
-    students = [];
-    for (let i = 0; i < ids.length; i += 300) {
-      const snaps = await db.getAll(...ids.slice(i, i + 300).map((id) => db.collection("students").doc(id)));
-      snaps.forEach((s) => { if (s.exists) students.push({ id: s.id, ...s.data() }); });
-    }
-    students.notFound = ids.length - students.length;
-  } else {
-    const snap = await db.collection("students").get();
-    const branches = Array.isArray(target?.branches) ? target.branches.filter(Boolean) : [];
-    const stages = Array.isArray(target?.stages) ? target.stages.filter(Boolean) : [];
-    const classes = Array.isArray(target?.classes) ? target.classes.map((c) => String(c).trim().toUpperCase()).filter(Boolean) : [];
-    students = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((s) => s.active !== false
-      && (!branches.length || branches.includes(branchOf(s)))
-      && (!stages.length || stages.includes(studentGrade(s)))
-      && (!classes.length || classes.includes(String(s.className || "").trim().toUpperCase())));
-    students.notFound = 0;
-  }
+  if (target?.mode === "IDS") return callTargetsFromFile(target, branchOf, scope);
+  const snap = await db.collection("students").get();
+  const branches = Array.isArray(target?.branches) ? target.branches.filter(Boolean) : [];
+  const stages = Array.isArray(target?.stages) ? target.stages.filter(Boolean) : [];
+  const classes = Array.isArray(target?.classes) ? target.classes.map((c) => String(c).trim().toUpperCase()).filter(Boolean) : [];
+  const students = snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((s) => s.active !== false
+    && (!branches.length || branches.includes(branchOf(s)))
+    && (!stages.length || stages.includes(studentGrade(s)))
+    && (!classes.length || classes.includes(String(s.className || "").trim().toUpperCase())));
   const byPhone = new Map();
   let outOfScope = 0;
   let noPhone = 0;
@@ -6692,7 +6732,7 @@ async function callTargets(caller, target) {
     if (byPhone.has(phone)) byPhone.get(phone).students.push(kid);
     else byPhone.set(phone, { phone, branch, students: [kid] });
   }
-  return { parents: [...byPhone.values()], students: students.length, notFound: students.notFound, outOfScope, noPhone };
+  return { parents: [...byPhone.values()], students: students.length, notFound: 0, outOfScope, noPhone };
 }
 
 // Deals tasks to agents: each to the least-loaded agent covering its branch
@@ -6716,7 +6756,7 @@ function callCampaignOut(id, c) {
     id, title: c.title, goal: c.goal || "", script: c.script || "", outcomes: c.outcomes || [], priority: c.priority, status: c.status,
     startDay: c.startDay, endDay: c.endDay, dailyQuota: c.dailyQuota, distribution: c.distribution, agents: c.agents || [], agentNames: c.agentNames || {},
     branches: c.branches || [], target: c.targetLabel || "", createdByName: c.createdByName || "", createdAt: c.createdAt?.toMillis?.() || null,
-    counts: c.counts || {}, outcomeCounts: c.outcomeCounts || {},
+    counts: c.counts || {}, outcomeCounts: c.outcomeCounts || {}, fileColumns: c.fileColumns || [],
   };
 }
 
@@ -6734,14 +6774,17 @@ exports.saveCallCampaign = onCall({ timeoutSeconds: 300, memory: "1GiB" }, async
   const priority = d.priority === "URGENT" ? "URGENT" : "NORMAL";
   const t = await callTargets(caller, d.target);
   const parents = t.parents.slice(0, CALL_MAX_TASKS);
-  const summary = { parents: parents.length, students: t.students, notFound: t.notFound, outOfScope: t.outOfScope, noPhone: t.noPhone, truncated: t.parents.length - parents.length };
+  const summary = {
+    parents: parents.length, students: t.students, notFound: t.notFound, outOfScope: t.outOfScope, noPhone: t.noPhone, truncated: t.parents.length - parents.length,
+    ...(t.rowStatus ? { rows: t.rows, fromFile: t.fromFile, merged: t.merged, duplicates: t.duplicates } : {}),
+  };
   const users = await loadActiveUsers();
   const agents = users.filter((u) => (d.agents || []).includes(u.id) && callRoleOf(u, "agent"));
   if (distribution === "AUTO" && !agents.length) throw new HttpsError("invalid-argument", "اختر موظف اتصال واحداً على الأقل للتوزيع التلقائي.");
   // Spread: the last due day at this quota, to warn when the period is short.
   const perAgent = agents.length ? Math.ceil(parents.length / agents.length) : 0;
   summary.lastDay = perAgent ? addWorkDays(startDay, Math.floor((perAgent - 1) / quota)) : startDay;
-  if (d.preview) return summary;
+  if (d.preview) return { ...summary, ...(t.rowStatus ? { rowStatus: t.rowStatus } : {}) };
   if (!parents.length) throw new HttpsError("failed-precondition", "لا يوجد أولياء أمور مطابقون (بأرقام جوال صحيحة) لهذه الحملة.");
 
   const now = Timestamp.now();
@@ -6749,15 +6792,16 @@ exports.saveCallCampaign = onCall({ timeoutSeconds: 300, memory: "1GiB" }, async
   const campRef = db.collection("callCampaigns").doc();
   const tasks = parents.map((p) => ({
     campaignId: campRef.id, campaignTitle: title, priority, phone: p.phone, branch: p.branch,
-    studentId: p.students[0].id, studentIds: p.students.map((s) => s.id), studentName: p.students.map((s) => s.name).join("، "),
-    grade: p.students.map((s) => [s.grade, s.className].filter(Boolean).join(" ")).join("، "),
+    studentId: p.students.find((s) => s.id)?.id || "", studentIds: p.students.map((s) => s.id).filter(Boolean), studentName: p.students.map((s) => s.name).join("، "),
+    grade: p.students.map((s) => [s.grade, s.className].filter(Boolean).join(" ")).filter(Boolean).join("، "),
+    ...(p.students.some((s) => s.extra && Object.keys(s.extra).length) ? { fileData: p.students.map((s) => ({ name: s.name, data: s.extra || {} })) } : {}),
     status: "PENDING", assignedTo: null, assignedName: "", dueDay: startDay, dueAt: null, attempts: 0, noAnswerCount: 0, history: [], verifyPending: false, createdAt: now,
   }));
   if (distribution === "AUTO") dealCallTasks(tasks, agents, { startDay, quota });
   await campRef.set({
     title, goal: str(d.goal, 500), script: str(d.script, 3000), outcomes, priority, status: "ACTIVE", startDay, endDay, dailyQuota: quota, distribution,
     agents: agents.map((a) => a.id), agentNames: Object.fromEntries(agents.map((a) => [a.id, a.name || ""])), branches,
-    targetLabel: str(d.targetLabel, 200), createdBy: caller.uid, createdByName: caller.name || "", createdAt: now, updatedAt: now,
+    targetLabel: str(d.targetLabel, 200), ...(t.columns?.length ? { fileColumns: t.columns } : {}), createdBy: caller.uid, createdByName: caller.name || "", createdAt: now, updatedAt: now,
     counts: { total: tasks.length, pending: tasks.length, done: 0, answered: 0, noAnswer: 0, wrong: 0, failed: 0, unassigned: tasks.filter((x) => !x.assignedTo).length },
     outcomeCounts: {},
   });
@@ -6804,7 +6848,7 @@ exports.getCallCampaign = onCall({ timeoutSeconds: 120, memory: "512MiB" }, asyn
       return {
         id: x.id, studentName: k.studentName, studentIds: k.studentIds, grade: k.grade, branch: k.branch, phone: k.phone, status: k.status,
         assignedTo: k.assignedTo, assignedName: k.assignedName, dueDay: k.dueDay, dueAt: k.dueAt?.toMillis?.() || null, attempts: k.attempts, outcome: k.outcome || "",
-        result: k.result || "", note: k.note || "", completedAt: k.completedAt?.toMillis?.() || null,
+        result: k.result || "", note: k.note || "", completedAt: k.completedAt?.toMillis?.() || null, fileData: k.fileData || [],
         history: (k.history || []).map((h) => ({ result: h.result, outcome: h.outcome || "", note: h.note || "", at: h.at?.toMillis?.() || null, byName: h.byName || "", verified: h.verified ?? null, talkSec: h.talkSec || 0, callAgent: h.callAgent || "" })),
       };
     }),
