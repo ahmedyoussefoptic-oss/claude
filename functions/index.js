@@ -7131,6 +7131,88 @@ exports.recordCallResult = onCall(async (request) => {
   return { ok: true, status: update.status || "PENDING" };
 });
 
+// The agent's other actions on a call, kept on it for the indicators: a
+// WhatsApp message opened to the parent, or a note («ملاحظة») filed from it.
+exports.logCallTaskAction = onCall(async (request) => {
+  const caller = await callCaller(request, "agent");
+  const d = request.data || {};
+  const ref = db.collection("callTasks").doc(String(d.taskId || ""));
+  const k = (await ref.get()).data();
+  if (!k) throw new HttpsError("not-found", "لم يتم العثور على الاتصال.");
+  if (k.assignedTo !== caller.uid && !(callRoleOf(caller, "supervisor") && inCallScope(caller, k.branch))) throw new HttpsError("permission-denied", "هذا الاتصال مسند لموظف آخر.");
+  const now = Timestamp.now();
+  const campRef = db.collection("callCampaigns").doc(k.campaignId);
+  if (d.action === "WHATSAPP") {
+    await ref.update({ waCount: FieldValue.increment(1), lastWaAt: now, actions: FieldValue.arrayUnion({ kind: "WHATSAPP", at: now, byId: caller.uid, byName: caller.name || "" }) });
+    if (!k.lastWaAt) await campRef.set({ counts: { whatsapp: FieldValue.increment(1) } }, { merge: true });
+    return { ok: true };
+  }
+  if (d.action === "COMPLAINT") {
+    const c = (await db.collection("complaints").doc(String(d.complaintDocId || "")).get()).data();
+    if (!c) throw new HttpsError("not-found", "لم يتم العثور على الملاحظة.");
+    const item = { id: String(d.complaintDocId), no: c.complaintId || "" };
+    if ((k.complaints || []).some((x) => x.id === item.id)) return { ok: true };
+    await ref.update({ complaints: FieldValue.arrayUnion(item), actions: FieldValue.arrayUnion({ kind: "COMPLAINT", at: now, byId: caller.uid, byName: caller.name || "", no: item.no }) });
+    if (!(k.complaints || []).length) await campRef.set({ counts: { complaints: FieldValue.increment(1) } }, { merge: true });
+    return { ok: true };
+  }
+  throw new HttpsError("invalid-argument", "طلب غير صالح.");
+});
+
+// The call team's indicators for one period (today / this week / this
+// month), shown to every agent on «مهامي»: per agent the attempts and their
+// results, the calls finished, WhatsApp messages and notes, and what is still
+// pending (and late). Counts only — no parent details.
+exports.callTeamStats = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+  const caller = await callCaller(request, "agent");
+  const period = ["today", "week", "month"].includes(request.data?.period) ? request.data.period : "today";
+  const today = riyadhDay();
+  const startDay = period === "today" ? today : period === "week"
+    ? (() => { const dd = new Date(`${today}T12:00:00Z`); dd.setUTCDate(dd.getUTCDate() - dd.getUTCDay()); return dd.toISOString().slice(0, 10); })()
+    : `${today.slice(0, 7)}-01`;
+  const start = Date.parse(`${startDay}T00:00:00+03:00`);
+  const [touched, pending, camps, users] = await Promise.all([
+    db.collection("callTasks").where("lastAttemptAt", ">=", Timestamp.fromMillis(start)).get(),
+    db.collection("callTasks").where("status", "==", "PENDING").get(),
+    db.collection("callCampaigns").where("status", "==", "ACTIVE").get(),
+    loadActiveUsers(),
+  ]);
+  const active = new Set(camps.docs.map((x) => x.id));
+  const per = {};
+  const row = (id, name) => (per[id] ||= { id, name: name || "", attempts: 0, answered: 0, noAnswer: 0, callback: 0, wrong: 0, done: 0, talkSec: 0, talked: 0, whatsapp: 0, complaints: 0, pending: 0, dueToday: 0, late: 0 });
+  users.filter((u) => u.callRoles?.agent === true).forEach((u) => row(u.id, u.name));
+  const msOf = (v) => v?.toMillis?.() || 0;
+  touched.docs.forEach((x) => {
+    const k = x.data();
+    (k.history || []).filter((h) => msOf(h.at) >= start && h.byId).forEach((h) => {
+      const r = row(h.byId, h.byName);
+      r.attempts++;
+      if (h.result === "ANSWERED") r.answered++;
+      else if (h.result === "NO_ANSWER") r.noAnswer++;
+      else if (h.result === "CALLBACK") r.callback++;
+      else if (h.result === "WRONG_NUMBER") r.wrong++;
+      if (h.verified === true && h.talkSec) { r.talkSec += h.talkSec; r.talked++; }
+    });
+    if (k.status !== "PENDING" && msOf(k.completedAt) >= start && k.assignedTo) row(k.assignedTo, k.assignedName).done++;
+    (k.actions || []).filter((a) => msOf(a.at) >= start && a.byId).forEach((a) => {
+      if (a.kind === "WHATSAPP") row(a.byId, a.byName).whatsapp++;
+      if (a.kind === "COMPLAINT") row(a.byId, a.byName).complaints++;
+    });
+  });
+  pending.docs.forEach((x) => {
+    const k = x.data();
+    if (!k.assignedTo || !active.has(k.campaignId)) return;
+    const r = row(k.assignedTo, k.assignedName);
+    r.pending++;
+    if (k.dueDay === today) r.dueToday++;
+    if (k.dueDay < today) r.late++;
+  });
+  const agents = Object.values(per).filter((r) => r.attempts || r.pending || r.done).sort((a, b) => b.attempts - a.attempts || b.answered - a.answered);
+  const sum = (key) => agents.reduce((n, r) => n + r[key], 0);
+  const totals = Object.fromEntries(["attempts", "answered", "noAnswer", "callback", "wrong", "done", "talkSec", "talked", "whatsapp", "complaints", "pending", "dueToday", "late"].map((key) => [key, sum(key)]));
+  return { period, startDay, me: caller.uid, agents, totals };
+});
+
 // Morning: each agent's calls for today. Afternoon: each campaign's day,
 // to whoever created it.
 exports.callTasksMorning = onSchedule({ schedule: "0 7 * * 0-4", timeZone: "Asia/Riyadh" }, async () => {

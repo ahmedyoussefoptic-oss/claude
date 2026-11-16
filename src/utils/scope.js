@@ -60,6 +60,9 @@ export function moduleDefault(userData, key) {
   if (key === 'trips') return tripsAccessOf(userData) !== 'none';
   // Call analytics (Bevatel) is given per employee.
   if (key === 'calls' || key === 'waReports') return false;
+  // «التقارير»: the system owner, admins and branch principals; anyone else
+  // only when given on the Users page.
+  if (key === 'reports') return userData?.isOwner === true || userData?.isPrincipal === true;
   return true;
 }
 export function canSeeModule(userData, key) {

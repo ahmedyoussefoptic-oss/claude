@@ -33,7 +33,7 @@ const SOURCES = [
 
 // `defaultType` pre-selects the category (the finance section opens it on
 // the financial one).
-export default function ComplaintForm({ onClose, prefill, defaultType = '' }) {
+export default function ComplaintForm({ onClose, prefill, defaultType = '', onCreated }) {
   const { t } = useTranslation();
   const { user, userData } = useAuthStore();
   const fileInputRef = useRef(null);
@@ -260,6 +260,7 @@ export default function ComplaintForm({ onClose, prefill, defaultType = '' }) {
         }
       }
 
+      onCreated?.({ id: docRef.id, complaintId });
       setSavedComplaint({
         appointmentError,
         id: docRef.id,

@@ -3805,6 +3805,55 @@
       "agents": "Call agents on this campaign",
       "redistribute": "Redistribute the remaining calls over the chosen agents",
       "redistributeHint": "All calls not yet done are dealt evenly (by each agent's branch) from today at the daily quota, and agents given new calls are notified. A callback stays with its agent if still chosen."
+    },
+    "my": {
+      "indicators": "My indicators",
+      "period": {
+        "today": "Today",
+        "week": "This week",
+        "month": "This month"
+      },
+      "pendingLine": "Due now {{due}} · callbacks {{retry}} · coming {{upcoming}} · late {{late}}",
+      "k": {
+        "attempts": "Calls made",
+        "doneSub": "{{n}} finished",
+        "answered": "Answered",
+        "rate": "Answer rate {{rate}}",
+        "noAnswer": "No answer",
+        "callback": "Callback asked",
+        "waiting": "Waiting: {{n}}",
+        "wrong": "Wrong number",
+        "talk": "Average talk time",
+        "talkSub": "from {{n}} calls verified in Bevatel",
+        "whatsapp": "WhatsApp messages",
+        "complaints": "Turned into notes",
+        "remaining": "Remaining",
+        "dueNow": "Due now: {{n}}",
+        "late": "Late"
+      },
+      "tab": {
+        "DUE": "Due now",
+        "RETRY": "Callbacks & no answer",
+        "UPCOMING": "Coming days",
+        "FINISHED": "Finished"
+      },
+      "retryHint": "Calls not answered or asked to call back, with a time set. Open any of them to call now.",
+      "empty": "Nothing here",
+      "team": "Team indicators — {{period}}",
+      "total": "Total",
+      "you": "you",
+      "col": {
+        "agent": "Agent",
+        "attempts": "Calls",
+        "answered": "Answered",
+        "rate": "Answer rate",
+        "noAnswer": "No answer",
+        "done": "Finished",
+        "whatsapp": "WhatsApp",
+        "complaints": "Notes",
+        "pending": "Remaining",
+        "late": "Late"
+      }
     }
   },
   "spedForm": {

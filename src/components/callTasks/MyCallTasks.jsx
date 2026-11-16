@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { collection, query, where, onSnapshot, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
-import { Phone, MessageCircle, Loader2, CheckCircle2, PhoneMissed, PhoneOff, Clock, FileText, ChevronDown, ChevronUp, Flame, ListChecks } from 'lucide-react';
+import { Phone, MessageCircle, Loader2, CheckCircle2, PhoneMissed, PhoneOff, Clock, FileText, ChevronDown, ChevronUp, Flame, ListChecks, ShieldCheck, Users as UsersIcon, Timer, AlertTriangle, CalendarClock } from 'lucide-react';
 import { db, functions } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches } from '../../hooks/useOrgData';
@@ -13,6 +13,14 @@ import { inputCls, btn, Pill } from '../platform/ui';
 
 const riyadhDay = (d = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Riyadh' }).format(d);
 const ms = (ts) => ts?.toMillis?.() || 0;
+const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
+const logAction = (data) => httpsCallable(functions, 'logCallTaskAction')(data).catch(() => {});
+// The first day of a period in Riyadh: today, this week (from Sunday), this month.
+function periodStart(period, today) {
+  if (period === 'week') { const d = new Date(`${today}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return d.toISOString().slice(0, 10); }
+  if (period === 'month') return `${today.slice(0, 7)}-01`;
+  return today;
+}
 
 // One call: the script, the parent's number, and the result in one step.
 function TaskCard({ task, campaign, open, onToggle, onComplaint }) {
@@ -52,6 +60,8 @@ function TaskCard({ task, campaign, open, onToggle, onComplaint }) {
             <span className="text-xs font-normal text-slate-500" dir="ltr">{task.grade}</span>
             {task.priority === 'URGENT' && <Pill className="bg-rose-50 text-rose-700 border-rose-200"><Flame className="w-3 h-3 ml-0.5" />{t('callTasks.urgent')}</Pill>}
             {task.attempts > 0 && <Pill className="bg-amber-50 text-amber-800 border-amber-200">{t('callTasks.attempt', { n: task.attempts + 1 })}</Pill>}
+            {task.dueAt && <Pill className="bg-indigo-50 text-indigo-700 border-indigo-200"><CalendarClock className="w-3 h-3 ml-0.5" />{format(task.dueAt.toDate(), 'MM-dd HH:mm')}</Pill>}
+            {(task.complaints || []).map((c) => <Pill key={c.id} className="bg-slate-50 text-slate-700 border-slate-200">{c.no}</Pill>)}
           </p>
           <p className="text-sm text-slate-500 truncate">{campaign?.title || task.campaignTitle} · {branches.find((b) => b.id === task.branch)?.name || task.branch}</p>
         </div>
@@ -62,7 +72,7 @@ function TaskCard({ task, campaign, open, onToggle, onComplaint }) {
         <div className="px-4 pb-4 space-y-3 border-t border-slate-100 pt-3">
           <div className="flex flex-wrap gap-2">
             <a href={`tel:${task.phone}`} className={`${btn.primary}`}><Phone className="w-4 h-4" />{t('callTasks.call')}</a>
-            <a href={waLink(task.phone, '')} target="_blank" rel="noreferrer" className={`${btn.ghost}`}><MessageCircle className="w-4 h-4 text-emerald-600" />{t('callTasks.whatsapp')}</a>
+            <a href={waLink(task.phone, '')} target="_blank" rel="noreferrer" onClick={() => logAction({ taskId: task.id, action: 'WHATSAPP' })} className={`${btn.ghost}`}><MessageCircle className="w-4 h-4 text-emerald-600" />{t('callTasks.whatsapp')}{task.waCount > 0 && <span className="text-xs text-emerald-700">({task.waCount})</span>}</a>
             <button type="button" onClick={onComplaint} className={btn.ghost}><FileText className="w-4 h-4" />{t('callTasks.toComplaint')}</button>
           </div>
           {campaign?.goal && <p className="text-sm text-slate-600"><b>{t('callTasks.goal')}:</b> {campaign.goal}</p>}
@@ -118,82 +128,175 @@ function TaskCard({ task, campaign, open, onToggle, onComplaint }) {
   );
 }
 
-// «مهامي اليوم»: the agent's calls due now (urgent campaigns first), the
-// ones coming back later today, and today's progress.
+// A finished call (answered / failed) with what was done on it.
+function DoneRow({ task, campaign }) {
+  const { t } = useTranslation();
+  const last = (task.history || [])[task.history.length - 1];
+  return (
+    <li className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-slate-900">{task.studentName}</span>
+        <span className="text-xs text-slate-500" dir="ltr">{task.phone}</span>
+        <Pill className={task.status === 'DONE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}>{task.outcome || t(`callTasks.results.${task.result}`, task.result || '')}</Pill>
+        {last?.verified === true && <span className="text-emerald-700 text-xs inline-flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" />{mmss(last.talkSec || 0)}</span>}
+        {task.waCount > 0 && <Pill className="bg-emerald-50 text-emerald-700 border-emerald-200"><MessageCircle className="w-3 h-3 ml-0.5" />{task.waCount}</Pill>}
+        {(task.complaints || []).map((c) => <Pill key={c.id} className="bg-slate-50 text-slate-700 border-slate-200"><FileText className="w-3 h-3 ml-0.5" />{c.no}</Pill>)}
+        <span className="text-xs text-slate-400 ms-auto">{campaign?.title || task.campaignTitle} · {task.completedAt ? format(task.completedAt.toDate(), 'MM-dd HH:mm') : ''}</span>
+      </div>
+      {task.note && <p className="text-xs text-slate-500 mt-1">{task.note}</p>}
+    </li>
+  );
+}
+
+function Kpi({ icon: Icon, label, value, sub, tone = 'text-slate-900', onClick, active }) {
+  const Tag = onClick ? 'button' : 'div';
+  return (
+    <Tag type={onClick ? 'button' : undefined} onClick={onClick} className={`text-start bg-white rounded-2xl border p-3 ${active ? 'border-primary ring-2 ring-primary/15' : 'border-slate-100'} ${onClick ? 'hover:border-primary/40' : ''}`}>
+      <p className="text-xs text-slate-500 flex items-center gap-1">{Icon && <Icon className="w-3.5 h-3.5" />}{label}</p>
+      <p className={`text-2xl font-bold tabular-nums ${tone}`}>{value}</p>
+      {sub && <p className="text-[11px] text-slate-400">{sub}</p>}
+    </Tag>
+  );
+}
+
+// «مهامي»: the agent's own indicators for a period (calls made, answered,
+// no answer, callbacks, wrong numbers, talk time, WhatsApp, notes), the calls
+// by state — due now, callbacks / retries, coming days, finished — and the
+// whole team's indicators.
 export default function MyCallTasks() {
   const { t } = useTranslation();
   const { user } = useAuthStore();
-  const [pending, setPending] = useState(null);
-  const [touched, setTouched] = useState([]);
+  const [mine, setMine] = useState(null);
   const [campaigns, setCampaigns] = useState({});
   const [openId, setOpenId] = useState(null);
   const [complaint, setComplaint] = useState(null);
   const [now, setNow] = useState(Date.now());
+  const [period, setPeriod] = useState('today');
+  const [tab, setTab] = useState('DUE');
+  const [team, setTeam] = useState(null);
   const today = riyadhDay();
 
   useEffect(() => {
     if (!user) return undefined;
-    return onSnapshot(query(collection(db, 'callTasks'), where('assignedTo', '==', user.uid), where('status', '==', 'PENDING')),
-      (snap) => setPending(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setPending([]));
+    return onSnapshot(query(collection(db, 'callTasks'), where('assignedTo', '==', user.uid)),
+      (snap) => setMine(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setMine([]));
   }, [user]);
-  useEffect(() => {
-    if (!user) return undefined;
-    const start = new Date(`${today}T00:00:00+03:00`);
-    return onSnapshot(query(collection(db, 'callTasks'), where('assignedTo', '==', user.uid), where('lastAttemptAt', '>=', Timestamp.fromDate(start))),
-      (snap) => setTouched(snap.docs.map((d) => ({ id: d.id, ...d.data() }))), () => setTouched([]));
-  }, [user, today]);
   useEffect(() => { const id = setInterval(() => setNow(Date.now()), 60000); return () => clearInterval(id); }, []);
-  const campaignIds = useMemo(() => [...new Set((pending || []).map((x) => x.campaignId))].sort().join(','), [pending]);
+  useEffect(() => {
+    let alive = true;
+    setTeam(null);
+    httpsCallable(functions, 'callTeamStats')({ period }).then((r) => { if (alive) setTeam(r.data); }).catch(() => { if (alive) setTeam({ agents: [], totals: {} }); });
+    return () => { alive = false; };
+  }, [period]);
+  const campaignIds = useMemo(() => [...new Set((mine || []).map((x) => x.campaignId))].sort().join(','), [mine]);
   useEffect(() => {
     campaignIds.split(',').filter(Boolean).forEach((id) => {
       getDoc(doc(db, 'callCampaigns', id)).then((s) => { if (s.exists()) setCampaigns((c) => ({ ...c, [id]: { id, ...s.data() } })); }).catch(() => {});
     });
   }, [campaignIds]);
 
-  const live = (pending || []).filter((x) => (campaigns[x.campaignId]?.status || 'ACTIVE') === 'ACTIVE');
-  const due = live.filter((x) => x.dueDay <= today && (!x.dueAt || ms(x.dueAt) <= now))
-    .sort((a, b) => (a.priority === 'URGENT' ? 0 : 1) - (b.priority === 'URGENT' ? 0 : 1) || a.dueDay.localeCompare(b.dueDay) || ms(a.dueAt) - ms(b.dueAt));
-  const later = live.filter((x) => x.dueDay <= today && x.dueAt && ms(x.dueAt) > now).sort((a, b) => ms(a.dueAt) - ms(b.dueAt));
-  const upcoming = live.filter((x) => x.dueDay > today).length;
-  const doneToday = touched.length;
-  const total = doneToday + due.length;
-  const pct = total ? Math.round((doneToday / total) * 100) : 0;
+  const startMs = Date.parse(`${periodStart(period, today)}T00:00:00+03:00`);
+  const stats = useMemo(() => {
+    const r = { attempts: 0, answered: 0, noAnswer: 0, callback: 0, wrong: 0, talkSec: 0, talked: 0, whatsapp: 0, complaints: 0, done: 0 };
+    (mine || []).forEach((k) => {
+      (k.history || []).filter((h) => h.byId === user?.uid && ms(h.at) >= startMs).forEach((h) => {
+        r.attempts++;
+        if (h.result === 'ANSWERED') r.answered++;
+        else if (h.result === 'NO_ANSWER') r.noAnswer++;
+        else if (h.result === 'CALLBACK') r.callback++;
+        else if (h.result === 'WRONG_NUMBER') r.wrong++;
+        if (h.verified === true && h.talkSec) { r.talkSec += h.talkSec; r.talked++; }
+      });
+      (k.actions || []).filter((a) => a.byId === user?.uid && ms(a.at) >= startMs).forEach((a) => { if (a.kind === 'WHATSAPP') r.whatsapp++; if (a.kind === 'COMPLAINT') r.complaints++; });
+      if (k.status !== 'PENDING' && ms(k.completedAt) >= startMs) r.done++;
+    });
+    return r;
+  }, [mine, startMs, user]);
 
-  if (!pending) return <div className="py-16 flex justify-center"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>;
+  if (!mine) return <div className="py-16 flex justify-center"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>;
+  const live = mine.filter((x) => x.status === 'PENDING' && (campaigns[x.campaignId]?.status || 'ACTIVE') === 'ACTIVE');
+  const byPriority = (a, b) => (a.priority === 'URGENT' ? 0 : 1) - (b.priority === 'URGENT' ? 0 : 1) || a.dueDay.localeCompare(b.dueDay) || ms(a.dueAt) - ms(b.dueAt);
+  const due = live.filter((x) => x.dueDay <= today && (!x.dueAt || ms(x.dueAt) <= now)).sort(byPriority);
+  // Callbacks and unanswered retries waiting for their time (can be called now).
+  const retry = live.filter((x) => x.dueAt && ms(x.dueAt) > now).sort((a, b) => ms(a.dueAt) - ms(b.dueAt));
+  const upcoming = live.filter((x) => x.dueDay > today && !x.dueAt).sort(byPriority);
+  const late = live.filter((x) => x.dueDay < today).length;
+  const finished = mine.filter((x) => x.status !== 'PENDING' && ms(x.completedAt) >= startMs).sort((a, b) => ms(b.completedAt) - ms(a.completedAt));
+  const doneToday = mine.filter((x) => (x.history || []).some((h) => h.byId === user?.uid && ms(h.at) >= Date.parse(`${today}T00:00:00+03:00`))).length;
+  const totalToday = doneToday + due.length;
+  const pctToday = totalToday ? Math.round((doneToday / totalToday) * 100) : 0;
+  const rate = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '—');
+  const lists = { DUE: due, RETRY: retry, UPCOMING: upcoming, FINISHED: finished };
+  const card = (x) => <TaskCard key={x.id} task={x} campaign={campaigns[x.campaignId]} open={openId === x.id} onToggle={() => setOpenId(openId === x.id ? null : x.id)} onComplaint={() => setComplaint(x)} />;
+
   return (
     <div className="space-y-4">
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4">
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
             <p className="text-sm text-slate-500">{t('callTasks.todayProgress')}</p>
-            <p className="text-2xl font-bold text-slate-900">{t('callTasks.doneOf', { done: doneToday, total })}</p>
+            <p className="text-2xl font-bold text-slate-900">{t('callTasks.doneOf', { done: doneToday, total: totalToday })}</p>
           </div>
-          <p className="text-xs text-slate-500">{t('callTasks.laterCount', { later: later.length, upcoming })}</p>
+          <p className="text-xs text-slate-500">{t('callTasks.my.pendingLine', { due: due.length, retry: retry.length, upcoming: upcoming.length, late })}</p>
         </div>
-        <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden mt-3"><div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} /></div>
+        <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden mt-3"><div className="h-full bg-emerald-500 transition-all" style={{ width: `${pctToday}%` }} /></div>
       </div>
 
-      {due.length === 0 ? (
-        <div className="bg-white rounded-2xl border border-slate-100 p-10 text-center text-slate-500"><ListChecks className="w-8 h-8 mx-auto mb-2 text-emerald-500" />{t('callTasks.allDone')}</div>
-      ) : (
-        <ul className="space-y-2">
-          {due.map((x) => <TaskCard key={x.id} task={x} campaign={campaigns[x.campaignId]} open={openId === x.id} onToggle={() => setOpenId(openId === x.id ? null : x.id)} onComplaint={() => setComplaint(x)} />)}
-        </ul>
-      )}
-      {later.length > 0 && (
-        <div>
-          <p className="text-sm font-bold text-slate-600 mb-2">{t('callTasks.laterToday')}</p>
-          <ul className="space-y-2 opacity-70">
-            {later.map((x) => (
-              <li key={x.id} className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm flex justify-between gap-2">
-                <span>{x.studentName} · {campaigns[x.campaignId]?.title || x.campaignTitle}</span>
-                <span className="text-slate-500 flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{format(x.dueAt.toDate(), 'HH:mm')}</span>
-              </li>
-            ))}
-          </ul>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className="text-sm font-bold text-slate-800">{t('callTasks.my.indicators')}</p>
+        <div className="flex gap-1 bg-slate-100 rounded-xl p-1 ms-auto">
+          {['today', 'week', 'month'].map((p) => <button key={p} type="button" onClick={() => setPeriod(p)} className={`px-3 py-1 rounded-lg text-sm ${period === p ? 'bg-white shadow-sm text-slate-900 font-medium' : 'text-slate-500'}`}>{t(`callTasks.my.period.${p}`)}</button>)}
         </div>
-      )}
-      {complaint && <ComplaintForm onClose={() => setComplaint(null)} prefill={{ studentId: complaint.studentId, parentPhone: complaint.phone, details: t('callTasks.complaintDetails', { campaign: complaint.campaignTitle }) }} />}
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        <Kpi icon={Phone} label={t('callTasks.my.k.attempts')} value={stats.attempts} sub={t('callTasks.my.k.doneSub', { n: stats.done })} />
+        <Kpi icon={CheckCircle2} label={t('callTasks.my.k.answered')} value={stats.answered} sub={t('callTasks.my.k.rate', { rate: rate(stats.answered, stats.attempts) })} tone="text-emerald-700" />
+        <Kpi icon={PhoneMissed} label={t('callTasks.my.k.noAnswer')} value={stats.noAnswer} tone="text-amber-700" onClick={() => setTab('RETRY')} active={tab === 'RETRY'} />
+        <Kpi icon={Clock} label={t('callTasks.my.k.callback')} value={stats.callback} sub={t('callTasks.my.k.waiting', { n: retry.length })} tone="text-indigo-700" onClick={() => setTab('RETRY')} />
+        <Kpi icon={PhoneOff} label={t('callTasks.my.k.wrong')} value={stats.wrong} tone="text-rose-700" />
+        <Kpi icon={Timer} label={t('callTasks.my.k.talk')} value={stats.talked ? mmss(stats.talkSec / stats.talked) : '—'} sub={t('callTasks.my.k.talkSub', { n: stats.talked })} />
+        <Kpi icon={MessageCircle} label={t('callTasks.my.k.whatsapp')} value={stats.whatsapp} tone="text-emerald-700" />
+        <Kpi icon={FileText} label={t('callTasks.my.k.complaints')} value={stats.complaints} />
+        <Kpi icon={ListChecks} label={t('callTasks.my.k.remaining')} value={live.length} sub={t('callTasks.my.k.dueNow', { n: due.length })} tone="text-sky-700" onClick={() => setTab('DUE')} active={tab === 'DUE'} />
+        <Kpi icon={AlertTriangle} label={t('callTasks.my.k.late')} value={late} tone={late ? 'text-rose-700' : 'text-slate-900'} />
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm">
+        <div className="p-2 border-b border-slate-100 flex flex-wrap gap-1">
+          {Object.keys(lists).map((k) => <button key={k} type="button" onClick={() => setTab(k)} className={`px-3 py-1.5 rounded-lg text-sm ${tab === k ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-100'}`}>{t(`callTasks.my.tab.${k}`)} <span className={tab === k ? 'opacity-80' : 'text-slate-400'}>({lists[k].length})</span></button>)}
+        </div>
+        <div className="p-3">
+          {tab === 'RETRY' && retry.length > 0 && <p className="text-xs text-slate-500 mb-2">{t('callTasks.my.retryHint')}</p>}
+          {!lists[tab].length ? (
+            <div className="p-8 text-center text-slate-500 text-sm"><ListChecks className="w-7 h-7 mx-auto mb-2 text-emerald-500" />{tab === 'DUE' ? t('callTasks.allDone') : t('callTasks.my.empty')}</div>
+          ) : tab === 'FINISHED' ? (
+            <ul className="space-y-2">{finished.slice(0, 300).map((x) => <DoneRow key={x.id} task={x} campaign={campaigns[x.campaignId]} />)}</ul>
+          ) : (
+            <ul className="space-y-2">{lists[tab].slice(0, 300).map(card)}</ul>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 overflow-x-auto">
+        <p className="text-sm font-bold text-slate-800 flex items-center gap-1.5 mb-3"><UsersIcon className="w-4 h-4 text-primary" />{t('callTasks.my.team', { period: t(`callTasks.my.period.${period}`) })}</p>
+        {!team ? <Loader2 className="w-5 h-5 animate-spin text-primary" /> : !team.agents.length ? <p className="text-sm text-slate-400">—</p> : (
+          <table className="w-full text-sm">
+            <thead className="text-xs text-slate-500"><tr>{['agent', 'attempts', 'answered', 'rate', 'noAnswer', 'done', 'whatsapp', 'complaints', 'pending', 'late'].map((k) => <th key={k} className="text-start py-1.5 px-2 whitespace-nowrap">{t(`callTasks.my.col.${k}`)}</th>)}</tr></thead>
+            <tbody>
+              {[...team.agents, { id: '__total', name: t('callTasks.my.total'), ...team.totals }].map((a) => (
+                <tr key={a.id} className={`border-t border-slate-50 ${a.id === team.me ? 'bg-primary/5 font-medium' : ''} ${a.id === '__total' ? 'font-bold bg-slate-50' : ''}`}>
+                  <td className="py-1.5 px-2 whitespace-nowrap">{a.name || '—'}{a.id === team.me && <span className="text-xs text-primary"> ({t('callTasks.my.you')})</span>}</td>
+                  <td className="px-2 tabular-nums">{a.attempts}</td><td className="px-2 tabular-nums text-emerald-700">{a.answered}</td><td className="px-2 tabular-nums">{rate(a.answered, a.attempts)}</td>
+                  <td className="px-2 tabular-nums text-amber-700">{a.noAnswer}</td><td className="px-2 tabular-nums">{a.done}</td><td className="px-2 tabular-nums">{a.whatsapp}</td><td className="px-2 tabular-nums">{a.complaints}</td>
+                  <td className="px-2 tabular-nums text-sky-700">{a.pending}</td><td className={`px-2 tabular-nums ${a.late ? 'text-rose-700' : ''}`}>{a.late}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      {complaint && <ComplaintForm onClose={() => setComplaint(null)} onCreated={({ id }) => logAction({ taskId: complaint.id, action: 'COMPLAINT', complaintDocId: id })} prefill={{ studentId: complaint.studentId, parentPhone: complaint.phone, details: t('callTasks.complaintDetails', { campaign: complaint.campaignTitle }) }} />}
     </div>
   );
 }
