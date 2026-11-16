@@ -7213,6 +7213,119 @@ exports.callTeamStats = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async 
   return { period, startDay, me: caller.uid, agents, totals };
 });
 
+// Supervisor: each agent's detailed activity between two days (Riyadh),
+// optionally for one campaign — attempts and their results, answer rate,
+// finished / failed calls, Bevatel checks and talk time, callbacks waiting
+// and overdue, late calls, WhatsApp and notes, first / last call and active
+// days, a per-day breakdown, per-campaign progress, and the agent's late and
+// overdue calls to follow up. Calls outside the supervisor's branches are
+// left out.
+exports.callAgentPerformance = onCall({ timeoutSeconds: 180, memory: "1GiB" }, async (request) => {
+  const caller = await callCaller(request, "supervisor");
+  const d = request.data || {};
+  const day = /^\d{4}-\d{2}-\d{2}$/;
+  const today = riyadhDay();
+  const fromDay = day.test(d.from || "") ? d.from : today;
+  const toDay = day.test(d.to || "") && d.to >= fromDay ? d.to : fromDay;
+  const start = Date.parse(`${fromDay}T00:00:00+03:00`);
+  const end = Date.parse(`${toDay}T23:59:59.999+03:00`);
+  const campaignId = typeof d.campaignId === "string" ? d.campaignId : "";
+  const [touched, pending, camps, users] = await Promise.all([
+    db.collection("callTasks").where("lastAttemptAt", ">=", Timestamp.fromMillis(start)).get(),
+    db.collection("callTasks").where("status", "==", "PENDING").get(),
+    db.collection("callCampaigns").get(),
+    loadActiveUsers(),
+  ]);
+  const campOf = new Map(camps.docs.map((x) => [x.id, x.data()]));
+  const keep = (k) => (!campaignId || k.campaignId === campaignId) && inCallScope(caller, k.branch);
+  const msOf = (v) => v?.toMillis?.() || 0;
+  const inRange = (t) => t >= start && t <= end;
+  const per = {};
+  const row = (id, name) => (per[id] ||= {
+    id, name: name || "", attempts: 0, answered: 0, noAnswer: 0, callback: 0, wrong: 0, done: 0, failed: 0,
+    verified: 0, unverified: 0, verifyPending: 0, talkSec: 0, talked: 0, whatsapp: 0, complaints: 0,
+    pending: 0, dueToday: 0, late: 0, oldestLateDays: 0, callbacksWaiting: 0, callbacksOverdue: 0, finishedAttempts: 0,
+    firstAt: 0, lastAt: 0, days: {}, hours: {}, campaigns: {}, lateList: [], overdueList: [],
+  });
+  const scope = callScope(caller);
+  const overlaps = (list) => !scope || list.some((b) => scope.includes(b));
+  users.filter((u) => u.callRoles?.agent === true && (u.access === "all" || overlaps([u.branch, ...(u.branches || [])].filter(Boolean)))).forEach((u) => row(u.id, u.name));
+  const campRow = (r, id) => (r.campaigns[id] ||= { id, title: campOf.get(id)?.title || "", attempts: 0, done: 0, pending: 0, late: 0 });
+  touched.docs.forEach((x) => {
+    const k = x.data();
+    if (!keep(k)) return;
+    (k.history || []).filter((h) => h.byId && inRange(msOf(h.at))).forEach((h) => {
+      const r = row(h.byId, h.byName);
+      const t = msOf(h.at);
+      r.attempts++;
+      if (h.result === "ANSWERED") r.answered++;
+      else if (h.result === "NO_ANSWER") r.noAnswer++;
+      else if (h.result === "CALLBACK") r.callback++;
+      else if (h.result === "WRONG_NUMBER") r.wrong++;
+      if (h.verified === true) { r.verified++; if (h.talkSec) { r.talkSec += h.talkSec; r.talked++; } } else if (h.verified === false) r.unverified++; else r.verifyPending++;
+      r.firstAt = r.firstAt ? Math.min(r.firstAt, t) : t;
+      r.lastAt = Math.max(r.lastAt, t);
+      const dd = riyadhDayOf(t);
+      const dr = (r.days[dd] ||= { day: dd, attempts: 0, answered: 0, noAnswer: 0, done: 0, first: t, last: t });
+      dr.attempts++;
+      if (h.result === "ANSWERED") dr.answered++;
+      if (h.result === "NO_ANSWER") dr.noAnswer++;
+      dr.first = Math.min(dr.first, t);
+      dr.last = Math.max(dr.last, t);
+      const hr = new Date(t + 3 * 3600e3).getUTCHours();
+      r.hours[hr] = (r.hours[hr] || 0) + 1;
+      campRow(r, k.campaignId).attempts++;
+    });
+    const doneAt = msOf(k.completedAt);
+    if (k.status !== "PENDING" && inRange(doneAt) && k.assignedTo) {
+      const r = row(k.assignedTo, k.assignedName);
+      if (k.status === "DONE") r.done++; else r.failed++;
+      r.finishedAttempts += k.attempts || (k.history || []).length;
+      campRow(r, k.campaignId).done++;
+      const dd = riyadhDayOf(doneAt);
+      (r.days[dd] ||= { day: dd, attempts: 0, answered: 0, noAnswer: 0, done: 0, first: doneAt, last: doneAt }).done++;
+    }
+    (k.actions || []).filter((a) => a.byId && inRange(msOf(a.at))).forEach((a) => {
+      if (a.kind === "WHATSAPP") row(a.byId, a.byName).whatsapp++;
+      if (a.kind === "COMPLAINT") row(a.byId, a.byName).complaints++;
+    });
+  });
+  const now = Date.now();
+  pending.docs.forEach((x) => {
+    const k = x.data();
+    if (!k.assignedTo || !keep(k) || campOf.get(k.campaignId)?.status !== "ACTIVE") return;
+    const r = row(k.assignedTo, k.assignedName);
+    r.pending++;
+    const cr = campRow(r, k.campaignId);
+    cr.pending++;
+    if (k.dueDay === today) r.dueToday++;
+    const item = { id: x.id, studentName: k.studentName || "", phone: k.phone || "", campaign: campOf.get(k.campaignId)?.title || k.campaignTitle || "", campaignId: k.campaignId, dueDay: k.dueDay, dueAt: msOf(k.dueAt), attempts: k.attempts || 0 };
+    if (k.dueDay < today) {
+      r.late++;
+      cr.late++;
+      r.oldestLateDays = Math.max(r.oldestLateDays, Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${k.dueDay}T12:00:00Z`)) / 86400e3));
+      if (r.lateList.length < 100) r.lateList.push(item);
+    }
+    if (msOf(k.dueAt)) {
+      r.callbacksWaiting++;
+      if (msOf(k.dueAt) < now - 30 * 60e3) { r.callbacksOverdue++; if (r.overdueList.length < 100) r.overdueList.push(item); }
+    }
+  });
+  const agents = Object.values(per).filter((r) => r.attempts || r.pending || r.done || r.failed).map((r) => ({
+    ...r,
+    days: Object.values(r.days).sort((a, b) => a.day.localeCompare(b.day)),
+    campaigns: Object.values(r.campaigns).sort((a, b) => b.attempts - a.attempts),
+    activeDays: Object.keys(r.days).length,
+    lateList: r.lateList.sort((a, b) => a.dueDay.localeCompare(b.dueDay)),
+    overdueList: r.overdueList.sort((a, b) => a.dueAt - b.dueAt),
+  })).sort((a, b) => b.attempts - a.attempts || b.done - a.done);
+  return {
+    from: fromDay, to: toDay, today,
+    campaigns: camps.docs.filter((x) => x.data().createdBy === caller.uid || overlaps(x.data().branches || [])).map((x) => ({ id: x.id, title: x.data().title, status: x.data().status, createdAt: msOf(x.data().createdAt) })).sort((a, b) => b.createdAt - a.createdAt),
+    agents,
+  };
+});
+
 // Morning: each agent's calls for today. Afternoon: each campaign's day,
 // to whoever created it.
 exports.callTasksMorning = onSchedule({ schedule: "0 7 * * 0-4", timeZone: "Asia/Riyadh" }, async () => {

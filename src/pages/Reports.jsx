@@ -24,7 +24,7 @@ import RecordContentRow from '../components/reports/RecordContentRow';
 import { complaintMetrics, ticketMetrics, timingRows, timingByBranch, ticketChannelRows, ticketChannelByEmployee } from '../utils/reportMetrics';
 import { useSlaSettings, elapsedMs, businessMs } from '../utils/businessTime';
 import { canAccessTechSupport, canSeeModule } from '../utils/scope';
-import { complaintStatusLabel, complaintHasType, complaintTypesLabel } from '../config/complaintTypes';
+import { complaintStatusLabel, complaintHasType, complaintTypesLabel, isFinancePrimary } from '../config/complaintTypes';
 import { complaintContent, ticketContent } from '../utils/reportContent';
 import { matchesClass, classOptions, stageClassLabel } from '../utils/classFilter';
 import { STAGES } from '../config/complaintTypes';
@@ -39,7 +39,9 @@ function sheetName(label) {
   return label.replace(/[\\/?*[\]:]/g, ' ').slice(0, 31);
 }
 
-const REPORT_TYPE_IDS = ['COMPLAINTS', 'TECH_SUPPORT', 'VISITS', 'SURVEY', 'LOST_FOUND', 'MEETINGS', 'MEETINGS_ACCESS'];
+// FINANCE is the complaints report on the financial notes only (the
+// finance section); COMPLAINTS then covers the general notes only.
+const REPORT_TYPE_IDS = ['COMPLAINTS', 'FINANCE', 'TECH_SUPPORT', 'VISITS', 'SURVEY', 'LOST_FOUND', 'MEETINGS', 'MEETINGS_ACCESS'];
 const RATING_KEYS = ['resolutionSpeed', 'solutionQuality', 'staffProfessionalism'];
 
 function average(list, getValue) {
@@ -74,6 +76,9 @@ export default function Reports() {
   const [itIds, setItIds] = useState(new Set());
   const [filters, setFilters] = useState(emptyFilters);
   const [reportType, setReportType] = useState('COMPLAINTS');
+  // «الملاحظات المالية» runs the complaints report on the financial notes.
+  const [financeOnly, setFinanceOnly] = useState(false);
+  const typeTitle = reportType === 'COMPLAINTS' && financeOnly ? t('reports.types.FINANCE') : t(`reports.types.${reportType}`);
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [lostItems, setLostItems] = useState([]);
@@ -81,6 +86,7 @@ export default function Reports() {
   const itemCategories = useItemCategories();
   const canSeeLost = canSeeModule(userData, 'lostFound');
   const canSeeMeetings = canSeeModule(userData, 'meetings');
+  const canSeeFinance = canSeeModule(userData, 'finance');
   const [meetingsData, setMeetingsData] = useState(null);
   const [accessData, setAccessData] = useState(null);
   // Complaints-report options: merging tech tickets in, and the full
@@ -182,6 +188,7 @@ export default function Reports() {
 
   const results = useMemo(() => {
     return complaints.filter((c) => {
+      if (isFinancePrimary(c) !== financeOnly) return false;
       if (filters.branch && c.branch !== filters.branch) return false;
       if (!matchesClass(c, filters)) return false;
       if (filters.complaintType && !complaintHasType(c, filters.complaintType)) return false;
@@ -199,7 +206,7 @@ export default function Reports() {
       }
       return true;
     });
-  }, [complaints, filters]);
+  }, [complaints, filters, financeOnly]);
 
   // Lost & found report: date range, branch and assignee from the filters.
   const lostResults = useMemo(() => lostItems.filter((i) => {
@@ -724,7 +731,7 @@ export default function Reports() {
       addVisitsSheet();
     }
 
-    const fileName = `${t('reports.types.' + reportType)} - ${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
+    const fileName = `${typeTitle} - ${format(new Date(), 'yyyy-MM-dd')}.xlsx`;
     XLSX.writeFile(wb, fileName);
   };
 
@@ -759,12 +766,12 @@ export default function Reports() {
 
       {/* Report type */}
       <div className="flex flex-wrap gap-2 no-print">
-        {REPORT_TYPE_IDS.filter((id) => (id !== 'LOST_FOUND' || canSeeLost) && (!id.startsWith('MEETINGS') || canSeeMeetings)).map((id) => (
+        {REPORT_TYPE_IDS.filter((id) => (id !== 'LOST_FOUND' || canSeeLost) && (!id.startsWith('MEETINGS') || canSeeMeetings) && (id !== 'FINANCE' || canSeeFinance)).map((id) => (
           <button
             key={id}
-            onClick={() => setReportType(id)}
+            onClick={() => { setReportType(id === 'FINANCE' ? 'COMPLAINTS' : id); setFinanceOnly(id === 'FINANCE'); }}
             className={`px-4 py-2 rounded-xl text-sm font-medium border transition-colors ${
-              reportType === id
+              (id === 'FINANCE' ? reportType === 'COMPLAINTS' && financeOnly : reportType === id && !(id === 'COMPLAINTS' && financeOnly))
                 ? 'bg-primary text-white border-primary shadow-sm'
                 : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
             }`}
@@ -901,7 +908,7 @@ export default function Reports() {
             <div>
               <h2 className="text-xl font-bold text-slate-900">{t('reports.schoolFullName')}</h2>
               <p className="text-sm text-slate-500">
-                {reportType === 'COMPLAINTS' && mergeTech ? t('reports.full.mergedTitle') : t(`reports.types.${reportType}`)}
+                {reportType === 'COMPLAINTS' && mergeTech ? t('reports.full.mergedTitle') : typeTitle}
                 {reportType === 'COMPLAINTS' && includeVisits && ` + ${t('reports.types.VISITS')}`}
                 {mergedSurvey && ` + ${t('reports.types.SURVEY')}`}
                 {mergedLost && ` + ${t('reports.types.LOST_FOUND')}`}

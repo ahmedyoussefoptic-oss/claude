@@ -1130,7 +1130,8 @@
       "VISITS": "Branch visits",
       "LOST_FOUND": "Lost & found",
       "MEETINGS": "Parent meetings",
-      "MEETINGS_ACCESS": "Teachers’ sign-ins"
+      "MEETINGS_ACCESS": "Teachers’ sign-ins",
+      "FINANCE": "Financial notes"
     },
     "criteriaTitle": "Report criteria",
     "complaintTypeLabel": "Complaint type",
@@ -3594,7 +3595,7 @@
       "lastAction": "Last action",
       "role": "Job title",
       "kinds": {
-        "created": "New records",
+        "created": "Opened notes",
         "updates": "Updates",
         "comments": "Comments"
       },
@@ -3626,7 +3627,8 @@
     "subtitle": "Customer-service calls to parents on topics set by management, with progress tracking and Bevatel call verification.",
     "tabs": {
       "mine": "My calls today",
-      "campaigns": "Campaigns"
+      "campaigns": "Campaigns",
+      "performance": "Agent performance"
     },
     "urgent": "Urgent",
     "attempt": "Attempt {{n}}",
@@ -3854,6 +3856,74 @@
         "pending": "Remaining",
         "late": "Late"
       }
+    },
+    "perf": {
+      "range": {
+        "today": "Today",
+        "yesterday": "Yesterday",
+        "week": "This week",
+        "month": "This month",
+        "custom": "Custom"
+      },
+      "campaign": "Campaign",
+      "allCampaigns": "All campaigns",
+      "agentsN": "{{n}} agents",
+      "failedN": "Failed: {{n}}",
+      "dueTodayN": "Due today: {{n}}",
+      "waitingN": "Waiting: {{n}}",
+      "verifiedSub": "verified {{v}} · not {{u}}",
+      "activeDaysN": "active {{n}} days",
+      "todayN": "today {{n}}",
+      "oldestN": "oldest {{n}} days",
+      "none": "No activity in this period.",
+      "notes": "«No answer» and «Callback» count each attempt. «Finished» ended in the period with an answer; «Failed» ended with a wrong number or 3 unanswered attempts. «Overdue callback» is a callback time passed by over 30 minutes without a call. «Verified» attempts have a matching Bevatel call. Remaining and late are for active campaigns now.",
+      "byDay": "By day",
+      "byHour": "Calls by hour",
+      "byCampaign": "By campaign",
+      "verifyLine": "Bevatel check: verified {{v}} · not verified {{u}} · awaiting sync {{p}}",
+      "followUp": "To follow up: late {{late}} · overdue callbacks {{overdue}}",
+      "nothingLate": "No late calls ✓",
+      "kind": {
+        "late": "Late",
+        "overdue": "Overdue callback"
+      },
+      "sheetAgents": "Agents",
+      "sheetDays": "By day",
+      "sheetFollow": "Follow up",
+      "col": {
+        "agent": "Agent",
+        "attempts": "Attempts",
+        "answered": "Answered",
+        "rate": "Answer rate",
+        "noAnswer": "No answer",
+        "callback": "Callback",
+        "wrong": "Wrong number",
+        "done": "Finished",
+        "failed": "Failed",
+        "avgAttempts": "Avg attempts per call",
+        "talk": "Avg talk",
+        "verified": "Verified (Bevatel)",
+        "whatsapp": "WhatsApp",
+        "complaints": "Notes",
+        "pending": "Remaining",
+        "dueToday": "Due today",
+        "late": "Late",
+        "oldest": "Oldest late (days)",
+        "callbacksWaiting": "Callbacks waiting",
+        "callbacksOverdue": "Overdue callbacks",
+        "firstLast": "First – last call",
+        "first": "First call",
+        "last": "Last call",
+        "activeDays": "Active days",
+        "day": "Day",
+        "campaign": "Campaign",
+        "kind": "Kind",
+        "student": "Student",
+        "phone": "Mobile",
+        "due": "Due",
+        "attemptsN": "Attempts"
+      },
+      "details": "details"
     }
   },
   "spedForm": {
