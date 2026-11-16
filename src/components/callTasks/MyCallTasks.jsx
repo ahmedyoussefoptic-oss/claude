@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { collection, query, where, onSnapshot, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
@@ -13,6 +14,12 @@ import { inputCls, btn, Pill } from '../platform/ui';
 
 const riyadhDay = (d = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Riyadh' }).format(d);
 const ms = (ts) => ts?.toMillis?.() || 0;
+const notePath = (c) => `${c.finance ? '/finance' : '/complaints'}?openId=${encodeURIComponent(c.id)}`;
+// A note number on a call, opening the note.
+function NotePill({ c }) {
+  const navigate = useNavigate();
+  return <button type="button" onClick={(e) => { e.stopPropagation(); navigate(notePath(c)); }} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border text-xs bg-slate-50 text-primary border-slate-200 hover:bg-primary/5 font-mono" dir="ltr"><FileText className="w-3 h-3" />{c.no || c.id}</button>;
+}
 const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
 const logAction = (data) => httpsCallable(functions, 'logCallTaskAction')(data).catch(() => {});
 // The first day of a period in Riyadh: today, this week (from Sunday), this month.
@@ -61,7 +68,7 @@ function TaskCard({ task, campaign, open, onToggle, onComplaint }) {
             {task.priority === 'URGENT' && <Pill className="bg-rose-50 text-rose-700 border-rose-200"><Flame className="w-3 h-3 ml-0.5" />{t('callTasks.urgent')}</Pill>}
             {task.attempts > 0 && <Pill className="bg-amber-50 text-amber-800 border-amber-200">{t('callTasks.attempt', { n: task.attempts + 1 })}</Pill>}
             {task.dueAt && <Pill className="bg-indigo-50 text-indigo-700 border-indigo-200"><CalendarClock className="w-3 h-3 ml-0.5" />{format(task.dueAt.toDate(), 'MM-dd HH:mm')}</Pill>}
-            {(task.complaints || []).map((c) => <Pill key={c.id} className="bg-slate-50 text-slate-700 border-slate-200">{c.no}</Pill>)}
+            {(task.complaints || []).map((c) => <NotePill key={c.id} c={c} />)}
           </p>
           <p className="text-sm text-slate-500 truncate">{campaign?.title || task.campaignTitle} · {branches.find((b) => b.id === task.branch)?.name || task.branch}</p>
         </div>
@@ -140,7 +147,7 @@ function DoneRow({ task, campaign }) {
         <Pill className={task.status === 'DONE' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}>{task.outcome || t(`callTasks.results.${task.result}`, task.result || '')}</Pill>
         {last?.verified === true && <span className="text-emerald-700 text-xs inline-flex items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" />{mmss(last.talkSec || 0)}</span>}
         {task.waCount > 0 && <Pill className="bg-emerald-50 text-emerald-700 border-emerald-200"><MessageCircle className="w-3 h-3 ml-0.5" />{task.waCount}</Pill>}
-        {(task.complaints || []).map((c) => <Pill key={c.id} className="bg-slate-50 text-slate-700 border-slate-200"><FileText className="w-3 h-3 ml-0.5" />{c.no}</Pill>)}
+        {(task.complaints || []).map((c) => <NotePill key={c.id} c={c} />)}
         <span className="text-xs text-slate-400 ms-auto">{campaign?.title || task.campaignTitle} · {task.completedAt ? format(task.completedAt.toDate(), 'MM-dd HH:mm') : ''}</span>
       </div>
       {task.note && <p className="text-xs text-slate-500 mt-1">{task.note}</p>}
@@ -226,7 +233,10 @@ export default function MyCallTasks() {
   const totalToday = doneToday + due.length;
   const pctToday = totalToday ? Math.round((doneToday / totalToday) * 100) : 0;
   const rate = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '—');
-  const lists = { DUE: due, RETRY: retry, UPCOMING: upcoming, FINISHED: finished };
+  // Calls I turned into a note in the period (newest first).
+  const noted = mine.filter((x) => (x.actions || []).some((a) => a.kind === 'COMPLAINT' && a.byId === user?.uid && ms(a.at) >= startMs))
+    .sort((a, b) => Math.max(...(b.actions || []).map((y) => ms(y.at))) - Math.max(...(a.actions || []).map((y) => ms(y.at))));
+  const lists = { DUE: due, RETRY: retry, UPCOMING: upcoming, FINISHED: finished, NOTES: noted };
   const card = (x) => <TaskCard key={x.id} task={x} campaign={campaigns[x.campaignId]} open={openId === x.id} onToggle={() => setOpenId(openId === x.id ? null : x.id)} onComplaint={() => setComplaint(x)} />;
 
   return (
@@ -256,7 +266,7 @@ export default function MyCallTasks() {
         <Kpi icon={PhoneOff} label={t('callTasks.my.k.wrong')} value={stats.wrong} tone="text-rose-700" />
         <Kpi icon={Timer} label={t('callTasks.my.k.talk')} value={stats.talked ? mmss(stats.talkSec / stats.talked) : '—'} sub={t('callTasks.my.k.talkSub', { n: stats.talked })} />
         <Kpi icon={MessageCircle} label={t('callTasks.my.k.whatsapp')} value={stats.whatsapp} tone="text-emerald-700" />
-        <Kpi icon={FileText} label={t('callTasks.my.k.complaints')} value={stats.complaints} />
+        <Kpi icon={FileText} label={t('callTasks.my.k.complaints')} value={stats.complaints} onClick={() => setTab('NOTES')} active={tab === 'NOTES'} />
         <Kpi icon={ListChecks} label={t('callTasks.my.k.remaining')} value={live.length} sub={t('callTasks.my.k.dueNow', { n: due.length })} tone="text-sky-700" onClick={() => setTab('DUE')} active={tab === 'DUE'} />
         <Kpi icon={AlertTriangle} label={t('callTasks.my.k.late')} value={late} tone={late ? 'text-rose-700' : 'text-slate-900'} />
       </div>
@@ -269,8 +279,8 @@ export default function MyCallTasks() {
           {tab === 'RETRY' && retry.length > 0 && <p className="text-xs text-slate-500 mb-2">{t('callTasks.my.retryHint')}</p>}
           {!lists[tab].length ? (
             <div className="p-8 text-center text-slate-500 text-sm"><ListChecks className="w-7 h-7 mx-auto mb-2 text-emerald-500" />{tab === 'DUE' ? t('callTasks.allDone') : t('callTasks.my.empty')}</div>
-          ) : tab === 'FINISHED' ? (
-            <ul className="space-y-2">{finished.slice(0, 300).map((x) => <DoneRow key={x.id} task={x} campaign={campaigns[x.campaignId]} />)}</ul>
+          ) : tab === 'FINISHED' || tab === 'NOTES' ? (
+            <ul className="space-y-2">{lists[tab].slice(0, 300).map((x) => (x.status === 'PENDING' ? card(x) : <DoneRow key={x.id} task={x} campaign={campaigns[x.campaignId]} />))}</ul>
           ) : (
             <ul className="space-y-2">{lists[tab].slice(0, 300).map(card)}</ul>
           )}

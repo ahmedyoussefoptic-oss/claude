@@ -7150,9 +7150,9 @@ exports.logCallTaskAction = onCall(async (request) => {
   if (d.action === "COMPLAINT") {
     const c = (await db.collection("complaints").doc(String(d.complaintDocId || "")).get()).data();
     if (!c) throw new HttpsError("not-found", "لم يتم العثور على الملاحظة.");
-    const item = { id: String(d.complaintDocId), no: c.complaintId || "" };
+    const item = { id: String(d.complaintDocId), no: c.complaintId || "", finance: c.complaintType === FINANCE_TYPE };
     if ((k.complaints || []).some((x) => x.id === item.id)) return { ok: true };
-    await ref.update({ complaints: FieldValue.arrayUnion(item), actions: FieldValue.arrayUnion({ kind: "COMPLAINT", at: now, byId: caller.uid, byName: caller.name || "", no: item.no }) });
+    await ref.update({ complaints: FieldValue.arrayUnion(item), actions: FieldValue.arrayUnion({ kind: "COMPLAINT", at: now, byId: caller.uid, byName: caller.name || "", no: item.no, id: item.id, finance: item.finance }) });
     if (!(k.complaints || []).length) await campRef.set({ counts: { complaints: FieldValue.increment(1) } }, { merge: true });
     return { ok: true };
   }
@@ -7245,7 +7245,7 @@ exports.callAgentPerformance = onCall({ timeoutSeconds: 180, memory: "1GiB" }, a
     id, name: name || "", attempts: 0, answered: 0, noAnswer: 0, callback: 0, wrong: 0, done: 0, failed: 0,
     verified: 0, unverified: 0, verifyPending: 0, talkSec: 0, talked: 0, whatsapp: 0, complaints: 0,
     pending: 0, dueToday: 0, late: 0, oldestLateDays: 0, callbacksWaiting: 0, callbacksOverdue: 0, finishedAttempts: 0,
-    firstAt: 0, lastAt: 0, days: {}, hours: {}, campaigns: {}, lateList: [], overdueList: [],
+    firstAt: 0, lastAt: 0, days: {}, hours: {}, campaigns: {}, lateList: [], overdueList: [], notes: [],
   });
   const scope = callScope(caller);
   const overlaps = (list) => !scope || list.some((b) => scope.includes(b));
@@ -7287,7 +7287,13 @@ exports.callAgentPerformance = onCall({ timeoutSeconds: 180, memory: "1GiB" }, a
     }
     (k.actions || []).filter((a) => a.byId && inRange(msOf(a.at))).forEach((a) => {
       if (a.kind === "WHATSAPP") row(a.byId, a.byName).whatsapp++;
-      if (a.kind === "COMPLAINT") row(a.byId, a.byName).complaints++;
+      if (a.kind === "COMPLAINT") {
+        const r = row(a.byId, a.byName);
+        r.complaints++;
+        // The note filed from this call (to open it from the indicators).
+        const c = (k.complaints || []).find((x) => (a.id && x.id === a.id) || (a.no && x.no === a.no)) || {};
+        r.notes.push({ id: a.id || c.id || "", no: a.no || c.no || "", finance: a.finance ?? c.finance ?? false, studentName: k.studentName || "", phone: k.phone || "", campaign: campOf.get(k.campaignId)?.title || k.campaignTitle || "", at: msOf(a.at) });
+      }
     });
   });
   const now = Date.now();
@@ -7318,6 +7324,7 @@ exports.callAgentPerformance = onCall({ timeoutSeconds: 180, memory: "1GiB" }, a
     activeDays: Object.keys(r.days).length,
     lateList: r.lateList.sort((a, b) => a.dueDay.localeCompare(b.dueDay)),
     overdueList: r.overdueList.sort((a, b) => a.dueAt - b.dueAt),
+    notes: r.notes.sort((a, b) => b.at - a.at),
   })).sort((a, b) => b.attempts - a.attempts || b.done - a.done);
   return {
     from: fromDay, to: toDay, today,

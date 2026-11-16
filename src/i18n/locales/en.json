@@ -3838,7 +3838,8 @@
         "DUE": "Due now",
         "RETRY": "Callbacks & no answer",
         "UPCOMING": "Coming days",
-        "FINISHED": "Finished"
+        "FINISHED": "Finished",
+        "NOTES": "Notes filed"
       },
       "retryHint": "Calls not answered or asked to call back, with a time set. Open any of them to call now.",
       "empty": "Nothing here",
@@ -3924,7 +3925,9 @@
         "due": "Due",
         "attemptsN": "Attempts"
       },
-      "details": "details"
+      "details": "details",
+      "notesTitle": "Notes filed from calls ({{n}})",
+      "financeNote": "Financial"
     }
   },
   "spedForm": {

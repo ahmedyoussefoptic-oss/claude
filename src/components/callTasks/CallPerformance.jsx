@@ -1,11 +1,14 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
-import { Loader2, FileDown, ChevronDown, AlertTriangle, Clock, Phone, CheckCircle2, PhoneMissed, Timer, ShieldCheck } from 'lucide-react';
+import { Loader2, FileDown, ChevronDown, AlertTriangle, Clock, Phone, CheckCircle2, PhoneMissed, Timer, ShieldCheck, FileText, ExternalLink } from 'lucide-react';
 import { functions } from '../../config/firebase';
 import { Tile, inputCls, btn } from '../platform/ui';
 
+// Where a note filed from a call opens (the finance section for a financial one).
+export const notePath = (n) => `${n.finance ? '/finance' : '/complaints'}?openId=${encodeURIComponent(n.id)}`;
 const riyadhDay = (d = new Date()) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Riyadh' }).format(d);
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 const mmss = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
@@ -160,7 +163,7 @@ export default function CallPerformance() {
                         <td className={td}>{a.talked ? mmss(a.talkSec / a.talked) : '—'}</td>
                         <td className={td}>{a.verified + a.unverified ? <span className={a.unverified > a.verified ? 'text-rose-700' : 'text-emerald-700'}>{a.verified}/{a.verified + a.unverified}</span> : '—'}</td>
                         <td className={td}>{a.whatsapp}</td>
-                        <td className={td}>{a.complaints}</td>
+                        <td className={td}>{a.complaints > 0 ? <button type="button" onClick={(e) => { e.stopPropagation(); setOpen(a.id); setTimeout(() => document.getElementById('perf-notes')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50); }} className="text-primary font-medium underline decoration-dotted">{a.complaints}</button> : 0}</td>
                         <td className={td}>{a.pending}<span className="block text-[11px] text-slate-400">{t('callTasks.perf.todayN', { n: a.dueToday })}</span></td>
                         <td className={`${td} ${a.late ? 'text-rose-700 font-bold' : ''}`}>{a.late}{a.late > 0 && <span className="block text-[11px] font-normal">{t('callTasks.perf.oldestN', { n: a.oldestLateDays })}</span>}</td>
                         <td className={`${td} ${a.callbacksOverdue ? 'text-rose-700 font-bold' : ''}`}>{a.callbacksOverdue}<span className="block text-[11px] text-slate-400 font-normal">{t('callTasks.perf.waitingN', { n: a.callbacksWaiting })}</span></td>
@@ -193,6 +196,7 @@ export default function CallPerformance() {
 // follow up (late, overdue callbacks).
 function AgentDetails({ agent: a }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const maxHour = Math.max(1, ...Object.values(a.hours || {}));
   const hours = Object.keys(a.hours || {}).map(Number).sort((x, y) => x - y);
   const box = 'bg-white rounded-xl border border-slate-100 p-3';
@@ -248,6 +252,25 @@ function AgentDetails({ agent: a }) {
             ))}
           </ul>
         ) : <p className="text-xs text-emerald-700">{t('callTasks.perf.nothingLate')}</p>}
+      </div>
+      <div id="perf-notes" className={`${box} lg:col-span-2`}>
+        <p className="font-bold text-slate-800 mb-2 flex items-center gap-1.5"><FileText className="w-4 h-4 text-primary" />{t('callTasks.perf.notesTitle', { n: (a.notes || []).length })}</p>
+        {(a.notes || []).length ? (
+          <ul className="divide-y divide-slate-50 text-xs">
+            {a.notes.map((n, i) => (
+              <li key={`${n.id}-${i}`} className="py-1.5 flex flex-wrap items-center gap-x-2">
+                {n.id
+                  ? <button type="button" onClick={() => navigate(notePath(n))} className="font-mono font-bold text-primary hover:underline inline-flex items-center gap-1" dir="ltr"><ExternalLink className="w-3 h-3" />{n.no || n.id}</button>
+                  : <span className="font-mono text-slate-500" dir="ltr">{n.no}</span>}
+                {n.finance && <span className="px-1.5 rounded border bg-emerald-50 text-emerald-700 border-emerald-200">{t('callTasks.perf.financeNote')}</span>}
+                <b className="text-slate-800">{n.studentName}</b>
+                <span className="text-slate-500" dir="ltr">{n.phone}</span>
+                <span className="text-slate-400">{n.campaign}</span>
+                <span className="text-slate-500 ms-auto" dir="ltr">{n.at ? format(new Date(n.at), 'yyyy-MM-dd HH:mm') : ''}</span>
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-xs text-slate-400">—</p>}
       </div>
     </div>
   );
