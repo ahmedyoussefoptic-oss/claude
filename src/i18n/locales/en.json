@@ -1222,7 +1222,8 @@
       "surveyTag": "Survey",
       "lostTag": "Lost & found",
       "optShowContent": "Show the complaint text and the solution reply in the detailed list",
-      "optShowContentTech": "Show the ticket text and the solution reply in the detailed list"
+      "optShowContentTech": "Show the ticket text and the solution reply in the detailed list",
+      "optIncludeFinance": "Include financial notes"
     },
     "timing": {
       "title": "Resolution & delay time",

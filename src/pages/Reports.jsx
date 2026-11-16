@@ -78,7 +78,11 @@ export default function Reports() {
   const [reportType, setReportType] = useState('COMPLAINTS');
   // «الملاحظات المالية» runs the complaints report on the financial notes.
   const [financeOnly, setFinanceOnly] = useState(false);
-  const typeTitle = reportType === 'COMPLAINTS' && financeOnly ? t('reports.types.FINANCE') : t(`reports.types.${reportType}`);
+  // The general report can take the financial notes in too.
+  const [includeFinance, setIncludeFinance] = useState(false);
+  const mergeFinance = includeFinance && !financeOnly && canSeeModule(userData, 'finance');
+  const typeTitle = reportType === 'COMPLAINTS' && financeOnly ? t('reports.types.FINANCE')
+    : `${t(`reports.types.${reportType}`)}${reportType === 'COMPLAINTS' && mergeFinance ? ` + ${t('reports.types.FINANCE')}` : ''}`;
   const [selectedComplaint, setSelectedComplaint] = useState(null);
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [lostItems, setLostItems] = useState([]);
@@ -188,7 +192,7 @@ export default function Reports() {
 
   const results = useMemo(() => {
     return complaints.filter((c) => {
-      if (isFinancePrimary(c) !== financeOnly) return false;
+      if (!mergeFinance && isFinancePrimary(c) !== financeOnly) return false;
       if (filters.branch && c.branch !== filters.branch) return false;
       if (!matchesClass(c, filters)) return false;
       if (filters.complaintType && !complaintHasType(c, filters.complaintType)) return false;
@@ -206,7 +210,7 @@ export default function Reports() {
       }
       return true;
     });
-  }, [complaints, filters, financeOnly]);
+  }, [complaints, filters, financeOnly, mergeFinance]);
 
   // Lost & found report: date range, branch and assignee from the filters.
   const lostResults = useMemo(() => lostItems.filter((i) => {
@@ -859,6 +863,12 @@ export default function Reports() {
         </div>
         {reportType === 'COMPLAINTS' && (
           <div className="flex flex-wrap gap-x-6 gap-y-2 mt-4 pt-4 border-t border-slate-100">
+            {!financeOnly && canSeeFinance && (
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" checked={includeFinance} onChange={(e) => setIncludeFinance(e.target.checked)} />
+                {t('reports.full.optIncludeFinance')}
+              </label>
+            )}
             {canSeeTech && (
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input type="checkbox" checked={includeTech} onChange={(e) => setIncludeTech(e.target.checked)} />
