@@ -1,7 +1,7 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
-import { Presentation, ClipboardCheck, LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText, Activity, PhoneOutgoing, HeartHandshake, Video, Wallet } from 'lucide-react';
+import { ChevronDown, Inbox, BarChart3, ShieldCheck, Presentation, ClipboardCheck, LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText, Activity, PhoneOutgoing, HeartHandshake, Video, Wallet } from 'lucide-react';
 import AssistantPanel from '../assistant/AssistantPanel';
 import { useEffect, useState, useRef } from 'react';
 import { httpsCallable } from 'firebase/functions';
@@ -19,6 +19,21 @@ import logo from '../../assets/logo.png';
 import { canSeeModule, tripsAccessOf } from '../../utils/scope';
 
 const ownerClaimTried = new Set();
+
+// The side menu in groups (each a drop-down), in this order; a page not
+// listed here falls in the last group. A group with one page shows the page
+// alone.
+const NAV_GROUPS = [
+  { id: 'home', paths: ['/dashboard'] },
+  { id: 'records', icon: Inbox, paths: ['/complaints', '/finance', '/tech-support', '/lost-found', '/visits'] },
+  { id: 'students', icon: GraduationCap, paths: ['/students', '/support-programs', '/meetings', '/surveys', '/trips', '/attendance'] },
+  { id: 'calls', icon: PhoneOutgoing, paths: ['/call-tasks', '/calls', '/wa-reports'] },
+  { id: 'reports', icon: BarChart3, paths: ['/reports', '/search', '/flow-map', '/activity'] },
+  { id: 'admin', icon: ShieldCheck, paths: ['/users', '/branch-qr', '/settings', '/deleted-complaints'] },
+  { id: 'platform', icon: LayoutGrid, paths: ['/platform'] },
+];
+const NAV_OPEN_KEY = 'mis-nav-open';
+const groupOf = (path) => (NAV_GROUPS.find((g) => g.paths.some((p) => path === p || path.startsWith(`${p}/`))) || NAV_GROUPS[NAV_GROUPS.length - 1]).id;
 
 export default function AppLayout() {
   const { t } = useTranslation();
@@ -48,6 +63,18 @@ export default function AppLayout() {
   }, [user?.uid, !!userData]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { presenceRef.current?.pageChanged(); }, [location.pathname]);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Which menu groups are open (remembered on this device); the group of
+  // the page being shown always opens.
+  const [openGroups, setOpenGroups] = useState(() => { try { return JSON.parse(localStorage.getItem(NAV_OPEN_KEY) || '[]'); } catch { return []; } });
+  const toggleGroup = (id) => setOpenGroups((list) => {
+    const next = list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+    try { localStorage.setItem(NAV_OPEN_KEY, JSON.stringify(next)); } catch { /* storage unavailable */ }
+    return next;
+  });
+  useEffect(() => {
+    const g = groupOf(location.pathname);
+    setOpenGroups((list) => (list.includes(g) ? list : [...list, g]));
+  }, [location.pathname]);
   const { design, setDesign } = useDesignStore();
   const navy = design === 'navy';
   // The design saved on the account (chosen on another device) wins.
@@ -118,7 +145,6 @@ export default function AppLayout() {
   // settings, the owner only (also enforced in firestore.rules).
   if (canSeePlatform(userData)) {
     navItems.push(
-      { divider: t('platform.navTitle'), path: '#platform' },
       { name: t('platform.home.title'), path: '/platform/home', icon: LayoutGrid },
       { name: t('platform.leaves.title'), path: '/platform/leaves', icon: DoorOpen },
       { name: t('platform.leads.title'), path: '/platform/leads', icon: UserPlus },
@@ -130,6 +156,11 @@ export default function AppLayout() {
 
   // After every section is listed, so staff with only leave steps land there.
   const homePath = blockedModule ? (navItems[0]?.path || '/no-access') : null;
+
+  // The menu in its groups (order of NAV_GROUPS, then of each group's pages).
+  const rank = (path) => { const g = NAV_GROUPS.find((x) => x.id === groupOf(path)); const i = g.paths.findIndex((p) => path === p || path.startsWith(`${p}/`)); return i < 0 ? 99 : i; };
+  const navGroups = NAV_GROUPS.map((g) => ({ ...g, items: navItems.filter((it) => groupOf(it.path) === g.id).sort((a, b) => rank(a.path) - rank(b.path)) })).filter((g) => g.items.length);
+  const activeGroup = groupOf(location.pathname);
 
   if (!user) {
     return <Outlet />;
@@ -167,29 +198,50 @@ export default function AppLayout() {
           </div>
         </div>
 
-        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-          {navItems.map((item) => {
-            if (item.divider) {
-              return <p key={item.path} className={`pt-4 pb-1 px-3 text-[11px] font-bold tracking-wide ${navy ? 'text-amber-300' : 'text-amber-600'}`}>{item.divider}</p>;
-            }
-            const Icon = item.icon;
-            const isActive = location.pathname.startsWith(item.path);
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          {navGroups.map((g) => {
+            const item = (it, nested) => {
+              const Icon = it.icon;
+              const isActive = location.pathname.startsWith(it.path);
+              return (
+                <button
+                  key={it.path}
+                  onClick={() => {
+                    navigate(it.path);
+                    setMobileMenuOpen(false);
+                  }}
+                  className={`w-full flex items-center gap-3 ${nested ? 'ps-4 pe-3 py-2' : 'px-3 py-2.5'} rounded-xl text-sm font-medium transition-colors ${
+                    navy
+                      ? (isActive ? 'bg-[#ffffff] text-[#1b345a] font-bold shadow-sm' : 'text-white/75 hover:bg-white/10 hover:text-white')
+                      : (isActive ? 'bg-primary/10 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900')
+                  }`}
+                >
+                  <Icon className={`${nested ? 'w-4 h-4' : 'w-5 h-5'} ${navy ? (isActive ? 'text-[#1b345a]' : 'text-white/50') : (isActive ? 'text-primary' : 'text-slate-400')}`} />
+                  <span className="text-start">{it.name}</span>
+                </button>
+              );
+            };
+            if (g.items.length === 1) return item(g.items[0], false);
+            const open = openGroups.includes(g.id);
+            const GIcon = g.icon || LayoutGrid;
+            const hasActive = g.id === activeGroup;
             return (
-              <button
-                key={item.path}
-                onClick={() => {
-                  navigate(item.path);
-                  setMobileMenuOpen(false);
-                }}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                  navy
-                    ? (isActive ? 'bg-[#ffffff] text-[#1b345a] font-bold shadow-sm' : 'text-white/75 hover:bg-white/10 hover:text-white')
-                    : (isActive ? 'bg-primary/10 text-primary' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900')
-                }`}
-              >
-                <Icon className={`w-5 h-5 ${navy ? (isActive ? 'text-[#1b345a]' : 'text-white/50') : (isActive ? 'text-primary' : 'text-slate-400')}`} />
-                {item.name}
-              </button>
+              <div key={g.id}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(g.id)}
+                  aria-expanded={open}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors ${
+                    navy ? (hasActive ? 'text-white' : 'text-white/80 hover:bg-white/10') : (hasActive ? 'text-slate-900' : 'text-slate-700 hover:bg-slate-50')
+                  }`}
+                >
+                  <GIcon className={`w-5 h-5 ${navy ? (g.id === 'platform' ? 'text-amber-300' : 'text-white/60') : (g.id === 'platform' ? 'text-amber-600' : 'text-slate-500')}`} />
+                  <span className="flex-1 text-start">{t(`nav.groups.${g.id}`)}</span>
+                  {!open && hasActive && <span className={`w-1.5 h-1.5 rounded-full ${navy ? 'bg-amber-300' : 'bg-primary'}`} />}
+                  <ChevronDown className={`w-4 h-4 transition-transform ${open ? 'rotate-180' : ''} ${navy ? 'text-white/50' : 'text-slate-400'}`} />
+                </button>
+                {open && <div className={`mt-0.5 mb-1 ms-3 ps-2 space-y-0.5 border-s ${navy ? 'border-white/15' : 'border-slate-200'}`}>{g.items.map((it) => item(it, true))}</div>}
+              </div>
             );
           })}
         </nav>

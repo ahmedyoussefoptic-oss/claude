@@ -70,7 +70,16 @@
     "waReports": "Branch WhatsApp",
     "finance": "Financial Feedback",
     "meetings": "Parent meetings",
-    "surveys": "Parent feedback"
+    "surveys": "Parent feedback",
+    "groups": {
+      "home": "Home",
+      "records": "Notes & tickets",
+      "students": "Students & parents",
+      "calls": "Calls & messages",
+      "reports": "Reports & follow-up",
+      "admin": "Administration",
+      "platform": "Al Moktashef platform"
+    }
   },
   "app": {
     "brand": "Al Moktashef International",
@@ -3676,7 +3685,7 @@
     "resume": "Resume",
     "close": "Close campaign",
     "closeConfirm": "Closing hides the remaining calls from the agents' lists. Continue?",
-    "print": "Print report",
+    "print": "PDF report",
     "stat": {
       "progress": "Progress",
       "progressSub": "{{done}} of {{total}}",
@@ -3857,7 +3866,9 @@
         "complaints": "Notes",
         "pending": "Remaining",
         "late": "Late"
-      }
+      },
+      "pdf": "PDF report",
+      "reportTitle": "My call tasks report"
     },
     "perf": {
       "range": {
@@ -3927,8 +3938,11 @@
       },
       "details": "details",
       "notesTitle": "Notes filed from calls ({{n}})",
-      "financeNote": "Financial"
-    }
+      "financeNote": "Financial",
+      "pdf": "PDF report",
+      "reportTitle": "Call agents performance report"
+    },
+    "callsList": "Calls ({{n}}) — {{filter}}"
   },
   "spedForm": {
     "title": "Special education student data",

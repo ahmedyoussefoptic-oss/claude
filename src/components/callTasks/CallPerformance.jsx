@@ -3,8 +3,9 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
-import { Loader2, FileDown, ChevronDown, AlertTriangle, Clock, Phone, CheckCircle2, PhoneMissed, Timer, ShieldCheck, FileText, ExternalLink } from 'lucide-react';
+import { Loader2, FileDown, ChevronDown, AlertTriangle, Clock, Phone, CheckCircle2, PhoneMissed, Timer, ShieldCheck, FileText, ExternalLink, Printer } from 'lucide-react';
 import { functions } from '../../config/firebase';
+import { printPage, escapeHtml } from '../../utils/printPage';
 import { Tile, inputCls, btn } from '../platform/ui';
 
 // Where a note filed from a call opens (the finance section for a financial one).
@@ -26,7 +27,7 @@ function preset(id, today) {
 // drill-down per agent: by day, by campaign, by hour, and the late / overdue
 // calls to follow up.
 export default function CallPerformance() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const today = riyadhDay();
   const [range, setRange] = useState(() => preset('today', today));
   const [rangeId, setRangeId] = useState('today');
@@ -74,6 +75,55 @@ export default function CallPerformance() {
     XLSX.writeFile(wb, `call-performance-${range[0]}-${range[1]}.xlsx`);
   };
 
+  // The report as a printable page (the browser saves it as PDF): the team
+  // totals, every agent's row, then each agent's days, campaigns, notes and
+  // the calls to follow up.
+  const printReport = () => {
+    const c = (k) => t(`callTasks.perf.col.${k}`);
+    const e = escapeHtml;
+    const campaign = (data?.campaigns || []).find((x) => x.id === campaignId);
+    const cols = ['agent', 'attempts', 'answered', 'rate', 'noAnswer', 'callback', 'wrong', 'done', 'failed', 'avgAttempts', 'talk', 'verified', 'whatsapp', 'complaints', 'pending', 'late', 'callbacksOverdue', 'firstLast'];
+    const cell = (a, k) => {
+      const fin = a.done + a.failed;
+      if (k === 'agent') return e(a.name || '—');
+      if (k === 'rate') return a.attempts ? `${pct(a.answered, a.attempts)}%` : '—';
+      if (k === 'avgAttempts') return fin ? Math.round((a.finishedAttempts / fin) * 10) / 10 : '—';
+      if (k === 'talk') return a.talked ? mmss(a.talkSec / a.talked) : '—';
+      if (k === 'verified') return a.verified + a.unverified ? `${a.verified}/${a.verified + a.unverified}` : '—';
+      if (k === 'firstLast') return `<span dir="ltr">${hm(a.firstAt)} – ${hm(a.lastAt)}</span>`;
+      return a[k] ?? 0;
+    };
+    const warn = (a, k) => (k === 'late' && a.late) || (k === 'callbacksOverdue' && a.callbacksOverdue) || (k === 'rate' && a.attempts && pct(a.answered, a.attempts) < 40);
+    const tile = (label, value, sub = '') => `<div class="tile"><div class="tl">${e(label)}</div><div class="tv">${e(value)}</div>${sub ? `<div class="ts">${e(sub)}</div>` : ''}</div>`;
+    const totals = `<div class="tiles">${[
+      tile(c('attempts'), total.attempts, t('callTasks.perf.agentsN', { n: agents.length })),
+      tile(c('answered'), total.answered, `${pct(total.answered, total.attempts)}%`),
+      tile(c('noAnswer'), total.noAnswer),
+      tile(c('done'), total.done, t('callTasks.perf.failedN', { n: total.failed })),
+      tile(c('pending'), total.pending, t('callTasks.perf.dueTodayN', { n: total.dueToday })),
+      tile(c('late'), total.late),
+      tile(c('callbacksOverdue'), total.callbacksOverdue, t('callTasks.perf.waitingN', { n: total.callbacksWaiting })),
+      tile(c('verified'), `${pct(total.verified, total.verified + total.unverified)}%`),
+    ].join('')}</div>`;
+    const table = `<table><thead><tr>${cols.map((k) => `<th>${e(c(k))}</th>`).join('')}</tr></thead><tbody>${agents.map((a) => `<tr>${cols.map((k) => `<td class="${warn(a, k) ? 'bad' : ''}">${cell(a, k)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+    const perAgent = agents.map((a) => `
+      <section class="agent"><h3>${e(a.name || '—')}</h3>
+      ${a.days.length ? `<h4>${e(t('callTasks.perf.byDay'))}</h4><table><thead><tr>${['day', 'attempts', 'answered', 'noAnswer', 'done', 'firstLast'].map((k) => `<th>${e(c(k))}</th>`).join('')}</tr></thead><tbody>${a.days.map((d) => `<tr><td dir="ltr">${d.day}</td><td>${d.attempts}</td><td>${d.answered}</td><td>${d.noAnswer}</td><td>${d.done}</td><td dir="ltr">${hm(d.first)} – ${hm(d.last)}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${a.campaigns.length ? `<h4>${e(t('callTasks.perf.byCampaign'))}</h4><table><thead><tr>${['campaign', 'attempts', 'done', 'pending', 'late'].map((k) => `<th>${e(c(k))}</th>`).join('')}</tr></thead><tbody>${a.campaigns.map((x) => `<tr><td>${e(x.title)}</td><td>${x.attempts}</td><td>${x.done}</td><td>${x.pending}</td><td class="${x.late ? 'bad' : ''}">${x.late}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${(a.notes || []).length ? `<h4>${e(t('callTasks.perf.notesTitle', { n: a.notes.length }))}</h4><table><tbody>${a.notes.map((n) => `<tr><td dir="ltr">${e(n.no)}</td><td>${e(n.studentName)}</td><td>${e(n.campaign)}</td><td dir="ltr">${n.at ? format(new Date(n.at), 'yyyy-MM-dd HH:mm') : ''}</td></tr>`).join('')}</tbody></table>` : ''}
+      ${a.lateList.length + a.overdueList.length ? `<h4>${e(t('callTasks.perf.followUp', { late: a.late, overdue: a.callbacksOverdue }))}</h4><table><tbody>${[...a.overdueList.map((x) => ['overdue', x]), ...a.lateList.map((x) => ['late', x])].map(([k, x]) => `<tr><td class="bad">${e(t(`callTasks.perf.kind.${k}`))}</td><td>${e(x.studentName)}</td><td dir="ltr">${e(x.phone)}</td><td>${e(x.campaign)}</td><td dir="ltr">${x.dueAt ? format(new Date(x.dueAt), 'yyyy-MM-dd HH:mm') : x.dueDay}</td></tr>`).join('')}</tbody></table>` : ''}
+      </section>`).join('');
+    printPage({
+      title: t('callTasks.perf.reportTitle'),
+      subtitle: `${range[0] === range[1] ? range[0] : `${range[0]} — ${range[1]}`} · ${campaign ? campaign.title : t('callTasks.perf.allCampaigns')}`,
+      school: t('trips.print.school'), dir: i18n.dir(), lang: i18n.language, landscape: true,
+      body: `${totals}${table}${perAgent}<p class="note">${e(t('callTasks.perf.notes'))}</p>`,
+      css: `.tiles { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; margin-bottom: 10px } .tile { border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px } .tl { color: #64748b; font-size: 8pt } .tv { font-size: 15pt; font-weight: bold } .ts { color: #94a3b8; font-size: 7.5pt }
+        table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-bottom: 8px } th, td { border: 1px solid #cbd5e1; padding: 3px 5px; text-align: start } th { background: #f1f5f9 } td.bad { color: #be123c; font-weight: bold }
+        .agent { break-inside: avoid-page; margin-top: 12px; border-top: 2px solid #0369a1; padding-top: 4px } h3 { margin: 4px 0; color: #0369a1; font-size: 12pt } h4 { margin: 6px 0 3px; font-size: 9.5pt; color: #334155 } .note { color: #64748b; font-size: 8pt; margin-top: 10px }`,
+    });
+  };
+
   const th = 'px-2 py-2 text-start font-medium whitespace-nowrap';
   const td = 'px-2 py-2 whitespace-nowrap tabular-nums';
   const sortTh = (k, label) => <th className={`${th} cursor-pointer select-none ${sort === k ? 'text-primary' : ''}`} onClick={() => setSort(k)}>{label}{sort === k ? ' ▾' : ''}</th>;
@@ -99,6 +149,7 @@ export default function CallPerformance() {
           </select>
         </label>
         <div className="flex-1" />
+        <button type="button" onClick={printReport} disabled={!data} className={btn.ghost}><Printer className="w-4 h-4" />{t('callTasks.perf.pdf')}</button>
         <button type="button" onClick={exportExcel} disabled={!data} className={btn.ghost}><FileDown className="w-4 h-4" />{t('platform.exportExcel')}</button>
       </div>
 

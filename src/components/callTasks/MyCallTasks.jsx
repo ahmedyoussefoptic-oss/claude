@@ -4,11 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import { collection, query, where, onSnapshot, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
-import { Phone, MessageCircle, Loader2, CheckCircle2, PhoneMissed, PhoneOff, Clock, FileText, ChevronDown, ChevronUp, Flame, ListChecks, ShieldCheck, Users as UsersIcon, Timer, AlertTriangle, CalendarClock } from 'lucide-react';
+import { Phone, MessageCircle, Loader2, CheckCircle2, PhoneMissed, PhoneOff, Clock, FileText, ChevronDown, ChevronUp, Flame, ListChecks, ShieldCheck, Users as UsersIcon, Timer, AlertTriangle, CalendarClock, Printer } from 'lucide-react';
 import { db, functions } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches } from '../../hooks/useOrgData';
 import { waLink } from '../../utils/whatsapp';
+import { printPage, escapeHtml } from '../../utils/printPage';
 import ComplaintForm from '../complaints/ComplaintForm';
 import { inputCls, btn, Pill } from '../platform/ui';
 
@@ -171,8 +172,8 @@ function Kpi({ icon: Icon, label, value, sub, tone = 'text-slate-900', onClick, 
 // by state — due now, callbacks / retries, coming days, finished — and the
 // whole team's indicators.
 export default function MyCallTasks() {
-  const { t } = useTranslation();
-  const { user } = useAuthStore();
+  const { t, i18n } = useTranslation();
+  const { user, userData } = useAuthStore();
   const [mine, setMine] = useState(null);
   const [campaigns, setCampaigns] = useState({});
   const [openId, setOpenId] = useState(null);
@@ -237,6 +238,28 @@ export default function MyCallTasks() {
   const noted = mine.filter((x) => (x.actions || []).some((a) => a.kind === 'COMPLAINT' && a.byId === user?.uid && ms(a.at) >= startMs))
     .sort((a, b) => Math.max(...(b.actions || []).map((y) => ms(y.at))) - Math.max(...(a.actions || []).map((y) => ms(y.at))));
   const lists = { DUE: due, RETRY: retry, UPCOMING: upcoming, FINISHED: finished, NOTES: noted };
+  // My indicators, the team's and my finished calls as a printable page (PDF).
+  const printReport = () => {
+    const e = escapeHtml;
+    const k = (x) => t(`callTasks.my.k.${x}`);
+    const tiles = [
+      [k('attempts'), stats.attempts], [k('answered'), `${stats.answered} (${rate(stats.answered, stats.attempts)})`], [k('noAnswer'), stats.noAnswer], [k('callback'), stats.callback],
+      [k('wrong'), stats.wrong], [k('talk'), stats.talked ? mmss(stats.talkSec / stats.talked) : '—'], [k('whatsapp'), stats.whatsapp], [k('complaints'), stats.complaints],
+      [k('remaining'), live.length], [k('late'), late],
+    ].map(([l, v]) => `<div class="tile"><div class="tl">${e(l)}</div><div class="tv">${e(v)}</div></div>`).join('');
+    const cols = ['agent', 'attempts', 'answered', 'rate', 'noAnswer', 'done', 'whatsapp', 'complaints', 'pending', 'late'];
+    const teamRows = team?.agents?.length ? [...team.agents, { id: '__t', name: t('callTasks.my.total'), ...team.totals }].map((a) => `<tr class="${a.id === team.me ? 'me' : ''}">${cols.map((c) => `<td>${c === 'agent' ? e(a.name || '—') : c === 'rate' ? rate(a.answered, a.attempts) : a[c] ?? 0}</td>`).join('')}</tr>`).join('') : '';
+    const done = finished.map((x) => `<tr><td>${e(x.studentName)}</td><td dir="ltr">${e(x.phone)}</td><td>${e(x.outcome || t(`callTasks.results.${x.result}`, x.result || ''))}</td><td>${e(x.note || '')}</td><td>${(x.complaints || []).map((c) => e(c.no)).join(' ')}</td><td dir="ltr">${x.completedAt ? format(x.completedAt.toDate(), 'yyyy-MM-dd HH:mm') : ''}</td></tr>`).join('');
+    printPage({
+      title: t('callTasks.my.reportTitle'), subtitle: [userData?.name, t(`callTasks.my.period.${period}`), today].filter(Boolean).join(' · '),
+      school: t('trips.print.school'), dir: i18n.dir(), lang: i18n.language,
+      body: `<div class="tiles">${tiles}</div>
+        ${teamRows ? `<h3>${e(t('callTasks.my.team', { period: t(`callTasks.my.period.${period}`) }))}</h3><table><thead><tr>${cols.map((c) => `<th>${e(t(`callTasks.my.col.${c}`))}</th>`).join('')}</tr></thead><tbody>${teamRows}</tbody></table>` : ''}
+        <h3>${e(t('callTasks.my.tab.FINISHED'))} (${finished.length})</h3>${done ? `<table><tbody>${done}</tbody></table>` : '<p>—</p>'}`,
+      css: `.tiles { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 10px } .tile { border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px } .tl { color: #64748b; font-size: 8pt } .tv { font-size: 14pt; font-weight: bold }
+        table { width: 100%; border-collapse: collapse; font-size: 8.5pt; margin-bottom: 8px } th, td { border: 1px solid #cbd5e1; padding: 3px 5px; text-align: start } th { background: #f1f5f9 } tr.me td { background: #f0f9ff; font-weight: bold } h3 { color: #0369a1; font-size: 11pt; margin: 10px 0 4px }`,
+    });
+  };
   const card = (x) => <TaskCard key={x.id} task={x} campaign={campaigns[x.campaignId]} open={openId === x.id} onToggle={() => setOpenId(openId === x.id ? null : x.id)} onComplaint={() => setComplaint(x)} />;
 
   return (
@@ -254,7 +277,8 @@ export default function MyCallTasks() {
 
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-sm font-bold text-slate-800">{t('callTasks.my.indicators')}</p>
-        <div className="flex gap-1 bg-slate-100 rounded-xl p-1 ms-auto">
+        <button type="button" onClick={printReport} className={`${btn.ghost} ms-auto`}><Printer className="w-4 h-4" />{t('callTasks.my.pdf')}</button>
+        <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
           {['today', 'week', 'month'].map((p) => <button key={p} type="button" onClick={() => setPeriod(p)} className={`px-3 py-1 rounded-lg text-sm ${period === p ? 'bg-white shadow-sm text-slate-900 font-medium' : 'text-slate-500'}`}>{t(`callTasks.my.period.${p}`)}</button>)}
         </div>
       </div>
