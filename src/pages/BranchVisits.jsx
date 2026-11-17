@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { Armchair, Handshake, Clock, CalendarDays, CalendarPlus, Phone, Loader2, CheckCircle2, HeartHandshake, Building2 } from 'lucide-react';
+import { Armchair, Handshake, Clock, CalendarDays, CalendarPlus, Phone, Loader2, CheckCircle2, HeartHandshake, Building2, UserCog, Pencil } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
@@ -70,18 +70,53 @@ function BookMeetingDialog({ visit, onClose }) {
   );
 }
 
-// Reception confirms that the parent was met and by whom (confirmBranchVisit);
-// that staff member then writes the meeting summary and solution.
-function ConfirmMeetingDialog({ visit, onClose }) {
-  const { t } = useTranslation();
+// The staff a visit can be met by: its assignees first, then the others
+// covering its branch (never reception accounts).
+function useVisitStaff(visit) {
   const users = useUsers();
   const assigned = (visit.assignedTo || []).map((id, i) => ({ id, name: users.find((u) => u.id === id)?.name || visit.assignedToNames?.[i] || id }));
   const others = users
     .filter((u) => u.active !== false && u.role !== 'RECEPTIONIST' && u.tripsAccess !== 'tripsOnly' && !(visit.assignedTo || []).includes(u.id)
       && (u.access === 'all' || userBranches(u).includes(visit.branch)))
-    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
-  const [metByIds, setMetByIds] = useState(assigned.length === 1 ? [assigned[0].id] : []);
-  const toggle = (id) => setMetByIds((list) => (list.includes(id) ? list.filter((x) => x !== id) : [...list, id]));
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'))
+    .map((u) => ({ id: u.id, name: u.name || u.email }));
+  return { assigned, others };
+}
+
+function StaffPicker({ visit, value, onChange }) {
+  const { t } = useTranslation();
+  const { assigned, others } = useVisitStaff(visit);
+  const [q, setQ] = useState('');
+  const match = (u) => !q.trim() || (u.name || '').includes(q.trim());
+  const toggle = (id) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
+  return (
+    <div>
+      <label className="block text-xs text-slate-600 mb-1">{t('branchVisits.metWith')}</label>
+      {others.length > 8 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('branchVisits.searchStaff')} className="w-full mb-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm" />}
+      <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-2">
+        {[[t('branchVisits.assignedGroup'), assigned], [t('branchVisits.otherStaff'), others]].map(([label, list]) => list.filter(match).length > 0 && (
+          <div key={label}>
+            <p className="text-[11px] font-bold text-slate-400 mb-1">{label}</p>
+            {list.filter(match).map((u) => (
+              <label key={u.id} className="flex items-center gap-2 text-sm text-slate-700 py-0.5 cursor-pointer">
+                <input type="checkbox" checked={value.includes(u.id)} onChange={() => toggle(u.id)} />
+                {u.name}
+              </label>
+            ))}
+          </div>
+        ))}
+      </div>
+      {value.length > 1 && <p className="text-xs text-teal-700 mt-1">{t('branchVisits.selectedCount', { n: value.length })}</p>}
+    </div>
+  );
+}
+
+// Reception confirms that the parent was met and by whom (confirmBranchVisit);
+// that staff member then writes the meeting summary and solution.
+function ConfirmMeetingDialog({ visit, onClose }) {
+  const { t } = useTranslation();
+  const [metByIds, setMetByIds] = useState(() => (visit.visitInterviewerIds?.length ? visit.visitInterviewerIds
+    : (visit.assignedTo || []).length === 1 ? [visit.assignedTo[0]] : []));
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -101,23 +136,7 @@ function ConfirmMeetingDialog({ visit, onClose }) {
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5 space-y-3">
         <h3 className="font-bold text-slate-900">{t('branchVisits.confirmTitle')}</h3>
         <p className="text-sm text-slate-600">{t('branchVisits.confirmFor', { parent: visit.parentName, student: visit.studentName })}</p>
-        <div>
-          <label className="block text-xs text-slate-600 mb-1">{t('branchVisits.metWith')}</label>
-          <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-2">
-            {[[t('branchVisits.assignedGroup'), assigned], [t('branchVisits.otherStaff'), others.map((u) => ({ id: u.id, name: u.name || u.email }))]].map(([label, list]) => list.length > 0 && (
-              <div key={label}>
-                <p className="text-[11px] font-bold text-slate-400 mb-1">{label}</p>
-                {list.map((u) => (
-                  <label key={u.id} className="flex items-center gap-2 text-sm text-slate-700 py-0.5 cursor-pointer">
-                    <input type="checkbox" checked={metByIds.includes(u.id)} onChange={() => toggle(u.id)} />
-                    {u.name}
-                  </label>
-                ))}
-              </div>
-            ))}
-          </div>
-          {metByIds.length > 1 && <p className="text-xs text-teal-700 mt-1">{t('branchVisits.selectedCount', { n: metByIds.length })}</p>}
-        </div>
+        <StaffPicker visit={visit} value={metByIds} onChange={setMetByIds} />
         <div>
           <label className="block text-xs text-slate-600 mb-1">{t('branchVisits.receptionNote')}</label>
           <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm" />
@@ -128,6 +147,44 @@ function ConfirmMeetingDialog({ visit, onClose }) {
           <button onClick={onClose} className="px-4 py-2 text-sm rounded-xl border border-slate-300 bg-white">{t('common.cancel')}</button>
           <button disabled={busy || !metByIds.length} onClick={confirm} className="px-5 py-2 text-sm rounded-xl bg-teal-600 text-white font-medium flex items-center gap-2 disabled:opacity-50">
             {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}{t('branchVisits.confirmButton')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Picks who will meet a waiting parent, or corrects who met them after the
+// visit was confirmed (setVisitInterviewer).
+function InterviewerDialog({ visit, onClose }) {
+  const { t } = useTranslation();
+  const met = visit.visitStatus === 'MET';
+  const [ids, setIds] = useState(() => (met ? (visit.visitMetByIds?.length ? visit.visitMetByIds : [visit.visitMetBy].filter(Boolean)) : visit.visitInterviewerIds || []));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await httpsCallable(functions, 'setVisitInterviewer')({ complaintDocId: visit.id, ids });
+      onClose();
+    } catch (err) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="fixed inset-0 bg-slate-900/50 z-[100] flex items-center justify-center p-4" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-5 space-y-3">
+        <h3 className="font-bold text-slate-900 flex items-center gap-2"><UserCog className="w-5 h-5 text-primary" />{t(met ? 'branchVisits.editInterviewerTitle' : 'branchVisits.pickInterviewerTitle')}</h3>
+        <p className="text-sm text-slate-600">{t('branchVisits.confirmFor', { parent: visit.parentName, student: visit.studentName })}</p>
+        <StaffPicker visit={visit} value={ids} onChange={setIds} />
+        <p className="text-xs text-slate-500">{t(met ? 'branchVisits.editInterviewerHint' : 'branchVisits.pickInterviewerHint')}</p>
+        {error && <p className="text-sm text-red-600">{error}</p>}
+        <div className="flex justify-end gap-2">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-xl border border-slate-300 bg-white">{t('common.cancel')}</button>
+          <button disabled={busy || !ids.length} onClick={save} className="px-5 py-2 text-sm rounded-xl bg-primary text-white font-medium flex items-center gap-2 disabled:opacity-50">
+            {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}{t('common.save')}
           </button>
         </div>
       </div>
@@ -154,6 +211,7 @@ export default function BranchVisits() {
   const [confirming, setConfirming] = useState(null);
   const [booking, setBooking] = useState(null);
   const [declining, setDeclining] = useState(null);
+  const [picking, setPicking] = useState(null);
   const [branchFilter, setBranchFilter] = useState('');
   // Staff open the visit's full record; reception only sees this list.
   const [openId, setOpenId] = useState(null);
@@ -277,7 +335,16 @@ export default function BranchVisits() {
                     </p>
                     <p className="text-sm text-slate-500 mt-0.5">{t('branchVisits.reason')}: {v.subject}</p>
                     {!waiting && v.visitMetByName ? (
-                      <p className="text-sm font-medium text-teal-700 mt-1">{t('branchVisits.interviewer')}: {v.visitMetByName}</p>
+                      <p className="text-sm font-medium text-teal-700 mt-1 flex flex-wrap items-center gap-1.5">
+                        {t('branchVisits.interviewer')}: {v.visitMetByName}
+                        {v.visitStatus === 'MET' && (
+                          <button onClick={(e) => { e.stopPropagation(); setPicking(v); }} title={t('branchVisits.editInterviewer')} className="px-2 py-0.5 rounded-md border border-teal-200 text-xs font-normal text-teal-700 hover:bg-teal-50 inline-flex items-center gap-1">
+                            <Pencil className="w-3 h-3" />{t('branchVisits.editInterviewer')}
+                          </button>
+                        )}
+                      </p>
+                    ) : waiting && v.visitInterviewerName ? (
+                      <p className="text-sm font-medium text-primary mt-1">{t('branchVisits.interviewer')}: {v.visitInterviewerName}</p>
                     ) : v.assignedToNames?.length > 0 && (
                       <p className="text-sm text-slate-600 mt-1">{t('branchVisits.expectedInterviewer')}: {v.assignedToNames.join(i18n.language === 'ar' ? '، ' : ', ')}</p>
                     )}
@@ -314,6 +381,9 @@ export default function BranchVisits() {
                             <CheckCircle2 className="w-3.5 h-3.5" />{t('branchVisits.confirmButton')}
                           </button>
                         )}
+                        <button onClick={(e) => { e.stopPropagation(); setPicking(v); }} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-teal-300 text-teal-700 hover:bg-teal-50 flex items-center gap-1">
+                          <UserCog className="w-3.5 h-3.5" />{t(v.visitInterviewerName ? 'branchVisits.changeInterviewer' : 'branchVisits.pickInterviewer')}
+                        </button>
                         {!isReceptionist && (
                           <button onClick={(e) => { e.stopPropagation(); setDeclining(v); }} className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-rose-300 text-rose-700 hover:bg-rose-50 flex items-center gap-1">
                             <HeartHandshake className="w-3.5 h-3.5" />{t('visitDecline.button')}
@@ -333,6 +403,9 @@ export default function BranchVisits() {
                     {!waiting && v.visitConfirmedByName && (
                       <p className="text-[11px] text-slate-400">{t('branchVisits.confirmedByReception', { name: v.visitConfirmedByName })}</p>
                     )}
+                    {!waiting && v.visitMetEditedByName && (
+                      <p className="text-[11px] text-slate-400">{t('branchVisits.interviewerEditedBy', { name: v.visitMetEditedByName })}</p>
+                    )}
                   </div>
                 </li>
               );
@@ -341,6 +414,7 @@ export default function BranchVisits() {
         )}
       </div>
       {confirming && <ConfirmMeetingDialog visit={confirming} onClose={() => setConfirming(null)} />}
+      {picking && <InterviewerDialog visit={picking} onClose={() => setPicking(null)} />}
       {booking && <BookMeetingDialog visit={booking} onClose={() => setBooking(null)} />}
       {declining && <VisitDeclineDialog visit={declining} branchName={branchName(declining.branch)} onClose={() => setDeclining(null)} />}
       {openId && visits.find((v) => v.id === openId) && (

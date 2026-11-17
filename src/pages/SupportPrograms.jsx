@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
-import { BookOpenCheck, Plus, Loader2, CalendarDays, Clock, ArrowRight, Pencil, Lock, Unlock, Users, UserCheck, ClipboardList, Layers } from 'lucide-react';
+import { BookOpenCheck, Plus, Loader2, CalendarDays, Clock, ArrowRight, Pencil, Lock, Unlock, Trash2, Users, UserCheck, ClipboardList, Layers } from 'lucide-react';
 import PageHero from '../components/common/PageHero';
 import { useBranches } from '../hooks/useOrgData';
 import { callSupport, time12 } from '../config/support';
@@ -89,6 +89,11 @@ function CycleDetails({ id, branchName, onBack }) {
   if (!data) return <div className="py-16 flex justify-center"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>;
   const c = data.cycle;
   const setStatus = async (action) => { setBusy(true); try { await callSupport('supportAction', { id, action, studentIds: [] }); await load(); } catch (err) { window.alert(err.message); } finally { setBusy(false); } };
+  const remove = async () => {
+    if (!window.confirm(t('support.deleteConfirm', { title: c.title, n: data.students.length }))) return;
+    setBusy(true);
+    try { await callSupport('supportDeleteCycle', { id }); onBack(); } catch (err) { window.alert(err.message); setBusy(false); }
+  };
   const tabs = [['students', Users], ['groups', Layers], ...(c.canManage ? [['supervisors', UserCheck]] : []), ['attendance', ClipboardList]];
 
   return (
@@ -105,6 +110,7 @@ function CycleDetails({ id, branchName, onBack }) {
             {c.status === 'ACTIVE'
               ? <button type="button" disabled={busy} onClick={() => { if (window.confirm(t('support.closeConfirm'))) setStatus('close'); }} className={btn.ghost}><Lock className="w-4 h-4" />{t('support.close')}</button>
               : <button type="button" disabled={busy} onClick={() => setStatus('open')} className={btn.ghost}><Unlock className="w-4 h-4" />{t('support.reopen')}</button>}
+            {c.status === 'CLOSED' && <button type="button" disabled={busy} onClick={remove} className={`${btn.ghost} text-rose-700 border-rose-200 hover:bg-rose-50`}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}{t('support.deleteCycle')}</button>}
           </div>
         )}
       </div>

@@ -342,6 +342,25 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     return res;
   });
 
+  // Deleting a closed cycle: its students, groups, supervisors and attendance,
+  // and the parent / supervisor links (they then show «not found»). Only a
+  // closed cycle, so an active one isn't removed by mistake.
+  out.supportDeleteCycle = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
+    const u = await caller(request);
+    const { ref, c } = await loadCycle(request.data?.id, u, { manage: true });
+    if (c.status !== "CLOSED") throw new HttpsError("failed-precondition", "أغلق الدورة أولاً ثم احذفها.");
+    const subs = await Promise.all(["students", "groups", "supervisors", "sessions"].map((n) => ref.collection(n).get()));
+    const tokens = [...subs[0].docs, ...subs[2].docs].map((x) => x.data().token).filter((tk) => typeof tk === "string" && tk);
+    const refs = [...tokens.map((tk) => db.collection("supportLinks").doc(tk)), ...subs.flatMap((sn) => sn.docs.map((x) => x.ref))];
+    for (let i = 0; i < refs.length; i += 400) {
+      const batch = db.batch();
+      refs.slice(i, i + 400).forEach((r) => batch.delete(r));
+      await batch.commit();
+    }
+    await ref.delete();
+    return { ok: true, students: subs[0].size };
+  });
+
   // --- groups and supervisors ----------------------------------------------------
   out.supportSaveGroup = onCall(async (request) => {
     const u = await caller(request);

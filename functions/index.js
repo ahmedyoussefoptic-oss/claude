@@ -776,7 +776,12 @@ exports.handleSlaStatusChanges = onDocumentUpdated({ document: "complaints/{comp
   // Old records assigned in bulk (counselor backfill) are added silently.
   const silentAssign = after.silentAssignAt && !(before.silentAssignAt && before.silentAssignAt.isEqual(after.silentAssignAt));
   if (newlyAssigned.length > 0 && !silentAssign) {
-    await notifyUsers(newlyAssigned, {
+    await notifyUsers(newlyAssigned, after.viaVisitQr && after.visitStatus === "WAITING" && before.visitStatus === "WAITING" ? {
+      title: "ولي أمر بانتظار المقابلة في الفرع",
+      body: `ولي أمر الطالب/ة ${after.studentName || ""} في الاستقبال، وقد حُدّدت للمقابلة — الملاحظة رقم ${after.complaintId}.`,
+      complaintId,
+      type: "VISIT_ARRIVED",
+    } : {
       title: "تم إسناد ملاحظة لك",
       body: `الملاحظة رقم ${after.complaintId} تم إسنادها إليك للمعالجة.`,
       complaintId,
@@ -2213,6 +2218,96 @@ exports.uploadTechSupportResolutionFile = onCall(async (request) => {
   return { ...uploaded, uploadedBy: request.auth.uid, createdAt: new Date().toISOString() };
 });
 
+// The staff picked for a branch visit (who meets / met the parent): each an
+// active, non-reception account covering the visit's branch (or already
+// assigned to it). `self` — the caller, accepted as is.
+async function resolveVisitStaff(ids, complaint, self) {
+  const snaps = await db.getAll(...ids.map((id) => db.collection("users").doc(id)));
+  return snaps.map((snapU) => {
+    const m = snapU.data();
+    if (self && snapU.id === self.id) return { id: snapU.id, name: self.name || "مستخدم" };
+    const coversBranch = m && (m.access === "all" || m.role === "ADMIN" || (m.branches || []).includes(complaint.branch) || m.branch === complaint.branch);
+    if (!snapU.exists || m.active === false || m.role === "RECEPTIONIST" || !(coversBranch || (complaint.assignedTo || []).includes(snapU.id))) {
+      throw new HttpsError("invalid-argument", "أحد الموظفين المختارين غير متاح لهذا الفرع.");
+    }
+    return { id: snapU.id, name: m.name || "مستخدم" };
+  });
+}
+
+// Reception (or staff of the branch) picks who will meet a waiting parent,
+// or corrects who met them after the visit was confirmed. The people picked
+// join the record's assignees (and are notified); a correction rewrites
+// «القائم بالمقابلة» on the record and in the reports.
+exports.setVisitInterviewer = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const { complaintDocId, ids: rawIds } = request.data || {};
+  if (!complaintDocId || typeof complaintDocId !== "string") throw new HttpsError("invalid-argument", "رقم الملاحظة مطلوب.");
+  const caller = (await db.collection("users").doc(request.auth.uid).get()).data();
+  if (!caller || caller.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  const complaintRef = db.collection("complaints").doc(complaintDocId);
+  const complaint = (await complaintRef.get()).data();
+  if (!complaint || complaint.viaVisitQr !== true) throw new HttpsError("not-found", "لم يتم العثور على الزيارة.");
+  if (!["WAITING", "MET"].includes(complaint.visitStatus)) throw new HttpsError("failed-precondition", "لا يمكن تعديل القائم بالمقابلة لهذه الزيارة.");
+
+  const byReception = caller.role === "RECEPTIONIST";
+  const inScope = caller.access === "all" || (caller.branches || []).includes(complaint.branch) || caller.branch === complaint.branch;
+  const allowed = byReception ? inScope : caller.role === "ADMIN" || (complaint.assignedTo || []).includes(request.auth.uid)
+    || (inScope && (caller.perms?.edit === true || caller.isPrincipal === true || caller.isQuality === true));
+  if (!allowed) throw new HttpsError("permission-denied", "لا تملك صلاحية تعديل القائم بالمقابلة.");
+
+  const ids = [...new Set((Array.isArray(rawIds) ? rawIds : []).filter((x) => typeof x === "string" && x))];
+  if (!ids.length) throw new HttpsError("invalid-argument", "اختر القائم بالمقابلة.");
+  if (ids.length > 8) throw new HttpsError("invalid-argument", "الحد الأقصى 8 أشخاص.");
+  const list = await resolveVisitStaff(ids, complaint, null);
+  const name = list.map((m) => m.name).join("، ");
+  const met = complaint.visitStatus === "MET";
+  const previous = met ? complaint.visitMetByName || "" : complaint.visitInterviewerName || "";
+
+  const now = Timestamp.now();
+  const actorName = caller.name || "مستخدم";
+  const assignedTo = complaint.assignedTo || [];
+  const newcomers = list.filter((m) => !assignedTo.includes(m.id));
+  const assigneeUpdate = !newcomers.length ? {} : {
+    assignedTo: [...assignedTo, ...newcomers.map((m) => m.id)],
+    assignedToNames: [...(complaint.assignedToNames || []), ...newcomers.map((m) => m.name)],
+    ...(assignedTo.length ? {} : { assignedAt: now }),
+  };
+  const batch = db.batch();
+  batch.set(complaintRef.collection("activityLog").doc(), {
+    action: "INTERNAL_COMMENT_ADDED",
+    actorId: request.auth.uid,
+    actorName,
+    metadata: {
+      comment: met
+        ? `✏️ عدّل ${byReception ? `موظف الاستقبال (${actorName})` : actorName} القائم بالمقابلة${previous ? ` من ${previous}` : ""} إلى ${name}.`
+        : `👤 حدّد ${byReception ? `موظف الاستقبال (${actorName})` : actorName} القائم بالمقابلة: ${name}.`,
+      visit: true,
+    },
+    createdAt: now,
+  });
+  batch.update(complaintRef, {
+    ...(met
+      ? { visitMetBy: list[0].id, visitMetByIds: list.map((m) => m.id), visitMetByName: name, visitMetEditedByName: actorName, visitMetEditedAt: now }
+      : { visitInterviewerIds: list.map((m) => m.id), visitInterviewerName: name, visitInterviewerByName: actorName }),
+    hasInternalComment: true,
+    ...assigneeUpdate,
+    updatedAt: now,
+  });
+  await batch.commit();
+  // Already-assigned people picked to meet a waiting parent hear it too
+  // (newcomers get the assignment notice from handleSlaStatusChanges).
+  const told = list.filter((m) => !newcomers.includes(m)).map((m) => m.id);
+  if (!met && told.length) {
+    await notifyUsers(told, {
+      title: "ولي أمر بانتظار المقابلة في الفرع",
+      body: `ولي أمر الطالب/ة ${complaint.studentName || ""} في الاستقبال، وقد حُدّدت للمقابلة — الملاحظة رقم ${complaint.complaintId}.`,
+      complaintId: complaintDocId,
+      type: "VISIT_ARRIVED",
+    });
+  }
+  return { ok: true, name };
+});
+
 // Confirms that a parent who checked in at a branch (QR visit, see
 // submitPublicComplaint's `visit` flag) has been met. The meeting notes /
 // agreed solution are stored as an internal comment (staff-only, never
@@ -2266,16 +2361,7 @@ exports.confirmBranchVisit = onCall(async (request) => {
   const ids = byReception ? picked : [request.auth.uid, ...picked.filter((x) => x !== request.auth.uid)];
   if (!ids.length) throw new HttpsError("invalid-argument", "اختر الموظف الذي قابل ولي الأمر.");
   if (ids.length > 8) throw new HttpsError("invalid-argument", "الحد الأقصى 8 أشخاص.");
-  const metSnaps = await db.getAll(...ids.map((id) => db.collection("users").doc(id)));
-  const metList = metSnaps.map((snapU) => {
-    const m = snapU.data();
-    if (snapU.id === request.auth.uid && !byReception) return { id: snapU.id, name: caller.name || "مستخدم" };
-    const coversBranch = m && (m.access === "all" || m.role === "ADMIN" || (m.branches || []).includes(complaint.branch) || m.branch === complaint.branch);
-    if (!snapU.exists || m.active === false || m.role === "RECEPTIONIST" || !(coversBranch || (complaint.assignedTo || []).includes(snapU.id))) {
-      throw new HttpsError("invalid-argument", "أحد الموظفين المختارين غير متاح لهذا الفرع.");
-    }
-    return { id: snapU.id, name: m.name || "مستخدم" };
-  });
+  const metList = await resolveVisitStaff(ids, complaint, byReception ? null : { id: request.auth.uid, name: caller.name });
   const metBy = { id: metList[0].id, name: metList.map((m) => m.name).join("، ") };
 
   const now = Timestamp.now();

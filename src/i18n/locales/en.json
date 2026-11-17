@@ -1734,7 +1734,16 @@
     "bookHint": "The visit is marked “not met”, the slot is booked as confirmed and the parent gets a WhatsApp message. On the day they scan the QR code and choose “I have an appointment”.",
     "meetingBooked": "Meeting: {{when}}",
     "bookedBy": "Booked by {{name}}",
-    "selectedCount": "{{n}} people selected"
+    "selectedCount": "{{n}} people selected",
+    "searchStaff": "Search by name...",
+    "pickInterviewer": "Set interviewer",
+    "changeInterviewer": "Change interviewer",
+    "editInterviewer": "Edit",
+    "pickInterviewerTitle": "Set the interviewer",
+    "editInterviewerTitle": "Edit the interviewer",
+    "pickInterviewerHint": "The staff member picked joins the assignees and is notified that the parent is waiting. It can be changed before the meeting is confirmed.",
+    "editInterviewerHint": "The interviewer is corrected on the record and in the reports, and the change is logged on the note.",
+    "interviewerEditedBy": "Interviewer edited by: {{name}}"
   },
   "slaSettings": {
     "title": "Resolution time (SLA) & working hours",
@@ -5521,7 +5530,8 @@
         "FATHER": "Father",
         "MOTHER": "Mother",
         "OTHER": "Other"
-      }
+      },
+      "transportNote": "Note: if the student is subscribed to the school transport service, the student’s return home from school is the parent’s responsibility."
     },
     "attend": {
       "title": "Support classes attendance",
@@ -5542,6 +5552,8 @@
       "attendance": "Attendance {{rate}}% · absent {{absent}}",
       "consent": "Consented by {{name}} · {{day}}",
       "decline": "Declined by {{name}} · {{day}}"
-    }
+    },
+    "deleteCycle": "Delete cycle",
+    "deleteConfirm": "The cycle “{{title}}” will be deleted for good with its students ({{n}}), groups, supervisors and attendance, and the parent and supervisor links will stop working. This cannot be undone. Continue?"
   }
 }

@@ -68,6 +68,7 @@ export default function SupportParent() {
                       <p className="text-slate-700">{t('support.parent.nominated', { program: t(`support.types.${view.type}`) })}{view.subjects.length ? ` ${t('support.parent.inSubjects', { subjects: view.subjects.join('، ') })}` : ''}.</p>
                       <p className="flex items-center gap-1.5 text-slate-700"><Clock className="w-4 h-4 text-primary" />{view.when}</p>
                       <p className="flex items-center gap-1.5 text-slate-700"><CalendarDays className="w-4 h-4 text-primary" />{t('support.parent.period')} <span dir="ltr">{view.from} → {view.to}</span></p>
+                      <p className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 leading-6">{t('support.parent.transportNote')}</p>
                       {view.group && <p className="text-slate-700">{t('support.parent.group', { name: view.group.name })}{view.group.room ? ` · ${t('support.parent.room', { room: view.group.room })}` : ''}</p>}
                     </div>
 
