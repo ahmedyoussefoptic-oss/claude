@@ -52,11 +52,14 @@ function meetingsByRole(userData) {
 // Admins see everything, reception only the branch visits, and
 // tripsAccess 'tripsOnly' / 'none' still apply. Mirrored in firestore.rules
 // (modAllowed / canAccessTechSupport) and functions (cleanUserModules).
-export const MODULE_KEYS = ['dashboard', 'complaints', 'finance', 'techSupport', 'lostFound', 'visits', 'trips', 'meetings', 'students', 'search', 'flowMap', 'reports', 'calls', 'waReports', 'assistant'];
+export const MODULE_KEYS = ['dashboard', 'complaints', 'finance', 'techSupport', 'lostFound', 'visits', 'trips', 'meetings', 'support', 'students', 'search', 'flowMap', 'reports', 'calls', 'waReports', 'assistant'];
 export function moduleDefault(userData, key) {
   if (key === 'techSupport') return techSupportByRole(userData);
   if (key === 'finance') return financeByRole(userData);
   if (key === 'meetings') return meetingsByRole(userData);
+  // «برامج الدعم»: principals, upper management and the academic department
+  // (mirrored in functions/support.js sees()).
+  if (key === 'support') return userData?.isPrincipal === true || userData?.role === 'UPPER_MANAGEMENT' || userData?.department === 'ACADEMIC';
   if (key === 'trips') return tripsAccessOf(userData) !== 'none';
   // Call analytics (Bevatel) is given per employee.
   if (key === 'calls' || key === 'waReports') return false;

@@ -79,7 +79,8 @@
       "reports": "Reports & follow-up",
       "admin": "Administration",
       "platform": "Al Moktashef platform"
-    }
+    },
+    "support": "Support programmes"
   },
   "app": {
     "brand": "Al Moktashef International",
@@ -956,7 +957,8 @@
         "assistant": "AI assistant",
         "waReports": "Branch WhatsApp",
         "finance": "Financial feedback",
-        "meetings": "Parent meetings"
+        "meetings": "Parent meetings",
+        "support": "Support programmes"
       },
       "noneWarning": "No section selected — the employee will see nothing after signing in.",
       "scopeTitle": "Record scope",
@@ -1027,7 +1029,8 @@
       "supervisorHint": "Creates call campaigns, deals them and follows progress in their branches"
     },
     "attendanceAccess": "Virtual attendance",
-    "attendanceAccessHint": "Sees virtual-class attendance for their branches' students, changes statuses and sends absence messages. System admins always have it."
+    "attendanceAccessHint": "Sees virtual-class attendance for their branches' students, changes statuses and sends absence messages. System admins always have it.",
+    "permSupportManage": "Manage support programmes (remedial & enrichment)"
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",
@@ -1642,7 +1645,8 @@
       "tripAnnouncementImage": "Trip announcement with image",
       "appointmentReminder": "Visit reminder",
       "lostFoundFound": "Lost item found",
-      "meetingNotice": "Parent meeting notice"
+      "meetingNotice": "Parent meeting notice",
+      "supportNotice": "Support programmes notice"
     },
     "guideTitle": "Suggested template texts to submit for approval",
     "guideIntro": "Create these four templates in the Taqnyat portal (Message Templates) with the names above, and wait for WhatsApp approval before enabling.",
@@ -5273,5 +5277,271 @@
     "confirm": "Convert",
     "success": "Converted to a financial note: {{id}}",
     "error": "Couldn't convert, try again."
+  },
+  "support": {
+    "title": "Support programmes",
+    "subtitle": "Remedial and enrichment classes: nominations, parent consent, groups and attendance",
+    "newCycle": "New cycle",
+    "empty": "No cycles yet.",
+    "facts": {
+      "cycles": "Cycles",
+      "students": "Nominated",
+      "consented": "Consented"
+    },
+    "cycleStatus": {
+      "ACTIVE": "Active",
+      "CLOSED": "Closed"
+    },
+    "types": {
+      "REMEDIAL": "Remedial",
+      "ENRICHMENT": "Enrichment"
+    },
+    "status": {
+      "NOMINATED": "Nominated",
+      "APPROVED": "Approved",
+      "PENDING_CONSENT": "Awaiting consent",
+      "CONSENTED": "Consented",
+      "DECLINED": "Declined",
+      "PLEDGE_SENT": "Pledge sent",
+      "PLEDGE_SIGNED": "Pledge signed",
+      "REJECTED": "Rejected",
+      "WITHDRAWN": "Withdrawn"
+    },
+    "weekdays": {
+      "0": "Sunday",
+      "1": "Monday",
+      "2": "Tuesday",
+      "3": "Wednesday",
+      "4": "Thursday",
+      "5": "Friday",
+      "6": "Saturday"
+    },
+    "back": "All cycles",
+    "edit": "Edit",
+    "close": "Close cycle",
+    "reopen": "Reopen",
+    "closeConfirm": "Closing stops nominations and parent answers. Continue?",
+    "sessionsN": "{{n}} classes",
+    "tabs": {
+      "students": "Students",
+      "groups": "Groups",
+      "supervisors": "Supervisors",
+      "attendance": "Attendance"
+    },
+    "editor": {
+      "newTitle": "New cycle",
+      "editTitle": "Edit cycle",
+      "required": "Enter the name and the start and end dates.",
+      "name": "Cycle name",
+      "namePh": "e.g. Term 2, 2026",
+      "start": "Start date",
+      "end": "End date",
+      "days": "Class days",
+      "from": "From",
+      "to": "To",
+      "branches": "Branches",
+      "branchesHint": "None chosen: all your branches.",
+      "holidays": "Days without classes",
+      "holidaysHint": "Holidays or exams within the period.",
+      "addDay": "Add",
+      "approval": "Nominations need the coordinator's or principal's approval",
+      "approvalHint": "Without it, an academic's nomination is approved at once, ready to send to the parent.",
+      "absentWa": "WhatsApp the parent on absence",
+      "absentWaHint": "Sent automatically when the supervisor saves attendance on the class day.",
+      "pledge": "Pledge text",
+      "pledgeHint": "{student} becomes the student's name and {program} the programme."
+    },
+    "all": "All",
+    "nominate": "Nominate students",
+    "search": "Search name or ID",
+    "allTypes": "All programmes",
+    "allGrades": "All grades",
+    "selectedN": "Selected: {{n}}",
+    "act": {
+      "approve": "Approve",
+      "reject": "Reject",
+      "send": "Send consent request",
+      "remind": "Remind",
+      "pledge": "Send pledge",
+      "copyLinks": "Copy links",
+      "copyLink": "Copy link",
+      "chooseGroup": "Choose group",
+      "noGroup": "No group",
+      "notify": "Notify parent",
+      "setGroup": "Assign",
+      "withdraw": "Withdraw",
+      "withdrawReason": "Reason (optional)",
+      "restore": "Restore",
+      "whatsapp": "WhatsApp",
+      "recordAnswer": "Record the parent's answer (phone)"
+    },
+    "copied": "{{n}} links copied.",
+    "noWa": "{{n}} students updated. WhatsApp messages are off for this — copy the links or send them with the WhatsApp button by each student.",
+    "sentResult": "{{done}} students: {{sent}} sent, {{failed}} failed.",
+    "doneN": "Done: {{n}}",
+    "nomResult": "Added {{added}} · already nominated {{already}} · not in the roster {{notFound}} · outside the branches {{outOfScope}}",
+    "col": {
+      "student": "Student",
+      "type": "Programme",
+      "status": "Status",
+      "answer": "Parent's answer",
+      "group": "Group",
+      "attendance": "Attendance",
+      "nominatedBy": "Nominated by",
+      "grade": "Grade",
+      "subjects": "Subjects",
+      "reason": "Reason",
+      "pledge": "Pledge",
+      "present": "Present",
+      "absent": "Absent",
+      "rate": "Attendance rate",
+      "link": "Parent link"
+    },
+    "waFailed": "WhatsApp failed",
+    "sentOn": "sent {{day}}",
+    "byPhone": "recorded by {{name}}",
+    "pledgeSigned": "Pledge signed by {{name}} · {{day}}",
+    "absentN": "absent {{n}}",
+    "noStudents": "No students.",
+    "flowHint": "Flow: nominated → approved → awaiting consent → consented (then group and attendance) or declined → pledge sent → pledge signed.",
+    "wa": {
+      "greeting": "Dear parent of {{name}},",
+      "body": "Your child was nominated for {{program}} classes in «{{cycle}}». Please answer from the link:"
+    },
+    "nom": {
+      "title": "Nominate students",
+      "type": "Programme",
+      "subjects": "Subjects",
+      "subjectsHint": "Optional for now.",
+      "otherSubject": "Other subjects (comma separated)",
+      "reason": "Reason",
+      "students": "Students",
+      "needStudents": "Choose at least one student.",
+      "upload": "or upload an Excel file of IDs",
+      "fromFile": "From the file: {{n}} IDs",
+      "submit": "Nominate {{n}}",
+      "needsApproval": "The coordinator approves the nomination before it goes to the parent.",
+      "direct": "The nomination is approved and ready to send to the parent."
+    },
+    "ans": {
+      "title": "Answer of {{name}}'s parent",
+      "yes": "Consents",
+      "no": "Declines",
+      "parent": "Parent's name",
+      "relation": "Relation",
+      "relationPh": "Father, mother…",
+      "reason": "Reason for declining",
+      "note": "Note"
+    },
+    "groups": {
+      "add": "New group",
+      "waiting": "Consented without a group: {{n}}",
+      "empty": "No groups yet.",
+      "noSupervisor": "No supervisor",
+      "countOf": "{{n}} of {{cap}} students",
+      "count": "{{n}} students",
+      "delete": "Delete",
+      "deleteConfirm": "Delete group «{{name}}»? Its students go back to no group.",
+      "editTitle": "Edit group",
+      "newTitle": "New group",
+      "name": "Group name",
+      "namePh": "e.g. Math — Grade 5",
+      "subject": "Subject",
+      "grades": "Grades",
+      "gradesHint": "e.g. G5, G6",
+      "capacity": "Capacity",
+      "teacher": "Teacher",
+      "room": "Room",
+      "supervisor": "Supervisor (takes attendance)",
+      "addSupervisorsFirst": "Add supervisors first in the Supervisors tab."
+    },
+    "sup": {
+      "add": "New supervisor",
+      "hint": "Each supervisor has a link and a PIN; the page shows their groups only.",
+      "empty": "No supervisors yet.",
+      "noGroups": "No groups assigned",
+      "copy": "Copy link & PIN",
+      "copied": "Copied",
+      "delete": "Delete",
+      "deleteConfirm": "Delete supervisor {{name}}? Their link stops working.",
+      "editTitle": "Edit supervisor",
+      "newTitle": "New supervisor",
+      "name": "Name",
+      "phone": "Mobile",
+      "newPin": "New PIN (the old one stops working)",
+      "message": "{{name}},\nAttendance link for «{{cycle}}»:\n{{link}}\nPIN: {{pin}}"
+    },
+    "att": {
+      "day": "Day",
+      "mark": "Mark",
+      "note": "Note",
+      "by": "By",
+      "noGroups": "Create the groups first.",
+      "notTaken": "Not taken",
+      "notStarted": "Classes start {{day}}.",
+      "mostAbsent": "Most absent",
+      "noAbsence": "No absence ✓"
+    },
+    "marks": {
+      "P": "Present",
+      "L": "Late",
+      "A": "Absent",
+      "E": "Excused"
+    },
+    "parent": {
+      "title": {
+        "REMEDIAL": "Remedial classes",
+        "ENRICHMENT": "Enrichment classes"
+      },
+      "idPrompt": "To continue, enter the student's ID number:",
+      "continue": "Continue",
+      "student": "Student",
+      "nominated": "The school nominated your child for {{program}} classes",
+      "inSubjects": "in {{subjects}}",
+      "period": "Period:",
+      "group": "Group: {{name}}",
+      "room": "Room: {{room}}",
+      "question": "Do you agree to your child joining the classes?",
+      "yes": "I agree",
+      "no": "I don't agree",
+      "name": "Parent's name",
+      "reason": "Reason (optional)",
+      "send": "Send",
+      "consented": "Thank you, your consent is recorded.",
+      "consentedBody": "We will send you the group and the first class date.",
+      "change": "Change answer",
+      "pledgeTitle": "Pledge",
+      "agree": "I acknowledge the pledge above.",
+      "sign": "Sign the pledge",
+      "changeToYes": "I changed my mind — I agree",
+      "signed": "Pledge signed",
+      "signedBody": "Signed by {{name}}. Thank you.",
+      "closed": "This nomination is not available now; please contact the school.",
+      "relations": {
+        "FATHER": "Father",
+        "MOTHER": "Mother",
+        "OTHER": "Other"
+      }
+    },
+    "attend": {
+      "title": "Support classes attendance",
+      "pinPrompt": "Enter the PIN sent to you.",
+      "enter": "Enter",
+      "today": "today",
+      "noClassToday": "Today is not a class day. You can choose a past day from the list.",
+      "noGroups": "No groups assigned to you yet.",
+      "allPresent": "All present",
+      "note": "Note (excuse, lateness…)",
+      "noStudents": "No students in this group.",
+      "save": "Save attendance ({{done}}/{{total}})",
+      "savedAt": "Saved {{time}}",
+      "notified": "Parents of absentees messaged: {{n}}"
+    },
+    "student": {
+      "title": "Support programmes (remedial & enrichment)",
+      "attendance": "Attendance {{rate}}% · absent {{absent}}",
+      "consent": "Consented by {{name}} · {{day}}",
+      "decline": "Declined by {{name}} · {{day}}"
+    }
   }
 }

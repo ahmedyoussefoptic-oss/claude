@@ -21,6 +21,7 @@ export const DEFAULT_WA_API = {
     appointmentReminder: '', // empty: reminders use the confirmation template
     tripNotice: 'trip_notice',
     meetingNotice: '', // empty until the template is approved: links are sent from the invitations list
+    supportNotice: '', // empty: the meeting template is used (same five variables)
   },
 };
 

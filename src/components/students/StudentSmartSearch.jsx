@@ -11,6 +11,7 @@ import { useBranches } from '../../hooks/useOrgData';
 import { useAdminPermissions, adminCan, canSeePlatform } from '../../config/adminPermissions';
 import { canSeeTrips, canSeeModule } from '../../utils/scope';
 import StudentSurveys from '../surveys/StudentSurveys';
+import StudentSupport from '../support/StudentSupport';
 import { searchStudents, lookupStudentById, buildStudentRecord, studentDisplayName, normalizeStudentId } from '../../utils/students';
 import { studentKey } from '../../utils/studentKey';
 import { Modal, Field, inputCls } from '../platform/ui';
@@ -315,6 +316,7 @@ function StudentFile({ student: s, records, branchName, canEdit, onEdit, onOpen,
         )))}
       </div>
       {canSeeModule(userData, 'meetings') && <StudentSurveys studentId={s.nationalId} className="border border-slate-100 rounded-2xl p-4" />}
+      {canSeeModule(userData, 'support') && <StudentSupport studentId={s.nationalId} className="border border-slate-100 rounded-2xl p-4" />}
     </Modal>
   );
 }

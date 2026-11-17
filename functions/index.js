@@ -231,6 +231,7 @@ exports.createStaffUser = onCall(async (request) => {
       users: !!perms?.users,
       trips: !!perms?.trips,
       tripFinance: !!perms?.tripFinance,
+      supportManage: !!perms?.supportManage,
       // Trip edit / delete / students / payments (unset = role-based default).
       ...Object.fromEntries(["tripEdit", "tripDelete", "tripStudents", "tripPayments", "tripAccounts"].filter((k) => typeof perms?.[k] === "boolean").map((k) => [k, perms[k]])),
     },
@@ -267,7 +268,7 @@ exports.createStaffUser = onCall(async (request) => {
 // (`modules`, missing key = the role's default) and whether they see every
 // record of their branches or only the ones assigned to them
 // (`recordScope`). Mirrored in src/utils/scope.js and firestore.rules.
-const USER_MODULE_KEYS = ["dashboard", "complaints", "finance", "techSupport", "lostFound", "visits", "trips", "meetings", "students", "search", "flowMap", "reports"];
+const USER_MODULE_KEYS = ["dashboard", "complaints", "finance", "techSupport", "lostFound", "visits", "trips", "meetings", "support", "students", "search", "flowMap", "reports"];
 function cleanUserModules(modules, recordScope) {
   const out = {};
   if (modules && typeof modules === "object") {
@@ -8093,3 +8094,9 @@ Object.assign(exports, meetingsModule({
 
 // «تقييمات أولياء الأمور» — see ./surveys.js.
 Object.assign(exports, surveysModule({ db, Timestamp, FieldValue, HttpsError, onCall, crypto, str, callerHasBranch, callerAll, normalizeDigits, studentGrade, studentSection, branchResolver }));
+// «برامج الدعم» (حصص التقوية والإثراء) — see functions/support.js.
+const supportModule = require("./support");
+Object.assign(exports, supportModule({
+  db, Timestamp, FieldValue, HttpsError, onCall, onSchedule, crypto, str, callerHasBranch, callerAll, normalizeDigits, studentGrade, studentSection,
+  branchResolver, taqnyatSend, waParam, toIntlNumber, PUBLIC_APP_URL, SCHOOL_NAME, WA_API_ENABLED, riyadhDay: () => riyadhDay(), notifyUsers,
+}));

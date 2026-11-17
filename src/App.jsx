@@ -29,6 +29,9 @@ import MeetingManager from './pages/MeetingManager';
 import MeetingPortal from './pages/MeetingPortal';
 import Surveys from './pages/Surveys';
 import SurveyPublic from './pages/SurveyPublic';
+import SupportPrograms from './pages/SupportPrograms';
+import SupportParent from './pages/SupportParent';
+import SupportAttend from './pages/SupportAttend';
 import Settings from './pages/Settings';
 import DeletedComplaints from './pages/DeletedComplaints';
 import { ROLES } from './config/roles';
@@ -106,6 +109,8 @@ function App() {
         <Route path="/meeting-in/:token" element={<MeetingCheckin />} />
         <Route path="/parent-meetings" element={<MeetingPortal />} />
         <Route path="/survey/:code" element={<SurveyPublic />} />
+        <Route path="/support/:token" element={<SupportParent />} />
+        <Route path="/support-attend/:token" element={<SupportAttend />} />
         <Route path="/leave" element={<LeaveRequest />} />
         <Route path="/sped/:formId" element={<SpecialEducationForm />} />
         <Route path="/join" element={<JoinInquiry />} />
@@ -133,6 +138,7 @@ function App() {
           <Route path="trips" element={<Trips />} />
           <Route path="meetings" element={<Meetings />} />
           <Route path="surveys" element={<Surveys />} />
+          <Route path="support-programs" element={<SupportPrograms />} />
           <Route path="calls" element={<Calls />} />
           <Route path="wa-reports" element={<WaReports />} />
           <Route path="activity" element={<ActivityOnly><UserActivity /></ActivityOnly>} />
