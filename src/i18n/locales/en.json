@@ -1691,7 +1691,7 @@
   },
   "branchVisits": {
     "title": "Branch visits",
-    "subtitle": "Parents who checked in at the branch with the QR code",
+    "subtitle": "Parents who checked in with the QR code, and new-registration visit appointments",
     "waitingNow": "Waiting now",
     "today": "Visits today",
     "metToday": "Met today",
@@ -1743,7 +1743,40 @@
     "editInterviewerTitle": "Edit the interviewer",
     "pickInterviewerHint": "The staff member picked joins the assignees and is notified that the parent is waiting. It can be changed before the meeting is confirmed.",
     "editInterviewerHint": "The interviewer is corrected on the record and in the reports, and the change is logged on the note.",
-    "interviewerEditedBy": "Interviewer edited by: {{name}}"
+    "interviewerEditedBy": "Interviewer edited by: {{name}}",
+    "newRegToday": "New-registration appointments today",
+    "statusScheduled": "Upcoming",
+    "kindAll": "All types",
+    "kindParents": "Current parents",
+    "kindNewReg": "New registration",
+    "lead": {
+      "badge": "New-registration visit",
+      "studentsLine": "Students: {{students}} — {{branch}}",
+      "host": "Host",
+      "officer": "Registration officer",
+      "status": {
+        "REQUESTED": "Awaiting branch confirmation",
+        "SCHEDULED": "Scheduled",
+        "CONFIRMED": "Parent confirmed",
+        "ARRIVED": "Waiting to be received",
+        "ATTENDED": "Received",
+        "NO_SHOW": "Did not come"
+      },
+      "requestedHint": "The branch principal confirms it in «Upcoming visit requests» above; the family's arrival can still be recorded.",
+      "arrived": "Family arrived",
+      "receive": "Received",
+      "noShow": "Did not come",
+      "openFile": "Open the lead",
+      "upcoming": "Upcoming",
+      "noShowConfirm": "Record that the family did not come? It is logged on the lead and a follow-up is set in two hours.",
+      "receiveTitle": "Record receiving the new-registration family",
+      "receivedBy": "Received by",
+      "receivedAt": "Received at",
+      "arrivedAt": "Arrived at",
+      "interest": "Interest after the visit (optional)",
+      "recordedBy": "Recorded by {{name}}",
+      "receiveHint": "The visit is recorded on the lead, its stage moves to «Visited», and a follow-up is set for the registration officer in a day."
+    }
   },
   "slaSettings": {
     "title": "Resolution time (SLA) & working hours",
@@ -3019,7 +3052,8 @@
         "ATTENDED": "Attended",
         "NO_SHOW": "No-show",
         "CANCELLED": "Cancelled",
-        "REQUESTED": "Awaiting branch confirmation"
+        "REQUESTED": "Awaiting branch confirmation",
+        "ARRIVED": "Family arrived — waiting"
       },
       "actions": {
         "confirmed": "Parent confirmed",
@@ -3075,7 +3109,9 @@
       "templateName": "Approved Taqnyat template name",
       "templateHint": "Leave empty to send confirmations and reminders manually with the WhatsApp button. Requires the WhatsApp API to be enabled in the main settings.",
       "autoRemind": "Automatically remind tomorrow's appointments every day at 5:00 PM",
-      "suggested": "Suggested template text (for approval in the Taqnyat portal), with a \"contact the branch\" URL button like the other templates:"
+      "suggested": "Suggested template text (for approval in the Taqnyat portal), with a \"contact the branch\" URL button like the other templates:",
+      "arrivedAt": "Arrived {{time}} ({{name}})",
+      "metByLine": "Received by: {{name}}"
     },
     "sped": {
       "title": "Special education data",
@@ -3505,7 +3541,8 @@
     "doneComplaint": "Done ({{when}}) — the parent is notified from the record as usual.",
     "sendWa": "Send on WhatsApp",
     "parentMessage": "Hello {{parent}},\nYour visit to Al Moktashef International Schools — {{branch}} is confirmed: {{when}}\nWe look forward to welcoming you.",
-    "qr": "Printable QR"
+    "qr": "Printable QR",
+    "markBelow": "Arrival and reception are recorded in the list below"
   },
   "waReports": {
     "title": "Branch WhatsApp analytics",

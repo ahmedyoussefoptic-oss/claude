@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
-import { Armchair, Handshake, Clock, CalendarDays, CalendarPlus, Phone, Loader2, CheckCircle2, HeartHandshake, Building2, UserCog, Pencil } from 'lucide-react';
+import { Armchair, Handshake, Clock, CalendarDays, CalendarPlus, Phone, Loader2, CheckCircle2, HeartHandshake, Building2, UserCog, Pencil, UserPlus } from 'lucide-react';
 import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
 import { ar, enUS } from 'date-fns/locale';
 import { db, functions } from '../config/firebase';
-import { useUsers } from '../hooks/useUsers';
 import useAuthStore from '../stores/useAuthStore';
 import { useBranches } from '../hooks/useOrgData';
 import { scopeConstraints, userBranches } from '../utils/scope';
+import StaffPicker from '../components/visits/StaffPicker';
 import StatCard from '../components/dashboard/StatCard';
 import { formatMinutes } from '../utils/duration';
 import { normalizeAssignees } from '../utils/assignees';
@@ -18,6 +18,7 @@ import AppointmentPicker from '../components/appointments/AppointmentPicker';
 import VisitDeclineDialog from '../components/visits/VisitDeclineDialog';
 import VisitRequestsPanel from '../components/visits/VisitRequestsPanel';
 import PageHero from '../components/common/PageHero';
+import LeadVisitRow, { LEAD_OPEN } from '../components/visits/LeadVisitRow';
 
 const isToday = (ts) => {
   if (!ts?.toDate) return false;
@@ -26,6 +27,12 @@ const isToday = (ts) => {
   return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
 };
 const minutesBetween = (a, b) => Math.max(0, Math.round((b - a) / 60000));
+const isTodayMs = (ms) => !!ms && new Date(ms).toDateString() === new Date().toDateString();
+// Order of the merged list: waiting now, then the coming appointments
+// (earliest first), then the finished visits (latest first).
+const rankOf = (item) => (item.kind === 'lead'
+  ? (item.v.status === 'ARRIVED' ? 0 : LEAD_OPEN.includes(item.v.status) ? 1 : 2)
+  : (item.v.visitStatus === 'WAITING' ? 0 : 2));
 
 // The parent couldn't be met during a walk-in visit: book a confirmed
 // meeting slot on the same record (bookMeetingFromVisit). The parent gets
@@ -66,47 +73,6 @@ function BookMeetingDialog({ visit, onClose }) {
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-// The staff a visit can be met by: its assignees first, then the others
-// covering its branch (never reception accounts).
-function useVisitStaff(visit) {
-  const users = useUsers();
-  const assigned = (visit.assignedTo || []).map((id, i) => ({ id, name: users.find((u) => u.id === id)?.name || visit.assignedToNames?.[i] || id }));
-  const others = users
-    .filter((u) => u.active !== false && u.role !== 'RECEPTIONIST' && u.tripsAccess !== 'tripsOnly' && !(visit.assignedTo || []).includes(u.id)
-      && (u.access === 'all' || userBranches(u).includes(visit.branch)))
-    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'))
-    .map((u) => ({ id: u.id, name: u.name || u.email }));
-  return { assigned, others };
-}
-
-function StaffPicker({ visit, value, onChange }) {
-  const { t } = useTranslation();
-  const { assigned, others } = useVisitStaff(visit);
-  const [q, setQ] = useState('');
-  const match = (u) => !q.trim() || (u.name || '').includes(q.trim());
-  const toggle = (id) => onChange(value.includes(id) ? value.filter((x) => x !== id) : [...value, id]);
-  return (
-    <div>
-      <label className="block text-xs text-slate-600 mb-1">{t('branchVisits.metWith')}</label>
-      {others.length > 8 && <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('branchVisits.searchStaff')} className="w-full mb-1.5 px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-sm" />}
-      <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl p-2 space-y-2">
-        {[[t('branchVisits.assignedGroup'), assigned], [t('branchVisits.otherStaff'), others]].map(([label, list]) => list.filter(match).length > 0 && (
-          <div key={label}>
-            <p className="text-[11px] font-bold text-slate-400 mb-1">{label}</p>
-            {list.filter(match).map((u) => (
-              <label key={u.id} className="flex items-center gap-2 text-sm text-slate-700 py-0.5 cursor-pointer">
-                <input type="checkbox" checked={value.includes(u.id)} onChange={() => toggle(u.id)} />
-                {u.name}
-              </label>
-            ))}
-          </div>
-        ))}
-      </div>
-      {value.length > 1 && <p className="text-xs text-teal-700 mt-1">{t('branchVisits.selectedCount', { n: value.length })}</p>}
     </div>
   );
 }
@@ -216,6 +182,24 @@ export default function BranchVisits() {
   // Staff open the visit's full record; reception only sees this list.
   const [openId, setOpenId] = useState(null);
   const isReceptionist = userData?.role === 'RECEPTIONIST';
+  // New-registration visits (leadVisits, through listBranchLeadVisits):
+  // «زيارة عميل تسجيل جديد» rows in the same list.
+  const [leadVisits, setLeadVisits] = useState([]);
+  const [platformUser, setPlatformUser] = useState(false);
+  const [kindFilter, setKindFilter] = useState('ALL');
+  const loadLeadVisits = useCallback(() => {
+    httpsCallable(functions, 'listBranchLeadVisits')({}).then(({ data }) => {
+      setLeadVisits(data.visits || []);
+      setPlatformUser(data.platform === true);
+    }).catch((err) => console.error(err));
+  }, []);
+  useEffect(() => {
+    if (!userData) return undefined;
+    loadLeadVisits();
+    const id = setInterval(loadLeadVisits, 60000);
+    return () => clearInterval(id);
+  }, [userData, loadLeadVisits]);
+  const todayKey = format(new Date(now), 'yyyy-MM-dd');
 
   // Keeps the "waiting for X minutes" figures moving.
   useEffect(() => {
@@ -243,6 +227,7 @@ export default function BranchVisits() {
   // Branches this user can pick from (all for admins / all-branch access).
   const branchOptions = (userData?.role === 'ADMIN' || userData?.access === 'all') ? branches : branches.filter((b) => userBranches(userData).includes(b.id));
   const scoped = useMemo(() => (branchFilter ? visits.filter((v) => v.branch === branchFilter) : visits), [visits, branchFilter]);
+  const scopedLeads = useMemo(() => (branchFilter ? leadVisits.filter((v) => v.branch === branchFilter) : leadVisits), [leadVisits, branchFilter]);
 
   const stats = useMemo(() => {
     const visits = scoped;
@@ -250,16 +235,25 @@ export default function BranchVisits() {
     const metToday = today.filter((v) => v.visitStatus === 'MET' && v.visitMetAt);
     // Today's visits: arrival → meeting, or → now for those still waiting.
     const waits = today.map((v) => minutesBetween(v.visitArrivedAt.toMillis(), v.visitStatus === 'MET' && v.visitMetAt ? v.visitMetAt.toMillis() : now));
+    // New-registration families who checked in today count like the others.
+    const leadsIn = scopedLeads.filter((v) => isTodayMs(v.arrivedAt) || (v.status === 'ATTENDED' && isTodayMs(v.metAt)));
+    leadsIn.filter((v) => v.arrivedAt).forEach((v) => waits.push(minutesBetween(v.arrivedAt, v.status === 'ATTENDED' && v.metAt ? v.metAt : now)));
     return {
-      waiting: visits.filter((v) => v.visitStatus === 'WAITING').length,
-      today: today.length,
-      metToday: metToday.length,
+      waiting: visits.filter((v) => v.visitStatus === 'WAITING').length + scopedLeads.filter((v) => v.status === 'ARRIVED').length,
+      today: today.length + leadsIn.length,
+      metToday: metToday.length + leadsIn.filter((v) => v.status === 'ATTENDED').length,
       avgWait: waits.length ? Math.round(waits.reduce((s, m) => s + m, 0) / waits.length) : null,
+      newRegToday: scopedLeads.filter((v) => v.dayKey === todayKey).length,
     };
-  }, [scoped, now]);
+  }, [scoped, scopedLeads, now, todayKey]);
 
-  const shown = scoped.filter((v) => (range === 'ALL' || isToday(v.visitArrivedAt) || v.visitStatus === 'WAITING')
-    && (statusFilter === 'ALL' || v.visitStatus === statusFilter));
+  const leadStatusOf = { WAITING: ['ARRIVED'], MET: ['ATTENDED'], NOT_MET: ['NO_SHOW'], SCHEDULED: LEAD_OPEN };
+  const shown = [
+    ...(kindFilter === 'NEW_REG' ? [] : scoped.filter((v) => (range === 'ALL' || isToday(v.visitArrivedAt) || v.visitStatus === 'WAITING')
+      && (statusFilter === 'ALL' || v.visitStatus === statusFilter)).map((v) => ({ kind: 'walkin', v, at: v.visitArrivedAt?.toMillis?.() || 0 }))),
+    ...(kindFilter === 'PARENTS' ? [] : scopedLeads.filter((v) => (range === 'ALL' || v.dayKey === todayKey || v.status === 'ARRIVED')
+      && (statusFilter === 'ALL' || leadStatusOf[statusFilter]?.includes(v.status))).map((v) => ({ kind: 'lead', v, at: v.arrivedAt || v.at || 0 }))),
+  ].sort((a, b) => rankOf(a) - rankOf(b) || (rankOf(a) === 1 ? a.at - b.at : b.at - a.at));
 
   const chip = (active, onClick, label) => (
     <button onClick={onClick} className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap transition-colors ${active ? 'bg-primary text-white font-medium' : 'text-slate-600 hover:bg-slate-100'}`}>{label}</button>
@@ -271,7 +265,7 @@ export default function BranchVisits() {
         icon={Armchair}
         title={t('branchVisits.title')}
         subtitle={t('branchVisits.subtitle')}
-        facts={[{ label: t('branchVisits.waitingNow'), value: stats.waiting, tone: 'red' }, { label: t('branchVisits.today'), value: stats.today }, { label: t('branchVisits.metToday'), value: stats.metToday, tone: 'green' }]}
+        facts={[{ label: t('branchVisits.waitingNow'), value: stats.waiting, tone: 'red' }, { label: t('branchVisits.today'), value: stats.today }, { label: t('branchVisits.metToday'), value: stats.metToday, tone: 'green' }, { label: t('branchVisits.newRegToday'), value: stats.newRegToday }]}
       />
 
       <VisitRequestsPanel />
@@ -292,6 +286,11 @@ export default function BranchVisits() {
           {chip(statusFilter === 'WAITING', () => setStatusFilter('WAITING'), t('branchVisits.statusWaiting'))}
           {chip(statusFilter === 'MET', () => setStatusFilter('MET'), t('branchVisits.statusMet'))}
           {chip(statusFilter === 'NOT_MET', () => setStatusFilter('NOT_MET'), t('branchVisits.statusNotMet'))}
+          {chip(statusFilter === 'SCHEDULED', () => setStatusFilter('SCHEDULED'), t('branchVisits.statusScheduled'))}
+          <span className="w-px h-6 bg-slate-200 mx-1" />
+          {chip(kindFilter === 'ALL', () => setKindFilter('ALL'), t('branchVisits.kindAll'))}
+          {chip(kindFilter === 'PARENTS', () => setKindFilter('PARENTS'), t('branchVisits.kindParents'))}
+          {chip(kindFilter === 'NEW_REG', () => setKindFilter('NEW_REG'), <span className="inline-flex items-center gap-1"><UserPlus className="w-3.5 h-3.5" />{t('branchVisits.kindNewReg')}</span>)}
           {branchOptions.length > 1 && (
             <>
               <span className="w-px h-6 bg-slate-200 mx-1" />
@@ -312,7 +311,11 @@ export default function BranchVisits() {
           <p className="py-16 text-center text-slate-400 text-sm">{t('branchVisits.empty')}</p>
         ) : (
           <ul className="divide-y divide-slate-100">
-            {shown.map((v) => {
+            {shown.map((item) => {
+              if (item.kind === 'lead') {
+                return <LeadVisitRow key={`lead-${item.v.id}`} v={item.v} branchName={branchName} now={now} todayKey={todayKey} platform={platformUser} onChanged={loadLeadVisits} />;
+              }
+              const v = item.v;
               const waiting = v.visitStatus === 'WAITING';
               const notMet = v.visitStatus === 'NOT_MET';
               const arrived = v.visitArrivedAt?.toMillis?.();

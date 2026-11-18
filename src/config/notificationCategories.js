@@ -10,7 +10,7 @@ export const NOTIFICATION_CATEGORIES = [
   { id: 'partialSolution', types: ['PARTIAL_SOLUTION_ADDED'] },
   { id: 'solved', types: ['SOLVED_NOTIFY_RECEIVER'] },
   { id: 'reopened', types: ['REOPENED', 'IT_REOPENED'] },
-  { id: 'visit', types: ['VISIT_ARRIVED'] },
+  { id: 'visit', types: ['VISIT_ARRIVED', 'LEAD_VISIT_ARRIVED'] },
   { id: 'viewed', types: ['VIEWED', 'IT_VIEWED'] },
   { id: 'appointment', types: ['APPOINTMENT_REQUESTED', 'APPOINTMENT_REMINDER', 'VISIT_REQUESTED'] },
   { id: 'trips', types: ['TRIP_APPROVAL_REQUESTED', 'TRIP_DECIDED', 'TRIP_RECEIPT'] },

@@ -49,23 +49,12 @@ export function useVisitTools() {
     await logLead(v.leadId, logText(kind, v), 'WHATSAPP');
   };
 
-  const setStatus = async (v, status, lead, interest) => {
-    const now = Timestamp.now();
-    await updateDoc(doc(db, 'leadVisits', v.id), { status, statusAt: now, statusByName: userData?.name || '', ...(interest ? { interest } : {}), updatedAt: now });
-    const patch = {};
-    const open = lead && leadOpen(lead);
-    if (status === 'ATTENDED') {
-      patch.visitedAt = now;
-      if (interest) patch.interest = interest;
-      if (open && stageIdx(lead.stage) < stageIdx('VISITED')) {
-        Object.assign(patch, { stage: 'VISITED', stageEnteredAt: now, 'stageHistory.VISITED': now, sideStatus: null, sideReason: '' });
-        if (!(lead.stageHistory || {}).VISIT_BOOKED) patch['stageHistory.VISIT_BOOKED'] = now;
-      }
-      if (open) patch.nextFollowUp = Timestamp.fromMillis(Date.now() + 86400e3);
-    }
-    if (status === 'NO_SHOW' && open) patch.nextFollowUp = Timestamp.fromMillis(Date.now() + 2 * 3600e3);
-    if (Object.keys(patch).length) await updateDoc(doc(db, 'leads', v.leadId), { ...patch, updatedAt: now });
-    await logLead(v.leadId, logText(status, v));
+  // Through leadVisitAction, so the visit, its reserved slot (public-link
+  // requests) and the lead's stage / follow-up always move together — the
+  // same path the branch visits page uses.
+  const setStatus = async (v, status, _lead, interest) => {
+    const action = { CONFIRMED: 'confirmed', ATTENDED: 'attended', NO_SHOW: 'noShow', CANCELLED: 'cancel' }[status];
+    await httpsCallable(functions, 'leadVisitAction')({ visitId: v.id, action, interest: interest || '' });
   };
 
   return { t, dateLocale, apiReady, branches, branchName, when, typeLabel, message, logText, logLead, sendApi, markManual, setStatus, userData };
@@ -95,6 +84,9 @@ export function VisitForm({ lead, visit, onClose }) {
       const data = { type: f.type, at, dayKey: f.date, branch: f.branch, host: f.host.trim(), notes: f.notes.trim(), updatedAt: now };
       let saved;
       if (visit) {
+        // A public-link request held a slot in the appointments pool: free it
+        // (the new time is set by hand, outside the pool).
+        if (visit.appointmentId && visit.at?.toMillis?.() !== at.toMillis()) await httpsCallable(functions, 'leadVisitAction')({ visitId: visit.id, action: 'release' });
         await updateDoc(doc(db, 'leadVisits', visit.id), { ...data, status: 'SCHEDULED', previousAt: visit.at || null, rescheduledCount: increment(1), autoRemindedFor: null, confirmationSentAt: null });
         saved = { ...visit, ...data };
       } else {
@@ -182,6 +174,7 @@ export function VisitRow({ v, lead, tools, onOpenLead, showLead }) {
   const [interest, setInterest] = useState(lead?.interest || '');
   const [editing, setEditing] = useState(false);
   const active = VISIT_ACTIVE.includes(v.status);
+  const arrived = v.status === 'ARRIVED';
   const run = (key, fn) => async () => {
     setBusy(key);
     setError(null);
@@ -222,6 +215,8 @@ export function VisitRow({ v, lead, tools, onOpenLead, showLead }) {
               : active && <span className="text-amber-700">{t('platform.visits.notReminded')}</span>}
             {v.confirmationSentAt && <span>{t('platform.visits.confirmationSent')}</span>}
             {v.rescheduledCount > 0 && <span>{t('platform.visits.rescheduled', { n: v.rescheduledCount })}</span>}
+            {v.arrivedAt?.toDate && <span className="text-rose-700">{t('platform.visits.arrivedAt', { time: `\u2066${format(v.arrivedAt.toDate(), 'h:mm a', { locale: dateLocale })}\u2069`, interpolation: { escapeValue: false }, name: v.arrivedByName || '' })}</span>}
+            {v.metByName && <span className="text-emerald-700">{t('platform.visits.metByLine', { name: v.metByName })}</span>}
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5 md:justify-end md:max-w-[340px]">
@@ -231,7 +226,7 @@ export function VisitRow({ v, lead, tools, onOpenLead, showLead }) {
             <a href={waLink(v.phone, tools.message(v, 'reminder'))} target="_blank" rel="noreferrer" onClick={() => { tools.markManual(v, 'reminder').catch((err) => setError(err.message)); }} className={`${act} bg-emerald-600 text-white border-emerald-600`}><MessageCircle className="w-3.5 h-3.5" />{t('platform.visits.actions.remindWa')}</a>
           ))}
           {v.status === 'SCHEDULED' && <button disabled={!!busy} onClick={run('confirm', () => tools.setStatus(v, 'CONFIRMED', lead))} className={`${act} bg-white text-indigo-700 border-indigo-200`}><CalendarCheck className="w-3.5 h-3.5" />{t('platform.visits.actions.confirmed')}</button>}
-          {active && <button disabled={!!busy} onClick={() => setAttending((x) => !x)} className={`${act} bg-white text-emerald-700 border-emerald-200`}><CheckCircle2 className="w-3.5 h-3.5" />{t('platform.visits.actions.attended')}</button>}
+          {(active || arrived) && <button disabled={!!busy} onClick={() => setAttending((x) => !x)} className={`${act} bg-white text-emerald-700 border-emerald-200`}><CheckCircle2 className="w-3.5 h-3.5" />{t('platform.visits.actions.attended')}</button>}
           {active && <button disabled={!!busy} onClick={run('noshow', () => tools.setStatus(v, 'NO_SHOW', lead))} className={`${act} bg-white text-rose-700 border-rose-200`}><UserX className="w-3.5 h-3.5" />{t('platform.visits.actions.noShow')}</button>}
           {(active || v.status === 'NO_SHOW') && lead && <button disabled={!!busy} onClick={() => setEditing(true)} className={`${act} bg-white text-slate-700 border-slate-200`}><CalendarClock className="w-3.5 h-3.5" />{t('platform.visits.actions.reschedule')}</button>}
           {active && <button disabled={!!busy} onClick={() => { if (window.confirm(`${t('platform.visits.actions.cancel')}؟`)) run('cancel', () => tools.setStatus(v, 'CANCELLED', lead))(); }} className={`${act} bg-white text-slate-500 border-slate-200`}><XCircle className="w-3.5 h-3.5" />{t('platform.visits.actions.cancel')}</button>}

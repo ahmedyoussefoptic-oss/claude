@@ -33,7 +33,6 @@ export default function VisitRequestsPanel() {
   const [msg, setMsg] = useState(null);
   const branchName = (id) => branches.find((b) => b.id === id)?.name || id;
   const canManage = (branch) => userData?.role === 'ADMIN' || ((all || mine?.includes(branch)) && (userData?.isPrincipal === true || userData?.perms?.edit === true));
-  const canMark = (branch) => canManage(branch) || ((all || mine?.includes(branch)) && (userData?.role === 'RECEPTIONIST' || userData?.isQuality === true));
 
   useEffect(() => {
     const start = new Date();
@@ -121,12 +120,7 @@ export default function VisitRequestsPanel() {
                       {isNew && canManage(a.branch) && (
                         <button disabled={!!busy} onClick={() => { const reason = window.prompt(t('visitRequests.cancelReason')); if (reason !== null) act(a, 'cancel', { reason }); }} className="px-3 py-1.5 rounded-lg text-sm text-rose-600 hover:bg-rose-50 flex items-center gap-1"><X className="w-4 h-4" />{t('visitRequests.cancel')}</button>
                       )}
-                      {isNew && a.status === 'CONFIRMED' && today && canMark(a.branch) && (
-                        <>
-                          <button disabled={!!busy} onClick={() => act(a, 'attended')} className="px-3 py-1.5 rounded-lg text-sm bg-sky-600 text-white">{t('visitRequests.attended')}</button>
-                          <button disabled={!!busy} onClick={() => act(a, 'noShow')} className="px-3 py-1.5 rounded-lg text-sm border border-slate-300 bg-white text-slate-600">{t('visitRequests.noShow')}</button>
-                        </>
-                      )}
+                      {isNew && today && <span className="px-2 py-1.5 text-xs text-emerald-700">{t('visitRequests.markBelow')}</span>}
                     </div>
                     {moving === a.id && (
                       <div className="space-y-2">

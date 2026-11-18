@@ -369,7 +369,7 @@ const NOTIFICATION_CATEGORIES = {
   partialSolution: ["PARTIAL_SOLUTION_ADDED"],
   solved: ["SOLVED_NOTIFY_RECEIVER"],
   reopened: ["REOPENED", "IT_REOPENED"],
-  visit: ["VISIT_ARRIVED"],
+  visit: ["VISIT_ARRIVED", "LEAD_VISIT_ARRIVED"],
   viewed: ["VIEWED", "IT_VIEWED"],
   appointment: ["APPOINTMENT_REQUESTED", "APPOINTMENT_REMINDER", "VISIT_REQUESTED"],
   trips: ["TRIP_APPROVAL_REQUESTED", "TRIP_DECIDED", "TRIP_RECEIPT"],
@@ -5338,7 +5338,8 @@ exports.submitNewStudentVisit = onCall({ secrets: WA_SECRETS }, async (request) 
   const when = formatRiyadh(reserved.start.toMillis());
   await lead.ref.update({
     visitAt: reserved.start, nextVisitId: visitRef.id, updatedAt: now,
-    ...(["INQUIRY", "QUALIFIED"].includes(lead.lead?.stage) ? { stage: "VISIT_BOOKED", stageEnteredAt: now } : {}),
+    ...(["INQUIRY", "QUALIFIED"].includes(lead.lead?.stage) ? { stage: "VISIT_BOOKED", stageEnteredAt: now, "stageHistory.VISIT_BOOKED": now, sideStatus: null, sideReason: "" } : {}),
+    ...(lead.existing ? {} : { nextFollowUp: reserved.start }),
   });
   await lead.ref.collection("activity").add({ type: "VISIT", text: `طلب زيارة مدرسية من الرابط: ${when} (بانتظار تأكيد الفرع)`, byName: "ولي الأمر (رابط طلب الزيارة)", at: now });
   const users = await loadActiveUsers();
@@ -5377,17 +5378,8 @@ exports.decideVisitRequest = onCall({ secrets: WA_SECRETS }, async (request) => 
   const actorName = caller.name || "مستخدم";
   const log = (text) => leadRef.collection("activity").add({ type: "VISIT", text, byName: actorName, byId: request.auth.uid, at: now });
 
-  if (action === "cancel") {
-    await apptRef.update({ status: "CANCELLED", cancelledAt: now });
-    await visitRef.update({ status: "CANCELLED", cancelReason: reason, updatedAt: now });
-    await log(`أُلغي طلب الزيارة${reason ? `: ${reason}` : ""}`);
-    return { ok: true };
-  }
-  if (action === "attended" || action === "noShow") {
-    await apptRef.update({ status: action === "attended" ? "CHECKED_IN" : "NO_SHOW" });
-    await visitRef.update({ status: action === "attended" ? "ATTENDED" : "NO_SHOW", updatedAt: now });
-    if (action === "attended") await leadRef.update({ stage: "VISITED", stageEnteredAt: now, updatedAt: now }).catch(() => {});
-    await log(action === "attended" ? "حضرت الأسرة الزيارة" : "لم تحضر الأسرة الزيارة");
+  if (action === "cancel" || action === "attended" || action === "noShow") {
+    await applyLeadVisitOutcome(visitRef, { ...visit, appointmentId: apptRef.id }, { attended: "ATTENDED", noShow: "NO_SHOW", cancel: "CANCELLED" }[action], { uid: request.auth.uid, name: actorName }, { reason });
     return { ok: true };
   }
   let start = appt.start;
@@ -5419,6 +5411,142 @@ exports.decideVisitRequest = onCall({ secrets: WA_SECRETS }, async (request) => 
     }
   }
   return { ok: true, when, sent, phone: appt.phone || "" };
+});
+
+// --- New-registration visits in «زيارات الفروع» -----------------------------
+// Every new-customer visit (leadVisits: booked from the lead's file or asked
+// for through /school-visit) is listed on the branch visits page as «زيارة
+// عميل تسجيل جديد» for the staff of its branch and the reception desk.
+// They see only what receiving the family needs (never the lead's file),
+// record the family's arrival (the registration officer and the branch
+// principal are notified), who received them, or that they did not come.
+// Status changes from the lead's file go through here too, so the visit,
+// its reserved slot and the lead's stage always move together.
+const LEAD_STAGE_ORDER = ["INQUIRY", "QUALIFIED", "VISIT_BOOKED", "VISITED", "TEST", "RESULT", "DOCUMENTS", "PAYMENT", "ENROLLED"];
+const LEAD_VISIT_OPEN = ["REQUESTED", "SCHEDULED", "CONFIRMED", "ARRIVED"];
+const leadIsOpen = (l) => l.stage !== "ENROLLED" && !["LOST", "UNQUALIFIED"].includes(l.sideStatus);
+const LEAD_VISIT_LOG = {
+  CONFIRMED: "أكّد ولي الأمر موعد الزيارة", ARRIVED: "وصلت الأسرة إلى الفرع", ATTENDED: "حضرت الأسرة الزيارة",
+  NO_SHOW: "لم تحضر الأسرة الزيارة", CANCELLED: "أُلغي موعد الزيارة",
+};
+// Who may open «زيارات الفروع» (mirrors canSeeModule in src/utils/scope.js).
+const seesVisits = (u) => u.role === "ADMIN" || u.role === "RECEPTIONIST" || (u.tripsAccess !== "tripsOnly" && (typeof u.modules?.visits === "boolean" ? u.modules.visits : true));
+const coversBranch = (u, branch) => u.role === "ADMIN" || u.access === "all" || (u.branches || []).includes(branch) || u.branch === branch;
+
+async function applyLeadVisitOutcome(visitRef, visit, status, actor, { reason = "", interest = "", metBy = null, note = "" } = {}) {
+  const now = Timestamp.now();
+  const upd = { status, statusAt: now, statusByName: actor.name, updatedAt: now };
+  if (status === "ARRIVED") Object.assign(upd, { arrivedAt: now, arrivedByName: actor.name });
+  if (status === "ATTENDED") {
+    Object.assign(upd, { metAt: now, ...(metBy ? { metByIds: metBy.map((m) => m.id), metByName: metBy.map((m) => m.name).join("، ") } : {}), ...(interest ? { interest } : {}) });
+    if (note) upd.receptionNote = note;
+  }
+  if (status === "CANCELLED" && reason) upd.cancelReason = reason;
+  await visitRef.update(upd);
+  if (visit.appointmentId) {
+    const apptStatus = { ATTENDED: "CHECKED_IN", ARRIVED: "CHECKED_IN", NO_SHOW: "NO_SHOW", CANCELLED: "CANCELLED" }[status];
+    if (apptStatus) await db.collection("appointments").doc(visit.appointmentId).update({ status: apptStatus, ...(status === "CANCELLED" ? { cancelledAt: now } : {}) }).catch(() => {});
+  }
+  if (!visit.leadId) return;
+  const leadRef = db.collection("leads").doc(visit.leadId);
+  const lead = (await leadRef.get()).data();
+  if (lead) {
+    const open = leadIsOpen(lead);
+    const patch = {};
+    if (status === "ATTENDED") {
+      patch.visitedAt = now;
+      if (interest) patch.interest = interest;
+      if (open && LEAD_STAGE_ORDER.indexOf(lead.stage) < LEAD_STAGE_ORDER.indexOf("VISITED")) {
+        Object.assign(patch, { stage: "VISITED", stageEnteredAt: now, "stageHistory.VISITED": now, sideStatus: null, sideReason: "" });
+        if (!(lead.stageHistory || {}).VISIT_BOOKED) patch["stageHistory.VISIT_BOOKED"] = now;
+      }
+      if (open) patch.nextFollowUp = Timestamp.fromMillis(Date.now() + 86400e3);
+    }
+    if (status === "NO_SHOW" && open) patch.nextFollowUp = Timestamp.fromMillis(Date.now() + 2 * 3600e3);
+    if (status === "CANCELLED" && lead.nextVisitId === visitRef.id) Object.assign(patch, { visitAt: null, nextVisitId: null });
+    if (Object.keys(patch).length) await leadRef.update({ ...patch, updatedAt: now });
+  }
+  const when = visit.at?.toMillis ? formatRiyadh(visit.at.toMillis()) : "";
+  const extra = status === "ATTENDED" && upd.metByName ? ` — استقبلها: ${upd.metByName}` : status === "CANCELLED" && reason ? `: ${reason}` : "";
+  await leadRef.collection("activity").add({ type: "VISIT", text: `${LEAD_VISIT_LOG[status] || status} (${LEAD_VISIT_TYPES[visit.type] || ""} — ${when})${extra}${note ? ` — ${note}` : ""}`, byName: actor.name, byId: actor.uid || null, at: now });
+}
+
+// The branch's new-registration visits from 30 days ago to 30 days ahead.
+exports.listBranchLeadVisits = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const u = (await db.collection("users").doc(request.auth.uid).get()).data();
+  if (!u || u.active === false || !(hasPlatform(u) || seesVisits(u))) throw new HttpsError("permission-denied", "لا تملك صلاحية عرض زيارات الفروع.");
+  const snap = await db.collection("leadVisits").where("dayKey", ">=", riyadhDay(-30)).where("dayKey", "<=", riyadhDay(30)).get();
+  const ms = (t) => t?.toMillis?.() || null;
+  const platform = hasPlatform(u);
+  return {
+    platform,
+    visits: snap.docs.map((d) => ({ id: d.id, ...d.data() }))
+      .filter((v) => v.status !== "CANCELLED" && (platform || coversBranch(u, v.branch)))
+      .map((v) => ({
+        id: v.id, leadId: platform ? v.leadId : null, leadCode: v.leadCode || "", type: v.type, at: ms(v.at), dayKey: v.dayKey, branch: v.branch,
+        status: v.status, parentName: v.parentName || "", phone: v.phone || "", students: v.students || "", host: v.host || "", notes: v.notes || "",
+        source: v.source || "", assignedToName: v.assignedToName || "", arrivedAt: ms(v.arrivedAt), arrivedByName: v.arrivedByName || "",
+        metAt: ms(v.metAt), metByName: v.metByName || "", statusByName: v.statusByName || "", confirmedByName: v.confirmedByName || "", hasSlot: !!v.appointmentId,
+      })),
+  };
+});
+
+// arrived / attended / noShow — the branch's staff and reception desk;
+// confirmed (the parent confirmed by phone) and cancel — platform users and
+// the branch principal / staff with edit permission; release (the visit was
+// moved from the lead's file outside the slot pool) — platform users.
+exports.leadVisitAction = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "يجب تسجيل الدخول.");
+  const { visitId, action } = request.data || {};
+  const map = { arrived: "ARRIVED", attended: "ATTENDED", noShow: "NO_SHOW", confirmed: "CONFIRMED", cancel: "CANCELLED", release: null };
+  if (!(action in map)) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+  const u = (await db.collection("users").doc(request.auth.uid).get()).data();
+  if (!u || u.active === false) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء.");
+  const visitRef = db.collection("leadVisits").doc(String(visitId || "_"));
+  const visit = (await visitRef.get()).data();
+  if (!visit) throw new HttpsError("not-found", "لم يتم العثور على الزيارة.");
+  const platform = hasPlatform(u);
+  const branchStaff = seesVisits(u) && coversBranch(u, visit.branch);
+  const manager = canManageAppointment(u, { branch: visit.branch, assignedTo: [] }, request.auth.uid);
+  const allowed = platform || (["arrived", "attended", "noShow"].includes(action) ? branchStaff : action !== "release" && branchStaff && manager);
+  if (!allowed) throw new HttpsError("permission-denied", "لا تملك صلاحية تنفيذ هذا الإجراء على زيارات هذا الفرع.");
+  const actor = { uid: request.auth.uid, name: u.name || "مستخدم" };
+  const now = Timestamp.now();
+
+  if (action === "release") {
+    if (visit.appointmentId) await db.collection("appointments").doc(visit.appointmentId).update({ status: "CANCELLED", cancelledAt: now }).catch(() => {});
+    await visitRef.update({ appointmentId: null, updatedAt: now });
+    return { ok: true };
+  }
+  const status = map[action];
+  const allowedFrom = {
+    ARRIVED: ["REQUESTED", "SCHEDULED", "CONFIRMED", "NO_SHOW"], ATTENDED: LEAD_VISIT_OPEN.concat("NO_SHOW"), NO_SHOW: LEAD_VISIT_OPEN,
+    CONFIRMED: ["SCHEDULED"], CANCELLED: ["REQUESTED", "SCHEDULED", "CONFIRMED"],
+  }[status];
+  if (!allowedFrom.includes(visit.status)) throw new HttpsError("failed-precondition", "حالة الزيارة تغيّرت — حدّث الصفحة.");
+  if (["ARRIVED", "ATTENDED"].includes(status) && visit.at?.toMillis() > Date.now() + 12 * 3600e3) throw new HttpsError("failed-precondition", "موعد هذه الزيارة لم يحن بعد.");
+
+  let metBy = null;
+  if (status === "ATTENDED") {
+    const ids = [...new Set((Array.isArray(request.data?.metByIds) ? request.data.metByIds : []).filter((x) => typeof x === "string" && x))].slice(0, 8);
+    if (ids.length) metBy = await resolveVisitStaff(ids, { branch: visit.branch, assignedTo: [] }, u.role === "RECEPTIONIST" ? null : { id: request.auth.uid, name: u.name });
+  }
+  const interest = platform && ["HIGH", "MEDIUM", "LOW"].includes(request.data?.interest) ? request.data.interest : "";
+  await applyLeadVisitOutcome(visitRef, visit, status, actor, { reason: str(request.data?.reason, 300), interest, metBy, note: str(request.data?.note, 300) });
+
+  if (status === "ARRIVED") {
+    const [users, lead] = await Promise.all([loadActiveUsers(), visit.leadId ? db.collection("leads").doc(visit.leadId).get() : null]);
+    const principals = users.filter((x) => x.isPrincipal === true && coversBranch(x, visit.branch)).map((x) => x.id);
+    const owner = lead?.data()?.assignedTo;
+    const to = [...new Set([...principals, ...(owner ? [owner] : [])])].filter((id) => id !== request.auth.uid);
+    await notifyUsers(to.length ? to : await platformOwners(), {
+      title: "وصلت أسرة لزيارة تسجيل جديد",
+      body: `${visit.parentName || ""} — ${visit.students || ""}${visit.host ? ` — المستقبِل: ${visit.host}` : ""}. الأسرة في الاستقبال الآن.`,
+      complaintId: visitRef.id, type: "LEAD_VISIT_ARRIVED",
+    });
+  }
+  return { ok: true };
 });
 
 // --- Platform data for the owner's student record ----------------------------
