@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
-import { BookOpenCheck, Plus, Loader2, CalendarDays, Clock, ArrowRight, Pencil, Lock, Unlock, Trash2, Users, UserCheck, ClipboardList, Layers } from 'lucide-react';
+import { BookOpenCheck, Plus, Loader2, CalendarDays, Clock, ArrowRight, Pencil, Lock, Unlock, Trash2, Users, UserCheck, ClipboardList, Layers, LayoutDashboard } from 'lucide-react';
 import PageHero from '../components/common/PageHero';
 import { useBranches } from '../hooks/useOrgData';
 import { callSupport, time12 } from '../config/support';
@@ -10,12 +10,13 @@ import SupportStudents from '../components/support/SupportStudents';
 import SupportGroups from '../components/support/SupportGroups';
 import SupportSupervisors from '../components/support/SupportSupervisors';
 import SupportAttendance from '../components/support/SupportAttendance';
+import SupportDashboard from '../components/support/SupportDashboard';
 import { Pill, btn } from '../components/platform/ui';
 
 export const weekdaysText = (t, list) => (list || []).map((w) => t(`support.weekdays.${w}`)).join(' و');
 
 // «برامج الدعم»: the cycles of remedial / enrichment classes; one opens in
-// its students, groups, supervisors and attendance.
+// its follow-up board, students, groups, supervisors and attendance.
 export default function SupportPrograms() {
   const { t } = useTranslation();
   const branches = useBranches();
@@ -77,7 +78,7 @@ function CycleDetails({ id, branchName, onBack }) {
   const { t } = useTranslation();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
-  const [tab, setTab] = useState('students');
+  const [tab, setTab] = useState('dashboard');
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -94,7 +95,7 @@ function CycleDetails({ id, branchName, onBack }) {
     setBusy(true);
     try { await callSupport('supportDeleteCycle', { id }); onBack(); } catch (err) { window.alert(err.message); setBusy(false); }
   };
-  const tabs = [['students', Users], ['groups', Layers], ...(c.canManage ? [['supervisors', UserCheck]] : []), ['attendance', ClipboardList]];
+  const tabs = [['dashboard', LayoutDashboard], ['students', Users], ['groups', Layers], ...(c.canManage ? [['supervisors', UserCheck]] : []), ['attendance', ClipboardList]];
 
   return (
     <div className="space-y-4">
@@ -114,9 +115,10 @@ function CycleDetails({ id, branchName, onBack }) {
           </div>
         )}
       </div>
-      <div className="flex gap-1 bg-white rounded-xl border border-slate-100 shadow-sm p-1 w-fit">
+      <div className="flex flex-wrap gap-1 bg-white rounded-xl border border-slate-100 shadow-sm p-1 w-fit max-w-full">
         {tabs.map(([k, Icon]) => <button key={k} type="button" onClick={() => setTab(k)} className={`px-4 py-2 rounded-lg text-sm flex items-center gap-1.5 ${tab === k ? 'bg-primary text-white' : 'text-slate-600 hover:bg-slate-100'}`}><Icon className="w-4 h-4" />{t(`support.tabs.${k}`)}</button>)}
       </div>
+      {tab === 'dashboard' && <SupportDashboard data={data} branchName={branchName} groupName={groupName} reload={load} />}
       {tab === 'students' && <SupportStudents data={data} branchName={branchName} groupName={groupName} reload={load} />}
       {tab === 'groups' && <SupportGroups data={data} branchName={branchName} reload={load} />}
       {tab === 'supervisors' && c.canManage && <SupportSupervisors data={data} branchName={branchName} reload={load} />}

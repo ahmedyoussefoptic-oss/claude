@@ -1799,7 +1799,8 @@
       "platform": "MIS platform",
       "leaves": "Leave request steps",
       "callTasks": "Call tasks",
-      "meetings": "Parent meetings"
+      "meetings": "Parent meetings",
+      "support": "Support programmes"
     },
     "hints": {
       "assigned": "When feedback, a tech ticket or lost item is assigned to you",
@@ -1817,7 +1818,8 @@
       "platform": "New leave requests and new customer inquiries",
       "leaves": "Approval, calling and handover, and the parent's notices (on the way, arrived, changed, cancelled)",
       "callTasks": "New calls assigned, the morning reminder of today's calls, and the supervisor's daily summary",
-      "meetings": "A low rating from a parent after a parent meeting"
+      "meetings": "A low rating from a parent after a parent meeting",
+      "support": "A student absent repeatedly, a group whose attendance wasn't taken, a parent who declined"
     },
     "channelsTitle": "Delivery (in addition to the in-app bell)",
     "channels": {
@@ -5335,7 +5337,8 @@
       "students": "Students",
       "groups": "Groups",
       "supervisors": "Supervisors",
-      "attendance": "Attendance"
+      "attendance": "Attendance",
+      "dashboard": "Follow-up"
     },
     "editor": {
       "newTitle": "New cycle",
@@ -5356,9 +5359,21 @@
       "approval": "Nominations need the coordinator's or principal's approval",
       "approvalHint": "Without it, an academic's nomination is approved at once, ready to send to the parent.",
       "absentWa": "WhatsApp the parent on absence",
-      "absentWaHint": "Sent automatically when the supervisor saves attendance on the class day.",
+      "absentWaHint": "Sent automatically once attendance closes on the class day.",
       "pledge": "Pledge text",
-      "pledgeHint": "{student} becomes the student's name and {program} the programme."
+      "pledgeHint": "{student} becomes the student's name and {program} the programme.",
+      "absenceTitle": "Absence & contact",
+      "closeTime": "Attendance closes",
+      "closeTimeHint": "Absence messages and calls go out after this.",
+      "alertAt": "Alert on repeated absence",
+      "alertAtHint": "Number of absences (0 = no alert).",
+      "absentCall": "A call to each absent student's parent",
+      "absentCallHint": "Added to «Call tasks» for customer service, with its result recorded.",
+      "noReplyCall": "A call to parents who haven't answered or signed the pledge",
+      "noReplyCallHint": "72 hours after sending (a WhatsApp reminder after 48). An answer recorded on the call updates the student.",
+      "callAgents": "Call agents",
+      "callAgentsHint": "Calls are dealt to them for the same day. None chosen: they wait unassigned for the call supervisor.",
+      "noAgents": "No call agents (the «call agent» role on the Users page)."
     },
     "all": "All",
     "nominate": "Nominate students",
@@ -5545,15 +5560,116 @@
       "noStudents": "No students in this group.",
       "save": "Save attendance ({{done}}/{{total}})",
       "savedAt": "Saved {{time}}",
-      "notified": "Parents of absentees messaged: {{n}}"
+      "notified": "Parents of absentees messaged: {{n}}",
+      "willNotify": "Absent students' parents will be notified when attendance closes at {{time}}"
     },
     "student": {
       "title": "Support programmes (remedial & enrichment)",
       "attendance": "Attendance {{rate}}% · absent {{absent}}",
       "consent": "Consented by {{name}} · {{day}}",
-      "decline": "Declined by {{name}} · {{day}}"
+      "decline": "Declined by {{name}} · {{day}}",
+      "attempts": "{{n}} attempts",
+      "pledgeTitle": "Parent's pledge (not joining)",
+      "declinedOn": "Declined",
+      "signedBy": "Signed by",
+      "signedAt": "Signed on",
+      "signedVia": "Signed via",
+      "viaLink": "Online through the link, after the student's ID",
+      "alert": "Repeated absence",
+      "nominated": "Nominated by {{by}} · {{day}}",
+      "sent": "Consent request sent {{day}}",
+      "pledgeSent": "Pledge sent {{day}}, not signed yet",
+      "pledgePdf": "Pledge PDF",
+      "remaining": "Classes left: {{n}} ({{when}})",
+      "classes": "Classes: {{n}} · absent {{absent}}",
+      "contact": "Contact on absence",
+      "openCycle": "Open the cycle"
     },
     "deleteCycle": "Delete cycle",
-    "deleteConfirm": "The cycle “{{title}}” will be deleted for good with its students ({{n}}), groups, supervisors and attendance, and the parent and supervisor links will stop working. This cannot be undone. Continue?"
+    "deleteConfirm": "The cycle “{{title}}” will be deleted for good with its students ({{n}}), groups, supervisors and attendance, and the parent and supervisor links will stop working. This cannot be undone. Continue?",
+    "callKind": {
+      "ABSENT": "Absence call",
+      "NO_REPLY": "No-answer call",
+      "PLEDGE": "Pledge call"
+    },
+    "waState": {
+      "sent": "WhatsApp sent",
+      "failed": "WhatsApp failed",
+      "off": "WhatsApp off for the cycle",
+      "none": "No WhatsApp",
+      "pending": "Sending",
+      "waiting": "Waiting for attendance to close"
+    },
+    "dash": {
+      "class": "Class",
+      "branch": "Branch",
+      "statusDay": "Status date",
+      "calls": "Calls",
+      "notes": "Notes",
+      "name": "Name",
+      "studentsN": "Students",
+      "classes": "Classes",
+      "waCol": "WhatsApp",
+      "callCol": "Call",
+      "agent": "Agent",
+      "callNote": "Call note",
+      "sheets": {
+        "students": "All students",
+        "noReply": "No answer",
+        "declined": "Declined",
+        "signed": "Pledges signed",
+        "noGroup": "Consented, no group",
+        "absences": "Absences & contact"
+      },
+      "by": {
+        "group": "By group",
+        "branch": "By branch",
+        "grade": "By grade",
+        "teacher": "By teacher"
+      },
+      "standing": "Where students stand",
+      "attendance": "Attendance",
+      "totalRate": "Attendance rate",
+      "taken": "Classes taken",
+      "absencesN": "Absences",
+      "waSent": "Absence messages sent",
+      "callsAbsent": "Absence calls",
+      "alertsN": "Repeated-absence alerts",
+      "tile": {
+        "all": "Nominated",
+        "NOMINATED": "Awaiting approval",
+        "APPROVED": "Not sent",
+        "PENDING_CONSENT": "No answer yet",
+        "CONSENTED": "Consented",
+        "noGroup": "Consented, no group",
+        "DECLINED": "Declined (no pledge)",
+        "PLEDGE_SENT": "Pledge unsigned",
+        "PLEDGE_SIGNED": "Pledge signed",
+        "WITHDRAWN": "Withdrawn",
+        "alerts": "Repeated-absence alerts"
+      },
+      "lastAbsent": "Last absent",
+      "reportTitle": "Support programmes follow-up report",
+      "supervisor": "Supervisor",
+      "legend": "✓ present · L late · A absent · E excused",
+      "signSupervisor": "Supervisor's signature",
+      "signCoordinator": "Coordinator's signature",
+      "sheetTitle": "Support programmes attendance sheet",
+      "excelAll": "Excel of all lists",
+      "printReport": "Print report",
+      "printSheets": "Attendance sheets",
+      "printSheet": "Print attendance sheet",
+      "over48": "Over 48 hours: {{n}}",
+      "notTakenToday": "Not taken today: {{n}} groups",
+      "classDays": "Class days so far: {{n}}",
+      "openCalls": "Open: {{n}}",
+      "closeHint": "Absence messages and calls go out when attendance closes at {{time}}; the coordinator and branch principal are alerted on repeated absence.",
+      "noMarks": "No attendance yet.",
+      "absenceFollow": "Absence follow-up",
+      "openOnly": "Open calls only",
+      "alerted": "Alerted {{day}}",
+      "toNote": "Open a note",
+      "noteDetails": "Repeated absence from {{program}} in «{{cycle}}»: absent {{n}} times (attendance {{rate}}%). Days absent: {{days}}."
+    }
   }
 }

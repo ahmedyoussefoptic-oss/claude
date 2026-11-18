@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 import { Loader2, KeyRound, ClipboardCheck, Check, Save } from 'lucide-react';
 import PublicHeader from '../components/common/PublicHeader';
-import { callSupport, MARKS, MARK_STYLE } from '../config/support';
+import { callSupport, MARKS, MARK_STYLE, time12 } from '../config/support';
 
 const card = 'w-full max-w-2xl bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-200';
 
@@ -38,7 +38,7 @@ export default function SupportAttend() {
     try {
       const r = await callSupport('supportMark', { token, pin, day: state.day, groupId: g.id, marks: marks[g.id] || {} });
       apply(r.state);
-      setSaved((x) => ({ ...x, [g.id]: r.notified }));
+      setSaved((x) => ({ ...x, [g.id]: r.notified ? t('support.attend.notified', { n: r.notified }) : r.pendingNotice ? t('support.attend.willNotify', { time: time12(r.pendingNotice) }) : '' }));
     } catch (err) { setError(err.message); } finally { setBusy(''); }
   };
 
@@ -98,7 +98,7 @@ export default function SupportAttend() {
                   {g.students.length > 0 && (
                     <div className="flex flex-wrap items-center gap-2">
                       <button type="button" disabled={busy === g.id || !done} onClick={() => save(g)} className="px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-bold flex items-center gap-2 disabled:opacity-60">{busy === g.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}{t('support.attend.save', { done, total: g.students.length })}</button>
-                      {g.savedAt > 0 && <span className="text-xs text-emerald-700">{t('support.attend.savedAt', { time: new Date(g.savedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) })}{saved[g.id] ? ` · ${t('support.attend.notified', { n: saved[g.id] })}` : ''}</span>}
+                      {g.savedAt > 0 && <span className="text-xs text-emerald-700">{t('support.attend.savedAt', { time: new Date(g.savedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) })}{saved[g.id] ? ` · ${saved[g.id]}` : ''}</span>}
                     </div>
                   )}
                 </section>

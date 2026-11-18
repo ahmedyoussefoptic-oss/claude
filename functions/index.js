@@ -377,6 +377,7 @@ const NOTIFICATION_CATEGORIES = {
   reminder: ["REMINDER", "IT_REMINDER", "LF_REMINDER"],
   platform: ["LEAVE_REQUESTED", "LEAD_NEW"],
   callTasks: ["CALL_ASSIGNED", "CALL_DAILY", "CALL_SUMMARY", "CALL_WRONG_NUMBER"],
+  support: ["SUPPORT_DECLINED", "SUPPORT_ABSENCE", "SUPPORT_NOT_TAKEN"],
   leaves: ["LEAVE_APPROVED", "LEAVE_CALLED", "LEAVE_PREPARE", "LEAVE_ARRIVED", "LEAVE_CANCELLED", "LEAVE_RESCHEDULED"],
 };
 const categoryOfType = (type) => Object.keys(NOTIFICATION_CATEGORIES).find((c) => NOTIFICATION_CATEGORIES[c].includes(type));
@@ -7215,8 +7216,74 @@ exports.recordCallResult = onCall(async (request) => {
   }
   const bev = (await db.collection("settings").doc("bevatel").get()).data();
   await verifyCallTask(ref, bev?.lastSyncAt?.toMillis?.() || 0);
+  // A «برامج الدعم» call: its result goes back on the student's enrollment.
+  if (k.support && supportHooks) await supportHooks.onCallResult({ id: ref.id, ...k }, entry, caller).catch((err) => console.error("support call result", err));
   return { ok: true, status: update.status || "PENDING" };
 });
+
+// «برامج الدعم» calls (a student absent from a class, a parent who hasn't
+// answered the consent request in 72 hours, a pledge not signed): one
+// campaign per cycle (callCampaigns/support_<cycleId>), made on its first
+// call. Each call has a fixed id (so it is never added twice) and is dealt to
+// the cycle's call agents (or the campaign's), due today; without agents it
+// waits unassigned for the call supervisor. Returns the ids added.
+const SUPPORT_CALL_OUTCOMES = ["موافق على الالتحاق", "غير موافق", "عذر مقبول", "سيلتزم بالحضور", "يرغب بالانسحاب", "أخرى"];
+async function addSupportCallTasks({ cycleId, cycleTitle, endDay, createdBy, createdByName, agentIds, items }) {
+  const valid = items.filter((x) => /^05\d{8}$/.test(callPhone(x.phone)));
+  if (!valid.length) return [];
+  const existing = await db.getAll(...valid.map((x) => db.collection("callTasks").doc(x.id)));
+  const fresh = valid.filter((x, i) => !existing[i].exists);
+  if (!fresh.length) return [];
+  const campRef = db.collection("callCampaigns").doc(`support_${cycleId}`);
+  const camp = (await campRef.get()).data();
+  const wanted = (agentIds || []).length ? agentIds : (camp?.agents || []);
+  const agents = (await loadActiveUsers()).filter((u) => wanted.includes(u.id) && callRoleOf(u, "agent"));
+  const today = riyadhDay();
+  const now = Timestamp.now();
+  const title = camp?.title || `برامج الدعم — ${cycleTitle}`;
+  const tasks = fresh.map((x) => ({
+    id: x.id, campaignId: campRef.id, campaignTitle: title, priority: x.kind === "ABSENT" ? "URGENT" : "NORMAL", phone: callPhone(x.phone), branch: x.branch || "",
+    studentId: x.studentId, studentIds: [x.studentId], studentName: x.name, grade: [x.grade, x.className].filter(Boolean).join(" "),
+    fileData: [{ name: x.name, data: { "سبب الاتصال": x.reason, "التفاصيل": x.detail, "البرنامج": x.program } }],
+    support: { cycleId, studentId: x.studentId, kind: x.kind, day: x.day || "" },
+    status: "PENDING", assignedTo: null, assignedName: "", dueDay: today, dueAt: null, attempts: 0, noAnswerCount: 0, history: [], verifyPending: false, createdAt: now,
+  }));
+  if (agents.length) {
+    const pending = await db.collection("callTasks").where("campaignId", "==", campRef.id).where("status", "==", "PENDING").get();
+    const existingLoad = {};
+    pending.docs.forEach((x) => { const a = x.data().assignedTo; if (a) existingLoad[a] = (existingLoad[a] || 0) + 1; });
+    dealCallTasks(tasks, agents, { startDay: today, quota: 100000, existing: existingLoad });
+  }
+  const branches = [...new Set(tasks.map((x) => x.branch).filter(Boolean))];
+  const unassigned = tasks.filter((x) => !x.assignedTo).length;
+  if (!camp) {
+    await campRef.set({
+      title, goal: "التواصل مع أولياء أمور طلاب برامج الدعم: الغياب عن الحصص، وعدم الرد على طلب الموافقة، والتعهد غير الموقّع.",
+      script: "السلام عليكم، معكم مدارس المكتشف العالمية بخصوص برامج الدعم (حصص التقوية والإثراء) لابنكم/ابنتكم. سبب الاتصال موضّح في بيانات الاتصال.",
+      outcomes: SUPPORT_CALL_OUTCOMES, priority: "NORMAL", status: "ACTIVE", startDay: today, endDay: endDay && endDay > today ? endDay : today, dailyQuota: 100,
+      distribution: agents.length ? "AUTO" : "MANUAL", agents: agents.map((a) => a.id), agentNames: Object.fromEntries(agents.map((a) => [a.id, a.name || ""])), branches,
+      targetLabel: "برامج الدعم (تلقائي)", fileColumns: ["سبب الاتصال", "التفاصيل", "البرنامج"], source: { kind: "support", cycleId },
+      createdBy: createdBy || "", createdByName: createdByName || "", createdAt: now, updatedAt: now,
+      counts: { total: tasks.length, pending: tasks.length, done: 0, answered: 0, noAnswer: 0, wrong: 0, failed: 0, unassigned }, outcomeCounts: {},
+    });
+  } else {
+    await campRef.set({
+      counts: { total: FieldValue.increment(tasks.length), pending: FieldValue.increment(tasks.length), unassigned: FieldValue.increment(unassigned) },
+      ...(branches.length ? { branches: FieldValue.arrayUnion(...branches) } : {}),
+      ...(agents.length ? { agents: FieldValue.arrayUnion(...agents.map((a) => a.id)), agentNames: Object.fromEntries(agents.map((a) => [a.id, a.name || ""])) } : {}),
+      ...(endDay && endDay > (camp.endDay || "") ? { endDay } : {}), updatedAt: now,
+    }, { merge: true });
+  }
+  const batch = db.batch();
+  tasks.forEach(({ id, ...x }) => batch.create(db.collection("callTasks").doc(id), x));
+  await batch.commit();
+  const perAgent = {};
+  tasks.forEach((x) => { if (x.assignedTo) perAgent[x.assignedTo] = (perAgent[x.assignedTo] || 0) + 1; });
+  for (const [uid, n] of Object.entries(perAgent)) {
+    await notifyUsers([uid], { title: `اتصالات برامج الدعم: ${cycleTitle}`, body: `أُسند إليك ${n} اتصالاً لليوم.`, complaintId: campRef.id, type: "CALL_ASSIGNED" }).catch(() => {});
+  }
+  return tasks.map((x) => x.id);
+}
 
 // The agent's other actions on a call, kept on it for the indicators: a
 // WhatsApp message opened to the parent, or a note («ملاحظة») filed from it.
@@ -8182,7 +8249,9 @@ Object.assign(exports, meetingsModule({
 Object.assign(exports, surveysModule({ db, Timestamp, FieldValue, HttpsError, onCall, crypto, str, callerHasBranch, callerAll, normalizeDigits, studentGrade, studentSection, branchResolver }));
 // «برامج الدعم» (حصص التقوية والإثراء) — see functions/support.js.
 const supportModule = require("./support");
-Object.assign(exports, supportModule({
+const { hooks: supportHooks, ...supportFunctions } = supportModule({
   db, Timestamp, FieldValue, HttpsError, onCall, onSchedule, crypto, str, callerHasBranch, callerAll, normalizeDigits, studentGrade, studentSection,
   branchResolver, taqnyatSend, waParam, toIntlNumber, PUBLIC_APP_URL, SCHOOL_NAME, WA_API_ENABLED, riyadhDay: () => riyadhDay(), notifyUsers,
-}));
+  loadActiveUsers, addSupportCallTasks, callRoleOf,
+});
+Object.assign(exports, supportFunctions);
