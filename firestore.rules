@@ -584,6 +584,11 @@ service cloud.firestore {
       allow read: if platformUser();
       allow write: if isOwner();
     }
+    // The registration form's options («كيف تعرفت على المدرسة»), read by
+    // the public /join and /school-visit pages.
+    match /platformSettings/joinForm {
+      allow read: if true;
+    }
 
     // Other collections — admins only, and never the collections matched
     // explicitly above (rules OR together, so a blanket admin rule would

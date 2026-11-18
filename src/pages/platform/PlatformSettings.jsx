@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { doc, setDoc } from 'firebase/firestore';
 import QRCode from 'qrcode';
-import { Settings2, Save, Check, Loader2, Link2, Copy, QrCode } from 'lucide-react';
+import { Settings2, Save, Check, Loader2, Link2, Copy, QrCode, Plus, Trash2, ArrowUp } from 'lucide-react';
 import { db } from '../../config/firebase';
 import { useBranches } from '../../hooks/useOrgData';
-import { LEAD_STAGES, LEAD_SOURCES, usePlatformSettings } from '../../config/platform';
+import { LEAD_STAGES, LEAD_SOURCES, usePlatformSettings, useHeardFromOptions, saveHeardFromOptions } from '../../config/platform';
+import { joinLink as buildJoinLink } from '../../components/platform/JoinLinksMenu';
 import { STAGES } from '../../config/complaintTypes';
 import { Field, inputCls, btn } from '../../components/platform/ui';
 import PageHero from '../../components/common/PageHero';
@@ -28,9 +29,14 @@ export default function PlatformSettings() {
   const [copied, setCopied] = useState('');
   const [qr, setQr] = useState({});
   const [linkSource, setLinkSource] = useState('WEBSITE');
+  const [linkBranch, setLinkBranch] = useState('');
+  const heardFrom = useHeardFromOptions();
+  const [heard, setHeard] = useState(() => heardFrom.map((o) => ({ label: o.label, subs: o.subs.join('، ') })));
 
   useEffect(() => { setDraft(settings); }, [settings]);
-  const joinLink = `${window.location.origin}/join?src=${linkSource}`;
+  useEffect(() => { setHeard(heardFrom.map((o) => ({ label: o.label, subs: o.subs.join('، ') }))); }, [heardFrom]);
+  const setHeardRow = (i, k, v) => setHeard((l) => l.map((o, j) => (j === i ? { ...o, [k]: v } : o)));
+  const joinLink = buildJoinLink(linkBranch, linkSource);
   const leaveLink = `${window.location.origin}/leave`;
   useEffect(() => {
     Promise.all([QRCode.toDataURL(joinLink, { width: 320, margin: 1 }), QRCode.toDataURL(leaveLink, { width: 320, margin: 1 })]).then(([j, l]) => setQr({ join: j, leave: l }));
@@ -47,6 +53,7 @@ export default function PlatformSettings() {
       leadVisitTemplate: String(draft.leadVisitTemplate || '').trim(),
       leadVisitAutoRemind: draft.leadVisitAutoRemind === true,
     }, { merge: true });
+    await saveHeardFromOptions(heard.map((o) => ({ label: o.label, subs: o.subs.split(/[,،\n]/) })));
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -72,17 +79,38 @@ export default function PlatformSettings() {
               <p className="text-sm font-medium text-slate-800">{label}</p>
               <p className="text-xs text-slate-500">{hint}</p>
               {k === 'join' && (
-                <select value={linkSource} onChange={(e) => setLinkSource(e.target.value)} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white">{LEAD_SOURCES.map((s) => <option key={s} value={s}>{t(`platform.leads.sources.${s}`)}</option>)}</select>
+                <div className="flex flex-wrap gap-2">
+                  <select value={linkBranch} onChange={(e) => setLinkBranch(e.target.value)} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white"><option value="">{t('platform.leads.links.all')}</option>{branches.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}</select>
+                  <select value={linkSource} onChange={(e) => setLinkSource(e.target.value)} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white">{LEAD_SOURCES.map((s) => <option key={s} value={s}>{t(`platform.leads.sources.${s}`)}</option>)}</select>
+                </div>
               )}
               <div className="flex gap-2">
                 <input readOnly value={link} dir="ltr" className={`${inputCls} font-mono text-xs`} />
                 <button onClick={() => copy(k, link)} className={btn.ghost}>{copied === k ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}</button>
-                {qr[k] && <a href={qr[k]} download={`${k}-qr.png`} className={btn.ghost}><QrCode className="w-4 h-4" /></a>}
+                {qr[k] && <a href={qr[k]} download={`${k}${k === 'join' && linkBranch ? `-${linkBranch}` : ''}-qr.png`} className={btn.ghost}><QrCode className="w-4 h-4" /></a>}
               </div>
             </div>
           </div>
         ))}
         <p className="text-xs text-slate-400 flex items-center gap-1"><Link2 className="w-3.5 h-3.5" />{t('platform.settings.referralHint')}</p>
+      </section>
+
+      <section className={card}>
+        <h3 className="font-bold text-slate-900">{t('platform.settings.heardFrom')}</h3>
+        <p className="text-xs text-slate-500">{t('platform.settings.heardFromHint')}</p>
+        <div className="space-y-2">
+          {heard.map((o, i) => (
+            <div key={i} className="flex flex-col sm:flex-row gap-2 sm:items-center border border-slate-100 rounded-xl p-2">
+              <input value={o.label} onChange={(e) => setHeardRow(i, 'label', e.target.value)} placeholder={t('platform.settings.heardFromOption')} className={`${inputCls} sm:w-56`} />
+              <input value={o.subs} onChange={(e) => setHeardRow(i, 'subs', e.target.value)} placeholder={t('platform.settings.heardFromSubs')} className={`${inputCls} flex-1`} />
+              <div className="flex gap-1 justify-end">
+                <button type="button" disabled={i === 0} onClick={() => setHeard((l) => { const n = [...l]; [n[i - 1], n[i]] = [n[i], n[i - 1]]; return n; })} className="p-2 text-slate-400 hover:text-primary disabled:opacity-30"><ArrowUp className="w-4 h-4" /></button>
+                <button type="button" onClick={() => setHeard((l) => l.filter((_, j) => j !== i))} className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <button type="button" onClick={() => setHeard((l) => [...l, { label: '', subs: '' }])} className="text-sm text-primary flex items-center gap-1"><Plus className="w-4 h-4" />{t('platform.settings.heardFromAdd')}</button>
       </section>
 
       <section className={card}>

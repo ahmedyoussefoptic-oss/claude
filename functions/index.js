@@ -5274,23 +5274,27 @@ async function upsertLeadFromPublic(d, label) {
   })).filter((s) => s.name || s.grade);
   if (!students.length) throw new HttpsError("invalid-argument", "أضف بيانات طالب واحد على الأقل.");
   const source = LEAD_SOURCES.includes(d.source) ? d.source : "WEBSITE";
+  // «كيف تعرفت على المدرسة» (options edited in the platform settings).
+  const heardFrom = str(d.heardFrom, 60);
+  const heardFromSub = heardFrom ? str(d.heardFromSub, 60) : "";
+  const heardText = heardFrom ? ` — كيف تعرف على المدرسة: ${heardFrom}${heardFromSub ? ` (${heardFromSub})` : ""}` : "";
   const now = Timestamp.now();
   const existing = await db.collection("leads").where("phone", "==", phone).limit(1).get();
   if (!existing.empty) {
     const ref = existing.docs[0].ref;
-    await ref.collection("activity").add({ type: "INQUIRY_AGAIN", text: `${label} (${students.map((s) => s.name || s.grade).join("، ")})`, byName: "ولي الأمر (نموذج إلكتروني)", at: now });
-    await ref.update({ updatedAt: now, lastInboundAt: now });
+    await ref.collection("activity").add({ type: "INQUIRY_AGAIN", text: `${label} (${students.map((s) => s.name || s.grade).join("، ")})${heardText}`, byName: "ولي الأمر (نموذج إلكتروني)", at: now });
+    await ref.update({ updatedAt: now, lastInboundAt: now, ...(heardFrom && !existing.docs[0].data().heardFrom ? { heardFrom, heardFromSub } : {}) });
     return { ref, code: existing.docs[0].data().code, existing: true, lead: existing.docs[0].data(), students, parentName, phone };
   }
   const code = await newCode("leads", "code", "LD");
   const ref = await db.collection("leads").add({
     code, parentName, phone, altPhone: normalizePhone(d.altPhone) || "", district: str(d.district, 60), preferredContact: str(d.preferredContact, 20),
-    students, branch: str(d.branch, 40), suggestedBranch: "", source, campaign: str(d.campaign, 60), referrer: str(d.ref, 60),
+    students, branch: str(d.branch, 40), suggestedBranch: "", source, campaign: str(d.campaign, 60), referrer: str(d.ref, 60), heardFrom, heardFromSub,
     stage: "INQUIRY", sideStatus: null, sideReason: "", interest: "", assignedTo: null, assignedToName: "",
     nextFollowUp: Timestamp.fromMillis(Date.now() + 24 * 3600e3), stageEnteredAt: now, noAnswerCount: 0,
     createdAt: now, updatedAt: now, lastInboundAt: now, firstResponseAt: null,
   });
-  await ref.collection("activity").add({ type: "CREATED", text: `فتح الملف — ${label}`, byName: "ولي الأمر (نموذج إلكتروني)", at: now });
+  await ref.collection("activity").add({ type: "CREATED", text: `فتح الملف — ${label}${heardText}`, byName: "ولي الأمر (نموذج إلكتروني)", at: now });
   await notifyUsers(await platformOwners(), { title: "عميل محتمل جديد", body: `${parentName} — ${students.map((s) => s.grade).filter(Boolean).join("، ")}`, complaintId: ref.id, type: "LEAD_NEW" });
   return { ref, code, existing: false, lead: { stage: "INQUIRY" }, students, parentName, phone };
 }
@@ -7284,6 +7288,28 @@ async function addSupportCallTasks({ cycleId, cycleTitle, endDay, createdBy, cre
   }
   return tasks.map((x) => x.id);
 }
+
+// Editing the comment written on a call attempt: its author, or a call
+// supervisor in the branch. The previous text is kept on the entry.
+exports.editCallTaskNote = onCall(async (request) => {
+  const caller = await callCaller(request, "agent");
+  const d = request.data || {};
+  const ref = db.collection("callTasks").doc(String(d.taskId || ""));
+  const index = Number(d.index);
+  const note = str(d.note, 500);
+  await db.runTransaction(async (tx) => {
+    const k = (await tx.get(ref)).data();
+    if (!k) throw new HttpsError("not-found", "لم يتم العثور على الاتصال.");
+    const history = [...(k.history || [])];
+    const h = history[index];
+    if (!Number.isInteger(index) || !h) throw new HttpsError("invalid-argument", "لم يتم العثور على التعليق.");
+    if (h.byId !== caller.uid && !(callRoleOf(caller, "supervisor") && inCallScope(caller, k.branch))) throw new HttpsError("permission-denied", "تعديل التعليق لكاتبه أو لمشرف الاتصال.");
+    if ((h.note || "") === note) return;
+    history[index] = { ...h, note, editedAt: Timestamp.now(), editedById: caller.uid, editedByName: caller.name || "", ...(h.editedAt ? {} : { originalNote: h.note || "" }) };
+    tx.update(ref, { history, ...(index === history.length - 1 ? { note } : {}) });
+  });
+  return { ok: true };
+});
 
 // The agent's other actions on a call, kept on it for the indicators: a
 // WhatsApp message opened to the parent, or a note («ملاحظة») filed from it.

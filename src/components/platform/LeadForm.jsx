@@ -10,6 +10,7 @@ import { useUsers } from '../../hooks/useUsers';
 import { STAGES } from '../../config/complaintTypes';
 import { LEAD_SOURCES, INTEREST_LEVELS, normalizePhone, randomCode } from '../../config/platform';
 import { Modal, Field, inputCls, btn } from './ui';
+import HeardFromField from './HeardFromField';
 
 const emptyStudent = () => ({ name: '', gender: '', birthDate: '', grade: '', curriculum: '', currentSchool: '' });
 
@@ -25,7 +26,7 @@ export default function LeadForm({ lead, onClose, onSaved }) {
   const [form, setForm] = useState(() => ({
     parentName: lead?.parentName || '', phone: lead?.phone ? `0${String(lead.phone).slice(3)}` : '', altPhone: lead?.altPhone ? `0${String(lead.altPhone).slice(3)}` : '',
     district: lead?.district || '', preferredContact: lead?.preferredContact || 'CALL', branch: lead?.branch || '', source: lead?.source || 'CALL_CENTER',
-    campaign: lead?.campaign || '', referrer: lead?.referrer || '', interest: lead?.interest || '', assignedTo: lead?.assignedTo || user?.uid || '',
+    campaign: lead?.campaign || '', referrer: lead?.referrer || '', heardFrom: lead?.heardFrom || '', heardFromSub: lead?.heardFromSub || '', interest: lead?.interest || '', assignedTo: lead?.assignedTo || user?.uid || '',
     nextFollowUp: format(lead?.nextFollowUp?.toDate ? lead.nextFollowUp.toDate() : new Date(Date.now() + 86400e3), "yyyy-MM-dd'T'HH:mm"),
     note: '',
   }));
@@ -51,7 +52,7 @@ export default function LeadForm({ lead, onClose, onSaved }) {
       const now = Timestamp.now();
       const data = {
         parentName: form.parentName.trim(), phone, altPhone: normalizePhone(form.altPhone) || '', district: form.district.trim(), preferredContact: form.preferredContact,
-        branch: form.branch, source: form.source, campaign: form.campaign.trim(), referrer: form.referrer.trim(), interest: form.interest,
+        branch: form.branch, source: form.source, campaign: form.campaign.trim(), referrer: form.referrer.trim(), heardFrom: form.heardFrom, heardFromSub: form.heardFrom ? form.heardFromSub : '', interest: form.interest,
         assignedTo: assignee?.id || null, assignedToName: assignee?.name || '',
         nextFollowUp: Timestamp.fromDate(new Date(form.nextFollowUp)),
         students: students.filter((s) => s.name.trim() || s.grade).map((s) => ({ ...s, name: s.name.trim(), currentSchool: s.currentSchool.trim() })),
@@ -119,6 +120,7 @@ export default function LeadForm({ lead, onClose, onSaved }) {
         <Field label={t('platform.leads.form.source')}><select value={form.source} onChange={set('source')} className={inputCls}>{LEAD_SOURCES.map((s) => <option key={s} value={s}>{t(`platform.leads.sources.${s}`)}</option>)}</select></Field>
         <Field label={t('platform.leads.form.campaign')}><input value={form.campaign} onChange={set('campaign')} className={inputCls} /></Field>
         <Field label={t('platform.leads.form.referrer')}><input value={form.referrer} onChange={set('referrer')} className={inputCls} /></Field>
+        <HeardFromField value={form.heardFrom} sub={form.heardFromSub} onChange={(heardFrom, heardFromSub) => setForm((f) => ({ ...f, heardFrom, heardFromSub }))} inputCls={inputCls} />
         <Field label={t('platform.leads.form.interest')}><select value={form.interest} onChange={set('interest')} className={inputCls}><option value="">—</option>{INTEREST_LEVELS.map((x) => <option key={x} value={x}>{t(`platform.leads.interest.${x}`)}</option>)}</select></Field>
         <Field label={t('platform.leads.form.assignedTo')}><select value={form.assignedTo} onChange={set('assignedTo')} className={inputCls}><option value="">—</option>{staff.map((u) => <option key={u.id} value={u.id}>{u.name || u.email}</option>)}</select></Field>
         <Field label={t('platform.leads.nextFollowUp')} required><input type="datetime-local" value={form.nextFollowUp} onChange={set('nextFollowUp')} className={inputCls} dir="ltr" /></Field>

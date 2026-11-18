@@ -10,6 +10,7 @@ import { useBranches, useDepartments } from '../hooks/useOrgData';
 import { STAGES } from '../config/complaintTypes';
 import { LEAD_SOURCES } from '../config/platform';
 import PublicHeader from '../components/common/PublicHeader';
+import HeardFromField from '../components/platform/HeardFromField';
 
 const inputCls = 'w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
 const emptyStudent = () => ({ name: '', gender: '', birthDate: '', grade: '', curriculum: '', currentSchool: '' });
@@ -26,7 +27,7 @@ export default function SchoolVisitRequest() {
   const departments = useDepartments();
   const lockedBranch = params.get('branch') || '';
   const [mode, setMode] = useState(null); // 'current' | 'new'
-  const [form, setForm] = useState({ parentName: '', phone: '', district: '', branch: lockedBranch, visitType: 'VISIT_TOUR', notes: '' });
+  const [form, setForm] = useState({ parentName: '', phone: '', district: '', branch: lockedBranch, visitType: 'VISIT_TOUR', notes: '', heardFrom: '', heardFromSub: '' });
   const [students, setStudents] = useState([emptyStudent()]);
   const [slot, setSlot] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -118,6 +119,7 @@ export default function SchoolVisitRequest() {
                   {!lockedBranch && (
                     <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('join.branch')} *</label><select required value={form.branch} onChange={(e) => { set('branch')(e); setSlot(null); }} className={inputCls}><option value="">—</option>{branches.map((b) => <option key={b.id} value={b.id}>{branchLabel(b.id)}</option>)}</select></div>
                   )}
+                  <HeardFromField value={form.heardFrom} sub={form.heardFromSub} onChange={(heardFrom, heardFromSub) => setForm((f) => ({ ...f, heardFrom, heardFromSub }))} inputCls={inputCls} />
                 </div>
               </section>
               <section className="space-y-3">

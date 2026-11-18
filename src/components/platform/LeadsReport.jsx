@@ -33,6 +33,8 @@ export default function LeadsReport({ leads, settings, slaCfg, branchName }) {
     return Object.entries(m).sort((a, b) => b[1].total - a[1].total);
   };
   const bySource = group((l) => l.source);
+  const heardLabel = (l) => (l.heardFrom ? `${l.heardFrom}${l.heardFromSub ? ` — ${l.heardFromSub}` : ''}` : '');
+  const byHeardFrom = group(heardLabel);
   const byStaff = group((l) => l.assignedToName);
   const byBranch = group((l) => l.branch);
 
@@ -50,7 +52,7 @@ export default function LeadsReport({ leads, settings, slaCfg, branchName }) {
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(leads.map((l) => ({
       [t('platform.code')]: l.code, [t('platform.leads.form.parentName')]: l.parentName, [t('platform.leads.form.phone')]: `0${String(l.phone).slice(3)}`,
       [t('platform.leads.form.students')]: (l.students || []).map((s) => `${s.name} ${s.grade}`).join('، '), [t('common.branch')]: branchName(l.branch),
-      [t('platform.leads.form.source')]: t(`platform.leads.sources.${l.source}`, l.source), [t('platform.leads.stage')]: t(`platform.leads.stages.${l.stage}`),
+      [t('platform.leads.form.source')]: t(`platform.leads.sources.${l.source}`, l.source), [t('join.heardFrom')]: heardLabel(l), [t('platform.leads.stage')]: t(`platform.leads.stages.${l.stage}`),
       [t('platform.leads.sideTitle')]: l.sideStatus ? t(`platform.leads.side.${l.sideStatus}`) : '', [t('platform.leads.form.assignedTo')]: l.assignedToName || '',
       [t('platform.leads.nextFollowUp')]: l.nextFollowUp?.toDate ? l.nextFollowUp.toDate().toISOString().slice(0, 16).replace('T', ' ') : '',
       [t('platform.createdAt')]: l.createdAt?.toDate ? l.createdAt.toDate().toISOString().slice(0, 10) : '',
@@ -103,6 +105,7 @@ export default function LeadsReport({ leads, settings, slaCfg, branchName }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {table(t('platform.leads.report.bySource'), bySource.map(([k, v]) => [t(`platform.leads.sources.${k}`, k), v]), t('platform.leads.form.source'))}
+        {table(t('platform.leads.report.byHeardFrom'), byHeardFrom, t('join.heardFrom'))}
         {table(t('platform.leads.report.byBranch'), byBranch.map(([k, v]) => [branchName(k), v]), t('common.branch'))}
         {table(t('platform.leads.report.byStaff'), byStaff, t('platform.leads.form.assignedTo'))}
         <section className="border border-slate-100 rounded-2xl p-4">

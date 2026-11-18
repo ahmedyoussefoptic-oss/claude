@@ -214,6 +214,7 @@ export default function LeadDetails({ lead, onClose }) {
               {lead.district && <span>{t('platform.leads.form.district')}: {lead.district}</span>}
               {lead.campaign && <span>{t('platform.leads.form.campaign')}: {lead.campaign}</span>}
               {lead.referrer && <span>{t('platform.leads.form.referrer')}: {lead.referrer}</span>}
+              {lead.heardFrom && <span>{t('join.heardFrom')}: <b className="text-slate-700">{lead.heardFrom}{lead.heardFromSub && ` — ${lead.heardFromSub}`}</b></span>}
               {lead.interest && <span>{t('platform.leads.form.interest')}: {t(`platform.leads.interest.${lead.interest}`)}</span>}
               {lead.visitAt && <span>{t('platform.leads.visitAt')}: <b dir="ltr">{format(lead.visitAt.toDate(), 'yyyy-MM-dd HH:mm')}</b></span>}
               {lead.testAt && <span>{t('platform.leads.testAt')}: <b dir="ltr">{format(lead.testAt.toDate(), 'yyyy-MM-dd HH:mm')}</b></span>}

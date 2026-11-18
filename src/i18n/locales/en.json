@@ -2902,7 +2902,15 @@
         "lossReasons": "Loss reasons",
         "seats": "Seats",
         "capacity": "Capacity",
-        "remaining": "Remaining"
+        "remaining": "Remaining",
+        "byHeardFrom": "How they heard about the school"
+      },
+      "links": {
+        "title": "Registration links",
+        "all": "All branches (the parent picks)",
+        "hint": "One link per branch: the branch is fixed on the parent's form and recorded on the file.",
+        "copy": "Copy link",
+        "qr": "Download QR code"
       }
     },
     "students": {
@@ -2978,7 +2986,12 @@
       "pickBranch": "Choose a branch",
       "reenroll": "Re-enrollment",
       "academicYear": "Coming academic year",
-      "academicYearHint": "e.g. 2027-2028 — parent decisions are stored for this year."
+      "academicYearHint": "e.g. 2027-2028 — parent decisions are stored for this year.",
+      "heardFrom": "\"How did you hear about the school\" on the registration links",
+      "heardFromHint": "Dropdown options on the registration and visit-request links. Write a sub-list separated by commas (e.g. Dima, Idea, najwa) to show it when the option is picked.",
+      "heardFromOption": "Option",
+      "heardFromSubs": "Sub-list (optional, comma-separated)",
+      "heardFromAdd": "Add option"
     },
     "visits": {
       "title": "Visits & school tours",
@@ -3184,7 +3197,9 @@
     "doneTitle": "Thank you for your interest",
     "doneBody": "We've received your request and admissions will contact you soon. Reference:",
     "doneExisting": "You already have a request with us; this inquiry was added to it. Reference:",
-    "privacy": "Your details are used only to contact you about enrollment."
+    "privacy": "Your details are used only to contact you about enrollment.",
+    "heardFrom": "How did you hear about the school?",
+    "heardFromSub": "Choose {{name}}"
   },
   "ticketConvert": {
     "title": "Convert ticket to feedback",
@@ -3957,7 +3972,10 @@
       "pdf": "PDF report",
       "reportTitle": "Call agents performance report"
     },
-    "callsList": "Calls ({{n}}) — {{filter}}"
+    "callsList": "Calls ({{n}}) — {{filter}}",
+    "editNote": "Edit comment",
+    "edited": "edited",
+    "editedBy": "Edited by {{name}} on {{at}}"
   },
   "spedForm": {
     "title": "Special education student data",

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { collection, onSnapshot, query, orderBy, where } from 'firebase/firestore';
-import { UserPlus, Plus, Loader2, Search, LayoutGrid, List, FileBarChart, AlertTriangle, CalendarClock, Link2, Copy, Check, GraduationCap, TrendingUp, CalendarCheck } from 'lucide-react';
+import { UserPlus, Plus, Loader2, Search, LayoutGrid, List, FileBarChart, AlertTriangle, CalendarClock, GraduationCap, TrendingUp, CalendarCheck } from 'lucide-react';
 import { format, isThisWeek, isThisMonth } from 'date-fns';
 import { db } from '../../config/firebase';
 import { useBranches } from '../../hooks/useOrgData';
@@ -12,6 +12,7 @@ import { Tile, Pill, btn } from '../../components/platform/ui';
 import LeadForm from '../../components/platform/LeadForm';
 import LeadDetails from '../../components/platform/LeadDetails';
 import LeadsReport from '../../components/platform/LeadsReport';
+import JoinLinksMenu from '../../components/platform/JoinLinksMenu';
 import { LeadVisitsDay, dayKeyOf } from '../../components/platform/LeadVisits';
 import { leadOpen, stageOverdue, followUpOverdue, tsMs } from '../../components/platform/leadUtils';
 import PageHero from '../../components/common/PageHero';
@@ -35,7 +36,6 @@ export default function Leads() {
   const [term, setTerm] = useState('');
   const [quick, setQuick] = useState('OPEN'); // OPEN | OVERDUE | FOLLOWUP_TODAY | CLOSED | ALL
   const [showForm, setShowForm] = useState(false);
-  const [copied, setCopied] = useState(false);
   const openId = searchParams.get('openId');
   const setOpenId = (id) => setSearchParams(id ? { openId: id } : {});
 
@@ -72,7 +72,6 @@ export default function Leads() {
     enrolledMonth: filtered.filter((l) => l.stage === 'ENROLLED' && l.enrolledAt?.toDate && isThisMonth(l.enrolledAt.toDate())).length,
   };
   const selected = (leads || []).find((l) => l.id === openId);
-  const link = `${window.location.origin}/join`;
   const select = (value, onChange, options, all) => (
     <select value={value} onChange={(e) => onChange(e.target.value)} className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm bg-white">
       <option value="">{all}</option>{options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -103,7 +102,7 @@ export default function Leads() {
         actions={(
           <>
         <div className="flex flex-wrap gap-2">
-          <button onClick={async () => { try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* ignore */ } }} className={btn.ghost}>{copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Link2 className="w-4 h-4" />}{t('platform.leads.copyFormLink')}</button>
+          <JoinLinksMenu />
           <button onClick={() => setShowForm(true)} className={btn.primary}><Plus className="w-4 h-4" />{t('platform.leads.new')}</button>
         </div>
           </>

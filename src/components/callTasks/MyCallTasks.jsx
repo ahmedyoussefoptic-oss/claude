@@ -4,9 +4,10 @@ import { useNavigate } from 'react-router-dom';
 import { collection, query, where, onSnapshot, doc, getDoc, Timestamp } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
-import { Phone, MessageCircle, Loader2, CheckCircle2, PhoneMissed, PhoneOff, Clock, FileText, ChevronDown, ChevronUp, Flame, ListChecks, ShieldCheck, Users as UsersIcon, Timer, AlertTriangle, CalendarClock, Printer } from 'lucide-react';
+import { Phone, MessageCircle, Loader2, CheckCircle2, PhoneMissed, PhoneOff, Clock, FileText, ChevronDown, ChevronUp, Flame, ListChecks, ShieldCheck, Users as UsersIcon, Timer, AlertTriangle, CalendarClock, Printer, Pencil, Check, X } from 'lucide-react';
 import { db, functions } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
+import { callRoleOf } from '../../config/adminPermissions';
 import { useBranches } from '../../hooks/useOrgData';
 import { waLink } from '../../utils/whatsapp';
 import { printPage, escapeHtml } from '../../utils/printPage';
@@ -28,6 +29,52 @@ function periodStart(period, today) {
   if (period === 'week') { const d = new Date(`${today}T12:00:00Z`); d.setUTCDate(d.getUTCDate() - d.getUTCDay()); return d.toISOString().slice(0, 10); }
   if (period === 'month') return `${today.slice(0, 7)}-01`;
   return today;
+}
+
+// The comment on one call attempt, editable by its author (or a call
+// supervisor) in place; the edit is marked with who made it and when.
+function EditableNote({ task, index, prefix = '', className = '' }) {
+  const { t } = useTranslation();
+  const { user, userData } = useAuthStore();
+  const h = (task.history || [])[index];
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  if (!h) return null;
+  const canEdit = h.byId === user?.uid || callRoleOf(userData, 'supervisor');
+  const save = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await httpsCallable(functions, 'editCallTaskNote')({ taskId: task.id, index, note: text.trim() });
+      setEditing(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (editing) {
+    return (
+      <div className={`space-y-1 ${className}`} onClick={(e) => e.stopPropagation()}>
+        {prefix && <p className="text-xs text-slate-500">{prefix}</p>}
+        <textarea rows={2} autoFocus maxLength={500} value={text} onChange={(e) => setText(e.target.value)} className={inputCls} />
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        <div className="flex gap-1.5">
+          <button type="button" disabled={busy} onClick={save} className={`${btn.small} bg-primary text-white`}>{busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{t('common.save')}</button>
+          <button type="button" onClick={() => { setEditing(false); setError(null); }} className={`${btn.small} border border-slate-300 bg-white text-slate-700`}><X className="w-3.5 h-3.5" />{t('common.cancel')}</button>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <p className={`text-xs text-slate-500 ${className}`}>
+      {prefix}{h.note ? `${prefix ? ': ' : ''}${h.note}` : ''}
+      {h.editedAt && <span className="text-slate-400" title={t('callTasks.editedBy', { name: h.editedByName || '', at: format(h.editedAt.toDate(), 'yyyy-MM-dd HH:mm') })}> ({t('callTasks.edited')})</span>}
+      {canEdit && <button type="button" title={t('callTasks.editNote')} onClick={(e) => { e.stopPropagation(); setText(h.note || ''); setEditing(true); }} className="ms-1 p-0.5 align-middle text-slate-400 hover:text-primary"><Pencil className="w-3 h-3" /></button>}
+    </p>
+  );
 }
 
 // One call: the script, the parent's number, and the result in one step.
@@ -100,7 +147,7 @@ function TaskCard({ task, campaign, open, onToggle, onComplaint }) {
           )}
           {(task.history || []).length > 0 && (
             <ul className="text-xs text-slate-500 space-y-0.5">
-              {task.history.map((h, i) => <li key={i}>{format(h.at.toDate(), 'yyyy-MM-dd HH:mm')} — {t(`callTasks.results.${h.result}`)}{h.note ? `: ${h.note}` : ''}</li>)}
+              {task.history.map((h, i) => <li key={i}><EditableNote task={task} index={i} prefix={`${format(h.at.toDate(), 'yyyy-MM-dd HH:mm')} — ${t(`callTasks.results.${h.result}`)}`} /></li>)}
             </ul>
           )}
 
@@ -151,7 +198,7 @@ function DoneRow({ task, campaign }) {
         {(task.complaints || []).map((c) => <NotePill key={c.id} c={c} />)}
         <span className="text-xs text-slate-400 ms-auto">{campaign?.title || task.campaignTitle} · {task.completedAt ? format(task.completedAt.toDate(), 'MM-dd HH:mm') : ''}</span>
       </div>
-      {task.note && <p className="text-xs text-slate-500 mt-1">{task.note}</p>}
+      {last && <EditableNote task={task} index={task.history.length - 1} className="mt-1" />}
     </li>
   );
 }

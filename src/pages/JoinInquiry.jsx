@@ -8,19 +8,22 @@ import { useBranches, useDepartments } from '../hooks/useOrgData';
 import { STAGES } from '../config/complaintTypes';
 import { LEAD_SOURCES } from '../config/platform';
 import PublicHeader from '../components/common/PublicHeader';
+import HeardFromField from '../components/platform/HeardFromField';
 
 const inputCls = 'w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary';
 const emptyStudent = () => ({ name: '', gender: '', birthDate: '', grade: '', curriculum: '', currentSchool: '' });
 
-// Public enrollment inquiry (/join?src=CAMPAIGN&c=<campaign>&ref=<referrer>):
+// Public enrollment inquiry (/join?branch=<id>&src=CAMPAIGN&c=<campaign>&ref=<referrer>):
 // from the website, ad campaigns, a branch QR code or a parent's referral
-// link. Opens (or adds to) the family's file in العملاء الجدد.
+// link. A branch's link (?branch=) fixes the branch. Opens (or adds to) the
+// family's file in العملاء الجدد.
 export default function JoinInquiry() {
   const { t } = useTranslation();
   const [params] = useSearchParams();
   const branches = useBranches();
   const departments = useDepartments();
-  const [form, setForm] = useState({ parentName: '', phone: '', district: '', branch: params.get('branch') || '', preferredContact: 'CALL' });
+  const lockedBranch = params.get('branch') || '';
+  const [form, setForm] = useState({ parentName: '', phone: '', district: '', branch: lockedBranch, preferredContact: 'CALL', heardFrom: '', heardFromSub: '' });
   const [students, setStudents] = useState([emptyStudent()]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -73,8 +76,9 @@ export default function JoinInquiry() {
                 <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('platform.leads.form.parentName')} *</label><input required value={form.parentName} onChange={set('parentName')} className={inputCls} /></div>
                 <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('platform.leads.form.phone')} *</label><input required inputMode="tel" dir="ltr" placeholder="05xxxxxxxx" value={form.phone} onChange={set('phone')} className={inputCls} /></div>
                 <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('platform.leads.form.district')}</label><input value={form.district} onChange={set('district')} className={inputCls} /></div>
-                <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('join.branch')}</label><select value={form.branch} onChange={set('branch')} className={inputCls}><option value="">{t('join.anyBranch')}</option>{branches.map((b) => <option key={b.id} value={b.id}>{t(`businessData.branches.${b.id}`, b.name)}</option>)}</select></div>
+                <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('join.branch')}</label><select value={form.branch} onChange={set('branch')} disabled={!!lockedBranch && branches.some((b) => b.id === lockedBranch)} className={`${inputCls} disabled:bg-slate-50 disabled:text-slate-700`}><option value="">{t('join.anyBranch')}</option>{branches.map((b) => <option key={b.id} value={b.id}>{t(`businessData.branches.${b.id}`, b.name)}</option>)}</select></div>
                 <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('platform.leads.form.preferredContact')}</label><select value={form.preferredContact} onChange={set('preferredContact')} className={inputCls}>{['CALL', 'WHATSAPP', 'VISIT'].map((c) => <option key={c} value={c}>{t(`platform.leads.contact.${c}`)}</option>)}</select></div>
+                <HeardFromField value={form.heardFrom} sub={form.heardFromSub} onChange={(heardFrom, heardFromSub) => setForm((f) => ({ ...f, heardFrom, heardFromSub }))} inputCls={inputCls} />
               </div>
             </section>
             <section className="space-y-3">

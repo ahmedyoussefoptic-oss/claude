@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
 // منصة المكتشف — shared constants for the owner-only platform modules
@@ -87,6 +87,27 @@ export function usePlatformSettings() {
   }, () => {}), []);
   return settings;
 }
+
+// «كيف تعرفت على المدرسة» on the registration links (/join, /school-visit):
+// each option may have a sub-list (e.g. the groups). Edited by the owner in
+// the platform settings; kept in platformSettings/joinForm (public read).
+export const DEFAULT_HEARD_FROM = [
+  { label: 'السوشيال ميديا', subs: [] },
+  { label: 'أقارب / أصدقاء', subs: [] },
+  { label: 'أبناء في المدرسة', subs: [] },
+  { label: 'جروبات', subs: ['Dima', 'Idea', 'najwa'] },
+];
+const cleanHeardFrom = (list) => (Array.isArray(list) ? list : [])
+  .map((o) => ({ label: String(o?.label || '').trim(), subs: (Array.isArray(o?.subs) ? o.subs : []).map((x) => String(x || '').trim()).filter(Boolean) }))
+  .filter((o) => o.label);
+export function useHeardFromOptions() {
+  const [options, setOptions] = useState(DEFAULT_HEARD_FROM);
+  useEffect(() => onSnapshot(doc(db, 'platformSettings', 'joinForm'), (snap) => {
+    if (snap.exists() && Array.isArray(snap.data().heardFrom)) setOptions(cleanHeardFrom(snap.data().heardFrom));
+  }, () => {}), []);
+  return options;
+}
+export const saveHeardFromOptions = (list) => setDoc(doc(db, 'platformSettings', 'joinForm'), { heardFrom: cleanHeardFrom(list) }, { merge: true });
 
 // Same normalization as the server (toIntlNumber): 05xxxxxxxx → 9665xxxxxxxx.
 export function normalizePhone(phone) {
