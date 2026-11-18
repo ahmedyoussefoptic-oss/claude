@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next';
-import { Presentation, LayoutDashboard, FileText, Wrench, PackageSearch, Armchair, Bus, GraduationCap, Search, Map, FileBarChart, Eye, UserCheck, Building2, RotateCcw, PhoneCall, Sparkles, MessageCircle, Wallet } from 'lucide-react';
+import { Presentation, LayoutDashboard, FileText, Wrench, PackageSearch, Armchair, Bus, GraduationCap, Search, Map, FileBarChart, Eye, UserCheck, Building2, RotateCcw, PhoneCall, Sparkles, MessageCircle, Wallet, BookOpenCheck } from 'lucide-react';
 import { MODULE_KEYS, moduleDefault } from '../../utils/scope';
 
-const ICONS = { dashboard: LayoutDashboard, complaints: FileText, finance: Wallet, techSupport: Wrench, lostFound: PackageSearch, visits: Armchair, trips: Bus, meetings: Presentation, students: GraduationCap, search: Search, flowMap: Map, reports: FileBarChart, calls: PhoneCall, waReports: MessageCircle, assistant: Sparkles };
+const ICONS = { dashboard: LayoutDashboard, complaints: FileText, finance: Wallet, techSupport: Wrench, lostFound: PackageSearch, visits: Armchair, trips: Bus, meetings: Presentation, students: GraduationCap, search: Search, flowMap: Map, reports: FileBarChart, calls: PhoneCall, waReports: MessageCircle, assistant: Sparkles, support: BookOpenCheck };
 const PRESETS = {
   default: null,
   complaintsOnly: ['dashboard', 'complaints'],
@@ -70,7 +70,7 @@ export default function ModuleAccessEditor({ form, setForm }) {
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
         {MODULE_KEYS.map((key) => {
-          const Icon = ICONS[key];
+          const Icon = ICONS[key] || Eye;
           const on = effectiveModule(form, key);
           return (
             <label key={key} className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm cursor-pointer transition ${on ? 'bg-white border-primary/40 text-slate-900' : 'bg-slate-100/60 border-slate-200 text-slate-400'}`}>
