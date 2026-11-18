@@ -24,7 +24,7 @@ export default function LeadForm({ lead, onClose, onSaved }) {
   const users = useUsers();
   const staff = users.filter((u) => u.active !== false && u.role !== 'RECEPTIONIST').sort((a, b) => (a.name || '').localeCompare(b.name || '', 'ar'));
   const [form, setForm] = useState(() => ({
-    parentName: lead?.parentName || '', phone: lead?.phone ? `0${String(lead.phone).slice(3)}` : '', altPhone: lead?.altPhone ? `0${String(lead.altPhone).slice(3)}` : '',
+    parentName: lead?.parentName || '', phone: lead?.phone ? `0${String(lead.phone).slice(3)}` : '', altPhone: lead?.altPhone ? `0${String(lead.altPhone).slice(3)}` : '', email: lead?.email || '',
     district: lead?.district || '', preferredContact: lead?.preferredContact || 'CALL', branch: lead?.branch || '', source: lead?.source || 'CALL_CENTER',
     campaign: lead?.campaign || '', referrer: lead?.referrer || '', heardFrom: lead?.heardFrom || '', heardFromSub: lead?.heardFromSub || '', interest: lead?.interest || '', assignedTo: lead?.assignedTo || user?.uid || '',
     nextFollowUp: format(lead?.nextFollowUp?.toDate ? lead.nextFollowUp.toDate() : new Date(Date.now() + 86400e3), "yyyy-MM-dd'T'HH:mm"),
@@ -51,7 +51,7 @@ export default function LeadForm({ lead, onClose, onSaved }) {
       const assignee = staff.find((u) => u.id === form.assignedTo);
       const now = Timestamp.now();
       const data = {
-        parentName: form.parentName.trim(), phone, altPhone: normalizePhone(form.altPhone) || '', district: form.district.trim(), preferredContact: form.preferredContact,
+        parentName: form.parentName.trim(), phone, altPhone: normalizePhone(form.altPhone) || '', email: form.email.trim().toLowerCase(), district: form.district.trim(), preferredContact: form.preferredContact,
         branch: form.branch, source: form.source, campaign: form.campaign.trim(), referrer: form.referrer.trim(), heardFrom: form.heardFrom, heardFromSub: form.heardFrom ? form.heardFromSub : '', interest: form.interest,
         assignedTo: assignee?.id || null, assignedToName: assignee?.name || '',
         nextFollowUp: Timestamp.fromDate(new Date(form.nextFollowUp)),
@@ -92,6 +92,7 @@ export default function LeadForm({ lead, onClose, onSaved }) {
         <Field label={t('platform.leads.form.parentName')} required><input value={form.parentName} onChange={set('parentName')} className={inputCls} /></Field>
         <Field label={t('platform.leads.form.phone')} required><input value={form.phone} onChange={set('phone')} disabled={!!lead} className={`${inputCls} disabled:bg-slate-50`} dir="ltr" placeholder="05xxxxxxxx" /></Field>
         <Field label={t('platform.leads.form.altPhone')}><input value={form.altPhone} onChange={set('altPhone')} className={inputCls} dir="ltr" /></Field>
+        <Field label={t('join.emailShort')}><input type="email" value={form.email} onChange={set('email')} className={inputCls} dir="ltr" /></Field>
         <Field label={t('platform.leads.form.district')}><input value={form.district} onChange={set('district')} className={inputCls} /></Field>
         <Field label={t('platform.leads.form.preferredContact')}>
           <select value={form.preferredContact} onChange={set('preferredContact')} className={inputCls}>{['CALL', 'WHATSAPP', 'VISIT'].map((c) => <option key={c} value={c}>{t(`platform.leads.contact.${c}`)}</option>)}</select>

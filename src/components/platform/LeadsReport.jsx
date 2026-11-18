@@ -50,7 +50,7 @@ export default function LeadsReport({ leads, settings, slaCfg, branchName }) {
     const XLSX = await import('xlsx');
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(leads.map((l) => ({
-      [t('platform.code')]: l.code, [t('platform.leads.form.parentName')]: l.parentName, [t('platform.leads.form.phone')]: `0${String(l.phone).slice(3)}`,
+      [t('platform.code')]: l.code, [t('platform.leads.form.parentName')]: l.parentName, [t('platform.leads.form.phone')]: `0${String(l.phone).slice(3)}`, [t('join.emailShort')]: l.email || '',
       [t('platform.leads.form.students')]: (l.students || []).map((s) => `${s.name} ${s.grade}`).join('، '), [t('common.branch')]: branchName(l.branch),
       [t('platform.leads.form.source')]: t(`platform.leads.sources.${l.source}`, l.source), [t('join.heardFrom')]: heardLabel(l), [t('platform.leads.stage')]: t(`platform.leads.stages.${l.stage}`),
       [t('platform.leads.sideTitle')]: l.sideStatus ? t(`platform.leads.side.${l.sideStatus}`) : '', [t('platform.leads.form.assignedTo')]: l.assignedToName || '',

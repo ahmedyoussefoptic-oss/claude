@@ -2991,7 +2991,8 @@
       "heardFromHint": "Dropdown options on the registration and visit-request links. Write a sub-list separated by commas (e.g. Dima, Idea, najwa) to show it when the option is picked.",
       "heardFromOption": "Option",
       "heardFromSubs": "Sub-list (optional, comma-separated)",
-      "heardFromAdd": "Add option"
+      "heardFromAdd": "Add option",
+      "heardFromSave": "Save options"
     },
     "visits": {
       "title": "Visits & school tours",
@@ -3191,7 +3192,7 @@
     "subtitle": "Leave your details and our admissions team will contact you shortly to help choose the right branch and curriculum.",
     "parent": "Parent details",
     "students": "Children",
-    "branch": "Preferred branch",
+    "branch": "Suitable branch",
     "anyBranch": "Any suitable branch",
     "submit": "Send",
     "doneTitle": "Thank you for your interest",
@@ -3199,7 +3200,10 @@
     "doneExisting": "You already have a request with us; this inquiry was added to it. Reference:",
     "privacy": "Your details are used only to contact you about enrollment.",
     "heardFrom": "How did you hear about the school?",
-    "heardFromSub": "Choose {{name}}"
+    "heardFromSub": "Choose {{name}}",
+    "email": "Email (optional)",
+    "emailShort": "Email",
+    "currentGrade": "Current grade"
   },
   "ticketConvert": {
     "title": "Convert ticket to feedback",

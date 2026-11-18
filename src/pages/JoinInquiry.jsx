@@ -23,7 +23,7 @@ export default function JoinInquiry() {
   const branches = useBranches();
   const departments = useDepartments();
   const lockedBranch = params.get('branch') || '';
-  const [form, setForm] = useState({ parentName: '', phone: '', district: '', branch: lockedBranch, preferredContact: 'CALL', heardFrom: '', heardFromSub: '' });
+  const [form, setForm] = useState({ parentName: '', phone: '', email: '', district: '', branch: lockedBranch, preferredContact: 'CALL', heardFrom: '', heardFromSub: '' });
   const [students, setStudents] = useState([emptyStudent()]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -75,30 +75,29 @@ export default function JoinInquiry() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('platform.leads.form.parentName')} *</label><input required value={form.parentName} onChange={set('parentName')} className={inputCls} /></div>
                 <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('platform.leads.form.phone')} *</label><input required inputMode="tel" dir="ltr" placeholder="05xxxxxxxx" value={form.phone} onChange={set('phone')} className={inputCls} /></div>
-                <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('platform.leads.form.district')}</label><input value={form.district} onChange={set('district')} className={inputCls} /></div>
-                <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('join.branch')}</label><select value={form.branch} onChange={set('branch')} disabled={!!lockedBranch && branches.some((b) => b.id === lockedBranch)} className={`${inputCls} disabled:bg-slate-50 disabled:text-slate-700`}><option value="">{t('join.anyBranch')}</option>{branches.map((b) => <option key={b.id} value={b.id}>{t(`businessData.branches.${b.id}`, b.name)}</option>)}</select></div>
-                <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('platform.leads.form.preferredContact')}</label><select value={form.preferredContact} onChange={set('preferredContact')} className={inputCls}>{['CALL', 'WHATSAPP', 'VISIT'].map((c) => <option key={c} value={c}>{t(`platform.leads.contact.${c}`)}</option>)}</select></div>
-                <HeardFromField value={form.heardFrom} sub={form.heardFromSub} onChange={(heardFrom, heardFromSub) => setForm((f) => ({ ...f, heardFrom, heardFromSub }))} inputCls={inputCls} />
+                <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('join.email')}</label><input type="email" dir="ltr" placeholder="name@example.com" value={form.email} onChange={set('email')} className={inputCls} /></div>
+                <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('platform.leads.form.district')} *</label><input required value={form.district} onChange={set('district')} className={inputCls} /></div>
+                <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('join.branch')} *</label><select required value={form.branch} onChange={set('branch')} disabled={!!lockedBranch && branches.some((b) => b.id === lockedBranch)} className={`${inputCls} disabled:bg-slate-50 disabled:text-slate-700`}><option value="">—</option>{branches.map((b) => <option key={b.id} value={b.id}>{t(`businessData.branches.${b.id}`, b.name)}</option>)}</select></div>
+                <div><label className="block text-sm font-medium text-slate-700 mb-1">{t('platform.leads.form.preferredContact')} *</label><select required value={form.preferredContact} onChange={set('preferredContact')} className={inputCls}>{['CALL', 'WHATSAPP'].map((c) => <option key={c} value={c}>{t(`platform.leads.contact.${c}`)}</option>)}</select></div>
+                <HeardFromField required value={form.heardFrom} sub={form.heardFromSub} onChange={(heardFrom, heardFromSub) => setForm((f) => ({ ...f, heardFrom, heardFromSub }))} inputCls={inputCls} />
               </div>
             </section>
             <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-bold text-slate-800">{t('join.students')}</h2>
-                {students.length < 6 && <button type="button" onClick={() => setStudents((l) => [...l, emptyStudent()])} className="text-sm text-primary flex items-center gap-1"><Plus className="w-4 h-4" />{t('platform.leads.form.addStudent')}</button>}
-              </div>
+              <h2 className="text-sm font-bold text-slate-800">{t('join.students')}</h2>
               {students.map((s, i) => (
                 <div key={i} className="border border-slate-100 rounded-xl p-3 grid grid-cols-2 gap-2">
-                  <div className="col-span-2"><label className="block text-xs text-slate-600 mb-1">{t('platform.leads.form.studentName')}</label><input value={s.name} onChange={(e) => setStudent(i, 'name', e.target.value)} className={inputCls} /></div>
-                  <div><label className="block text-xs text-slate-600 mb-1">{t('platform.grade')} *</label><select required value={s.grade} onChange={(e) => setStudent(i, 'grade', e.target.value)} className={inputCls}><option value="">—</option>{STAGES.map((g) => <option key={g} value={g}>{g}</option>)}</select></div>
-                  <div><label className="block text-xs text-slate-600 mb-1">{t('platform.leads.form.curriculum')}</label><select value={s.curriculum} onChange={(e) => setStudent(i, 'curriculum', e.target.value)} className={inputCls}><option value="">—</option>{departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
-                  <div><label className="block text-xs text-slate-600 mb-1">{t('platform.leads.form.gender')}</label><select value={s.gender} onChange={(e) => setStudent(i, 'gender', e.target.value)} className={inputCls}><option value="">—</option><option value="M">{t('platform.gender.M')}</option><option value="F">{t('platform.gender.F')}</option></select></div>
-                  <div><label className="block text-xs text-slate-600 mb-1">{t('platform.leads.form.birthDate')}</label><input type="date" value={s.birthDate} onChange={(e) => setStudent(i, 'birthDate', e.target.value)} className={inputCls} /></div>
+                  <div className="col-span-2"><label className="block text-xs text-slate-600 mb-1">{t('platform.leads.form.studentName')} *</label><input required value={s.name} onChange={(e) => setStudent(i, 'name', e.target.value)} className={inputCls} /></div>
+                  <div><label className="block text-xs text-slate-600 mb-1">{t('join.currentGrade')} *</label><select required value={s.grade} onChange={(e) => setStudent(i, 'grade', e.target.value)} className={inputCls}><option value="">—</option>{STAGES.map((g) => <option key={g} value={g}>{g}</option>)}</select></div>
+                  <div><label className="block text-xs text-slate-600 mb-1">{t('platform.leads.form.curriculum')} *</label><select required value={s.curriculum} onChange={(e) => setStudent(i, 'curriculum', e.target.value)} className={inputCls}><option value="">—</option>{departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}</select></div>
+                  <div><label className="block text-xs text-slate-600 mb-1">{t('platform.leads.form.gender')} *</label><select required value={s.gender} onChange={(e) => setStudent(i, 'gender', e.target.value)} className={inputCls}><option value="">—</option><option value="M">{t('platform.gender.M')}</option><option value="F">{t('platform.gender.F')}</option></select></div>
+                  <div><label className="block text-xs text-slate-600 mb-1">{t('platform.leads.form.birthDate')} *</label><input required type="date" value={s.birthDate} onChange={(e) => setStudent(i, 'birthDate', e.target.value)} className={inputCls} /></div>
                   <div className="col-span-2 flex items-end gap-2">
-                    <div className="flex-1"><label className="block text-xs text-slate-600 mb-1">{t('platform.leads.form.currentSchool')}</label><input value={s.currentSchool} onChange={(e) => setStudent(i, 'currentSchool', e.target.value)} className={inputCls} /></div>
+                    <div className="flex-1"><label className="block text-xs text-slate-600 mb-1">{t('platform.leads.form.currentSchool')} *</label><input required value={s.currentSchool} onChange={(e) => setStudent(i, 'currentSchool', e.target.value)} className={inputCls} /></div>
                     {students.length > 1 && <button type="button" onClick={() => setStudents((l) => l.filter((_, j) => j !== i))} className="p-2.5 text-rose-500"><Trash2 className="w-4 h-4" /></button>}
                   </div>
                 </div>
               ))}
+              {students.length < 6 && <button type="button" onClick={() => setStudents((l) => [...l, emptyStudent()])} className="w-full py-2.5 border-2 border-dashed border-primary/30 rounded-xl text-sm text-primary flex items-center justify-center gap-1 hover:bg-primary/5"><Plus className="w-4 h-4" />{t('platform.leads.form.addStudent')}</button>}
             </section>
             {error && <p className="text-sm text-red-600 flex items-center gap-1"><AlertTriangle className="w-4 h-4" />{error}</p>}
             <button disabled={busy} className="w-full py-3 bg-primary text-white rounded-xl font-medium flex items-center justify-center gap-2 disabled:opacity-60">{busy && <Loader2 className="w-4 h-4 animate-spin" />}{t('join.submit')}</button>

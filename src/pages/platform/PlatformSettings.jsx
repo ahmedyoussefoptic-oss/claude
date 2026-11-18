@@ -58,6 +58,18 @@ export default function PlatformSettings() {
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   };
+  const [heardSaving, setHeardSaving] = useState(false);
+  const [heardSaved, setHeardSaved] = useState(false);
+  const saveHeard = async () => {
+    setHeardSaving(true);
+    try {
+      await saveHeardFromOptions(heard.map((o) => ({ label: o.label, subs: o.subs.split(/[,،\n]/) })));
+      setHeardSaved(true);
+      setTimeout(() => setHeardSaved(false), 2000);
+    } finally {
+      setHeardSaving(false);
+    }
+  };
   const copy = async (k, text) => { try { await navigator.clipboard.writeText(text); setCopied(k); setTimeout(() => setCopied(''), 1500); } catch { /* ignore */ } };
   const setCap = (g, v) => setDraft((d) => ({ ...d, capacity: { ...(d.capacity || {}), [capBranch]: { ...((d.capacity || {})[capBranch] || {}), [g]: Number(v) || 0 } } }));
   const card = 'bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4';
@@ -110,7 +122,10 @@ export default function PlatformSettings() {
             </div>
           ))}
         </div>
-        <button type="button" onClick={() => setHeard((l) => [...l, { label: '', subs: '' }])} className="text-sm text-primary flex items-center gap-1"><Plus className="w-4 h-4" />{t('platform.settings.heardFromAdd')}</button>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <button type="button" onClick={() => setHeard((l) => [...l, { label: '', subs: '' }])} className="text-sm text-primary flex items-center gap-1"><Plus className="w-4 h-4" />{t('platform.settings.heardFromAdd')}</button>
+          <button type="button" onClick={saveHeard} disabled={heardSaving} className={btn.primary}>{heardSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : heardSaved ? <Check className="w-4 h-4" /> : <Save className="w-4 h-4" />}{heardSaved ? t('platform.settings.saved') : t('platform.settings.heardFromSave')}</button>
+        </div>
       </section>
 
       <section className={card}>

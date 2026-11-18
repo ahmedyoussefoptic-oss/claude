@@ -5277,18 +5277,19 @@ async function upsertLeadFromPublic(d, label) {
   // «كيف تعرفت على المدرسة» (options edited in the platform settings).
   const heardFrom = str(d.heardFrom, 60);
   const heardFromSub = heardFrom ? str(d.heardFromSub, 60) : "";
+  const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(str(d.email, 120)) ? str(d.email, 120).toLowerCase() : "";
   const heardText = heardFrom ? ` — كيف تعرف على المدرسة: ${heardFrom}${heardFromSub ? ` (${heardFromSub})` : ""}` : "";
   const now = Timestamp.now();
   const existing = await db.collection("leads").where("phone", "==", phone).limit(1).get();
   if (!existing.empty) {
     const ref = existing.docs[0].ref;
     await ref.collection("activity").add({ type: "INQUIRY_AGAIN", text: `${label} (${students.map((s) => s.name || s.grade).join("، ")})${heardText}`, byName: "ولي الأمر (نموذج إلكتروني)", at: now });
-    await ref.update({ updatedAt: now, lastInboundAt: now, ...(heardFrom && !existing.docs[0].data().heardFrom ? { heardFrom, heardFromSub } : {}) });
+    await ref.update({ updatedAt: now, lastInboundAt: now, ...(heardFrom && !existing.docs[0].data().heardFrom ? { heardFrom, heardFromSub } : {}), ...(email && !existing.docs[0].data().email ? { email } : {}) });
     return { ref, code: existing.docs[0].data().code, existing: true, lead: existing.docs[0].data(), students, parentName, phone };
   }
   const code = await newCode("leads", "code", "LD");
   const ref = await db.collection("leads").add({
-    code, parentName, phone, altPhone: normalizePhone(d.altPhone) || "", district: str(d.district, 60), preferredContact: str(d.preferredContact, 20),
+    code, parentName, phone, altPhone: normalizePhone(d.altPhone) || "", email, district: str(d.district, 60), preferredContact: str(d.preferredContact, 20),
     students, branch: str(d.branch, 40), suggestedBranch: "", source, campaign: str(d.campaign, 60), referrer: str(d.ref, 60), heardFrom, heardFromSub,
     stage: "INQUIRY", sideStatus: null, sideReason: "", interest: "", assignedTo: null, assignedToName: "",
     nextFollowUp: Timestamp.fromMillis(Date.now() + 24 * 3600e3), stageEnteredAt: now, noAnswerCount: 0,

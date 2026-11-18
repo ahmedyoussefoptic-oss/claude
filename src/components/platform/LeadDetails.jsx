@@ -212,6 +212,7 @@ export default function LeadDetails({ lead, onClose }) {
             </ul>
             <div className="mt-3 text-xs text-slate-500 flex flex-wrap gap-x-4 gap-y-1">
               {lead.district && <span>{t('platform.leads.form.district')}: {lead.district}</span>}
+              {lead.email && <span>{t('join.emailShort')}: <a href={`mailto:${lead.email}`} className="text-primary" dir="ltr">{lead.email}</a></span>}
               {lead.campaign && <span>{t('platform.leads.form.campaign')}: {lead.campaign}</span>}
               {lead.referrer && <span>{t('platform.leads.form.referrer')}: {lead.referrer}</span>}
               {lead.heardFrom && <span>{t('join.heardFrom')}: <b className="text-slate-700">{lead.heardFrom}{lead.heardFromSub && ` — ${lead.heardFromSub}`}</b></span>}
