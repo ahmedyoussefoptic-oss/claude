@@ -5520,11 +5520,19 @@
       "reason": "Reason",
       "students": "Students",
       "needStudents": "Choose at least one student.",
-      "upload": "or upload an Excel file of IDs",
+      "upload": "Or upload Excel files (the teachers' form or any list of IDs)",
       "fromFile": "From the file: {{n}} IDs",
       "submit": "Nominate {{n}}",
       "needsApproval": "The coordinator approves the nomination before it goes to the parent.",
-      "direct": "The nomination is approved and ready to send to the parent."
+      "direct": "The nomination is approved and ready to send to the parent.",
+      "template": "Download the teachers' form",
+      "templateFile": "support-nomination-form.xlsx",
+      "templateHint": "Each teacher fills the form with their students (ID, programme, subject, reason); upload the files here together. The programme, subjects and reason chosen above only fill blank cells.",
+      "clearFiles": "Clear files",
+      "teacher": "Nominating teacher",
+      "badFile": "Could not read {{name}}.",
+      "noTypeRows": "{{n}} rows without a programme — they go into «{{type}}» chosen above.",
+      "notFoundIds": "IDs not found in the student roster (check the form)"
     },
     "ans": {
       "title": "Answer of {{name}}'s parent",

@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
-import { UserPlus, Loader2, Check, X, Send, BellRing, FileSignature, Layers, Undo2, Link2, MessageCircle, FileDown, Phone, Search, Upload } from 'lucide-react';
+import { UserPlus, Loader2, Check, X, Send, BellRing, FileSignature, Layers, Undo2, Link2, MessageCircle, FileDown, Phone, Search, Upload, FileSpreadsheet } from 'lucide-react';
+import { NOMINATION_TEMPLATE_URL, readNominationRows } from '../../utils/supportNominationExcel';
 import { callSupport, SUPPORT_STATUSES, SUPPORT_TYPES, STATUS_STYLE, TYPE_STYLE, SUBJECTS, attRate } from '../../config/support';
 import { waLink } from '../../utils/whatsapp';
 import StudentPicker from '../platform/StudentPicker';
@@ -64,7 +65,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
       [t('support.col.status')]: t(`support.status.${s.status}`), [t('support.col.answer')]: s.consent ? `${s.consent.name} ${day(s.consent.at)}` : s.decline ? `${s.decline.name} ${day(s.decline.at)} — ${s.decline.reason || ''}` : '',
       [t('support.col.pledge')]: s.pledge ? `${s.pledge.name} ${day(s.pledge.at)}` : '', [t('support.col.group')]: groupName[s.groupId] || '',
       [t('support.col.present')]: (s.att.P || 0) + (s.att.L || 0), [t('support.col.absent')]: s.att.A || 0, [t('support.col.rate')]: attRate(s.att) ?? '',
-      [t('support.col.nominatedBy')]: s.nominatedByName, ...(manage ? { [t('support.col.link')]: s.link || '' } : {}),
+      [t('support.nom.teacher')]: s.nominatedTeacher || '', [t('support.col.nominatedBy')]: s.nominatedByName, ...(manage ? { [t('support.col.link')]: s.link || '' } : {}),
     }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Students');
@@ -119,7 +120,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
       )}
       {notice && (
         <div className={`text-sm rounded-xl p-3 border ${notice.error ? 'bg-red-50 text-red-700 border-red-100' : 'bg-emerald-50 text-emerald-800 border-emerald-100'}`}>
-          {notice.error || (notice.nominate ? t('support.nomResult', notice.nominate) : notice.copied != null ? t('support.copied', { n: notice.copied }) : notice.noWa ? t('support.noWa', { n: notice.done }) : notice.sent != null ? t('support.sentResult', { done: notice.done, sent: notice.sent, failed: notice.failed }) : t('support.doneN', { n: notice.done }))}
+          {notice.error || (notice.nominate ? <>{t('support.nomResult', notice.nominate)}{notice.nominate.notFoundIds?.length > 0 && <span className="block text-xs text-amber-800 mt-1">{t('support.nom.notFoundIds')}: <span dir="ltr">{notice.nominate.notFoundIds.join('، ')}</span></span>}</> : notice.copied != null ? t('support.copied', { n: notice.copied }) : notice.noWa ? t('support.noWa', { n: notice.done }) : notice.sent != null ? t('support.sentResult', { done: notice.done, sent: notice.sent, failed: notice.failed }) : t('support.doneN', { n: notice.done }))}
         </div>
       )}
 
@@ -147,7 +148,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
                   </td>
                   <td className="px-2 py-2 text-xs">{groupName[s.groupId] || <span className="text-slate-300">—</span>}</td>
                   <td className="px-2 py-2 text-xs whitespace-nowrap">{rate == null ? <span className="text-slate-300">—</span> : <span className={rate < 75 ? 'text-rose-700 font-bold' : 'text-emerald-700'}>{rate}%</span>}{(s.att.A || 0) > 0 && <span className="block text-rose-600">{t('support.absentN', { n: s.att.A })}</span>}</td>
-                  <td className="px-2 py-2 text-xs text-slate-500">{s.nominatedByName}<span className="block text-slate-400">{day(s.nominatedAt)}</span></td>
+                  <td className="px-2 py-2 text-xs text-slate-500">{s.nominatedTeacher && <span className="block text-slate-700">{s.nominatedTeacher}</span>}{s.nominatedByName}<span className="block text-slate-400">{day(s.nominatedAt)}</span></td>
                   <td className="px-2 py-2 whitespace-nowrap">
                     {manage && s.link && (
                       <span className="flex gap-1">
@@ -173,7 +174,9 @@ export default function SupportStudents({ data, branchName, groupName, reload })
 }
 
 // Nominating: the programme, subjects and reason, and the students — picked
-// one by one or read from an Excel file (any 10-digit ID in its first sheet).
+// one by one or read from Excel: the teachers' form (each row its own
+// programme, subject, reason and teacher; the choices here fill the blanks),
+// or any list with 10-digit IDs in it.
 function NominateModal({ cycle, onClose, onDone }) {
   const { t } = useTranslation();
   const [type, setType] = useState('REMEDIAL');
@@ -181,25 +184,40 @@ function NominateModal({ cycle, onClose, onDone }) {
   const [other, setOther] = useState('');
   const [reason, setReason] = useState('');
   const [list, setList] = useState([]);
-  const [fileIds, setFileIds] = useState([]);
+  const [fileRows, setFileRows] = useState([]);
+  const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const chip = (on) => `px-3 py-1.5 rounded-lg text-sm border ${on ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'}`;
-  const readFile = async (file) => {
+  // Several files (one per teacher) add up; a later row for the same student wins.
+  const readFiles = async (picked) => {
+    setError(null);
     const XLSX = await import('xlsx');
-    const wb = XLSX.read(await file.arrayBuffer());
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true });
-    const ids = new Set();
-    rows.flat().forEach((v) => { const d = String(v ?? '').replace(/[٠-٩]/g, (c) => String(c.charCodeAt(0) - 1632)).replace(/\D/g, ''); if (/^\d{10}$/.test(d)) ids.add(d); });
-    setFileIds([...ids]);
+    const byId = new Map(fileRows.map((r) => [r.studentId, r]));
+    const names = [];
+    for (const file of picked) {
+      try {
+        const { rows } = readNominationRows(XLSX, XLSX.read(await file.arrayBuffer()));
+        rows.forEach((r) => byId.set(r.studentId, r));
+        names.push(`${file.name} (${rows.length})`);
+      } catch { setError(t('support.nom.badFile', { name: file.name })); }
+    }
+    setFileRows([...byId.values()]);
+    setFiles((x) => [...x, ...names]);
   };
+  const fileIds = fileRows.map((r) => r.studentId);
   const ids = [...new Set([...list.map((s) => s.nationalId), ...fileIds])];
+  const noType = fileRows.filter((r) => !r.type).length;
   const save = async () => {
     setError(null);
     if (!ids.length) { setError(t('support.nom.needStudents')); return; }
     setBusy(true);
     try {
-      const r = await callSupport('supportNominate', { id: cycle.id, type, subjects: [...subjects, ...other.split(/[،,]/).map((x) => x.trim()).filter(Boolean)], reason, studentIds: ids });
+      const r = await callSupport('supportNominate', {
+        id: cycle.id, type, subjects: [...subjects, ...other.split(/[،,]/).map((x) => x.trim()).filter(Boolean)], reason,
+        studentIds: list.map((s) => s.nationalId).filter((x) => !fileIds.includes(x)),
+        entries: fileRows.map(({ studentId, type: rowType, subjects: rowSubjects, reason: rowReason, teacher }) => ({ studentId, type: rowType, subjects: rowSubjects, reason: rowReason, teacher })),
+      });
       onDone(r);
     } catch (err) { setError(err.message); setBusy(false); }
   };
@@ -216,10 +234,37 @@ function NominateModal({ cycle, onClose, onDone }) {
       <Field label={t('support.nom.students')}>
         <StudentPicker value={null} onChange={(s) => { if (s && !list.some((x) => x.nationalId === s.nationalId)) setList((x) => [...x, s]); }} />
         {list.length > 0 && <div className="flex flex-wrap gap-1.5 mt-2">{list.map((s) => <span key={s.nationalId} className="px-2 py-1 rounded-lg bg-sky-50 border border-sky-100 text-xs flex items-center gap-1">{s.nameAr || s.name}<button type="button" onClick={() => setList((x) => x.filter((y) => y.nationalId !== s.nationalId))}><X className="w-3 h-3" /></button></span>)}</div>}
-        <label className="mt-2 flex items-center gap-2 text-sm text-primary cursor-pointer border border-dashed border-primary/40 rounded-xl p-3">
-          <Upload className="w-4 h-4" />{fileIds.length ? t('support.nom.fromFile', { n: fileIds.length }) : t('support.nom.upload')}
-          <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) readFile(f); }} />
-        </label>
+        <div className="mt-2 border border-dashed border-primary/40 rounded-xl p-3 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <label className="flex items-center gap-2 text-sm text-primary cursor-pointer">
+              <Upload className="w-4 h-4" />{fileIds.length ? t('support.nom.fromFile', { n: fileIds.length }) : t('support.nom.upload')}
+              <input type="file" multiple accept=".xlsx,.xls,.csv" className="hidden" onChange={(e) => { const f = [...(e.target.files || [])]; e.target.value = ''; if (f.length) readFiles(f); }} />
+            </label>
+            <a href={NOMINATION_TEMPLATE_URL} download={t('support.nom.templateFile')} className="text-xs text-emerald-700 border border-emerald-200 bg-emerald-50 rounded-lg px-2.5 py-1.5 flex items-center gap-1"><FileSpreadsheet className="w-3.5 h-3.5" />{t('support.nom.template')}</a>
+          </div>
+          <p className="text-xs text-slate-500">{t('support.nom.templateHint')}</p>
+          {files.length > 0 && <p className="text-xs text-slate-600">{files.join(' · ')} <button type="button" onClick={() => { setFileRows([]); setFiles([]); }} className="text-rose-600 ms-1">{t('support.nom.clearFiles')}</button></p>}
+          {fileRows.some((r) => r.name || r.type || r.reason) && (
+            <div className="max-h-56 overflow-auto border border-slate-100 rounded-lg">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 text-slate-500 sticky top-0"><tr>{['col.student', 'col.grade', 'col.type', 'col.subjects', 'col.reason', 'nom.teacher'].map((k) => <th key={k} className="px-2 py-1.5 text-start font-medium">{t(`support.${k}`)}</th>)}</tr></thead>
+                <tbody>
+                  {fileRows.map((r) => (
+                    <tr key={r.studentId} className="border-t border-slate-100">
+                      <td className="px-2 py-1.5"><p className="text-slate-800">{r.name || '—'}</p><p className="text-slate-400" dir="ltr">{r.studentId}</p></td>
+                      <td className="px-2 py-1.5" dir="ltr">{[r.grade, r.className].filter(Boolean).join(' ')}</td>
+                      <td className="px-2 py-1.5">{r.type ? <Pill className={TYPE_STYLE[r.type]}>{t(`support.types.${r.type}`)}</Pill> : <span className="text-amber-700">{t(`support.types.${type}`)}*</span>}</td>
+                      <td className="px-2 py-1.5">{r.subjects.join('، ')}</td>
+                      <td className="px-2 py-1.5 max-w-48">{r.reason}</td>
+                      <td className="px-2 py-1.5">{r.teacher}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {noType > 0 && <p className="text-xs text-amber-700">{t('support.nom.noTypeRows', { n: noType, type: t(`support.types.${type}`) })}</p>}
+        </div>
       </Field>
       <p className="text-xs text-slate-500">{cycle.requireApproval && !cycle.canManage ? t('support.nom.needsApproval') : t('support.nom.direct')}</p>
     </Modal>

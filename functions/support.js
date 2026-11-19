@@ -205,7 +205,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
 
   const enrollOut = (x, e, canManage) => ({
     id: x.id, studentId: e.studentId, name: e.name, branch: e.branch, grade: e.grade, className: e.className, section: e.section || "",
-    type: e.type, subjects: e.subjects || [], reason: e.reason || "", status: e.status, nominatedByName: e.nominatedByName || "", nominatedAt: ms(e.nominatedAt),
+    type: e.type, subjects: e.subjects || [], reason: e.reason || "", status: e.status, nominatedByName: e.nominatedByName || "", nominatedTeacher: e.nominatedTeacher || "", nominatedAt: ms(e.nominatedAt),
     reviewNote: e.reviewNote || "", consent: e.consent ? { ...e.consent, at: ms(e.consent.at) } : null, decline: e.decline ? { ...e.decline, at: ms(e.decline.at) } : null,
     pledge: e.pledge ? { ...e.pledge, at: ms(e.pledge.at) } : null, groupId: e.groupId || "", att: e.att || {}, hasPhone: !!e.phone,
     wa: e.wa ? { status: e.wa.status || "", error: e.wa.error || "", consent: ms(e.wa.consent), remind: ms(e.wa.remind), pledge: ms(e.wa.pledge) } : null,
@@ -237,14 +237,27 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const { ref, c } = await loadCycle(dd.id, u);
     if (c.status !== "ACTIVE") throw new HttpsError("failed-precondition", "الدورة مغلقة.");
     const type = TYPES.includes(dd.type) ? dd.type : null;
-    if (!type) throw new HttpsError("invalid-argument", "اختر نوع البرنامج.");
-    const ids = [...new Set((Array.isArray(dd.studentIds) ? dd.studentIds : []).map(cleanId).filter((x) => /^\d{6,15}$/.test(x)))].slice(0, 2000);
-    if (!ids.length) throw new HttpsError("invalid-argument", "اختر الطلاب.");
-    const subjects = [...new Set((Array.isArray(dd.subjects) ? dd.subjects : []).map((s) => str(s, 60)).filter(Boolean))].slice(0, 12);
+    const subjectsOf = (list) => [...new Set((Array.isArray(list) ? list : []).map((s) => str(s, 60)).filter(Boolean))].slice(0, 12);
+    const subjects = subjectsOf(dd.subjects);
     const reason = str(dd.reason, 600);
+    // One per student: the request's programme / subjects / reason, or — from
+    // the teachers' Excel form — the row's own, with the teacher's name.
+    const per = new Map();
+    (Array.isArray(dd.studentIds) ? dd.studentIds : []).forEach((x) => per.set(cleanId(x), {}));
+    (Array.isArray(dd.entries) ? dd.entries : []).slice(0, 2000).forEach((x) => {
+      if (!x || typeof x !== "object") return;
+      const rowSubjects = subjectsOf(x.subjects);
+      per.set(cleanId(x.studentId), {
+        ...(TYPES.includes(x.type) ? { type: x.type } : {}), ...(rowSubjects.length ? { subjects: rowSubjects } : {}),
+        ...(str(x.reason, 600) ? { reason: str(x.reason, 600) } : {}), teacher: str(x.teacher, 80),
+      });
+    });
+    const ids = [...per.keys()].filter((x) => /^\d{6,15}$/.test(x)).slice(0, 2000);
+    if (!ids.length) throw new HttpsError("invalid-argument", "اختر الطلاب.");
+    if (!type && ids.some((x) => !per.get(x).type)) throw new HttpsError("invalid-argument", "اختر نوع البرنامج.");
     const branchOf = await branchResolver();
     const now = Timestamp.now();
-    const result = { added: 0, already: 0, notFound: 0, outOfScope: 0 };
+    const result = { added: 0, already: 0, notFound: 0, outOfScope: 0, notFoundIds: [] };
     const auto = c.requireApproval === false || manages(u, c);
     for (let i = 0; i < ids.length; i += 300) {
       const chunk = ids.slice(i, i + 300);
@@ -252,15 +265,17 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
       const batch = db.batch();
       chunk.forEach((sid, j) => {
         const s = stu[j].data();
-        if (!s) { result.notFound++; return; }
+        if (!s) { result.notFound++; if (result.notFoundIds.length < 100) result.notFoundIds.push(sid); return; }
         const branch = branchOf(s);
+        const row = per.get(sid);
         if (((c.branches || []).length && !c.branches.includes(branch)) || !(callerAll(u) || manages(u, c) || callerHasBranch(u, branch))) { result.outOfScope++; return; }
         if (cur[j].exists && cur[j].data().status !== "WITHDRAWN" && cur[j].data().status !== "REJECTED") { result.already++; return; }
         const tk = token();
         batch.set(db.collection("supportLinks").doc(tk), { kind: "parent", cycleId: ref.id, studentId: sid, fails: 0 });
         batch.set(ref.collection("students").doc(sid), {
           studentId: sid, name: str(s.nameAr || s.name, 120), branch, grade: studentGrade(s), className: str(s.className, 20), section: studentSection(s) || "",
-          phone: toIntlNumber(s.mobile) || "", type, subjects, reason, status: auto ? "APPROVED" : "NOMINATED",
+          phone: toIntlNumber(s.mobile) || "", type: row.type || type, subjects: row.subjects || subjects, reason: row.reason || reason,
+          ...(row.teacher ? { nominatedTeacher: row.teacher } : {}), status: auto ? "APPROVED" : "NOMINATED",
           nominatedBy: u.uid, nominatedByName: u.name || "", nominatedAt: now, token: tk, att: {},
           ...(auto ? { reviewedBy: u.uid, reviewedByName: u.name || "", reviewedAt: now } : {}),
         });
