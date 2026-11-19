@@ -80,7 +80,7 @@
       "admin": "Administration",
       "platform": "Al Moktashef platform"
     },
-    "support": "Support programmes"
+    "support": "School programmes"
   },
   "app": {
     "brand": "Al Moktashef International",
@@ -5369,7 +5369,7 @@
     "error": "Couldn't convert, try again."
   },
   "support": {
-    "title": "Support programmes",
+    "title": "School programmes",
     "subtitle": "Remedial and enrichment classes: nominations, parent consent, groups and attendance",
     "newCycle": "New cycle",
     "empty": "No cycles yet.",
@@ -5414,7 +5414,7 @@
     "sessionsN": "{{n}} classes",
     "tabs": {
       "students": "Students",
-      "groups": "Groups",
+      "groups": "Programmes",
       "supervisors": "Supervisors",
       "attendance": "Attendance",
       "dashboard": "Follow-up"
@@ -5576,7 +5576,12 @@
         "MIDDLE": "Middle school",
         "SECONDARY": "High school",
         "OTHER": "No stage"
-      }
+      },
+      "attendance": "Attendance during the cycle",
+      "noSessions": "This group's classes haven't started yet.",
+      "notTaken": "Attendance not taken for this class",
+      "notMarked": "Not marked",
+      "legend": "Days from oldest to newest"
     },
     "sup": {
       "add": "New supervisor",
@@ -5813,6 +5818,17 @@
       "done": "{{n}} students nominated — thank you.",
       "needsApproval": "The programme coordinator reviews nominations before contacting parents.",
       "already": "{{n}} were already nominated."
+    },
+    "programs": {
+      "REMEDIAL": "Interventional programmes",
+      "ENRICHMENT": "Enrichment programmes",
+      "REMEDIAL_en": "برامج التقوية",
+      "ENRICHMENT_en": "البرامج الإثرائية",
+      "groupsN": "{{n}} groups",
+      "studentsN": "{{n}} students",
+      "back": "All programmes",
+      "open": "View groups",
+      "empty": "No groups in this programme yet."
     }
   }
 }

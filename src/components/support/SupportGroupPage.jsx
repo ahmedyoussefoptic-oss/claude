@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowRight, Printer, Users, DoorOpen, UserCheck, GraduationCap } from 'lucide-react';
-import { TYPE_STYLE, attRate } from '../../config/support';
+import { ArrowRight, Printer, Users, DoorOpen, UserCheck, GraduationCap, Loader2 } from 'lucide-react';
+import { TYPE_STYLE, attRate, callSupport, riyadhDay, MARKS, MARK_STYLE } from '../../config/support';
 import { printPage, escapeHtml as esc } from '../../utils/printPage';
 import { Pill, btn } from '../platform/ui';
 
@@ -17,11 +17,20 @@ const stageOf = (grade) => {
 const byGrade = (a, b) => String(a).localeCompare(String(b), 'en', { numeric: true });
 
 // One support group on its own page: its details and its (consented)
-// students, split by stage and then by grade, with their attendance.
+// students, split by stage and then by grade, with their attendance totals
+// and their mark at each of the group's classes so far.
 export default function SupportGroupPage({ data, group: g, branchName, onBack }) {
   const { t, i18n } = useTranslation();
   const c = data.cycle;
   const supName = data.supervisors.find((s) => s.id === g.supervisorId)?.name || '';
+  const [sessions, setSessions] = useState(null);
+  useEffect(() => { callSupport('supportAttendance', { id: c.id }).then((r) => setSessions(r.sessions || [])).catch(() => setSessions([])); }, [c.id]);
+  const today = riyadhDay();
+  const days = useMemo(() => c.sessions.filter((d) => d <= today), [c.sessions, today]);
+  const byDay = useMemo(() => Object.fromEntries((sessions || []).filter((x) => x.groupId === g.id).map((x) => [x.day, x])), [sessions, g.id]);
+  // One student's classes: { day, s } — s a mark, '' unmarked, null not taken.
+  const marksOf = (st) => days.map((day) => { const x = byDay[day]; return { day, s: x ? x.marks?.[st.studentId]?.s || '' : null }; });
+  const markLetter = (k) => t(`support.marks.${k}`).charAt(0);
   const list = useMemo(() => data.students.filter((s) => s.groupId === g.id && s.status === 'CONSENTED'), [data, g.id]);
   const stages = useMemo(() => STAGES.map((st) => {
     const inStage = list.filter((s) => stageOf(s.grade) === st);
@@ -36,12 +45,14 @@ export default function SupportGroupPage({ data, group: g, branchName, onBack })
     `${t('support.groups.supervisor')}: ${supName || t('support.groups.noSupervisor')}`].filter(Boolean);
 
   const print = () => {
-    const head = ['#', t('support.col.student'), t('support.col.grade'), t('support.marks.P'), t('support.marks.A'), t('support.col.rate')];
+    const head = ['#', t('support.col.student'), t('support.col.grade'), t('support.marks.P'), t('support.marks.A'), t('support.col.rate'), ...(days.length ? [t('support.groups.attendance')] : [])];
+    const strip = (s) => (days.length ? `<td class="m">${marksOf(s).map((m) => `<span class="k k${m.s ?? 'N'}" title="${m.day}">${m.s ? esc(markLetter(m.s)) : m.s === '' ? '·' : '–'}</span>`).join('')}</td>` : '');
     const body = `<p class="meta">${esc(info.join(' · '))}</p><p class="meta">${esc(g.capacity ? t('support.groups.countOf', { n: list.length, cap: g.capacity }) : t('support.groups.count', { n: list.length }))}</p>
-${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.count})</h3>${st.grades.map((gr) => `<h4>${esc(gr.grade || '—')} (${gr.students.length})</h4><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${gr.students.map((s, i) => `<tr><td class="c">${i + 1}</td><td>${esc(s.name)}</td><td><span dir="ltr">${esc(`${s.grade} ${s.className}`.trim())}</span></td><td class="c">${(s.att?.P || 0) + (s.att?.L || 0)}</td><td class="c">${s.att?.A || 0}</td><td class="c">${esc(rateText(s))}</td></tr>`).join('')}</tbody></table>`).join('')}`).join('')}`;
+${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.count})</h3>${st.grades.map((gr) => `<h4>${esc(gr.grade || '—')} (${gr.students.length})</h4><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${gr.students.map((s, i) => `<tr><td class="c">${i + 1}</td><td>${esc(s.name)}</td><td><span dir="ltr">${esc(`${s.grade} ${s.className}`.trim())}</span></td><td class="c">${(s.att?.P || 0) + (s.att?.L || 0)}</td><td class="c">${s.att?.A || 0}</td><td class="c">${esc(rateText(s))}</td>${strip(s)}</tr>`).join('')}</tbody></table>`).join('')}`).join('')}`;
     printPage({
       title: g.name, subtitle: `${c.title} · ${t(`support.types.${g.type}`)}`, school: t('trips.print.school'), body, dir: i18n.dir(), lang: i18n.language,
-      css: 'table{width:100%;border-collapse:collapse;margin:4px 0 10px}th,td{border:1px solid #cbd5e1;padding:3px 5px;text-align:start;font-size:9pt}th{background:#f1f5f9}h3{margin:12px 0 4px;color:#0369a1;font-size:12pt}h4{margin:6px 0 2px;font-size:10pt;color:#334155}.c{text-align:center}.meta{color:#475569;font-size:9pt;margin:0 0 4px}',
+      css: 'table{width:100%;border-collapse:collapse;margin:4px 0 10px}th,td{border:1px solid #cbd5e1;padding:3px 5px;text-align:start;font-size:9pt}th{background:#f1f5f9}h3{margin:12px 0 4px;color:#0369a1;font-size:12pt}h4{margin:6px 0 2px;font-size:10pt;color:#334155}.c{text-align:center}.meta{color:#475569;font-size:9pt;margin:0 0 4px}.m{white-space:nowrap}.k{display:inline-block;width:14px;text-align:center;font-size:8pt;border-radius:3px;margin:0 1px}.kP{background:#d1fae5;color:#047857}.kL{background:#fef3c7;color:#b45309}.kA{background:#ffe4e6;color:#be123c;font-weight:bold}.kE{background:#e2e8f0;color:#475569}.kN,.k{color:#94a3b8}',
+      landscape: days.length > 12,
     });
   };
 
@@ -60,6 +71,14 @@ ${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.c
         </div>
         {list.length > 0 && <button type="button" onClick={print} className={btn.ghost}><Printer className="w-4 h-4" />{t('support.groups.print')}</button>}
       </div>
+
+      {list.length > 0 && days.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          {MARKS.map((k) => <span key={k} className="flex items-center gap-1"><span className={`w-5 h-5 rounded border flex items-center justify-center text-[11px] ${MARK_STYLE[k].on}`}>{markLetter(k)}</span>{t(`support.marks.${k}`)}</span>)}
+          <span className="flex items-center gap-1"><span className="w-5 h-5 rounded border border-dashed border-slate-300 flex items-center justify-center text-slate-400">–</span>{t('support.att.notTaken')}</span>
+          <span className="text-slate-400">· {t('support.groups.legend')}</span>
+        </div>
+      )}
 
       {stages.length > 1 && (
         <div className="flex flex-wrap gap-2">
@@ -86,6 +105,7 @@ ${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.c
                       <th className="px-2 py-1.5 text-center">{t('support.marks.P')}</th>
                       <th className="px-2 py-1.5 text-center">{t('support.marks.A')}</th>
                       <th className="px-2 py-1.5 text-center">{t('support.col.rate')}</th>
+                      <th className="px-2 py-1.5 text-start">{t('support.groups.attendance')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -97,6 +117,20 @@ ${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.c
                         <td className="px-2 py-2 text-center text-emerald-700">{(s.att?.P || 0) + (s.att?.L || 0)}</td>
                         <td className={`px-2 py-2 text-center ${s.att?.A ? 'text-rose-700 font-bold' : 'text-slate-400'}`}>{s.att?.A || 0}</td>
                         <td className="px-2 py-2 text-center">{rateText(s)}</td>
+                        <td className="px-2 py-2">
+                          {!sessions ? <Loader2 className="w-4 h-4 animate-spin text-slate-300" />
+                            : !days.length ? <span className="text-xs text-slate-400">{t('support.groups.noSessions')}</span>
+                              : (
+                                <div className="flex flex-wrap gap-1 min-w-[8rem]">
+                                  {marksOf(s).map((m) => (
+                                    <span key={m.day} title={`${m.day} — ${m.s ? t(`support.marks.${m.s}`) : m.s === '' ? t('support.groups.notMarked') : t('support.groups.notTaken')}`}
+                                      className={`w-6 h-6 rounded border flex items-center justify-center text-[11px] font-bold ${m.s ? MARK_STYLE[m.s].on : m.s === '' ? 'border-slate-200 text-slate-400' : 'border-dashed border-slate-300 text-slate-300'}`}>
+                                      {m.s ? markLetter(m.s) : m.s === '' ? '·' : '–'}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

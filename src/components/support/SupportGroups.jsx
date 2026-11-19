@@ -1,19 +1,57 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Pencil, Trash2, Loader2, Users, DoorOpen, UserCheck, GraduationCap, ChevronLeft } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Users, DoorOpen, UserCheck, GraduationCap, ChevronLeft, ArrowRight, Layers, TrendingUp, Sparkles } from 'lucide-react';
 import { callSupport, SUPPORT_TYPES, TYPE_STYLE, SUBJECTS } from '../../config/support';
 import { Modal, Field, Pill, inputCls, btn } from '../platform/ui';
 
-// The cycle's groups: programme, branch, grades, subject, teacher, room,
-// capacity and supervisor — with how many students each holds. Students go
-// into a group from the students tab.
-export default function SupportGroups({ data, branchName, reload, onOpen }) {
+const PROGRAM_ICON = { REMEDIAL: TrendingUp, ENRICHMENT: Sparkles };
+const PROGRAM_TONE = { REMEDIAL: 'from-amber-50 border-amber-200 text-amber-800', ENRICHMENT: 'from-sky-50 border-sky-200 text-sky-700' };
+
+// The cycle's programmes (remedial / enrichment), each a section of its own
+// with its groups and students; one opens into its groups.
+export function SupportProgramTypes({ data, onOpen }) {
+  const { t } = useTranslation();
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      {SUPPORT_TYPES.map((type) => {
+        const groups = data.groups.filter((g) => g.type === type);
+        const ids = new Set(groups.map((g) => g.id));
+        const inGroups = data.students.filter((s) => s.status === 'CONSENTED' && ids.has(s.groupId)).length;
+        const waiting = data.students.filter((s) => s.status === 'CONSENTED' && !s.groupId && s.type === type).length;
+        const Icon = PROGRAM_ICON[type];
+        return (
+          <button key={type} type="button" onClick={() => onOpen(type)} className={`text-start bg-gradient-to-b ${PROGRAM_TONE[type]} to-white border rounded-2xl p-5 hover:shadow-md transition`}>
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-lg font-bold text-slate-900">{t(`support.programs.${type}`)}</p>
+                <p className="text-sm font-medium opacity-80" dir="auto">{t(`support.programs.${type}_en`)}</p>
+              </div>
+              <span className="w-11 h-11 rounded-xl bg-white/80 border border-current/20 flex items-center justify-center shrink-0"><Icon className="w-5 h-5" /></span>
+            </div>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-slate-700 mt-4">
+              <span className="flex items-center gap-1"><Layers className="w-4 h-4" />{t('support.programs.groupsN', { n: groups.length })}</span>
+              <span className="flex items-center gap-1"><Users className="w-4 h-4" />{t('support.programs.studentsN', { n: inGroups })}</span>
+              {waiting > 0 && <span className="text-amber-700">{t('support.groups.waiting', { n: waiting })}</span>}
+            </div>
+            <p className="text-xs text-primary font-medium flex items-center gap-1 mt-3"><ChevronLeft className="w-3.5 h-3.5 ltr:rotate-180" />{t('support.programs.open')}</p>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// One programme's groups: branch, grades, subject, teacher, room, capacity
+// and supervisor — with how many students each holds. Students go into a
+// group from the students tab.
+export default function SupportGroups({ data, type, branchName, reload, onOpen, onBack }) {
   const { t } = useTranslation();
   const c = data.cycle;
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState('');
+  const groups = data.groups.filter((g) => g.type === type);
   const members = (gid) => data.students.filter((s) => s.groupId === gid && s.status === 'CONSENTED');
-  const waiting = data.students.filter((s) => s.status === 'CONSENTED' && !s.groupId);
+  const waiting = data.students.filter((s) => s.status === 'CONSENTED' && !s.groupId && s.type === type);
   const supName = (id) => data.supervisors.find((s) => s.id === id)?.name || '';
   const remove = async (g) => {
     if (!window.confirm(t('support.groups.deleteConfirm', { name: g.name }))) return;
@@ -22,13 +60,17 @@ export default function SupportGroups({ data, branchName, reload, onOpen }) {
   };
   return (
     <div className="space-y-4">
+      <div>
+        <button type="button" onClick={onBack} className="text-sm text-primary flex items-center gap-1 mb-1"><ArrowRight className="w-4 h-4" />{t('support.programs.back')}</button>
+        <h3 className="text-lg font-bold text-slate-900">{t(`support.programs.${type}`)} <span className="text-sm font-medium text-slate-500" dir="auto">— {t(`support.programs.${type}_en`)}</span></h3>
+      </div>
       <div className="flex flex-wrap items-center gap-2">
-        {c.canManage && <button type="button" onClick={() => setEditing({})} className={btn.primary}><Plus className="w-4 h-4" />{t('support.groups.add')}</button>}
+        {c.canManage && <button type="button" onClick={() => setEditing({ type })} className={btn.primary}><Plus className="w-4 h-4" />{t('support.groups.add')}</button>}
         <p className={`text-sm ${waiting.length ? 'text-amber-700' : 'text-slate-500'}`}>{t('support.groups.waiting', { n: waiting.length })}</p>
       </div>
-      {!data.groups.length ? <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-slate-500">{t('support.groups.empty')}</div> : (
+      {!groups.length ? <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-slate-500">{t('support.programs.empty')}</div> : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {data.groups.map((g) => {
+          {groups.map((g) => {
             const list = members(g.id);
             const full = g.capacity && list.length >= g.capacity;
             return (
