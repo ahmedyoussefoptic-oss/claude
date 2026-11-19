@@ -42,8 +42,8 @@ export default function SupportStudents({ data, branchName, groupName, reload })
     .sort((a, b) => a.grade.localeCompare(b.grade, 'en', { numeric: true }) || a.name.localeCompare(b.name, 'ar'));
   const picked = shown.filter((s) => selected.includes(s.id));
 
-  const act = async (action, extra = {}, ids = selected) => {
-    setBusy(action);
+  const act = async (action, extra = {}, ids = selected, busyKey = action) => {
+    setBusy(busyKey);
     setNotice(null);
     try {
       const r = await callSupport('supportAction', { id: c.id, action, studentIds: ids, ...extra });
@@ -51,6 +51,12 @@ export default function SupportStudents({ data, branchName, groupName, reload })
       setSelected([]);
       await reload();
     } catch (err) { setNotice({ error: err.message }); } finally { setBusy(''); }
+  };
+  // Approve / reject one nominated student from its own row.
+  const review = (s, action) => {
+    let note = '';
+    if (action === 'reject') { note = window.prompt(t('support.act.rejectReason', { name: s.name })); if (note === null) return; }
+    act(action, { note }, [s.id], `${action}:${s.id}`);
   };
   const copyLinks = async (list) => {
     const text = list.filter((s) => s.link).map((s) => `${s.name}: ${s.link}`).join('\n');
@@ -152,6 +158,12 @@ export default function SupportStudents({ data, branchName, groupName, reload })
                   <td className="px-2 py-2 text-xs whitespace-nowrap">{rate == null ? <span className="text-slate-300">—</span> : <span className={rate < 75 ? 'text-rose-700 font-bold' : 'text-emerald-700'}>{rate}%</span>}{(s.att.A || 0) > 0 && <span className="block text-rose-600">{t('support.absentN', { n: s.att.A })}</span>}</td>
                   <td className="px-2 py-2 text-xs text-slate-500">{s.nominatedTeacher && <span className="block text-slate-700">{s.nominatedTeacher}</span>}{s.nominatedByName}<span className="block text-slate-400">{day(s.nominatedAt)}</span></td>
                   <td className="px-2 py-2 whitespace-nowrap">
+                    {manage && ['NOMINATED', 'REJECTED'].includes(s.status) && (
+                      <span className="flex gap-1 mb-1">
+                        <button type="button" disabled={!!busy} onClick={() => review(s, 'approve')} className="px-2 py-1 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1">{busy === `approve:${s.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{t('support.act.approveOne')}</button>
+                        {s.status === 'NOMINATED' && <button type="button" disabled={!!busy} onClick={() => review(s, 'reject')} className="px-2 py-1 rounded-lg text-xs font-medium border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-60 flex items-center gap-1">{busy === `reject:${s.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}{t('support.act.rejectOne')}</button>}
+                      </span>
+                    )}
                     {manage && s.link && (
                       <span className="flex gap-1">
                         <button type="button" title={t('support.act.copyLink')} onClick={() => copyLinks([s])} className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50"><Link2 className="w-3.5 h-3.5" /></button>

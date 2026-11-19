@@ -5476,7 +5476,10 @@
       "withdrawReason": "Reason (optional)",
       "restore": "Restore",
       "whatsapp": "WhatsApp",
-      "recordAnswer": "Record the parent's answer (phone)"
+      "recordAnswer": "Record the parent's answer (phone)",
+      "approveOne": "Approve",
+      "rejectOne": "Reject",
+      "rejectReason": "Reason for rejecting {{name}} (optional):"
     },
     "copied": "{{n}} links copied.",
     "noWa": "{{n}} students updated. WhatsApp messages are off for this — copy the links or send them with the WhatsApp button by each student.",
