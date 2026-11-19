@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Loader2, FileDown, Printer, AlertTriangle, MessageCircle, Phone, FileText, Users, CheckCircle2, XCircle, FileSignature, Clock, ClipboardList, BellRing } from 'lucide-react';
+import { Loader2, FileDown, Printer, AlertTriangle, MessageCircle, Phone, FileText, Users, CheckCircle2, XCircle, FileSignature, Clock, ClipboardList, BellRing, Check, X } from 'lucide-react';
 import { callSupport, riyadhDay, attRate, time12, TYPE_STYLE, STATUS_STYLE } from '../../config/support';
 import { printPage, escapeHtml as esc } from '../../utils/printPage';
 import ComplaintForm from '../complaints/ComplaintForm';
@@ -26,6 +26,8 @@ export default function SupportDashboard({ data, branchName, groupName, reload }
   const [by, setBy] = useState('group');
   const [openOnly, setOpenOnly] = useState(false);
   const [noteFor, setNoteFor] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [actError, setActError] = useState(null);
   useEffect(() => { callSupport('supportAttendance', { id: c.id }).then(setAtt).catch(() => setAtt({ sessions: [], calls: [], notTaken: {} })); }, [c.id]);
 
   const today = riyadhDay();
@@ -156,6 +158,15 @@ ${['group', 'branch', 'grade', 'teacher'].map((k) => `<h3>${esc(t(`support.dash.
   if (!att) return <div className="py-16 flex justify-center"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>;
   const tile = (k, icon, tone, sub) => <Tile key={k} label={t(`support.dash.tile.${k}`)} value={lists[k].length} icon={icon} tone={tone} sub={sub} onClick={() => setList(list === k ? '' : k)} active={list === k} />;
   const picked = list ? lists[list] : [];
+  // Approve / reject from the list: one student, or every nominated one.
+  const canReview = c.canManage && picked.some((s) => ['NOMINATED', 'REJECTED'].includes(s.status));
+  const review = async (action, ids, key, note = '') => {
+    setBusy(key);
+    setActError(null);
+    try { await callSupport('supportAction', { id: c.id, action, studentIds: ids, note }); await reload(); } catch (err) { setActError(err.message); } finally { setBusy(''); }
+  };
+  const rejectOne = (s) => { const note = window.prompt(t('support.act.rejectReason', { name: s.name })); if (note !== null) review('reject', [s.id], `reject:${s.id}`, note); };
+  const nominatedHere = picked.filter((s) => s.status === 'NOMINATED');
   const notTakenToday = att.notTaken?.[today];
 
   return (
@@ -186,10 +197,16 @@ ${['group', 'branch', 'grade', 'teacher'].map((k) => `<h3>${esc(t(`support.dash.
         <section className="bg-white rounded-2xl border border-primary/30 shadow-sm overflow-x-auto">
           <div className="flex items-center justify-between px-4 py-2 border-b border-slate-100">
             <p className="font-bold text-slate-800 text-sm">{t(`support.dash.tile.${list}`)} ({picked.length})</p>
+            <div className="flex-1" />
+            {c.canManage && nominatedHere.length > 0 && (
+              <button type="button" disabled={!!busy} onClick={() => { if (window.confirm(t('support.act.approveAllConfirm', { n: nominatedHere.length }))) review('approve', nominatedHere.map((s) => s.id), 'approveAll'); }} className="me-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1">
+                {busy === 'approveAll' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{t('support.act.approveAll', { n: nominatedHere.length })}
+              </button>
+            )}
             <button type="button" onClick={async () => { const XLSX = await import('xlsx'); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(picked.map(studentRow)), 'List'); XLSX.writeFile(wb, `${c.title.slice(0, 20)}-${list}.xlsx`); }} className={`${btn.small} border border-slate-200`}><FileDown className="w-3.5 h-3.5" />Excel</button>
           </div>
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500 text-xs"><tr><th className="px-3 py-2 text-start">{t('support.col.student')}</th><th className="px-3 py-2 text-start">{t('support.col.grade')}</th><th className="px-3 py-2 text-start">{t('support.col.type')}</th><th className="px-3 py-2 text-start">{t('support.col.status')}</th><th className="px-3 py-2 text-start">{t('support.dash.statusDay')}</th><th className="px-3 py-2 text-start">{t('support.dash.calls')}</th></tr></thead>
+            <thead className="bg-slate-50 text-slate-500 text-xs"><tr><th className="px-3 py-2 text-start">{t('support.col.student')}</th><th className="px-3 py-2 text-start">{t('support.col.grade')}</th><th className="px-3 py-2 text-start">{t('support.col.type')}</th><th className="px-3 py-2 text-start">{t('support.col.status')}</th><th className="px-3 py-2 text-start">{t('support.dash.statusDay')}</th><th className="px-3 py-2 text-start">{t('support.dash.calls')}</th>{canReview && <th className="px-3 py-2" />}</tr></thead>
             <tbody className="divide-y divide-slate-100">
               {picked.map((s) => (
                 <tr key={s.id}>
@@ -199,10 +216,21 @@ ${['group', 'branch', 'grade', 'teacher'].map((k) => `<h3>${esc(t(`support.dash.
                   <td className="px-3 py-2"><Pill className={STATUS_STYLE[s.status]}>{t(`support.status.${s.status}`)}</Pill></td>
                   <td className="px-3 py-2 text-xs" dir="ltr">{statusDay(s)}</td>
                   <td className="px-3 py-2 text-xs text-slate-600">{callsOf(s.studentId).map(callText).join(' · ')}</td>
+                  {canReview && (
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {['NOMINATED', 'REJECTED'].includes(s.status) && (
+                        <span className="flex gap-1">
+                          <button type="button" disabled={!!busy} onClick={() => review('approve', [s.id], `approve:${s.id}`)} className="px-2 py-1 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1">{busy === `approve:${s.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{t('support.act.approveOne')}</button>
+                          {s.status === 'NOMINATED' && <button type="button" disabled={!!busy} onClick={() => rejectOne(s)} className="px-2 py-1 rounded-lg text-xs font-medium border border-rose-200 text-rose-700 hover:bg-rose-50 disabled:opacity-60 flex items-center gap-1">{busy === `reject:${s.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <X className="w-3.5 h-3.5" />}{t('support.act.rejectOne')}</button>}
+                        </span>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
+          {actError && <p className="mx-4 my-2 text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{actError}</p>}
           {!picked.length && <p className="py-6 text-center text-sm text-slate-400">{t('support.noStudents')}</p>}
         </section>
       )}
