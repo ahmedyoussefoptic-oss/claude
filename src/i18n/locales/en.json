@@ -5556,7 +5556,18 @@
       "teacher": "Teacher",
       "room": "Room",
       "supervisor": "Supervisor (takes attendance)",
-      "addSupervisorsFirst": "Add supervisors first in the Supervisors tab."
+      "addSupervisorsFirst": "Add supervisors first in the Supervisors tab.",
+      "open": "View students",
+      "back": "All groups",
+      "print": "Print list",
+      "noStudents": "No students in this group yet.",
+      "stages": {
+        "KG": "Kindergarten",
+        "PRIMARY": "Primary",
+        "MIDDLE": "Middle school",
+        "SECONDARY": "High school",
+        "OTHER": "No stage"
+      }
     },
     "sup": {
       "add": "New supervisor",

@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Pencil, Trash2, Loader2, Users, DoorOpen, UserCheck, GraduationCap } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Users, DoorOpen, UserCheck, GraduationCap, ChevronLeft } from 'lucide-react';
 import { callSupport, SUPPORT_TYPES, TYPE_STYLE, SUBJECTS } from '../../config/support';
 import { Modal, Field, Pill, inputCls, btn } from '../platform/ui';
 
 // The cycle's groups: programme, branch, grades, subject, teacher, room,
 // capacity and supervisor — with how many students each holds. Students go
 // into a group from the students tab.
-export default function SupportGroups({ data, branchName, reload }) {
+export default function SupportGroups({ data, branchName, reload, onOpen }) {
   const { t } = useTranslation();
   const c = data.cycle;
   const [editing, setEditing] = useState(null);
@@ -32,7 +32,7 @@ export default function SupportGroups({ data, branchName, reload }) {
             const list = members(g.id);
             const full = g.capacity && list.length >= g.capacity;
             return (
-              <div key={g.id} className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2">
+              <div key={g.id} role="button" tabIndex={0} onClick={() => onOpen(g.id)} onKeyDown={(e) => { if (e.key === 'Enter') onOpen(g.id); }} className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2 cursor-pointer hover:border-primary/40 hover:shadow-sm transition">
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-bold text-slate-900">{g.name}</p>
                   <Pill className={TYPE_STYLE[g.type]}>{t(`support.types.${g.type}`)}</Pill>
@@ -43,13 +43,15 @@ export default function SupportGroups({ data, branchName, reload }) {
                   <p className="flex items-center gap-1"><UserCheck className="w-3.5 h-3.5 text-primary" />{supName(g.supervisorId) || <span className="text-amber-700">{t('support.groups.noSupervisor')}</span>}</p>
                   <p className={`flex items-center gap-1 ${full ? 'text-rose-700 font-bold' : ''}`}><Users className="w-3.5 h-3.5 text-primary" />{g.capacity ? t('support.groups.countOf', { n: list.length, cap: g.capacity }) : t('support.groups.count', { n: list.length })}</p>
                 </div>
-                {list.length > 0 && <p className="text-xs text-slate-500 leading-5">{list.map((s) => s.name).join('، ')}</p>}
+                <div className="flex items-center gap-3 pt-1" onClick={(e) => e.stopPropagation()}>
+                  <button type="button" onClick={() => onOpen(g.id)} className="text-xs text-primary font-medium flex items-center gap-1"><ChevronLeft className="w-3.5 h-3.5 ltr:rotate-180" />{t('support.groups.open')}</button>
                 {c.canManage && (
-                  <div className="flex gap-2 pt-1">
+                  <>
                     <button type="button" onClick={() => setEditing(g)} className="text-xs text-primary flex items-center gap-1"><Pencil className="w-3.5 h-3.5" />{t('support.edit')}</button>
                     <button type="button" disabled={busy === g.id} onClick={() => remove(g)} className="text-xs text-rose-600 flex items-center gap-1">{busy === g.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}{t('support.groups.delete')}</button>
-                  </div>
+                  </>
                 )}
+                </div>
               </div>
             );
           })}

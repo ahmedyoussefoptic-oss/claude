@@ -478,8 +478,8 @@ function ComplaintDetailsInner({ complaint, onClose }) {
   const firstPendingIndex = stepStates.findIndex((s) => !s.done);
 
   return (
-    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex justify-end">
-      <div className="w-full max-w-2xl bg-slate-50 h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-300">
+    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-0 sm:p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="w-full max-w-5xl bg-slate-50 h-full sm:h-[94vh] sm:rounded-2xl overflow-hidden flex flex-col shadow-2xl">
         
         {/* Header */}
         <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between sticky top-0 z-10">

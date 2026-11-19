@@ -8,6 +8,7 @@ import { callSupport, time12 } from '../config/support';
 import CycleEditor from '../components/support/CycleEditor';
 import SupportStudents from '../components/support/SupportStudents';
 import SupportGroups from '../components/support/SupportGroups';
+import SupportGroupPage from '../components/support/SupportGroupPage';
 import SupportSupervisors from '../components/support/SupportSupervisors';
 import SupportAttendance from '../components/support/SupportAttendance';
 import SupportDashboard from '../components/support/SupportDashboard';
@@ -30,7 +31,7 @@ export default function SupportPrograms() {
   const load = useCallback(() => callSupport('supportList', {}).then(setData).catch((err) => setError(err.message)), []);
   useEffect(() => { load(); }, [load]);
 
-  if (openId) return <CycleDetails id={openId} branchName={branchName} onBack={() => { setParams({}); load(); }} />;
+  if (openId) return <CycleDetails id={openId} branchName={branchName} onBack={() => { setParams({}); load(); }} groupId={params.get('group')} openGroup={(g) => setParams(g ? { openId, group: g } : { openId })} />;
   const list = data?.cycles || [];
   const total = list.reduce((n, c) => n + (c.counts.total || 0), 0);
   return (
@@ -74,11 +75,11 @@ export default function SupportPrograms() {
   );
 }
 
-function CycleDetails({ id, branchName, onBack }) {
+function CycleDetails({ id, branchName, onBack, groupId, openGroup }) {
   const { t } = useTranslation();
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);
-  const [tab, setTab] = useState('dashboard');
+  const [tab, setTab] = useState(groupId ? 'groups' : 'dashboard');
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -95,6 +96,8 @@ function CycleDetails({ id, branchName, onBack }) {
     setBusy(true);
     try { await callSupport('supportDeleteCycle', { id }); onBack(); } catch (err) { window.alert(err.message); setBusy(false); }
   };
+  const openedGroup = groupId && data.groups.find((g) => g.id === groupId);
+  if (openedGroup) return <SupportGroupPage data={data} group={openedGroup} branchName={branchName} onBack={() => openGroup(null)} />;
   const tabs = [['dashboard', LayoutDashboard], ['students', Users], ['groups', Layers], ...(c.canManage ? [['supervisors', UserCheck]] : []), ['attendance', ClipboardList]];
 
   return (
@@ -120,7 +123,7 @@ function CycleDetails({ id, branchName, onBack }) {
       </div>
       {tab === 'dashboard' && <SupportDashboard data={data} branchName={branchName} groupName={groupName} reload={load} />}
       {tab === 'students' && <SupportStudents data={data} branchName={branchName} groupName={groupName} reload={load} />}
-      {tab === 'groups' && <SupportGroups data={data} branchName={branchName} reload={load} />}
+      {tab === 'groups' && <SupportGroups data={data} branchName={branchName} reload={load} onOpen={openGroup} />}
       {tab === 'supervisors' && c.canManage && <SupportSupervisors data={data} branchName={branchName} reload={load} />}
       {tab === 'attendance' && <SupportAttendance data={data} groupName={groupName} />}
       {editing && <CycleEditor initial={c} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); load(); }} />}
