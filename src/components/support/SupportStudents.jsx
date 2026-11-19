@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
 import { UserPlus, Loader2, Check, X, Send, BellRing, FileSignature, Layers, Undo2, Link2, MessageCircle, FileDown, Phone, Search, Upload, FileSpreadsheet, Copy, RefreshCw, Power } from 'lucide-react';
@@ -275,18 +275,24 @@ function NominateModal({ cycle, onClose, onDone }) {
 }
 
 // The teachers' nomination link (one per cycle) and its PIN: copy / send,
-// a new link (the old one stops), pause.
+// a new link (the old one stops), pause — and the teachers who entered with
+// it (name, subject, stage, nominations).
 function TeacherLinkModal({ cycle, initial, onClose }) {
   const { t } = useTranslation();
   const [link, setLink] = useState(initial);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState(null);
   const [copied, setCopied] = useState(false);
-  const run = async (action) => {
+  const run = async (action, extra = {}) => {
     setBusy(action);
     setError(null);
-    try { setLink(await callSupport('supportTeacherLink', { id: cycle.id, action })); } catch (err) { setError(err.message); } finally { setBusy(''); }
+    try { setLink(await callSupport('supportTeacherLink', { id: cycle.id, action, ...extra })); } catch (err) { setError(err.message); } finally { setBusy(''); }
   };
+  useEffect(() => {
+    if (!initial) return;
+    callSupport('supportTeacherLink', { id: cycle.id, action: 'list' }).then((r) => r && setLink(r)).catch(() => {});
+  }, [cycle.id, initial]);
+  const teachers = link?.teachers || [];
   const message = link ? t('support.tlink.message', { cycle: cycle.title, link: link.link, pin: link.pin }) : '';
   const copy = async () => { try { await navigator.clipboard.writeText(message); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { window.prompt('', message); } };
   return (
@@ -311,6 +317,28 @@ function TeacherLinkModal({ cycle, initial, onClose }) {
             <button type="button" disabled={!!busy} onClick={() => { if (window.confirm(t('support.tlink.renewConfirm'))) run('renew'); }} className={btn.ghost}>{busy === 'renew' ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}{t('support.tlink.renew')}</button>
           </div>
           <p className="text-xs text-slate-500">{cycle.requireApproval === false ? t('support.tlink.direct') : t('support.tlink.approval')}</p>
+          <div className="space-y-2">
+            <p className="text-sm font-bold text-slate-900">{t('support.tlink.teachers', { n: teachers.length })}</p>
+            {!teachers.length ? <p className="text-xs text-slate-400">{t('support.tlink.noTeachers')}</p> : (
+              <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-72">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 text-slate-500 sticky top-0"><tr>{['tName', 'tSubject', 'tStage', 'tNominated', 'tLast'].map((k) => <th key={k} className="px-2 py-1.5 text-start font-medium">{t(`support.tlink.${k}`)}</th>)}<th /></tr></thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {teachers.map((x) => (
+                      <tr key={x.id}>
+                        <td className="px-2 py-1.5 font-medium text-slate-900">{x.name}</td>
+                        <td className="px-2 py-1.5">{x.subject}</td>
+                        <td className="px-2 py-1.5">{x.stage ? t(`support.groups.stages.${x.stage}`) : ''}</td>
+                        <td className="px-2 py-1.5 text-center">{x.nominated}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap" dir="ltr">{x.lastAt ? new Date(x.lastAt).toLocaleString('en-GB', { timeZone: 'Asia/Riyadh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</td>
+                        <td className="px-2 py-1.5"><button type="button" title={t('support.tlink.remove')} disabled={!!busy} onClick={() => { if (window.confirm(t('support.tlink.removeConfirm', { name: x.name }))) run('removeTeacher', { teacherId: x.id }); }} className="text-slate-400 hover:text-rose-600"><X className="w-3.5 h-3.5" /></button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </Modal>

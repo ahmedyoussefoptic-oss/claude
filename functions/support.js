@@ -205,7 +205,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
 
   const enrollOut = (x, e, canManage) => ({
     id: x.id, studentId: e.studentId, name: e.name, branch: e.branch, grade: e.grade, className: e.className, section: e.section || "",
-    type: e.type, subjects: e.subjects || [], reason: e.reason || "", status: e.status, nominatedByName: e.nominatedByName || "", nominatedTeacher: e.nominatedTeacher || "", nominatedAt: ms(e.nominatedAt),
+    type: e.type, subjects: e.subjects || [], reason: e.reason || "", status: e.status, nominatedByName: e.nominatedByName || "", nominatedTeacher: e.nominatedTeacher || "", nominatedTeacherSubject: e.nominatedTeacherSubject || "", nominatedAt: ms(e.nominatedAt),
     reviewNote: e.reviewNote || "", consent: e.consent ? { ...e.consent, at: ms(e.consent.at) } : null, decline: e.decline ? { ...e.decline, at: ms(e.decline.at) } : null,
     pledge: e.pledge ? { ...e.pledge, at: ms(e.pledge.at) } : null, groupId: e.groupId || "", att: e.att || {}, hasPhone: !!e.phone,
     wa: e.wa ? { status: e.wa.status || "", error: e.wa.error || "", consent: ms(e.wa.consent), remind: ms(e.wa.remind), pledge: ms(e.wa.pledge) } : null,
@@ -278,7 +278,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         batch.set(ref.collection("students").doc(sid), {
           studentId: sid, name: str(s.nameAr || s.name, 120), branch, grade: studentGrade(s), className: str(s.className, 20), section: studentSection(s) || "",
           phone: toIntlNumber(s.mobile) || "", type: row.type || base.type, subjects: row.subjects || base.subjects, reason: row.reason || base.reason,
-          ...(row.teacher ? { nominatedTeacher: row.teacher } : {}), ...(by.via ? { nominatedVia: by.via } : {}), status: by.auto ? "APPROVED" : "NOMINATED",
+          ...(row.teacher ? { nominatedTeacher: row.teacher } : {}), ...(by.teacherSubject ? { nominatedTeacherSubject: by.teacherSubject, nominatedTeacherStage: by.teacherStage } : {}), ...(by.via ? { nominatedVia: by.via } : {}), status: by.auto ? "APPROVED" : "NOMINATED",
           nominatedBy: by.uid || "", nominatedByName: by.name || "", nominatedAt: now, token: tk, att: {},
           ...(by.auto ? { reviewedBy: by.uid, reviewedByName: by.name || "", reviewedAt: now } : {}),
         });
@@ -314,17 +314,39 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
   });
 
   // --- the teachers' link -----------------------------------------------------------
-  // /support-nominate/<token> + PIN, one per cycle: a teacher (no account)
-  // picks a class and nominates from it. The page never sees national IDs —
-  // each student goes by a key made from the link's token.
+  // /support-nominate/<token> + PIN, one per cycle: a teacher (no account —
+  // teachers change) enters the PIN with their name, subject and stage, then
+  // picks a class of that stage and nominates from it. Each teacher who
+  // enters is listed for the coordinator (supportCycles/{id}/teachers). The
+  // page never sees national IDs — each student goes by a key made from the
+  // link's token.
   const teacherKey = (tk, sid) => crypto.createHmac("sha256", tk).update(sid).digest("base64url").slice(0, 16);
+  const TEACHER_STAGES = ["KG", "PRIMARY", "MIDDLE", "SECONDARY"];
+  // «G4» / «KG2» → its stage: KG, 1–6 primary, 7–9 middle, 10–12 secondary.
+  const stageOfGrade = (g) => {
+    const x = String(g || "");
+    if (/^KG/i.test(x)) return "KG";
+    const n = Number((x.match(/\d+/) || [])[0]);
+    return !n ? "" : n <= 6 ? "PRIMARY" : n <= 9 ? "MIDDLE" : n <= 12 ? "SECONDARY" : "";
+  };
+  // A student without a known stage (e.g. SEN) is shown to every stage.
+  const inStage = (stage, grade) => { const st = stageOfGrade(grade); return !st || st === stage; };
   const teacherLinkOut = (c) => (c.teacherLink?.token ? { link: `${PUBLIC_APP_URL}/support-nominate/${c.teacherLink.token}`, pin: c.teacherLink.pin, enabled: c.teacherLink.enabled !== false } : null);
+  const teachersOut = async (ref) => (await ref.collection("teachers").get()).docs.map((x) => {
+    const t = x.data();
+    return { id: x.id, name: t.name, subject: t.subject || "", stage: t.stage || "", opens: t.opens || 0, nominated: t.nominated || 0, firstAt: ms(t.firstAt), lastAt: ms(t.lastAt) };
+  }).sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
   out.supportTeacherLink = onCall(async (request) => {
     const u = await caller(request);
     const dd = request.data || {};
     const { ref, c } = await loadCycle(dd.id, u, { manage: true });
     const old = c.teacherLink || {};
-    if (dd.action === "renew" || !old.token) {
+    if (dd.action === "list") {
+      return old.token ? { ...teacherLinkOut(c), teachers: await teachersOut(ref) } : null;
+    }
+    if (dd.action === "removeTeacher") {
+      await ref.collection("teachers").doc(str(dd.teacherId, 40) || "-").delete();
+    } else if (dd.action === "renew" || !old.token) {
       const tk = token();
       if (old.token) await db.collection("supportLinks").doc(old.token).delete().catch(() => {});
       await db.collection("supportLinks").doc(tk).set({ kind: "teacher", cycleId: ref.id, fails: 0 });
@@ -332,7 +354,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     } else if (dd.action === "disable" || dd.action === "enable") {
       await ref.update({ "teacherLink.enabled": dd.action === "enable" });
     }
-    return teacherLinkOut((await ref.get()).data());
+    return { ...teacherLinkOut((await ref.get()).data()), teachers: await teachersOut(ref) };
   });
   async function teacherOf(request) {
     const dd = request.data || {};
@@ -344,18 +366,25 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     if (l.fails) await lRef.update({ fails: 0 });
     if (c.teacherLink.enabled === false) throw new HttpsError("failed-precondition", "أُوقف رابط الترشيح، يرجى التواصل مع منسق البرنامج.");
     if (c.status !== "ACTIVE") throw new HttpsError("failed-precondition", "انتهت هذه الدورة.");
-    return { cRef, c, tk: dd.token };
+    const t = dd.teacher && typeof dd.teacher === "object" ? dd.teacher : {};
+    const teacher = { name: str(t.name, 80), subject: str(t.subject, 60), stage: TEACHER_STAGES.includes(t.stage) ? t.stage : "" };
+    if (!teacher.name) throw new HttpsError("invalid-argument", "اكتب اسم المعلم.");
+    if (!teacher.subject) throw new HttpsError("invalid-argument", "اختر المادة التي تدرّسها.");
+    if (!teacher.stage) throw new HttpsError("invalid-argument", "اختر المرحلة.");
+    // One record per teacher (name + subject + stage, spaces ignored).
+    const tid = crypto.createHash("sha256").update(`${teacher.name}|${teacher.subject}|${teacher.stage}`.replace(/\s+/g, "")).digest("base64url").slice(0, 20);
+    return { cRef, c, tk: dd.token, teacher, tRef: cRef.collection("teachers").doc(tid) };
   }
   // The cycle's branches' students (active), with whether each is already in
   // this cycle or another active one.
-  async function teacherRoster(cRef, c, tk) {
+  async function teacherRoster(cRef, c, tk, stage) {
     const [branchOf, snap, mine, brSnap] = await Promise.all([
       branchResolver(), db.collection("students").select("nameAr", "name", "branch", "branchName", "gradeName", "className", "active").get(),
       cRef.collection("students").get(), db.collection("branches").get(),
     ]);
     const all = !(c.branches || []).length;
     const rows = snap.docs.filter((x) => x.data().active !== false).map((x) => ({ id: x.id, s: x.data(), branch: branchOf(x.data()) }))
-      .filter((x) => /^\d{6,15}$/.test(x.id) && x.branch && (all || c.branches.includes(x.branch)));
+      .filter((x) => /^\d{6,15}$/.test(x.id) && x.branch && (all || c.branches.includes(x.branch)) && inStage(stage, studentGrade(x.s)));
     const here = new Map(mine.docs.filter((x) => !["WITHDRAWN", "REJECTED"].includes(x.data().status)).map((x) => [x.id, x.data().type]));
     const elsewhere = await inOtherCycles(cRef.id, rows.map((x) => x.id).filter((x) => !here.has(x)));
     const branchName = Object.fromEntries(brSnap.docs.map((x) => [x.id, x.data().name || x.id]));
@@ -372,27 +401,33 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     };
   }
   out.supportTeacherOpen = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
-    const { cRef, c, tk } = await teacherOf(request);
-    return teacherRoster(cRef, c, tk);
+    const { cRef, c, tk, teacher, tRef } = await teacherOf(request);
+    const now = Timestamp.now();
+    const seen = await tRef.get();
+    await tRef.set({ ...teacher, lastAt: now, opens: FieldValue.increment(1), ...(seen.exists ? {} : { firstAt: now, nominated: 0 }) }, { merge: true });
+    return teacherRoster(cRef, c, tk, teacher.stage);
   });
   out.supportTeacherNominate = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
-    const { cRef, c, tk } = await teacherOf(request);
+    const { cRef, c, tk, teacher, tRef } = await teacherOf(request);
     const dd = request.data || {};
-    const teacher = str(dd.teacher, 80);
-    if (!teacher) throw new HttpsError("invalid-argument", "اكتب اسم المعلم.");
     const entries = (Array.isArray(dd.entries) ? dd.entries : []).slice(0, 100).filter((x) => x && typeof x === "object" && typeof x.k === "string");
     if (!entries.length) throw new HttpsError("invalid-argument", "اختر الطلاب.");
     if (entries.some((x) => !TYPES.includes(x.type))) throw new HttpsError("invalid-argument", "اختر البرنامج لكل طالب.");
     // Key → national ID, over the cycle's branches.
     const branchOf = await branchResolver();
-    const snap = await db.collection("students").select("branch", "branchName", "active").get();
+    const snap = await db.collection("students").select("branch", "branchName", "gradeName", "active").get();
     const all = !(c.branches || []).length;
     const byKey = new Map();
-    snap.docs.forEach((x) => { if (x.data().active !== false && (all || c.branches.includes(branchOf(x.data())))) byKey.set(teacherKey(tk, x.id), x.id); });
+    snap.docs.forEach((x) => {
+      if (x.data().active !== false && (all || c.branches.includes(branchOf(x.data()))) && inStage(teacher.stage, studentGrade(x.data()))) byKey.set(teacherKey(tk, x.id), x.id);
+    });
     const per = new Map();
-    entries.forEach((x) => { const sid = byKey.get(x.k); if (sid) per.set(sid, rowOf({ ...x, teacher })); });
-    const result = await nominate(cRef, c, per, { type: null, subjects: [], reason: "" }, { uid: "", name: `${teacher} (رابط المعلمين)`, auto: c.requireApproval === false, via: "TEACHER_LINK" }, () => true);
-    return { result, state: await teacherRoster(cRef, (await cRef.get()).data(), tk) };
+    entries.forEach((x) => { const sid = byKey.get(x.k); if (sid) per.set(sid, rowOf({ ...x, teacher: teacher.name })); });
+    // A row without a subject takes the teacher's own.
+    const result = await nominate(cRef, c, per, { type: null, subjects: [teacher.subject], reason: "" },
+      { uid: "", name: `${teacher.name} (رابط المعلمين)`, auto: c.requireApproval === false, via: "TEACHER_LINK", teacherSubject: teacher.subject, teacherStage: teacher.stage }, () => true);
+    if (result.added) await tRef.update({ nominated: FieldValue.increment(result.added), lastAt: Timestamp.now() }).catch(() => {});
+    return { result, state: await teacherRoster(cRef, (await cRef.get()).data(), tk, teacher.stage) };
   });
 
   // --- the coordinator's actions -----------------------------------------------
@@ -497,8 +532,8 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const u = await caller(request);
     const { ref, c } = await loadCycle(request.data?.id, u, { manage: true });
     if (c.status !== "CLOSED") throw new HttpsError("failed-precondition", "أغلق الدورة أولاً ثم احذفها.");
-    const subs = await Promise.all(["students", "groups", "supervisors", "sessions"].map((n) => ref.collection(n).get()));
-    const tokens = [...subs[0].docs, ...subs[2].docs].map((x) => x.data().token).filter((tk) => typeof tk === "string" && tk);
+    const subs = await Promise.all(["students", "groups", "supervisors", "sessions", "teachers"].map((n) => ref.collection(n).get()));
+    const tokens = [...subs[0].docs, ...subs[2].docs].map((x) => x.data().token).concat(c.teacherLink?.token || []).filter((tk) => typeof tk === "string" && tk);
     const refs = [...tokens.map((tk) => db.collection("supportLinks").doc(tk)), ...subs.flatMap((sn) => sn.docs.map((x) => x.ref))];
     for (let i = 0; i < refs.length; i += 400) {
       const batch = db.batch();

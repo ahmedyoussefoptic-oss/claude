@@ -1,25 +1,33 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
-import { Loader2, KeyRound, UserPlus, Check, X, Search, Send, CircleCheck } from 'lucide-react';
+import { Loader2, KeyRound, UserPlus, Check, X, Search, Send, CircleCheck, LogOut } from 'lucide-react';
 import PublicHeader from '../components/common/PublicHeader';
 import { callSupport, SUPPORT_TYPES, TYPE_STYLE, SUBJECTS } from '../config/support';
 
 const card = 'w-full max-w-3xl bg-white p-4 md:p-5 rounded-2xl shadow-sm border border-slate-200';
 const inp = 'w-full px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white';
-const NAME_KEY = 'mis-support-teacher-name';
+const TEACHER_KEY = 'mis-support-teacher';
+const STAGES = ['KG', 'PRIMARY', 'MIDDLE', 'SECONDARY'];
 const byGrade = (a, b) => String(a).localeCompare(String(b), 'en', { numeric: true });
-const readName = () => { try { return localStorage.getItem(NAME_KEY) || ''; } catch { return ''; } };
+// The teacher's name, subject and stage, kept on this device for next time.
+const readTeacher = () => {
+  try {
+    const v = JSON.parse(localStorage.getItem(TEACHER_KEY) || '{}');
+    return { name: String(v.name || ''), subject: String(v.subject || ''), stage: STAGES.includes(v.stage) ? v.stage : '' };
+  } catch { return { name: '', subject: '', stage: '' }; }
+};
 
-// «/support-nominate/:token» — a teacher, without an account, nominates
-// students for the support programmes after the PIN: picks a class, ticks
-// students, and gives each the programme, subject and reason. A student
-// already in this cycle or another active one can't be picked again.
+// «/support-nominate/:token» — a teacher, without an account (teachers
+// change), enters with the PIN, their name, subject and stage, then
+// nominates students of that stage: picks a class, ticks students, and gives
+// each the programme, subject and reason. A student already in this cycle or
+// another active one can't be picked again.
 export default function SupportNominate() {
   const { token } = useParams();
   const { t } = useTranslation();
   const [pin, setPin] = useState('');
-  const [teacher, setTeacher] = useState(readName);
+  const [teacher, setTeacher] = useState(readTeacher);
   const [state, setState] = useState(null);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState(null);
@@ -36,12 +44,21 @@ export default function SupportNominate() {
     setBusy('open');
     setError(null);
     try {
-      const s = await callSupport('supportTeacherOpen', { token, pin });
-      try { localStorage.setItem(NAME_KEY, teacher.trim()); } catch { /* private mode */ }
+      const who = { name: teacher.name.trim(), subject: teacher.subject.trim(), stage: teacher.stage };
+      const s = await callSupport('supportTeacherOpen', { token, pin, teacher: who });
+      try { localStorage.setItem(TEACHER_KEY, JSON.stringify(who)); } catch { /* private mode */ }
+      setTeacher(who);
       setState(s);
+      setDef((d) => ({ ...d, subject: who.subject }));
       if (s.branches.length === 1) setBranch(s.branches[0].id);
     } catch (err) { setError(err.message); } finally { setBusy(''); }
   };
+  // Another teacher on the same device: back to the entry form.
+  const leave = () => {
+    setState(null); setPin(''); setPicked([]); setResult(null); setError(null);
+    setBranch(''); setGrade(''); setCls(''); setQ('');
+  };
+  const ready = pin.length >= 4 && teacher.name.trim() && teacher.subject.trim() && teacher.stage;
 
   const students = useMemo(() => state?.students || [], [state]);
   const inBranch = useMemo(() => students.filter((s) => !branch || s.branch === branch), [students, branch]);
@@ -61,11 +78,10 @@ export default function SupportNominate() {
 
   const submit = async () => {
     setError(null);
-    if (!teacher.trim()) { setError(t('support.tnom.needName')); return; }
     setBusy('send');
     try {
       const r = await callSupport('supportTeacherNominate', {
-        token, pin, teacher: teacher.trim(),
+        token, pin, teacher,
         entries: picked.map((x) => ({ k: x.k, type: x.type, subjects: x.subject.split(/[،,]/).map((y) => y.trim()).filter(Boolean), reason: x.reason })),
       });
       setState(r.state);
@@ -85,17 +101,28 @@ export default function SupportNominate() {
             <KeyRound className="w-10 h-10 text-primary mx-auto" />
             <p className="font-bold text-slate-900">{t('support.tnom.title')}</p>
             <p className="text-sm text-slate-500">{t('support.tnom.prompt')}</p>
-            <input value={teacher} onChange={(e) => setTeacher(e.target.value)} placeholder={t('support.tnom.teacherName')} className={`${inp} text-center py-3`} />
+            <input value={teacher.name} onChange={(e) => setTeacher((x) => ({ ...x, name: e.target.value }))} placeholder={t('support.tnom.teacherName')} className={`${inp} text-center py-3`} />
+            <input list="tnom-subjects" value={teacher.subject} onChange={(e) => setTeacher((x) => ({ ...x, subject: e.target.value }))} placeholder={t('support.tnom.mySubject')} className={`${inp} text-center py-3`} />
+            <div className="text-start space-y-1.5">
+              <p className="text-xs text-slate-500">{t('support.tnom.myStage')}</p>
+              <div className="grid grid-cols-2 gap-2">
+                {STAGES.map((st) => <button key={st} type="button" onClick={() => setTeacher((x) => ({ ...x, stage: st }))} className={chip(teacher.stage === st)}>{t(`support.groups.stages.${st}`)}</button>)}
+              </div>
+            </div>
             <input value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} inputMode="numeric" maxLength={6} dir="ltr" placeholder="PIN" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-center text-2xl tracking-[0.5em] font-mono" />
             {error && <p className="text-sm text-rose-700">{error}</p>}
-            <button disabled={busy === 'open' || pin.length < 4 || !teacher.trim()} className="w-full py-3 bg-primary text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-60">{busy === 'open' && <Loader2 className="w-4 h-4 animate-spin" />}{t('support.tnom.enter')}</button>
+            <datalist id="tnom-subjects">{SUBJECTS.map((s) => <option key={s} value={s} />)}</datalist>
+            <button disabled={busy === 'open' || !ready} className="w-full py-3 bg-primary text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-60">{busy === 'open' && <Loader2 className="w-4 h-4 animate-spin" />}{t('support.tnom.enter')}</button>
           </form>
         ) : (
           <>
             <div className={card}>
               <p className="font-bold text-slate-900 flex items-center gap-2"><UserPlus className="w-5 h-5 text-primary" />{t('support.tnom.title')} — {state.cycle}</p>
               <p className="text-xs text-slate-500 mt-1">{state.when} · <span dir="ltr">{state.from} → {state.to}</span></p>
-              <p className="text-xs text-slate-500 mt-1">{t('support.tnom.as', { name: teacher })}</p>
+              <div className="flex items-center justify-between gap-2 mt-1">
+                <p className="text-xs text-slate-500">{t('support.tnom.as', { name: teacher.name, subject: teacher.subject, stage: t(`support.groups.stages.${teacher.stage}`) })}</p>
+                <button type="button" onClick={leave} className="text-xs text-slate-500 hover:text-primary flex items-center gap-1 shrink-0"><LogOut className="w-3.5 h-3.5" />{t('support.tnom.leave')}</button>
+              </div>
             </div>
 
             {result && (

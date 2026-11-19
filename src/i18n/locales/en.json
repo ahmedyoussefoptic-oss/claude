@@ -5778,7 +5778,7 @@
     "tlink": {
       "button": "Teachers' nomination link",
       "title": "Teachers' nomination link",
-      "hint": "One link per cycle with a PIN, sent to teachers. A teacher picks a grade and class and nominates students without signing in. Students already in this cycle or another active one can't be picked.",
+      "hint": "One link per cycle with a PIN, sent to the teachers. A teacher enters with their name, subject and stage (no account), sees only their stage's students and nominates them. A student already nominated in this cycle or in another active one can't be picked. To stop former teachers: «New link and PIN».",
       "create": "Create the link",
       "link": "Link",
       "pin": "PIN",
@@ -5791,14 +5791,23 @@
       "renewConfirm": "The current link will stop and a new link and PIN are made. Continue?",
       "approval": "Nominations from the link arrive as «nominated» and wait for your approval.",
       "direct": "Nominations from the link are approved at once (the cycle needs no approval).",
-      "message": "Dear teachers,\nTo nominate students for the support programmes (remedial / enrichment) — {{cycle}}:\n{{link}}\nPIN: {{pin}}"
+      "message": "Dear teachers,\nTo nominate students for the support programmes (remedial / enrichment) — {{cycle}}:\n{{link}}\nPIN: {{pin}}",
+      "teachers": "Teachers who entered ({{n}})",
+      "noTeachers": "No teacher has entered yet.",
+      "tName": "Teacher",
+      "tSubject": "Subject",
+      "tStage": "Stage",
+      "tNominated": "Nominations",
+      "tLast": "Last entry",
+      "remove": "Remove from the list",
+      "removeConfirm": "Remove «{{name}}» from the teachers list? Their nominations stay, and they can enter again while the PIN is valid."
     },
     "tnom": {
       "title": "Nominate students for support programmes",
-      "prompt": "Enter your name and the PIN you were sent.",
+      "prompt": "Enter your name, the subject you teach and your stage, then the PIN you were sent.",
       "teacherName": "Teacher's name",
       "enter": "Enter",
-      "as": "Teacher: {{name}}",
+      "as": "Teacher: {{name}} — {{subject}} — {{stage}}",
       "step1": "1. Pick the students",
       "step2": "2. Programme, subject and reason",
       "branch": "Branch",
@@ -5817,7 +5826,10 @@
       "needName": "Enter the teacher's name.",
       "done": "{{n}} students nominated — thank you.",
       "needsApproval": "The programme coordinator reviews nominations before contacting parents.",
-      "already": "{{n}} were already nominated."
+      "already": "{{n}} were already nominated.",
+      "mySubject": "Subject you teach",
+      "myStage": "Stage",
+      "leave": "Sign out / another teacher"
     },
     "programs": {
       "REMEDIAL": "Interventional programmes",
