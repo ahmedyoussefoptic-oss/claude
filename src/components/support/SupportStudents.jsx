@@ -41,6 +41,8 @@ export default function SupportStudents({ data, branchName, groupName, reload })
     && (!q || `${s.name} ${s.studentId} ${s.className}`.includes(q.trim())))
     .sort((a, b) => a.grade.localeCompare(b.grade, 'en', { numeric: true }) || a.name.localeCompare(b.name, 'ar'));
   const picked = shown.filter((s) => selected.includes(s.id));
+  // Every nominated student in the current filter, for «approve all».
+  const waiting = shown.filter((s) => s.status === 'NOMINATED');
 
   const act = async (action, extra = {}, ids = selected, busyKey = action) => {
     setBusy(busyKey);
@@ -98,6 +100,11 @@ export default function SupportStudents({ data, branchName, groupName, reload })
         {branchesIn.length > 1 && <select value={branch} onChange={(e) => setBranch(e.target.value)} className={sel}><option value="">{t('common.allBranches')}</option>{branchesIn.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}</select>}
         <select value={grade} onChange={(e) => setGrade(e.target.value)} className={sel}><option value="">{t('support.allGrades')}</option>{grades.map((g) => <option key={g} value={g}>{g}</option>)}</select>
         <div className="flex-1" />
+        {manage && waiting.length > 0 && (
+          <button type="button" disabled={!!busy} onClick={() => { if (window.confirm(t('support.act.approveAllConfirm', { n: waiting.length }))) act('approve', {}, waiting.map((s) => s.id), 'approveAll'); }} className="px-3 py-2 rounded-xl text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1.5">
+            {busy === 'approveAll' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{t('support.act.approveAll', { n: waiting.length })}
+          </button>
+        )}
         <button type="button" onClick={exportExcel} className={btn.ghost}><FileDown className="w-4 h-4" />Excel</button>
       </div>
 

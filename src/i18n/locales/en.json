@@ -5479,7 +5479,9 @@
       "recordAnswer": "Record the parent's answer (phone)",
       "approveOne": "Approve",
       "rejectOne": "Reject",
-      "rejectReason": "Reason for rejecting {{name}} (optional):"
+      "rejectReason": "Reason for rejecting {{name}} (optional):",
+      "approveAll": "Approve all nominated ({{n}})",
+      "approveAllConfirm": "Approve {{n}} nominated students (in the current filter)?"
     },
     "copied": "{{n}} links copied.",
     "noWa": "{{n}} students updated. WhatsApp messages are off for this — copy the links or send them with the WhatsApp button by each student.",
