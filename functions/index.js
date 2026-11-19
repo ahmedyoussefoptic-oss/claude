@@ -7248,7 +7248,18 @@ exports.rebalanceCallTasks = onCall({ timeoutSeconds: 300, memory: "512MiB" }, a
     const n = got[a.id].filter((x) => x.data().assignedTo !== a.id).length;
     if (n) await notifyUsers([a.id], { title: `حملة اتصال: ${c.title}`, body: `أُسند إليك ${n} اتصالاً إضافياً، وأصبح المتبقي لديك ${want[a.id]}.`, complaintId: ref.id, type: "CALL_ASSIGNED" }).catch(() => {});
   }
-  return { moved };
+  // Per agent: calls held before and after, and how many came in / went out.
+  const rows = {};
+  const row = (id, name) => (rows[id] ||= { id, name: name || "", before: 0, after: 0, gained: 0, lost: 0 });
+  pending.forEach((x) => { const k = x.data(); row(k.assignedTo || "", k.assignedName).before++; });
+  for (const a of agents) {
+    const r = row(a.id, a.name);
+    r.name = a.name || r.name;
+    r.after = want[a.id];
+    r.gained = got[a.id].length;
+  }
+  Object.values(rows).forEach((r) => { r.lost = r.before + r.gained - r.after; });
+  return { moved, perAgent: Object.values(rows).filter((r) => r.gained || r.lost).sort((a, b) => (b.gained - b.lost) - (a.gained - a.lost)) };
 });
 
 exports.setCallCampaignStatus = onCall(async (request) => {

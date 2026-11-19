@@ -3900,7 +3900,14 @@
       "over": "{{n}} over",
       "even": "Evenly",
       "save": "Redistribute",
-      "saved": "Redistributed — {{n}} calls moved."
+      "saved": "Redistributed — {{n}} calls moved.",
+      "movesTitle": "Calls moved in the redistribution",
+      "col": {
+        "before": "Before",
+        "gained": "Moved in",
+        "lost": "Moved out",
+        "after": "After"
+      }
     },
     "my": {
       "indicators": "My indicators",

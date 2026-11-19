@@ -365,6 +365,7 @@ function CampaignDetails({ id, onBack }) {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
   const [rebalancing, setRebalancing] = useState(false);
+  const [moves, setMoves] = useState(null);
   const [notice, setNotice] = useState('');
   const today = riyadhDay();
 
@@ -453,7 +454,31 @@ function CampaignDetails({ id, onBack }) {
 
       {notice && <p className="text-sm bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-xl p-3">{notice}</p>}
       {editing && <EditCampaign campaign={c} onClose={() => setEditing(false)} onSaved={async (r) => { setEditing(false); setNotice(r.moved ? t('callTasks.edit.savedMoved', { n: r.moved }) : t('callTasks.edit.saved')); await load(); }} />}
-      {rebalancing && <RebalanceCalls campaignId={id} tasks={tasks} onClose={() => setRebalancing(false)} onSaved={async (r) => { setRebalancing(false); setNotice(t('callTasks.rebalance.saved', { n: r.moved })); await load(); }} />}
+      {rebalancing && <RebalanceCalls campaignId={id} tasks={tasks} onClose={() => setRebalancing(false)} onSaved={async (r) => { setRebalancing(false); setNotice(t('callTasks.rebalance.saved', { n: r.moved })); setMoves(r.perAgent || []); await load(); }} />}
+      {moves?.length > 0 && (
+        <section className="bg-white rounded-2xl border border-sky-100 shadow-sm p-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="font-bold text-slate-800 flex items-center gap-1.5"><Shuffle className="w-4 h-4" />{t('callTasks.rebalance.movesTitle')}</h3>
+            <button onClick={() => setMoves(null)} className="text-slate-400 hover:text-slate-600" aria-label={t('common.close')}><X className="w-4 h-4" /></button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-xs text-slate-500"><tr>{['agent', 'before', 'gained', 'lost', 'after'].map((k) => <th key={k} className="text-start py-1 px-2 whitespace-nowrap">{k === 'agent' ? t('callTasks.col.agent') : t(`callTasks.rebalance.col.${k}`)}</th>)}</tr></thead>
+              <tbody>
+                {moves.map((m) => (
+                  <tr key={m.id} className="border-t border-slate-50">
+                    <td className="py-1.5 px-2">{m.id ? m.name : t('callTasks.unassigned')}</td>
+                    <td className="px-2 tabular-nums">{m.before}</td>
+                    <td className="px-2 tabular-nums text-emerald-700 font-medium">{m.gained ? `+${m.gained}` : '—'}</td>
+                    <td className="px-2 tabular-nums text-rose-700 font-medium">{m.lost ? `−${m.lost}` : '—'}</td>
+                    <td className="px-2 tabular-nums font-bold">{m.after}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Tile label={t('callTasks.stat.progress')} value={`${pct(n.done + n.failed, n.total)}%`} sub={t('callTasks.stat.progressSub', { done: (n.done || 0) + (n.failed || 0), total: n.total || 0 })} tone="text-slate-900" />
         <Tile label={t('callTasks.stat.answered')} value={n.answered || 0} sub={`${pct(n.answered, (n.done || 0) + (n.failed || 0))}%`} tone="text-emerald-700" onClick={() => setFilter('DONE')} active={filter === 'DONE'} />
