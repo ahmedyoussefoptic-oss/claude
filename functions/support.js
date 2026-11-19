@@ -585,6 +585,89 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     await batch.commit();
     return { ok: true, freed: inside.size };
   });
+  // Groups made by themselves: the consented students with no group, by
+  // branch, programme, stage and (first) subject. Matching groups that still
+  // have room are filled first; the rest go into new groups of at most
+  // `capacity` students (0 = one group each), split by grade then class.
+  // `apply` false only returns the plan.
+  const STAGE_AR = { KG: "رياض الأطفال", PRIMARY: "الابتدائي", MIDDLE: "المتوسط", SECONDARY: "الثانوي", "": "أخرى" };
+  const subjectKey = (x) => String(x || "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").split(/\s+/).map((w) => w.replace(/^ال/, "")).join("");
+  out.supportAutoGroups = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+    const u = await caller(request);
+    const dd = request.data || {};
+    const { ref, c } = await loadCycle(dd.id, u, { manage: true });
+    const onlyType = TYPES.includes(dd.type) ? dd.type : "";
+    const capacity = Math.max(0, Math.min(200, Math.floor(Number(dd.capacity) || 0)));
+    const [st, gr, br] = await Promise.all([ref.collection("students").get(), ref.collection("groups").get(), db.collection("branches").get()]);
+    const branchName = Object.fromEntries(br.docs.map((x) => [x.id, String(x.data().name || x.id).replace(/^فرع\s+/, "")]));
+    const groups = gr.docs.map((x) => ({ id: x.id, ...x.data() }));
+    const size = new Map();
+    st.docs.forEach((x) => { const e = x.data(); if (e.groupId && e.status === "CONSENTED") size.set(e.groupId, (size.get(e.groupId) || 0) + 1); });
+    const todo = st.docs.map((x) => ({ id: x.id, ...x.data() })).filter((e) => e.status === "CONSENTED" && !e.groupId && (!onlyType || e.type === onlyType));
+    // Same branch, programme, stage and subject → one bucket.
+    const buckets = new Map();
+    todo.forEach((e) => {
+      const subject = String((e.subjects || [])[0] || "").trim();
+      const stage = stageOfGrade(e.grade);
+      const key = [e.branch || "", e.type, stage, subjectKey(subject)].join("|");
+      if (!buckets.has(key)) buckets.set(key, { branch: e.branch || "", type: e.type, stage, subjects: new Map(), list: [] });
+      const b = buckets.get(key);
+      if (subject) b.subjects.set(subject, (b.subjects.get(subject) || 0) + 1);
+      b.list.push(e);
+    });
+    const multiBranch = new Set(todo.map((e) => e.branch || "")).size > 1 || (c.branches || []).length > 1;
+    const names = new Set(groups.map((g) => g.name));
+    const byGrade = (a, b) => String(a.grade).localeCompare(String(b.grade), "en", { numeric: true }) || String(a.className).localeCompare(String(b.className), "en", { numeric: true }) || String(a.name).localeCompare(String(b.name), "ar");
+    const plan = [];
+    [...buckets.values()].sort((a, b) => a.type.localeCompare(b.type) || a.branch.localeCompare(b.branch) || TEACHER_STAGES.indexOf(a.stage) - TEACHER_STAGES.indexOf(b.stage)).forEach((b) => {
+      const subject = [...b.subjects.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] || "";
+      const list = b.list.sort(byGrade);
+      // Existing groups of the same kind with room.
+      groups.filter((g) => g.type === b.type && (g.branch || "") === b.branch && subjectKey(g.subject) === subjectKey(subject)
+        && (g.grades || []).length && g.grades.every((x) => stageOfGrade(x) === b.stage)).forEach((g) => {
+        const room = g.capacity ? g.capacity - (size.get(g.id) || 0) : Infinity;
+        if (room <= 0 || !list.length) return;
+        const take = list.splice(0, room === Infinity ? list.length : room);
+        size.set(g.id, (size.get(g.id) || 0) + take.length);
+        plan.push({ id: g.id, name: g.name, type: g.type, branch: b.branch, subject, stage: b.stage, students: take, existing: true });
+      });
+      if (!list.length) return;
+      const parts = capacity ? Math.ceil(list.length / capacity) : 1;
+      const per = Math.ceil(list.length / parts);
+      const base = [`${b.type === "ENRICHMENT" ? "إثراء" : "تقوية"}${subject ? ` ${subject}` : ""}`, STAGE_AR[b.stage], multiBranch && b.branch ? branchName[b.branch] || b.branch : ""].filter(Boolean).join(" — ");
+      for (let i = 0; i < parts; i++) {
+        let name = parts > 1 ? `${base} (${i + 1})` : base;
+        for (let n = 2; names.has(name); n++) name = `${base} (${parts > 1 ? `${i + 1}-` : ""}${n})`;
+        names.add(name);
+        plan.push({ name, type: b.type, branch: b.branch, subject, stage: b.stage, students: list.slice(i * per, (i + 1) * per), existing: false });
+      }
+    });
+    const rows = plan.map((p) => ({
+      name: p.name, type: p.type, branch: p.branch, subject: p.subject, stage: p.stage, existing: p.existing, count: p.students.length,
+      grades: [...new Set(p.students.map((e) => e.grade).filter(Boolean))].sort((a, b) => a.localeCompare(b, "en", { numeric: true })),
+    }));
+    if (!dd.apply) return { plan: rows, students: todo.length };
+    const now = Timestamp.now();
+    const writes = [];
+    plan.forEach((p, i) => {
+      let gid = p.id;
+      if (!gid) {
+        const gRef = ref.collection("groups").doc();
+        gid = gRef.id;
+        writes.push((batch) => batch.set(gRef, {
+          name: p.name, type: p.type, branch: p.branch, subject: p.subject, grades: rows[i].grades, teacher: "", room: "", capacity, supervisorId: "",
+          auto: true, createdAt: now, updatedAt: now,
+        }));
+      }
+      p.students.forEach((e) => writes.push((batch) => batch.update(ref.collection("students").doc(e.id), { groupId: gid })));
+    });
+    for (let i = 0; i < writes.length; i += 400) {
+      const batch = db.batch();
+      writes.slice(i, i + 400).forEach((w) => w(batch));
+      await batch.commit();
+    }
+    return { plan: rows, students: todo.length, created: plan.filter((p) => !p.existing).length, placed: plan.reduce((n, p) => n + p.students.length, 0) };
+  });
   out.supportSaveSupervisor = onCall(async (request) => {
     const u = await caller(request);
     const dd = request.data || {};

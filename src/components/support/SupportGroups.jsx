@@ -1,17 +1,83 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Pencil, Trash2, Loader2, Users, DoorOpen, UserCheck, GraduationCap, ChevronLeft, ArrowRight, Layers, TrendingUp, Sparkles } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Users, DoorOpen, UserCheck, GraduationCap, ChevronLeft, ArrowRight, Layers, TrendingUp, Sparkles, Wand2 } from 'lucide-react';
 import { callSupport, SUPPORT_TYPES, TYPE_STYLE, SUBJECTS } from '../../config/support';
 import { Modal, Field, Pill, inputCls, btn } from '../platform/ui';
 
 const PROGRAM_ICON = { REMEDIAL: TrendingUp, ENRICHMENT: Sparkles };
 const PROGRAM_TONE = { REMEDIAL: 'from-amber-50 border-amber-200 text-amber-800', ENRICHMENT: 'from-sky-50 border-sky-200 text-sky-700' };
 
+// «Make the groups»: the consented students with no group, into groups by
+// branch, programme, stage and subject (matching groups with room are filled
+// first). Shows the plan, then makes it.
+export function AutoGroupsModal({ cycle, type = '', branchName, onClose, onDone }) {
+  const { t } = useTranslation();
+  const [capacity, setCapacity] = useState(15);
+  const [plan, setPlan] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState(null);
+  const preview = async (cap = capacity) => {
+    setBusy('preview');
+    setError(null);
+    try { setPlan(await callSupport('supportAutoGroups', { id: cycle.id, type, capacity: Number(cap) || 0 })); } catch (err) { setError(err.message); } finally { setBusy(''); }
+  };
+  useEffect(() => { preview(15); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const apply = async () => {
+    setBusy('apply');
+    setError(null);
+    try { onDone(await callSupport('supportAutoGroups', { id: cycle.id, type, capacity: Number(capacity) || 0, apply: true })); } catch (err) { setError(err.message); setBusy(''); }
+  };
+  const rows = plan?.plan || [];
+  return (
+    <Modal title={t('support.auto.title')} onClose={onClose} size="max-w-3xl"
+      footer={<><button type="button" onClick={onClose} className={btn.ghost}>{t('common.cancel')}</button><button type="button" disabled={!!busy || !rows.length} onClick={apply} className={btn.primary}>{busy === 'apply' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wand2 className="w-4 h-4" />}{t('support.auto.apply', { n: plan?.students || 0 })}</button></>}>
+      {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl p-3">{error}</div>}
+      <p className="text-sm text-slate-600">{t('support.auto.hint')}</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label={t('support.auto.capacity')} hint={t('support.auto.capacityHint')}><input type="number" min={0} max={200} value={capacity} onChange={(e) => setCapacity(e.target.value)} className={`${inputCls} w-32`} /></Field>
+        <button type="button" disabled={!!busy} onClick={() => preview()} className={`${btn.ghost} mb-1`}>{busy === 'preview' && <Loader2 className="w-4 h-4 animate-spin" />}{t('support.auto.preview')}</button>
+      </div>
+      {!plan ? <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div> : !rows.length ? <p className="text-sm text-slate-500 text-center py-6">{t('support.auto.none')}</p> : (
+        <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-96">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-500 text-xs sticky top-0"><tr>{['group', 'program', 'stage', 'subject', 'grades', 'count'].map((k) => <th key={k} className="px-2 py-1.5 text-start font-medium">{t(`support.auto.col.${k}`)}</th>)}</tr></thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((r, i) => (
+                <tr key={i}>
+                  <td className="px-2 py-1.5 font-medium text-slate-900">{r.name}{r.existing ? <span className="ms-1 text-[11px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600">{t('support.auto.existing')}</span> : <span className="ms-1 text-[11px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700">{t('support.auto.new')}</span>}{r.branch && branchName ? <span className="block text-xs text-slate-400">{branchName(r.branch)}</span> : null}</td>
+                  <td className="px-2 py-1.5"><Pill className={TYPE_STYLE[r.type]}>{t(`support.types.${r.type}`)}</Pill></td>
+                  <td className="px-2 py-1.5 text-xs">{t(`support.groups.stages.${r.stage || 'OTHER'}`)}</td>
+                  <td className="px-2 py-1.5 text-xs">{r.subject || '—'}</td>
+                  <td className="px-2 py-1.5 text-xs" dir="ltr">{r.grades.join(', ')}</td>
+                  <td className="px-2 py-1.5 text-center font-bold">{r.count}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="text-xs text-slate-500">{t('support.auto.after')}</p>
+    </Modal>
+  );
+}
+
 // The cycle's programmes (remedial / enrichment), each a section of its own
 // with its groups and students; one opens into its groups.
-export function SupportProgramTypes({ data, onOpen }) {
+export function SupportProgramTypes({ data, onOpen, branchName, reload }) {
   const { t } = useTranslation();
+  const [auto, setAuto] = useState(false);
+  const [done, setDone] = useState(null);
+  const waitingAll = data.students.filter((s) => s.status === 'CONSENTED' && !s.groupId).length;
   return (
+    <div className="space-y-3">
+    {data.cycle.canManage && waitingAll > 0 && (
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" onClick={() => setAuto(true)} className={btn.primary}><Wand2 className="w-4 h-4" />{t('support.auto.button')}</button>
+        <p className="text-sm text-amber-700">{t('support.groups.waiting', { n: waitingAll })}</p>
+      </div>
+    )}
+    {done && <p className="text-sm rounded-xl p-3 border bg-emerald-50 text-emerald-800 border-emerald-100">{t('support.auto.done', { groups: done.created, n: done.placed })}</p>}
+    {auto && <AutoGroupsModal cycle={data.cycle} branchName={branchName} onClose={() => setAuto(false)} onDone={async (r) => { setAuto(false); setDone(r); await reload?.(); }} />}
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
       {SUPPORT_TYPES.map((type) => {
         const groups = data.groups.filter((g) => g.type === type);
@@ -38,6 +104,7 @@ export function SupportProgramTypes({ data, onOpen }) {
         );
       })}
     </div>
+    </div>
   );
 }
 
@@ -49,6 +116,8 @@ export default function SupportGroups({ data, type, branchName, reload, onOpen, 
   const c = data.cycle;
   const [editing, setEditing] = useState(null);
   const [busy, setBusy] = useState('');
+  const [auto, setAuto] = useState(false);
+  const [done, setDone] = useState(null);
   const groups = data.groups.filter((g) => g.type === type);
   const members = (gid) => data.students.filter((s) => s.groupId === gid && s.status === 'CONSENTED');
   const waiting = data.students.filter((s) => s.status === 'CONSENTED' && !s.groupId && s.type === type);
@@ -66,8 +135,11 @@ export default function SupportGroups({ data, type, branchName, reload, onOpen, 
       </div>
       <div className="flex flex-wrap items-center gap-2">
         {c.canManage && <button type="button" onClick={() => setEditing({ type })} className={btn.primary}><Plus className="w-4 h-4" />{t('support.groups.add')}</button>}
+        {c.canManage && waiting.length > 0 && <button type="button" onClick={() => setAuto(true)} className={btn.ghost}><Wand2 className="w-4 h-4" />{t('support.auto.button')}</button>}
         <p className={`text-sm ${waiting.length ? 'text-amber-700' : 'text-slate-500'}`}>{t('support.groups.waiting', { n: waiting.length })}</p>
       </div>
+      {done && <p className="text-sm rounded-xl p-3 border bg-emerald-50 text-emerald-800 border-emerald-100">{t('support.auto.done', { groups: done.created, n: done.placed })}</p>}
+      {auto && <AutoGroupsModal cycle={c} type={type} branchName={branchName} onClose={() => setAuto(false)} onDone={async (r) => { setAuto(false); setDone(r); await reload(); }} />}
       {!groups.length ? <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-slate-500">{t('support.programs.empty')}</div> : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {groups.map((g) => {

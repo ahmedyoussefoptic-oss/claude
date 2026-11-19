@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Loader2, FileDown, Printer, AlertTriangle, MessageCircle, Phone, FileText, Users, CheckCircle2, XCircle, FileSignature, Clock, ClipboardList, BellRing, Check, X } from 'lucide-react';
+import { Loader2, FileDown, Printer, AlertTriangle, MessageCircle, Phone, FileText, Users, CheckCircle2, XCircle, FileSignature, Clock, ClipboardList, BellRing, Check, X, Wand2 } from 'lucide-react';
 import { callSupport, riyadhDay, attRate, time12, TYPE_STYLE, STATUS_STYLE } from '../../config/support';
 import { printPage, escapeHtml as esc } from '../../utils/printPage';
 import ComplaintForm from '../complaints/ComplaintForm';
+import { AutoGroupsModal } from './SupportGroups';
 import { Tile, Pill, btn } from '../platform/ui';
 
 const MARK_SIGN = { P: '✓', L: 'م', A: 'غ', E: 'ع' };
@@ -28,6 +29,7 @@ export default function SupportDashboard({ data, branchName, groupName, reload }
   const [noteFor, setNoteFor] = useState(null);
   const [busy, setBusy] = useState('');
   const [actError, setActError] = useState(null);
+  const [auto, setAuto] = useState(false);
   useEffect(() => { callSupport('supportAttendance', { id: c.id }).then(setAtt).catch(() => setAtt({ sessions: [], calls: [], notTaken: {} })); }, [c.id]);
 
   const today = riyadhDay();
@@ -204,6 +206,9 @@ ${['group', 'branch', 'grade', 'teacher'].map((k) => `<h3>${esc(t(`support.dash.
                 {busy === 'approveAll' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{t('support.act.approveAll', { n: nominatedHere.length })}
               </button>
             )}
+            {c.canManage && list === 'noGroup' && picked.length > 0 && (
+              <button type="button" onClick={() => setAuto(true)} className="me-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-white flex items-center gap-1"><Wand2 className="w-3.5 h-3.5" />{t('support.auto.button')}</button>
+            )}
             {c.canManage && awaitingHere.length > 0 && (
               <button type="button" disabled={!!busy} onClick={() => { if (window.confirm(t('support.act.consentAllConfirm', { n: awaitingHere.length }))) review('consentMany', awaitingHere.map((s) => s.id), 'consentAll'); }} className="me-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1">
                 {busy === 'consentAll' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{t('support.act.consentAll', { n: awaitingHere.length })}
@@ -237,6 +242,7 @@ ${['group', 'branch', 'grade', 'teacher'].map((k) => `<h3>${esc(t(`support.dash.
               ))}
             </tbody>
           </table>
+          {auto && <AutoGroupsModal cycle={c} branchName={branchName} onClose={() => setAuto(false)} onDone={async () => { setAuto(false); await reload(); }} />}
           {actError && <p className="mx-4 my-2 text-sm text-red-700 bg-red-50 border border-red-100 rounded-xl px-3 py-2">{actError}</p>}
           {!picked.length && <p className="py-6 text-center text-sm text-slate-400">{t('support.noStudents')}</p>}
         </section>

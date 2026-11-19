@@ -127,7 +127,7 @@ function CycleDetails({ id, branchName, onBack, groupId, prog, openProg, openGro
       {tab === 'students' && <SupportStudents data={data} branchName={branchName} groupName={groupName} reload={load} />}
       {tab === 'groups' && (prog
         ? <SupportGroups data={data} type={prog} branchName={branchName} reload={load} onBack={() => openProg(null)} onOpen={(g) => openGroup(g, prog)} />
-        : <SupportProgramTypes data={data} onOpen={openProg} />)}
+        : <SupportProgramTypes data={data} onOpen={openProg} branchName={branchName} reload={load} />)}
       {tab === 'supervisors' && c.canManage && <SupportSupervisors data={data} branchName={branchName} reload={load} />}
       {tab === 'attendance' && <SupportAttendance data={data} groupName={groupName} />}
       {editing && <CycleEditor initial={c} onClose={() => setEditing(false)} onSaved={() => { setEditing(false); load(); }} />}

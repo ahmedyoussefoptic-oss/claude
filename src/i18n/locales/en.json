@@ -5851,6 +5851,28 @@
       "back": "All programmes",
       "open": "View groups",
       "empty": "No groups in this programme yet."
+    },
+    "auto": {
+      "button": "Make groups automatically",
+      "title": "Make groups automatically",
+      "hint": "Consented students with no group are placed by programme, stage and subject (and branch). Matching groups that still have seats are filled first, then new groups are made.",
+      "capacity": "Max students per group",
+      "capacityHint": "0 = one group per subject and stage",
+      "preview": "Preview",
+      "apply": "Create and place {{n}} students",
+      "none": "No consented students without a group.",
+      "existing": "existing",
+      "new": "new",
+      "after": "Afterwards, complete each group's teacher, room and supervisor, then send the group notice to parents from the students tab.",
+      "done": "{{groups}} groups made and {{n}} students placed.",
+      "col": {
+        "group": "Group",
+        "program": "Programme",
+        "stage": "Stage",
+        "subject": "Subject",
+        "grades": "Grades",
+        "count": "Students"
+      }
     }
   }
 }
