@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
-import { UserPlus, Loader2, Check, X, Send, BellRing, FileSignature, Layers, Undo2, Link2, MessageCircle, FileDown, Phone, Search, Upload, FileSpreadsheet } from 'lucide-react';
+import { UserPlus, Loader2, Check, X, Send, BellRing, FileSignature, Layers, Undo2, Link2, MessageCircle, FileDown, Phone, Search, Upload, FileSpreadsheet, Copy, RefreshCw, Power } from 'lucide-react';
 import { NOMINATION_TEMPLATE_URL, readNominationRows } from '../../utils/supportNominationExcel';
 import { callSupport, SUPPORT_STATUSES, SUPPORT_TYPES, STATUS_STYLE, TYPE_STYLE, SUBJECTS, attRate } from '../../config/support';
 import { waLink } from '../../utils/whatsapp';
@@ -31,6 +31,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
   const [answering, setAnswering] = useState(null);
   const [groupTo, setGroupTo] = useState('');
   const [notifyGroup, setNotifyGroup] = useState(true);
+  const [linkOpen, setLinkOpen] = useState(false);
 
   const students = data.students;
   const counts = useMemo(() => { const m = {}; students.forEach((s) => { m[s.status] = (m[s.status] || 0) + 1; }); return m; }, [students]);
@@ -85,6 +86,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 flex flex-wrap items-center gap-2">
         {c.status === 'ACTIVE' && <button type="button" onClick={() => setNominating(true)} className={btn.primary}><UserPlus className="w-4 h-4" />{t('support.nominate')}</button>}
+        {c.status === 'ACTIVE' && manage && <button type="button" onClick={() => setLinkOpen(true)} className={btn.ghost}><Link2 className="w-4 h-4" />{t('support.tlink.button')}</button>}
         <div className="relative"><Search className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 right-3" /><input value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('support.search')} className={`${sel} pr-9 w-52`} /></div>
         <select value={type} onChange={(e) => setType(e.target.value)} className={sel}><option value="">{t('support.allTypes')}</option>{SUPPORT_TYPES.map((x) => <option key={x} value={x}>{t(`support.types.${x}`)}</option>)}</select>
         {branchesIn.length > 1 && <select value={branch} onChange={(e) => setBranch(e.target.value)} className={sel}><option value="">{t('common.allBranches')}</option>{branchesIn.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}</select>}
@@ -120,7 +122,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
       )}
       {notice && (
         <div className={`text-sm rounded-xl p-3 border ${notice.error ? 'bg-red-50 text-red-700 border-red-100' : 'bg-emerald-50 text-emerald-800 border-emerald-100'}`}>
-          {notice.error || (notice.nominate ? <>{t('support.nomResult', notice.nominate)}{notice.nominate.notFoundIds?.length > 0 && <span className="block text-xs text-amber-800 mt-1">{t('support.nom.notFoundIds')}: <span dir="ltr">{notice.nominate.notFoundIds.join('، ')}</span></span>}</> : notice.copied != null ? t('support.copied', { n: notice.copied }) : notice.noWa ? t('support.noWa', { n: notice.done }) : notice.sent != null ? t('support.sentResult', { done: notice.done, sent: notice.sent, failed: notice.failed }) : t('support.doneN', { n: notice.done }))}
+          {notice.error || (notice.nominate ? <>{t('support.nomResult', notice.nominate)}{notice.nominate.otherCycleList?.length > 0 && <span className="block text-xs text-amber-800 mt-1">{t('support.nom.otherCycleList')}: {notice.nominate.otherCycleList.map((x) => `${x.name} (${x.cycle} — ${t(`support.types.${x.type}`)})`).join('، ')}</span>}{notice.nominate.notFoundIds?.length > 0 && <span className="block text-xs text-amber-800 mt-1">{t('support.nom.notFoundIds')}: <span dir="ltr">{notice.nominate.notFoundIds.join('، ')}</span></span>}</> : notice.copied != null ? t('support.copied', { n: notice.copied }) : notice.noWa ? t('support.noWa', { n: notice.done }) : notice.sent != null ? t('support.sentResult', { done: notice.done, sent: notice.sent, failed: notice.failed }) : t('support.doneN', { n: notice.done }))}
         </div>
       )}
 
@@ -168,6 +170,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
       <p className="text-xs text-slate-500">{t('support.flowHint')}</p>
 
       {nominating && <NominateModal cycle={c} onClose={() => setNominating(false)} onDone={async (r) => { setNominating(false); await reload(); setNotice({ nominate: r }); }} />}
+      {linkOpen && <TeacherLinkModal cycle={c} initial={data.teacherLink} onClose={() => { setLinkOpen(false); reload(); }} />}
       {answering && <AnswerModal cycle={c} student={answering} onClose={() => setAnswering(null)} onDone={async () => { setAnswering(null); await reload(); }} />}
     </div>
   );
@@ -267,6 +270,49 @@ function NominateModal({ cycle, onClose, onDone }) {
         </div>
       </Field>
       <p className="text-xs text-slate-500">{cycle.requireApproval && !cycle.canManage ? t('support.nom.needsApproval') : t('support.nom.direct')}</p>
+    </Modal>
+  );
+}
+
+// The teachers' nomination link (one per cycle) and its PIN: copy / send,
+// a new link (the old one stops), pause.
+function TeacherLinkModal({ cycle, initial, onClose }) {
+  const { t } = useTranslation();
+  const [link, setLink] = useState(initial);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const run = async (action) => {
+    setBusy(action);
+    setError(null);
+    try { setLink(await callSupport('supportTeacherLink', { id: cycle.id, action })); } catch (err) { setError(err.message); } finally { setBusy(''); }
+  };
+  const message = link ? t('support.tlink.message', { cycle: cycle.title, link: link.link, pin: link.pin }) : '';
+  const copy = async () => { try { await navigator.clipboard.writeText(message); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { window.prompt('', message); } };
+  return (
+    <Modal title={t('support.tlink.title')} onClose={onClose} size="max-w-lg" footer={<button type="button" onClick={onClose} className={btn.ghost}>{t('common.close')}</button>}>
+      {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl p-3">{error}</div>}
+      <p className="text-sm text-slate-600">{t('support.tlink.hint')}</p>
+      {!link ? (
+        <button type="button" disabled={!!busy} onClick={() => run('create')} className={btn.primary}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link2 className="w-4 h-4" />}{t('support.tlink.create')}</button>
+      ) : (
+        <div className="space-y-3">
+          <div className={`rounded-xl border p-3 space-y-2 ${link.enabled ? 'border-slate-200 bg-slate-50' : 'border-rose-200 bg-rose-50'}`}>
+            {!link.enabled && <p className="text-sm font-bold text-rose-700">{t('support.tlink.paused')}</p>}
+            <p className="text-xs text-slate-500">{t('support.tlink.link')}</p>
+            <p className="text-sm font-mono break-all" dir="ltr">{link.link}</p>
+            <p className="text-xs text-slate-500">{t('support.tlink.pin')}</p>
+            <p className="text-2xl font-mono tracking-[0.3em]" dir="ltr">{link.pin}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={copy} className={btn.primary}>{copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}{copied ? t('support.sup.copied') : t('support.tlink.copy')}</button>
+            <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer" className={btn.ghost}><MessageCircle className="w-4 h-4" />{t('support.tlink.whatsapp')}</a>
+            <button type="button" disabled={!!busy} onClick={() => run(link.enabled ? 'disable' : 'enable')} className={btn.ghost}>{busy === 'disable' || busy === 'enable' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />}{link.enabled ? t('support.tlink.pause') : t('support.tlink.resume')}</button>
+            <button type="button" disabled={!!busy} onClick={() => { if (window.confirm(t('support.tlink.renewConfirm'))) run('renew'); }} className={btn.ghost}>{busy === 'renew' ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}{t('support.tlink.renew')}</button>
+          </div>
+          <p className="text-xs text-slate-500">{cycle.requireApproval === false ? t('support.tlink.direct') : t('support.tlink.approval')}</p>
+        </div>
+      )}
     </Modal>
   );
 }

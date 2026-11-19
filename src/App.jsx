@@ -32,6 +32,7 @@ import SurveyPublic from './pages/SurveyPublic';
 import SupportPrograms from './pages/SupportPrograms';
 import SupportParent from './pages/SupportParent';
 import SupportAttend from './pages/SupportAttend';
+import SupportNominate from './pages/SupportNominate';
 import Settings from './pages/Settings';
 import DeletedComplaints from './pages/DeletedComplaints';
 import { ROLES } from './config/roles';
@@ -111,6 +112,7 @@ function App() {
         <Route path="/survey/:code" element={<SurveyPublic />} />
         <Route path="/support/:token" element={<SupportParent />} />
         <Route path="/support-attend/:token" element={<SupportAttend />} />
+        <Route path="/support-nominate/:token" element={<SupportNominate />} />
         <Route path="/leave" element={<LeaveRequest />} />
         <Route path="/sped/:formId" element={<SpecialEducationForm />} />
         <Route path="/join" element={<JoinInquiry />} />

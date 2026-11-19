@@ -5482,7 +5482,7 @@
     "noWa": "{{n}} students updated. WhatsApp messages are off for this — copy the links or send them with the WhatsApp button by each student.",
     "sentResult": "{{done}} students: {{sent}} sent, {{failed}} failed.",
     "doneN": "Done: {{n}}",
-    "nomResult": "Added {{added}} · already nominated {{already}} · not in the roster {{notFound}} · outside the branches {{outOfScope}}",
+    "nomResult": "Added {{added}} · already nominated {{already}} · in another programme {{otherCycle}} · not in the roster {{notFound}} · outside the branches {{outOfScope}}",
     "col": {
       "student": "Student",
       "type": "Programme",
@@ -5532,7 +5532,8 @@
       "teacher": "Nominating teacher",
       "badFile": "Could not read {{name}}.",
       "noTypeRows": "{{n}} rows without a programme — they go into «{{type}}» chosen above.",
-      "notFoundIds": "IDs not found in the student roster (check the form)"
+      "notFoundIds": "IDs not found in the student roster (check the form)",
+      "otherCycleList": "Not nominated — already in another programme"
     },
     "ans": {
       "title": "Answer of {{name}}'s parent",
@@ -5768,6 +5769,50 @@
       "alerted": "Alerted {{day}}",
       "toNote": "Open a note",
       "noteDetails": "Repeated absence from {{program}} in «{{cycle}}»: absent {{n}} times (attendance {{rate}}%). Days absent: {{days}}."
+    },
+    "tlink": {
+      "button": "Teachers' nomination link",
+      "title": "Teachers' nomination link",
+      "hint": "One link per cycle with a PIN, sent to teachers. A teacher picks a grade and class and nominates students without signing in. Students already in this cycle or another active one can't be picked.",
+      "create": "Create the link",
+      "link": "Link",
+      "pin": "PIN",
+      "copy": "Copy the message",
+      "whatsapp": "Send on WhatsApp",
+      "pause": "Pause",
+      "resume": "Turn on",
+      "paused": "The link is paused — teachers can't nominate from it.",
+      "renew": "New link and PIN",
+      "renewConfirm": "The current link will stop and a new link and PIN are made. Continue?",
+      "approval": "Nominations from the link arrive as «nominated» and wait for your approval.",
+      "direct": "Nominations from the link are approved at once (the cycle needs no approval).",
+      "message": "Dear teachers,\nTo nominate students for the support programmes (remedial / enrichment) — {{cycle}}:\n{{link}}\nPIN: {{pin}}"
+    },
+    "tnom": {
+      "title": "Nominate students for support programmes",
+      "prompt": "Enter your name and the PIN you were sent.",
+      "teacherName": "Teacher's name",
+      "enter": "Enter",
+      "as": "Teacher: {{name}}",
+      "step1": "1. Pick the students",
+      "step2": "2. Programme, subject and reason",
+      "branch": "Branch",
+      "grade": "Grade",
+      "allClasses": "All classes",
+      "search": "Or search by student name",
+      "pickClass": "Pick a grade to see its students.",
+      "none": "No students.",
+      "nominated": "Nominated — {{type}}",
+      "inOther": "In another programme: {{cycle}}",
+      "defaults": "Defaults for the students you pick (each can be changed):",
+      "subject": "Subject",
+      "reason": "Reason",
+      "nonePicked": "No students picked yet.",
+      "submit": "Nominate {{n}}",
+      "needName": "Enter the teacher's name.",
+      "done": "{{n}} students nominated — thank you.",
+      "needsApproval": "The programme coordinator reviews nominations before contacting parents.",
+      "already": "{{n}} were already nominated."
     }
   }
 }

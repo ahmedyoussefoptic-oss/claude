@@ -11,7 +11,7 @@
 //   supportCycles/{id}/groups/{gid}        a group: type, branch, grades, subject, teacher, room, capacity, supervisor
 //   supportCycles/{id}/supervisors/{sid}   a supervisor: name, link token, PIN
 //   supportCycles/{id}/sessions/{day_gid}  one class: the marks
-//   supportLinks/{token}                   a parent's or supervisor's link → its cycle (wrong-ID / PIN lock)
+//   supportLinks/{token}                   a parent's, supervisor's or the teachers' link → its cycle (wrong-ID / PIN lock)
 // Read and written only here (firestore.rules deny these collections).
 
 const TYPES = ["REMEDIAL", "ENRICHMENT"];
@@ -227,38 +227,35 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
       groups: gr.docs.map((x) => ({ id: x.id, ...x.data(), createdAt: ms(x.data().createdAt) })),
       supervisors: sv.docs.map((x) => ({ id: x.id, name: x.data().name, phone: x.data().phone || "", branch: x.data().branch || "", pin: x.data().pin, link: `${PUBLIC_APP_URL}/support-attend/${x.data().token}` })),
       hasWa: !!(await waSettings()),
+      teacherLink: canManage ? teacherLinkOut(c) : null,
     };
   });
 
   // --- nominating --------------------------------------------------------------
-  out.supportNominate = onCall({ timeoutSeconds: 120 }, async (request) => {
-    const u = await caller(request);
-    const dd = request.data || {};
-    const { ref, c } = await loadCycle(dd.id, u);
-    if (c.status !== "ACTIVE") throw new HttpsError("failed-precondition", "الدورة مغلقة.");
-    const type = TYPES.includes(dd.type) ? dd.type : null;
-    const subjectsOf = (list) => [...new Set((Array.isArray(list) ? list : []).map((s) => str(s, 60)).filter(Boolean))].slice(0, 12);
-    const subjects = subjectsOf(dd.subjects);
-    const reason = str(dd.reason, 600);
-    // One per student: the request's programme / subjects / reason, or — from
-    // the teachers' Excel form — the row's own, with the teacher's name.
-    const per = new Map();
-    (Array.isArray(dd.studentIds) ? dd.studentIds : []).forEach((x) => per.set(cleanId(x), {}));
-    (Array.isArray(dd.entries) ? dd.entries : []).slice(0, 2000).forEach((x) => {
-      if (!x || typeof x !== "object") return;
-      const rowSubjects = subjectsOf(x.subjects);
-      per.set(cleanId(x.studentId), {
-        ...(TYPES.includes(x.type) ? { type: x.type } : {}), ...(rowSubjects.length ? { subjects: rowSubjects } : {}),
-        ...(str(x.reason, 600) ? { reason: str(x.reason, 600) } : {}), teacher: str(x.teacher, 80),
-      });
-    });
+  const subjectsOf = (list) => [...new Set((Array.isArray(list) ? list : []).map((x) => str(x, 60)).filter(Boolean))].slice(0, 12);
+  // Still in a programme (not rejected / withdrawn / declined by the parent).
+  const LIVE = ["NOMINATED", "APPROVED", "PENDING_CONSENT", "CONSENTED"];
+  // Students already in another active cycle: id → { cycle, type }. A student
+  // takes one programme at a time — within a cycle the enrollment is one
+  // record, and across cycles this keeps them out of a second one.
+  async function inOtherCycles(cycleId, ids) {
+    const others = (await cycles().where("status", "==", "ACTIVE").get()).docs.filter((x) => x.id !== cycleId);
+    const want = new Set(ids);
+    const found = new Map();
+    const lists = await Promise.all(others.map((o) => o.ref.collection("students").where("status", "in", LIVE).get()));
+    lists.forEach((snap, i) => snap.docs.forEach((x) => { if (want.has(x.id) && !found.has(x.id)) found.set(x.id, { cycle: others[i].data().title || "", type: x.data().type }); }));
+    return found;
+  }
+  // The shared part: `per` is id → { type?, subjects?, reason?, teacher? }
+  // over `base` (the request's programme, subjects, reason); `by` says who,
+  // `inScope(branch)` whether they may nominate from that branch.
+  async function nominate(ref, c, per, base, by, inScope) {
     const ids = [...per.keys()].filter((x) => /^\d{6,15}$/.test(x)).slice(0, 2000);
     if (!ids.length) throw new HttpsError("invalid-argument", "اختر الطلاب.");
-    if (!type && ids.some((x) => !per.get(x).type)) throw new HttpsError("invalid-argument", "اختر نوع البرنامج.");
-    const branchOf = await branchResolver();
+    if (!base.type && ids.some((x) => !per.get(x).type)) throw new HttpsError("invalid-argument", "اختر نوع البرنامج.");
+    const [branchOf, elsewhere] = await Promise.all([branchResolver(), inOtherCycles(ref.id, ids)]);
     const now = Timestamp.now();
-    const result = { added: 0, already: 0, notFound: 0, outOfScope: 0, notFoundIds: [] };
-    const auto = c.requireApproval === false || manages(u, c);
+    const result = { added: 0, already: 0, notFound: 0, outOfScope: 0, otherCycle: 0, notFoundIds: [], otherCycleList: [] };
     for (let i = 0; i < ids.length; i += 300) {
       const chunk = ids.slice(i, i + 300);
       const [stu, cur] = await Promise.all([db.getAll(...chunk.map((x) => db.collection("students").doc(x))), db.getAll(...chunk.map((x) => ref.collection("students").doc(x)))]);
@@ -268,16 +265,22 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         if (!s) { result.notFound++; if (result.notFoundIds.length < 100) result.notFoundIds.push(sid); return; }
         const branch = branchOf(s);
         const row = per.get(sid);
-        if (((c.branches || []).length && !c.branches.includes(branch)) || !(callerAll(u) || manages(u, c) || callerHasBranch(u, branch))) { result.outOfScope++; return; }
+        if (((c.branches || []).length && !c.branches.includes(branch)) || !inScope(branch)) { result.outOfScope++; return; }
         if (cur[j].exists && cur[j].data().status !== "WITHDRAWN" && cur[j].data().status !== "REJECTED") { result.already++; return; }
+        const other = elsewhere.get(sid);
+        if (other) {
+          result.otherCycle++;
+          if (result.otherCycleList.length < 100) result.otherCycleList.push({ name: str(s.nameAr || s.name, 120), cycle: other.cycle, type: other.type });
+          return;
+        }
         const tk = token();
         batch.set(db.collection("supportLinks").doc(tk), { kind: "parent", cycleId: ref.id, studentId: sid, fails: 0 });
         batch.set(ref.collection("students").doc(sid), {
           studentId: sid, name: str(s.nameAr || s.name, 120), branch, grade: studentGrade(s), className: str(s.className, 20), section: studentSection(s) || "",
-          phone: toIntlNumber(s.mobile) || "", type: row.type || type, subjects: row.subjects || subjects, reason: row.reason || reason,
-          ...(row.teacher ? { nominatedTeacher: row.teacher } : {}), status: auto ? "APPROVED" : "NOMINATED",
-          nominatedBy: u.uid, nominatedByName: u.name || "", nominatedAt: now, token: tk, att: {},
-          ...(auto ? { reviewedBy: u.uid, reviewedByName: u.name || "", reviewedAt: now } : {}),
+          phone: toIntlNumber(s.mobile) || "", type: row.type || base.type, subjects: row.subjects || base.subjects, reason: row.reason || base.reason,
+          ...(row.teacher ? { nominatedTeacher: row.teacher } : {}), ...(by.via ? { nominatedVia: by.via } : {}), status: by.auto ? "APPROVED" : "NOMINATED",
+          nominatedBy: by.uid || "", nominatedByName: by.name || "", nominatedAt: now, token: tk, att: {},
+          ...(by.auto ? { reviewedBy: by.uid, reviewedByName: by.name || "", reviewedAt: now } : {}),
         });
         result.added++;
       });
@@ -285,6 +288,111 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     }
     await refreshCounts(ref);
     return result;
+  }
+  // One row of the Excel form / the teachers' page → per-student overrides.
+  const rowOf = (x) => {
+    const rowSubjects = subjectsOf(x.subjects);
+    return {
+      ...(TYPES.includes(x.type) ? { type: x.type } : {}), ...(rowSubjects.length ? { subjects: rowSubjects } : {}),
+      ...(str(x.reason, 600) ? { reason: str(x.reason, 600) } : {}), teacher: str(x.teacher, 80),
+    };
+  };
+
+  out.supportNominate = onCall({ timeoutSeconds: 120 }, async (request) => {
+    const u = await caller(request);
+    const dd = request.data || {};
+    const { ref, c } = await loadCycle(dd.id, u);
+    if (c.status !== "ACTIVE") throw new HttpsError("failed-precondition", "الدورة مغلقة.");
+    // One per student: the request's programme / subjects / reason, or — from
+    // the teachers' Excel form — the row's own, with the teacher's name.
+    const per = new Map();
+    (Array.isArray(dd.studentIds) ? dd.studentIds : []).forEach((x) => per.set(cleanId(x), {}));
+    (Array.isArray(dd.entries) ? dd.entries : []).slice(0, 2000).forEach((x) => { if (x && typeof x === "object") per.set(cleanId(x.studentId), rowOf(x)); });
+    const base = { type: TYPES.includes(dd.type) ? dd.type : null, subjects: subjectsOf(dd.subjects), reason: str(dd.reason, 600) };
+    const auto = c.requireApproval === false || manages(u, c);
+    return nominate(ref, c, per, base, { uid: u.uid, name: u.name || "", auto }, (b) => callerAll(u) || manages(u, c) || callerHasBranch(u, b));
+  });
+
+  // --- the teachers' link -----------------------------------------------------------
+  // /support-nominate/<token> + PIN, one per cycle: a teacher (no account)
+  // picks a class and nominates from it. The page never sees national IDs —
+  // each student goes by a key made from the link's token.
+  const teacherKey = (tk, sid) => crypto.createHmac("sha256", tk).update(sid).digest("base64url").slice(0, 16);
+  const teacherLinkOut = (c) => (c.teacherLink?.token ? { link: `${PUBLIC_APP_URL}/support-nominate/${c.teacherLink.token}`, pin: c.teacherLink.pin, enabled: c.teacherLink.enabled !== false } : null);
+  out.supportTeacherLink = onCall(async (request) => {
+    const u = await caller(request);
+    const dd = request.data || {};
+    const { ref, c } = await loadCycle(dd.id, u, { manage: true });
+    const old = c.teacherLink || {};
+    if (dd.action === "renew" || !old.token) {
+      const tk = token();
+      if (old.token) await db.collection("supportLinks").doc(old.token).delete().catch(() => {});
+      await db.collection("supportLinks").doc(tk).set({ kind: "teacher", cycleId: ref.id, fails: 0 });
+      await ref.update({ teacherLink: { token: tk, pin: pin(), enabled: true } });
+    } else if (dd.action === "disable" || dd.action === "enable") {
+      await ref.update({ "teacherLink.enabled": dd.action === "enable" });
+    }
+    return teacherLinkOut((await ref.get()).data());
+  });
+  async function teacherOf(request) {
+    const dd = request.data || {};
+    const { lRef, l } = await linkOf(dd.token, "teacher");
+    const cRef = cycles().doc(l.cycleId);
+    const c = (await cRef.get()).data();
+    if (!c || c.teacherLink?.token !== dd.token) throw new HttpsError("not-found", "الرابط غير صحيح أو انتهت صلاحيته.");
+    if (String(dd.pin || "") !== String(c.teacherLink.pin)) await wrong(lRef, l, "الرمز");
+    if (l.fails) await lRef.update({ fails: 0 });
+    if (c.teacherLink.enabled === false) throw new HttpsError("failed-precondition", "أُوقف رابط الترشيح، يرجى التواصل مع منسق البرنامج.");
+    if (c.status !== "ACTIVE") throw new HttpsError("failed-precondition", "انتهت هذه الدورة.");
+    return { cRef, c, tk: dd.token };
+  }
+  // The cycle's branches' students (active), with whether each is already in
+  // this cycle or another active one.
+  async function teacherRoster(cRef, c, tk) {
+    const [branchOf, snap, mine, brSnap] = await Promise.all([
+      branchResolver(), db.collection("students").select("nameAr", "name", "branch", "branchName", "gradeName", "className", "active").get(),
+      cRef.collection("students").get(), db.collection("branches").get(),
+    ]);
+    const all = !(c.branches || []).length;
+    const rows = snap.docs.filter((x) => x.data().active !== false).map((x) => ({ id: x.id, s: x.data(), branch: branchOf(x.data()) }))
+      .filter((x) => /^\d{6,15}$/.test(x.id) && x.branch && (all || c.branches.includes(x.branch)));
+    const here = new Map(mine.docs.filter((x) => !["WITHDRAWN", "REJECTED"].includes(x.data().status)).map((x) => [x.id, x.data().type]));
+    const elsewhere = await inOtherCycles(cRef.id, rows.map((x) => x.id).filter((x) => !here.has(x)));
+    const branchName = Object.fromEntries(brSnap.docs.map((x) => [x.id, x.data().name || x.id]));
+    return {
+      cycle: c.title, when: whenText(c), from: c.startDay, to: c.endDay, school: SCHOOL_NAME, needsApproval: c.requireApproval !== false,
+      branches: [...new Set(rows.map((x) => x.branch))].map((b) => ({ id: b, name: branchName[b] || b })),
+      students: rows.map((x) => {
+        const other = elsewhere.get(x.id);
+        return {
+          k: teacherKey(tk, x.id), name: str(x.s.nameAr || x.s.name, 120), branch: x.branch, grade: studentGrade(x.s), className: str(x.s.className, 20),
+          ...(here.has(x.id) ? { inThis: here.get(x.id) } : {}), ...(other ? { inOther: other.cycle } : {}),
+        };
+      }).sort((a, b) => a.name.localeCompare(b.name, "ar")),
+    };
+  }
+  out.supportTeacherOpen = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+    const { cRef, c, tk } = await teacherOf(request);
+    return teacherRoster(cRef, c, tk);
+  });
+  out.supportTeacherNominate = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+    const { cRef, c, tk } = await teacherOf(request);
+    const dd = request.data || {};
+    const teacher = str(dd.teacher, 80);
+    if (!teacher) throw new HttpsError("invalid-argument", "اكتب اسم المعلم.");
+    const entries = (Array.isArray(dd.entries) ? dd.entries : []).slice(0, 100).filter((x) => x && typeof x === "object" && typeof x.k === "string");
+    if (!entries.length) throw new HttpsError("invalid-argument", "اختر الطلاب.");
+    if (entries.some((x) => !TYPES.includes(x.type))) throw new HttpsError("invalid-argument", "اختر البرنامج لكل طالب.");
+    // Key → national ID, over the cycle's branches.
+    const branchOf = await branchResolver();
+    const snap = await db.collection("students").select("branch", "branchName", "active").get();
+    const all = !(c.branches || []).length;
+    const byKey = new Map();
+    snap.docs.forEach((x) => { if (x.data().active !== false && (all || c.branches.includes(branchOf(x.data())))) byKey.set(teacherKey(tk, x.id), x.id); });
+    const per = new Map();
+    entries.forEach((x) => { const sid = byKey.get(x.k); if (sid) per.set(sid, rowOf({ ...x, teacher })); });
+    const result = await nominate(cRef, c, per, { type: null, subjects: [], reason: "" }, { uid: "", name: `${teacher} (رابط المعلمين)`, auto: c.requireApproval === false, via: "TEACHER_LINK" }, () => true);
+    return { result, state: await teacherRoster(cRef, (await cRef.get()).data(), tk) };
   });
 
   // --- the coordinator's actions -----------------------------------------------
