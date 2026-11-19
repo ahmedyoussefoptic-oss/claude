@@ -7164,6 +7164,93 @@ exports.assignCallTasks = onCall({ timeoutSeconds: 120 }, async (request) => {
   return { moved };
 });
 
+// Supervisor: share a campaign's remaining calls by hand — how many each
+// agent should hold ({ uid: n }, summing to every pending call). Each agent
+// keeps their own calls up to their number (callbacks with a set time first,
+// then by due day); the rest, with the unassigned, go to agents short of
+// their number, calls in an agent's branches first. Agents whose list changed
+// are spread again from today at the daily quota; a moved callback keeps its
+// time. The agents given a number become the campaign's agents.
+exports.rebalanceCallTasks = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
+  const caller = await callCaller(request, "supervisor");
+  const { ref, c } = await loadCallCampaign(caller, request.data?.campaignId);
+  if (c.status === "CLOSED") throw new HttpsError("failed-precondition", "الحملة مغلقة.");
+  const raw = request.data?.counts && typeof request.data.counts === "object" ? request.data.counts : {};
+  const want = {};
+  for (const [uid, v] of Object.entries(raw)) {
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < 0) throw new HttpsError("invalid-argument", "الأعداد يجب أن تكون أرقاماً صحيحة موجبة.");
+    if (n > 0) want[String(uid)] = n;
+  }
+  const agents = (await loadActiveUsers()).filter((u) => want[u.id] && callRoleOf(u, "agent"));
+  if (!agents.length) throw new HttpsError("invalid-argument", "حدّد عدد الاتصالات لموظف واحد على الأقل.");
+  if (agents.length !== Object.keys(want).length) throw new HttpsError("invalid-argument", "أحد الموظفين المحددين ليس موظف اتصال نشطاً.");
+  const pending = (await db.collection("callTasks").where("campaignId", "==", ref.id).where("status", "==", "PENDING").get()).docs;
+  const total = Object.values(want).reduce((s, n) => s + n, 0);
+  if (total !== pending.length) throw new HttpsError("failed-precondition", `مجموع الأعداد (${total}) لا يساوي الاتصالات المتبقية (${pending.length}). حدّث الصفحة وأعد المحاولة.`);
+
+  const order = (a, b) => String(a.data().dueDay).localeCompare(String(b.data().dueDay)) || (a.data().createdAt?.toMillis?.() || 0) - (b.data().createdAt?.toMillis?.() || 0);
+  pending.sort(order);
+  const keep = {};
+  const got = {};
+  let pool = [];
+  agents.forEach((a) => { keep[a.id] = []; got[a.id] = []; });
+  pending.forEach((x) => { const a = x.data().assignedTo; if (a && keep[a]) keep[a].push(x); else pool.push(x); });
+  const changed = new Set();
+  for (const a of agents) {
+    const list = keep[a.id].sort((p, q) => (p.data().dueAt ? 0 : 1) - (q.data().dueAt ? 0 : 1) || order(p, q));
+    if (list.length > want[a.id]) { pool.push(...list.slice(want[a.id])); keep[a.id] = list.slice(0, want[a.id]); changed.add(a.id); }
+  }
+  pool.sort(order);
+  // Branch-limited agents pick from their branches first, then everyone
+  // fills what is left.
+  const need = (a) => want[a.id] - keep[a.id].length - got[a.id].length;
+  const scoped = [...agents].sort((a, b) => (callScope(a) ? 0 : 1) - (callScope(b) ? 0 : 1));
+  for (const pass of [true, false]) {
+    for (const a of scoped) {
+      if (need(a) <= 0) continue;
+      const rest = [];
+      for (const x of pool) {
+        if (need(a) > 0 && (!pass || inCallScope(a, x.data().branch || ""))) got[a.id].push(x);
+        else rest.push(x);
+      }
+      pool = rest;
+    }
+  }
+
+  const today = riyadhDay();
+  const from = c.startDay > today ? c.startDay : today;
+  const quota = c.dailyQuota || 30;
+  const updates = [];
+  let moved = 0;
+  for (const a of agents) {
+    if (got[a.id].length) changed.add(a.id);
+    if (!changed.has(a.id)) continue;
+    let i = 0;
+    [...keep[a.id].sort(order), ...got[a.id]].forEach((x) => {
+      const k = x.data();
+      const data = {};
+      if (k.assignedTo !== a.id) { data.assignedTo = a.id; data.assignedName = a.name || ""; moved++; }
+      if (!k.dueAt) { const dueDay = addWorkDays(from, Math.floor(i++ / quota)); if (dueDay !== k.dueDay) data.dueDay = dueDay; }
+      if (Object.keys(data).length) updates.push({ ref: x.ref, data });
+    });
+  }
+  for (let i = 0; i < updates.length; i += 450) {
+    const batch = db.batch();
+    updates.slice(i, i + 450).forEach((u) => batch.update(u.ref, u.data));
+    await batch.commit();
+  }
+  await ref.update({
+    agents: agents.map((a) => a.id), agentNames: Object.fromEntries(agents.map((a) => [a.id, a.name || ""])), distribution: "MANUAL",
+    "counts.unassigned": 0, updatedAt: Timestamp.now(), updatedBy: caller.uid,
+  });
+  for (const a of agents) {
+    const n = got[a.id].filter((x) => x.data().assignedTo !== a.id).length;
+    if (n) await notifyUsers([a.id], { title: `حملة اتصال: ${c.title}`, body: `أُسند إليك ${n} اتصالاً إضافياً، وأصبح المتبقي لديك ${want[a.id]}.`, complaintId: ref.id, type: "CALL_ASSIGNED" }).catch(() => {});
+  }
+  return { moved };
+});
+
 exports.setCallCampaignStatus = onCall(async (request) => {
   const caller = await callCaller(request, "supervisor");
   const { ref } = await loadCallCampaign(caller, request.data?.id);

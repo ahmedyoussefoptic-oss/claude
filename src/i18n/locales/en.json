@@ -3889,6 +3889,19 @@
       "redistribute": "Redistribute the remaining calls over the chosen agents",
       "redistributeHint": "All calls not yet done are dealt evenly (by each agent's branch) from today at the daily quota, and agents given new calls are notified. A callback stays with its agent if still chosen."
     },
+    "rebalance": {
+      "button": "Redistribute by counts",
+      "title": "Redistribute remaining calls",
+      "hint": "Set how many remaining calls each agent should hold. Each agent keeps her own calls up to the new number (callbacks first); the rest and the unassigned move to agents who need more, calls in their branch first, then are scheduled from today at the daily quota. Agents set to 0 are removed from the campaign's agents.",
+      "now": "Now",
+      "new": "New",
+      "sum": "Total {{sum}} of {{total}}",
+      "left": "{{n}} left",
+      "over": "{{n}} over",
+      "even": "Evenly",
+      "save": "Redistribute",
+      "saved": "Redistributed — {{n}} calls moved."
+    },
     "my": {
       "indicators": "My indicators",
       "period": {

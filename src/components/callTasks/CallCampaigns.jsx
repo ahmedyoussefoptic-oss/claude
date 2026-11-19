@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { httpsCallable } from 'firebase/functions';
 import { format } from 'date-fns';
-import { Plus, Loader2, X, FileDown, Printer, Pause, Play, Lock, Upload, Users as UsersIcon, ShieldCheck, ShieldAlert, ShieldQuestion, Flame, ArrowRight, Pencil } from 'lucide-react';
+import { Plus, Loader2, X, FileDown, Printer, Pause, Play, Lock, Upload, Users as UsersIcon, ShieldCheck, ShieldAlert, ShieldQuestion, Flame, ArrowRight, Pencil, Shuffle } from 'lucide-react';
 import { functions } from '../../config/firebase';
 import useAuthStore from '../../stores/useAuthStore';
 import { useBranches } from '../../hooks/useOrgData';
@@ -282,6 +282,75 @@ function EditCampaign({ campaign: c, onClose, onSaved }) {
   );
 }
 
+// Sharing a campaign's remaining calls by hand: how many each agent holds.
+function RebalanceCalls({ campaignId, tasks, onClose, onSaved }) {
+  const { t } = useTranslation();
+  const users = useUsers();
+  const pending = tasks.filter((k) => k.status === 'PENDING');
+  const current = {};
+  pending.forEach((k) => { if (k.assignedTo) current[k.assignedTo] = (current[k.assignedTo] || 0) + 1; });
+  const unassigned = pending.filter((k) => !k.assignedTo).length;
+  const agentIds = new Set(users.filter((u) => u.active !== false && u.callRoles?.agent === true).map((u) => u.id));
+  Object.keys(current).forEach((id) => agentIds.add(id));
+  const nameOf = (id) => users.find((u) => u.id === id)?.name || pending.find((k) => k.assignedTo === id)?.assignedName || id;
+  const rows = [...agentIds].map((id) => ({ id, name: nameOf(id), now: current[id] || 0 })).sort((a, b) => b.now - a.now || a.name.localeCompare(b.name, 'ar'));
+  const [counts, setCounts] = useState(() => Object.fromEntries(rows.map((r) => [r.id, String(r.now)])));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const num = (id) => Math.max(0, Math.floor(Number(counts[id]) || 0));
+  const sum = rows.reduce((s, r) => s + num(r.id), 0);
+  const left = pending.length - sum;
+  const even = () => {
+    const chosen = rows.filter((r) => num(r.id) > 0);
+    const list = chosen.length ? chosen : rows;
+    const base = Math.floor(pending.length / list.length);
+    let extra = pending.length % list.length;
+    setCounts(Object.fromEntries(rows.map((r) => [r.id, String(list.includes(r) ? base + (extra-- > 0 ? 1 : 0) : 0)])));
+  };
+  const save = async () => {
+    setError(null);
+    setBusy(true);
+    try {
+      const r = await call('rebalanceCallTasks', { campaignId, counts: Object.fromEntries(rows.filter((x) => num(x.id) > 0).map((x) => [x.id, num(x.id)])) });
+      onSaved(r);
+    } catch (err) { setError(err.message); setBusy(false); }
+  };
+  return (
+    <Modal title={t('callTasks.rebalance.title')} onClose={onClose} size="max-w-lg"
+      footer={<>
+        <button onClick={onClose} className={btn.ghost}>{t('common.cancel')}</button>
+        <button disabled={busy || left !== 0 || !pending.length} onClick={save} className={btn.primary}>{busy && <Loader2 className="w-4 h-4 animate-spin" />}{t('callTasks.rebalance.save')}</button>
+      </>}>
+      {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl p-3">{error}</div>}
+      <p className="text-xs text-slate-500">{t('callTasks.rebalance.hint')}</p>
+      <div className="border border-slate-200 rounded-xl divide-y divide-slate-100">
+        <div className="flex items-center gap-2 px-3 py-2 text-xs text-slate-500 bg-slate-50 rounded-t-xl">
+          <span className="flex-1">{t('callTasks.col.agent')}</span><span className="w-16 text-center">{t('callTasks.rebalance.now')}</span><span className="w-24 text-center">{t('callTasks.rebalance.new')}</span>
+        </div>
+        {rows.map((r) => (
+          <div key={r.id} className={`flex items-center gap-2 px-3 py-1.5 text-sm ${num(r.id) !== r.now ? 'bg-sky-50/50' : ''}`}>
+            <span className="flex-1 truncate">{r.name}</span>
+            <span className="w-16 text-center tabular-nums text-slate-500">{r.now}</span>
+            <input type="number" min={0} value={counts[r.id]} onChange={(e) => setCounts((x) => ({ ...x, [r.id]: e.target.value }))} className={`${inputCls} w-24 text-center py-1`} />
+          </div>
+        ))}
+        {unassigned > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1.5 text-sm text-amber-800">
+            <span className="flex-1">{t('callTasks.unassigned')}</span><span className="w-16 text-center tabular-nums">{unassigned}</span><span className="w-24 text-center tabular-nums">0</span>
+          </div>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        <span className={`font-medium ${left === 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+          {t('callTasks.rebalance.sum', { sum, total: pending.length })}{left !== 0 && ` — ${left > 0 ? t('callTasks.rebalance.left', { n: left }) : t('callTasks.rebalance.over', { n: -left })}`}
+        </span>
+        <div className="flex-1" />
+        <button type="button" onClick={even} className={btn.ghost}>{t('callTasks.rebalance.even')}</button>
+      </div>
+    </Modal>
+  );
+}
+
 function CampaignDetails({ id, onBack }) {
   const { t, i18n } = useTranslation();
   const branches = useBranches();
@@ -295,6 +364,7 @@ function CampaignDetails({ id, onBack }) {
   const [assignTo, setAssignTo] = useState('');
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [rebalancing, setRebalancing] = useState(false);
   const [notice, setNotice] = useState('');
   const today = riyadhDay();
 
@@ -383,6 +453,7 @@ function CampaignDetails({ id, onBack }) {
 
       {notice && <p className="text-sm bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-xl p-3">{notice}</p>}
       {editing && <EditCampaign campaign={c} onClose={() => setEditing(false)} onSaved={async (r) => { setEditing(false); setNotice(r.moved ? t('callTasks.edit.savedMoved', { n: r.moved }) : t('callTasks.edit.saved')); await load(); }} />}
+      {rebalancing && <RebalanceCalls campaignId={id} tasks={tasks} onClose={() => setRebalancing(false)} onSaved={async (r) => { setRebalancing(false); setNotice(t('callTasks.rebalance.saved', { n: r.moved })); await load(); }} />}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         <Tile label={t('callTasks.stat.progress')} value={`${pct(n.done + n.failed, n.total)}%`} sub={t('callTasks.stat.progressSub', { done: (n.done || 0) + (n.failed || 0), total: n.total || 0 })} tone="text-slate-900" />
         <Tile label={t('callTasks.stat.answered')} value={n.answered || 0} sub={`${pct(n.answered, (n.done || 0) + (n.failed || 0))}%`} tone="text-emerald-700" onClick={() => setFilter('DONE')} active={filter === 'DONE'} />
@@ -407,7 +478,10 @@ function CampaignDetails({ id, onBack }) {
           </div>
         </section>
         <section className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 overflow-x-auto">
-          <h3 className="font-bold text-slate-800 mb-3 flex items-center gap-1.5"><UsersIcon className="w-4 h-4" />{t('callTasks.byAgent')}</h3>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <h3 className="font-bold text-slate-800 flex items-center gap-1.5"><UsersIcon className="w-4 h-4" />{t('callTasks.byAgent')}</h3>
+            {c.status !== 'CLOSED' && (n.pending || 0) > 0 && <button onClick={() => setRebalancing(true)} className="text-xs text-primary border border-primary/30 rounded-lg px-2.5 py-1 hover:bg-primary/5 inline-flex items-center gap-1"><Shuffle className="w-3.5 h-3.5" />{t('callTasks.rebalance.button')}</button>}
+          </div>
           <table className="w-full text-sm">
             <thead className="text-xs text-slate-500"><tr>{['agent', 'done', 'pending', 'late', 'today', 'verified'].map((k) => <th key={k} className="text-start py-1 px-1">{t(k === 'agent' ? 'callTasks.col.agent' : `callTasks.agentCol.${k}`)}</th>)}</tr></thead>
             <tbody>
