@@ -5481,7 +5481,12 @@
       "rejectOne": "Reject",
       "rejectReason": "Reason for rejecting {{name}} (optional):",
       "approveAll": "Approve all nominated ({{n}})",
-      "approveAllConfirm": "Approve {{n}} nominated students (in the current filter)?"
+      "approveAllConfirm": "Approve {{n}} nominated students (in the current filter)?",
+      "consentOne": "Parent consent",
+      "consentOneHint": "Record the parent's consent by hand",
+      "consentAll": "Parents' consent for all ({{n}})",
+      "consentAllConfirm": "Record the parent's consent by hand for {{n}} students awaiting it (in the current filter)?",
+      "consentSelected": "Record parent consent"
     },
     "copied": "{{n}} links copied.",
     "noWa": "{{n}} students updated. WhatsApp messages are off for this — copy the links or send them with the WhatsApp button by each student.",

@@ -43,6 +43,8 @@ export default function SupportStudents({ data, branchName, groupName, reload })
   const picked = shown.filter((s) => selected.includes(s.id));
   // Every nominated student in the current filter, for «approve all».
   const waiting = shown.filter((s) => s.status === 'NOMINATED');
+  // Every student awaiting the parent's consent, for «consent for all».
+  const awaiting = shown.filter((s) => ['APPROVED', 'PENDING_CONSENT'].includes(s.status));
 
   const act = async (action, extra = {}, ids = selected, busyKey = action) => {
     setBusy(busyKey);
@@ -105,6 +107,11 @@ export default function SupportStudents({ data, branchName, groupName, reload })
             {busy === 'approveAll' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{t('support.act.approveAll', { n: waiting.length })}
           </button>
         )}
+        {manage && awaiting.length > 0 && (
+          <button type="button" disabled={!!busy} onClick={() => { if (window.confirm(t('support.act.consentAllConfirm', { n: awaiting.length }))) act('consentMany', {}, awaiting.map((s) => s.id), 'consentAll'); }} className="px-3 py-2 rounded-xl text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1.5">
+            {busy === 'consentAll' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}{t('support.act.consentAll', { n: awaiting.length })}
+          </button>
+        )}
         <button type="button" onClick={exportExcel} className={btn.ghost}><FileDown className="w-4 h-4" />Excel</button>
       </div>
 
@@ -115,6 +122,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
           {picked.some((s) => s.status === 'NOMINATED') && bulk('reject', X, t('support.act.reject'))}
           {picked.some((s) => ['APPROVED', 'PENDING_CONSENT'].includes(s.status)) && bulk('send', Send, t('support.act.send'), btn.primary)}
           {picked.some((s) => s.status === 'PENDING_CONSENT') && bulk('remind', BellRing, t('support.act.remind'))}
+          {picked.some((s) => ['APPROVED', 'PENDING_CONSENT', 'DECLINED', 'PLEDGE_SENT'].includes(s.status)) && bulk('consentMany', Check, t('support.act.consentSelected'), btn.primary)}
           {picked.some((s) => ['DECLINED', 'PLEDGE_SENT'].includes(s.status)) && bulk('sendPledge', FileSignature, t('support.act.pledge'))}
           {picked.some((s) => s.link) && <button type="button" onClick={() => copyLinks(picked)} className={btn.ghost}><Link2 className="w-4 h-4" />{t('support.act.copyLinks')}</button>}
           {picked.some((s) => s.status === 'CONSENTED') && (
@@ -165,6 +173,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
                   <td className="px-2 py-2 text-xs whitespace-nowrap">{rate == null ? <span className="text-slate-300">—</span> : <span className={rate < 75 ? 'text-rose-700 font-bold' : 'text-emerald-700'}>{rate}%</span>}{(s.att.A || 0) > 0 && <span className="block text-rose-600">{t('support.absentN', { n: s.att.A })}</span>}</td>
                   <td className="px-2 py-2 text-xs text-slate-500">{s.nominatedTeacher && <span className="block text-slate-700">{s.nominatedTeacher}</span>}{s.nominatedByName}<span className="block text-slate-400">{day(s.nominatedAt)}</span></td>
                   <td className="px-2 py-2 whitespace-nowrap">
+                    {manage && ['APPROVED', 'PENDING_CONSENT', 'DECLINED', 'PLEDGE_SENT'].includes(s.status) && <span className="flex gap-1 mb-1">{['APPROVED', 'PENDING_CONSENT', 'DECLINED', 'PLEDGE_SENT'].includes(s.status) && <button type="button" title={t('support.act.consentOneHint')} disabled={!!busy} onClick={() => act('consentMany', {}, [s.id], `consentMany:${s.id}`)} className="px-2 py-1 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1">{busy === `consentMany:${s.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{t('support.act.consentOne')}</button>}</span>}
                     {manage && ['NOMINATED', 'REJECTED'].includes(s.status) && (
                       <span className="flex gap-1 mb-1">
                         <button type="button" disabled={!!busy} onClick={() => review(s, 'approve')} className="px-2 py-1 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1">{busy === `approve:${s.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{t('support.act.approveOne')}</button>

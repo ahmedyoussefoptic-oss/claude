@@ -474,6 +474,12 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         ? { status: "CONSENTED", consent: { name: str(dd.parentName, 80), relation: str(dd.relation, 30), via: "STAFF", note: str(dd.note, 300), at: now, ...by }, decline: FieldValue.delete() }
         : { status: "DECLINED", decline: { name: str(dd.parentName, 80), relation: str(dd.relation, 30), reason: str(dd.note, 300), via: "STAFF", at: now, ...by } });
       res.done = 1;
+    } else if (a === "consentMany") {
+      // The parents' consent recorded by hand, for one student or many (the
+      // school took it outside the link — a form, a meeting).
+      const rows = list.filter((e) => ["APPROVED", "PENDING_CONSENT", "DECLINED", "PLEDGE_SENT"].includes(e.status));
+      await write(rows, { status: "CONSENTED", consent: { name: "ولي الأمر (موافقة يدوية)", relation: "", via: "STAFF", note: str(dd.note, 300), at: now, ...by }, decline: FieldValue.delete() });
+      res.done = rows.length;
     } else if (a === "withdraw") {
       await write(list, { status: "WITHDRAWN", withdrawnAt: now, withdrawNote: str(dd.note, 300), groupId: "" });
       res.done = list.length;

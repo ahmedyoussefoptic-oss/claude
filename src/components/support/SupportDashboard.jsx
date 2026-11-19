@@ -159,7 +159,7 @@ ${['group', 'branch', 'grade', 'teacher'].map((k) => `<h3>${esc(t(`support.dash.
   const tile = (k, icon, tone, sub) => <Tile key={k} label={t(`support.dash.tile.${k}`)} value={lists[k].length} icon={icon} tone={tone} sub={sub} onClick={() => setList(list === k ? '' : k)} active={list === k} />;
   const picked = list ? lists[list] : [];
   // Approve / reject from the list: one student, or every nominated one.
-  const canReview = c.canManage && picked.some((s) => ['NOMINATED', 'REJECTED'].includes(s.status));
+  const canReview = c.canManage && picked.some((s) => ['NOMINATED', 'REJECTED', ...['APPROVED', 'PENDING_CONSENT', 'DECLINED', 'PLEDGE_SENT']].includes(s.status));
   const review = async (action, ids, key, note = '') => {
     setBusy(key);
     setActError(null);
@@ -167,6 +167,7 @@ ${['group', 'branch', 'grade', 'teacher'].map((k) => `<h3>${esc(t(`support.dash.
   };
   const rejectOne = (s) => { const note = window.prompt(t('support.act.rejectReason', { name: s.name })); if (note !== null) review('reject', [s.id], `reject:${s.id}`, note); };
   const nominatedHere = picked.filter((s) => s.status === 'NOMINATED');
+  const awaitingHere = picked.filter((s) => ['APPROVED', 'PENDING_CONSENT'].includes(s.status));
   const notTakenToday = att.notTaken?.[today];
 
   return (
@@ -203,6 +204,11 @@ ${['group', 'branch', 'grade', 'teacher'].map((k) => `<h3>${esc(t(`support.dash.
                 {busy === 'approveAll' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{t('support.act.approveAll', { n: nominatedHere.length })}
               </button>
             )}
+            {c.canManage && awaitingHere.length > 0 && (
+              <button type="button" disabled={!!busy} onClick={() => { if (window.confirm(t('support.act.consentAllConfirm', { n: awaitingHere.length }))) review('consentMany', awaitingHere.map((s) => s.id), 'consentAll'); }} className="me-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1">
+                {busy === 'consentAll' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{t('support.act.consentAll', { n: awaitingHere.length })}
+              </button>
+            )}
             <button type="button" onClick={async () => { const XLSX = await import('xlsx'); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(picked.map(studentRow)), 'List'); XLSX.writeFile(wb, `${c.title.slice(0, 20)}-${list}.xlsx`); }} className={`${btn.small} border border-slate-200`}><FileDown className="w-3.5 h-3.5" />Excel</button>
           </div>
           <table className="w-full text-sm">
@@ -218,6 +224,7 @@ ${['group', 'branch', 'grade', 'teacher'].map((k) => `<h3>${esc(t(`support.dash.
                   <td className="px-3 py-2 text-xs text-slate-600">{callsOf(s.studentId).map(callText).join(' · ')}</td>
                   {canReview && (
                     <td className="px-3 py-2 whitespace-nowrap">
+                      {['APPROVED', 'PENDING_CONSENT', 'DECLINED', 'PLEDGE_SENT'].includes(s.status) && <button type="button" title={t('support.act.consentOneHint')} disabled={!!busy} onClick={() => review('consentMany', [s.id], `consentMany:${s.id}`)} className="px-2 py-1 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1">{busy === `consentMany:${s.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{t('support.act.consentOne')}</button>}
                       {['NOMINATED', 'REJECTED'].includes(s.status) && (
                         <span className="flex gap-1">
                           <button type="button" disabled={!!busy} onClick={() => review('approve', [s.id], `approve:${s.id}`)} className="px-2 py-1 rounded-lg text-xs font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1">{busy === `approve:${s.id}` ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}{t('support.act.approveOne')}</button>
