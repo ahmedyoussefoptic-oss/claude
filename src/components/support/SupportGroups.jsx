@@ -14,21 +14,22 @@ const PROGRAM_TONE = { REMEDIAL: 'from-amber-50 border-amber-200 text-amber-800'
 export function AutoGroupsModal({ cycle, type = '', branchName, onClose, onDone }) {
   const { t } = useTranslation();
   const [capacity, setCapacity] = useState(15);
+  const [by, setBy] = useState('grade');
   const [plan, setPlan] = useState(null);
   const [merges, setMerges] = useState([]);
   const [ticked, setTicked] = useState([]);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState(null);
-  const preview = async (cap = capacity, m = merges) => {
+  const preview = async (cap = capacity, m = merges, how = by) => {
     setBusy('preview');
     setError(null);
-    try { setPlan(await callSupport('supportAutoGroups', { id: cycle.id, type, capacity: Number(cap) || 0, merges: m })); setMerges(m); setTicked([]); } catch (err) { setError(err.message); } finally { setBusy(''); }
+    try { setPlan(await callSupport('supportAutoGroups', { id: cycle.id, type, by: how, capacity: Number(cap) || 0, merges: m })); setMerges(m); setTicked([]); } catch (err) { setError(err.message); } finally { setBusy(''); }
   };
   useEffect(() => { preview(15, []); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const apply = async () => {
     setBusy('apply');
     setError(null);
-    try { onDone(await callSupport('supportAutoGroups', { id: cycle.id, type, capacity: Number(capacity) || 0, merges, apply: true })); } catch (err) { setError(err.message); setBusy(''); }
+    try { onDone(await callSupport('supportAutoGroups', { id: cycle.id, type, by, capacity: Number(capacity) || 0, merges, apply: true })); } catch (err) { setError(err.message); setBusy(''); }
   };
   const rows = plan?.plan || [];
   const keyOf = (r) => r.members.join('|');
@@ -45,6 +46,9 @@ export function AutoGroupsModal({ cycle, type = '', branchName, onClose, onDone 
       {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl p-3">{error}</div>}
       <p className="text-sm text-slate-600">{t('support.auto.hint')}</p>
       <div className="flex flex-wrap items-end gap-2">
+        <Field label={t('support.auto.by')}>
+          <div className="flex gap-1.5">{['grade', 'stage'].map((x) => <button key={x} type="button" disabled={!!busy} onClick={() => { setBy(x); preview(capacity, [], x); }} className={`px-3 py-2 rounded-xl text-sm border ${by === x ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'}`}>{t(`support.auto.by_${x}`)}</button>)}</div>
+        </Field>
         <Field label={t('support.auto.capacity')} hint={t('support.auto.capacityHint')}><input type="number" min={0} max={200} value={capacity} onChange={(e) => setCapacity(e.target.value)} className={`${inputCls} w-32`} /></Field>
         <button type="button" disabled={!!busy} onClick={() => preview(capacity, [])} className={`${btn.ghost} mb-1`}>{busy === 'preview' && <Loader2 className="w-4 h-4 animate-spin" />}{t('support.auto.preview')}</button>
         {rows.length > 1 && (

@@ -616,6 +616,10 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
   // branch only, at most one of them an existing group.
   // `apply` false only returns the plan.
   const STAGE_AR = { KG: "رياض الأطفال", PRIMARY: "الابتدائي", MIDDLE: "المتوسط", SECONDARY: "الثانوي", "": "أخرى" };
+  const ORD_AR = ["", "الأول", "الثاني", "الثالث", "الرابع", "الخامس", "السادس", "السابع", "الثامن", "التاسع", "العاشر", "الحادي عشر", "الثاني عشر"];
+  // «G7» → «الصف السابع»; KG / SEN as they are.
+  const gradeAr = (g) => { const m = /^G(\d{1,2})$/i.exec(String(g || "")); return m && ORD_AR[Number(m[1])] ? `الصف ${ORD_AR[Number(m[1])]}` : String(g || "") || "أخرى"; };
+  const gradeSort = (a, b) => String(a).localeCompare(String(b), "en", { numeric: true });
   const subjectKey = (x) => String(x || "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").split(/\s+/).map((w) => w.replace(/^ال/, "")).join("");
   out.supportAutoGroups = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
     const u = await caller(request);
@@ -630,13 +634,16 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     st.docs.forEach((x) => { const e = x.data(); if (e.groupId && e.status === "CONSENTED") size.set(e.groupId, (size.get(e.groupId) || 0) + 1); });
     const size0 = new Map(size);
     const todo = st.docs.map((x) => ({ id: x.id, ...x.data() })).filter((e) => e.status === "CONSENTED" && !e.groupId && (!onlyType || e.type === onlyType));
-    // Same branch, programme, stage and subject → one bucket.
+    // By grade (the default — each grade apart with its subject) or by stage.
+    const byGradeOnly = dd.by !== "stage";
+    // Same branch, programme, grade (or stage) and subject → one bucket.
     const buckets = new Map();
     todo.forEach((e) => {
       const subject = String((e.subjects || [])[0] || "").trim();
       const stage = stageOfGrade(e.grade);
-      const key = [e.branch || "", e.type, stage, subjectKey(subject)].join("|");
-      if (!buckets.has(key)) buckets.set(key, { branch: e.branch || "", type: e.type, stage, subjects: new Map(), list: [] });
+      const grade = byGradeOnly ? String(e.grade || "") : "";
+      const key = [e.branch || "", e.type, stage, grade, subjectKey(subject)].join("|");
+      if (!buckets.has(key)) buckets.set(key, { branch: e.branch || "", type: e.type, stage, grade, subjects: new Map(), list: [] });
       const b = buckets.get(key);
       if (subject) b.subjects.set(subject, (b.subjects.get(subject) || 0) + 1);
       b.list.push(e);
@@ -645,12 +652,12 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const names = new Set(groups.map((g) => g.name));
     const byGrade = (a, b) => String(a.grade).localeCompare(String(b.grade), "en", { numeric: true }) || String(a.className).localeCompare(String(b.className), "en", { numeric: true }) || String(a.name).localeCompare(String(b.name), "ar");
     const plan = [];
-    [...buckets.values()].sort((a, b) => a.type.localeCompare(b.type) || a.branch.localeCompare(b.branch) || TEACHER_STAGES.indexOf(a.stage) - TEACHER_STAGES.indexOf(b.stage)).forEach((b) => {
+    [...buckets.values()].sort((a, b) => a.type.localeCompare(b.type) || a.branch.localeCompare(b.branch) || TEACHER_STAGES.indexOf(a.stage) - TEACHER_STAGES.indexOf(b.stage) || gradeSort(a.grade, b.grade)).forEach((b) => {
       const subject = [...b.subjects.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] || "";
       const list = b.list.sort(byGrade);
       // Existing groups of the same kind with room.
       groups.filter((g) => g.type === b.type && (g.branch || "") === b.branch && subjectKey(g.subject) === subjectKey(subject)
-        && (g.grades || []).length && g.grades.every((x) => stageOfGrade(x) === b.stage)).forEach((g) => {
+        && (g.grades || []).length && g.grades.every((x) => (byGradeOnly ? x === b.grade : stageOfGrade(x) === b.stage))).forEach((g) => {
         const room = g.capacity ? g.capacity - (size.get(g.id) || 0) : Infinity;
         if (room <= 0 || !list.length) return;
         const take = list.splice(0, room === Infinity ? list.length : room);
@@ -660,7 +667,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
       if (!list.length) return;
       const parts = capacity ? Math.ceil(list.length / capacity) : 1;
       const per = Math.ceil(list.length / parts);
-      const base = [`${b.type === "ENRICHMENT" ? "إثراء" : "تقوية"}${subject ? ` ${subject}` : ""}`, STAGE_AR[b.stage], multiBranch && b.branch ? branchName[b.branch] || b.branch : ""].filter(Boolean).join(" — ");
+      const base = [`${b.type === "ENRICHMENT" ? "إثراء" : "تقوية"}${subject ? ` ${subject}` : ""}`, byGradeOnly ? gradeAr(b.grade) : STAGE_AR[b.stage], multiBranch && b.branch ? branchName[b.branch] || b.branch : ""].filter(Boolean).join(" — ");
       for (let i = 0; i < parts; i++) {
         let name = parts > 1 ? `${base} (${i + 1})` : base;
         for (let n = 2; names.has(name); n++) name = `${base} (${parts > 1 ? `${i + 1}-` : ""}${n})`;
@@ -682,7 +689,9 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
       let name = old[0]?.name;
       if (!name) {
         parts.forEach((p) => names.delete(p.name));
-        const base = [`${parts[0].type === "ENRICHMENT" ? "إثراء" : "تقوية"}${subjects.length ? ` ${subjects.join(" / ")}` : ""}`, stages.map((x) => STAGE_AR[x]).join(" و"),
+        const grades = [...new Set(parts.flatMap((p) => p.students.map((e) => String(e.grade || ""))))].sort(gradeSort);
+        const where = byGradeOnly ? (grades.length > 1 && grades.every((x) => /^G\d+$/i.test(x)) ? `الصفوف ${grades.map((x) => ORD_AR[Number(x.slice(1))] || x).join(" و")}` : grades.map(gradeAr).join(" و")) : stages.map((x) => STAGE_AR[x]).join(" و");
+        const base = [`${parts[0].type === "ENRICHMENT" ? "إثراء" : "تقوية"}${subjects.length ? ` ${subjects.join(" / ")}` : ""}`, where,
           multiBranch && parts[0].branch ? branchName[parts[0].branch] || parts[0].branch : ""].filter(Boolean).join(" — ");
         name = base;
         for (let n = 2; names.has(name); n++) name = `${base} (${n})`;
@@ -699,7 +708,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
       name: p.name, type: p.type, branch: p.branch, subject: p.subject, stage: p.stage, stages: p.stages, members: p.members, merged: !!p.merged, existing: p.existing, count: p.students.length,
       grades: [...new Set(p.students.map((e) => e.grade).filter(Boolean))].sort((a, b) => a.localeCompare(b, "en", { numeric: true })),
     }));
-    if (!dd.apply) return { plan: rows, students: todo.length };
+    if (!dd.apply) return { plan: rows, students: todo.length, by: byGradeOnly ? "grade" : "stage" };
     const now = Timestamp.now();
     const writes = [];
     plan.forEach((p, i) => {

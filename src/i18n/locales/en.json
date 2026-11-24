@@ -5861,9 +5861,9 @@
     "auto": {
       "button": "Make groups automatically",
       "title": "Make groups automatically",
-      "hint": "Consented students with no group are placed by programme, stage and subject (and branch): each stage in its own groups with its subject, Cycle 1 and Cycle 2 students together. Matching groups with seats are filled first, then new groups are made.",
+      "hint": "Consented students with no group are placed by programme and subject (and branch): each grade (or stage) in its own groups with its subject, Cycle 1 and Cycle 2 students together. Matching groups with seats are filled first, then new groups are made.",
       "capacity": "Max students per group",
-      "capacityHint": "0 = one group per subject and stage",
+      "capacityHint": "0 = one group per subject and grade (or stage)",
       "preview": "Preview",
       "apply": "Create and place {{n}} students",
       "none": "No consented students without a group.",
@@ -5878,7 +5878,10 @@
         "subject": "Subject",
         "grades": "Grades",
         "count": "Students"
-      }
+      },
+      "by": "Group by",
+      "by_grade": "Grade",
+      "by_stage": "Stage"
     },
     "round": {
       "label": "Cycle",
@@ -5896,7 +5899,7 @@
       "selected": "Merge selected ({{n}})",
       "pickHint": "Pick the groups to merge, then press «Merge selected».",
       "mixed": "Groups of different programmes or branches cannot be merged.",
-      "autoHint": "Each stage gets its own groups with its subject. To merge groups (e.g. two small stages) tick them and press «Merge selected».",
+      "autoHint": "Each grade gets its own groups with its subject. To merge groups (e.g. two small grades) tick them and press «Merge selected».",
       "mergedN": "merged from {{n}}",
       "undo": "Undo merge",
       "done": "Groups merged into «{{name}}» — it now has {{n}} students.",
