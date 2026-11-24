@@ -18,6 +18,11 @@ export const STATUS_STYLE = {
 };
 export const TYPE_STYLE = { REMEDIAL: 'bg-amber-50 text-amber-800 border-amber-200', ENRICHMENT: 'bg-sky-50 text-sky-700 border-sky-200' };
 export const MARKS = ['P', 'L', 'A', 'E'];
+// The Cycle (round) a student came in with — Cycle 1 carried over, Cycle 2
+// new — in the same groups; only a tag.
+export const ROUNDS = [1, 2, 3, 4];
+export const roundLabel = (n) => `Cycle ${n}`;
+export const ROUND_STYLE = { 1: 'bg-indigo-50 text-indigo-700 border-indigo-200', 2: 'bg-teal-50 text-teal-700 border-teal-200', 3: 'bg-fuchsia-50 text-fuchsia-700 border-fuchsia-200', 4: 'bg-lime-50 text-lime-700 border-lime-200' };
 export const MARK_STYLE = {
   P: { on: 'bg-emerald-600 text-white border-emerald-600', off: 'text-emerald-700 border-emerald-200 bg-white' },
   L: { on: 'bg-amber-500 text-white border-amber-500', off: 'text-amber-700 border-amber-200 bg-white' },

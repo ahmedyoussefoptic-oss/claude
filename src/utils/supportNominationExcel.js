@@ -18,6 +18,7 @@ const FIELDS = [
   ['subjects', /الماد|subject/i],
   ['reason', /سبب|الاحتياج|ملاحظ|reason|note/i],
   ['teacher', /المعلم|teacher/i],
+  ['round', /cycle|دفعة|دفعه|الدورة/i],
 ];
 export const typeOf = (v) => {
   const s = clean(v).toLowerCase();
@@ -26,7 +27,17 @@ export const typeOf = (v) => {
   return '';
 };
 
-// One sheet → { rows: [{studentId, name, grade, className, type, subjects, reason, teacher}], form: bool }.
+// «Cycle 2» / «2» / «الثانية» → 2 (0 when none).
+const ORDINALS = [/اول|أول|ولى/, /ثان/, /ثالث/, /رابع/];
+export const roundOf = (v) => {
+  const s = latin(clean(v));
+  const n = Number((s.match(/\d+/) || [])[0]);
+  if (n >= 1 && n <= 9) return n;
+  const i = ORDINALS.findIndex((re) => re.test(s));
+  return i >= 0 ? i + 1 : 0;
+};
+
+// One sheet → { rows: [{studentId, name, grade, className, type, subjects, reason, teacher, round}], form: bool }.
 // `form` is false for a plain list (no header row found): then every
 // 10-digit number anywhere in it is a student, as before.
 export function readNominationRows(XLSX, wb) {
@@ -35,7 +46,7 @@ export function readNominationRows(XLSX, wb) {
   const headAt = aoa.findIndex((r) => r.some((v) => FIELDS[0][1].test(clean(v))));
   if (headAt < 0) {
     const ids = [...new Set(aoa.flat().map(idOf).filter(Boolean))];
-    return { form: false, rows: ids.map((studentId) => ({ studentId, name: '', grade: '', className: '', type: '', subjects: [], reason: '', teacher: '' })) };
+    return { form: false, rows: ids.map((studentId) => ({ studentId, name: '', grade: '', className: '', type: '', subjects: [], reason: '', teacher: '', round: 0 })) };
   }
   const col = {};
   aoa[headAt].forEach((h, i) => {
@@ -54,7 +65,7 @@ export function readNominationRows(XLSX, wb) {
     rows.push({
       studentId, name: get('name'), grade: get('grade'), className: get('className'),
       type: typeOf(get('type')), subjects: get('subjects').split(/[،,؛;/]+/).map(clean).filter(Boolean),
-      reason: get('reason'), teacher: get('teacher'),
+      reason: get('reason'), teacher: get('teacher'), round: roundOf(get('round')),
     });
   });
   return { form: true, rows };

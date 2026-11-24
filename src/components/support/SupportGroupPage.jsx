@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowRight, Printer, Users, DoorOpen, UserCheck, GraduationCap, Loader2 } from 'lucide-react';
-import { TYPE_STYLE, attRate, callSupport, riyadhDay, MARKS, MARK_STYLE } from '../../config/support';
+import { TYPE_STYLE, attRate, callSupport, riyadhDay, MARKS, MARK_STYLE, roundLabel } from '../../config/support';
+import RoundPill from './RoundPill';
 import { printPage, escapeHtml as esc } from '../../utils/printPage';
 import { Pill, btn } from '../platform/ui';
 
@@ -48,7 +49,7 @@ export default function SupportGroupPage({ data, group: g, branchName, onBack })
     const head = ['#', t('support.col.student'), t('support.col.grade'), t('support.marks.P'), t('support.marks.A'), t('support.col.rate'), ...(days.length ? [t('support.groups.attendance')] : [])];
     const strip = (s) => (days.length ? `<td class="m">${marksOf(s).map((m) => `<span class="k k${m.s ?? 'N'}" title="${m.day}">${m.s ? esc(markLetter(m.s)) : m.s === '' ? '·' : '–'}</span>`).join('')}</td>` : '');
     const body = `<p class="meta">${esc(info.join(' · '))}</p><p class="meta">${esc(g.capacity ? t('support.groups.countOf', { n: list.length, cap: g.capacity }) : t('support.groups.count', { n: list.length }))}</p>
-${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.count})</h3>${st.grades.map((gr) => `<h4>${esc(gr.grade || '—')} (${gr.students.length})</h4><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${gr.students.map((s, i) => `<tr><td class="c">${i + 1}</td><td>${esc(s.name)}</td><td><span dir="ltr">${esc(`${s.grade} ${s.className}`.trim())}</span></td><td class="c">${(s.att?.P || 0) + (s.att?.L || 0)}</td><td class="c">${s.att?.A || 0}</td><td class="c">${esc(rateText(s))}</td>${strip(s)}</tr>`).join('')}</tbody></table>`).join('')}`).join('')}`;
+${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.count})</h3>${st.grades.map((gr) => `<h4>${esc(gr.grade || '—')} (${gr.students.length})</h4><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${gr.students.map((s, i) => `<tr><td class="c">${i + 1}</td><td>${esc(s.name)}${s.round ? ` <small dir="ltr">(${esc(roundLabel(s.round))})</small>` : ''}</td><td><span dir="ltr">${esc(`${s.grade} ${s.className}`.trim())}</span></td><td class="c">${(s.att?.P || 0) + (s.att?.L || 0)}</td><td class="c">${s.att?.A || 0}</td><td class="c">${esc(rateText(s))}</td>${strip(s)}</tr>`).join('')}</tbody></table>`).join('')}`).join('')}`;
     printPage({
       title: g.name, subtitle: `${c.title} · ${t(`support.types.${g.type}`)}`, school: t('trips.print.school'), body, dir: i18n.dir(), lang: i18n.language,
       css: 'table{width:100%;border-collapse:collapse;margin:4px 0 10px}th,td{border:1px solid #cbd5e1;padding:3px 5px;text-align:start;font-size:9pt}th{background:#f1f5f9}h3{margin:12px 0 4px;color:#0369a1;font-size:12pt}h4{margin:6px 0 2px;font-size:10pt;color:#334155}.c{text-align:center}.meta{color:#475569;font-size:9pt;margin:0 0 4px}.m{white-space:nowrap}.k{display:inline-block;width:14px;text-align:center;font-size:8pt;border-radius:3px;margin:0 1px}.kP{background:#d1fae5;color:#047857}.kL{background:#fef3c7;color:#b45309}.kA{background:#ffe4e6;color:#be123c;font-weight:bold}.kE{background:#e2e8f0;color:#475569}.kN,.k{color:#94a3b8}',
@@ -80,9 +81,10 @@ ${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.c
         </div>
       )}
 
-      {stages.length > 1 && (
+      {(stages.length > 1 || list.some((s) => s.round)) && (
         <div className="flex flex-wrap gap-2">
-          {stages.map((st) => <Pill key={st.stage} className="bg-white text-slate-700 border-slate-200">{t(`support.groups.stages.${st.stage}`)}: {st.count}</Pill>)}
+          {stages.length > 1 && stages.map((st) => <Pill key={st.stage} className="bg-white text-slate-700 border-slate-200">{t(`support.groups.stages.${st.stage}`)}: {st.count}</Pill>)}
+          {list.some((s) => s.round) && [...new Set(list.map((s) => s.round || 0))].sort().map((r) => <Pill key={`r${r}`} className="bg-white text-slate-700 border-slate-200">{r ? <span dir="ltr">{roundLabel(r)}</span> : t('support.round.untagged')}: {list.filter((s) => (s.round || 0) === r).length}</Pill>)}
         </div>
       )}
 
@@ -112,7 +114,7 @@ ${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.c
                     {gr.students.map((s, i) => (
                       <tr key={s.id} className="border-t border-slate-100">
                         <td className="px-4 py-2 text-slate-400">{i + 1}</td>
-                        <td className="px-2 py-2"><p className="font-medium text-slate-900">{s.name}</p><p className="text-xs text-slate-500" dir="ltr">{s.studentId}</p></td>
+                        <td className="px-2 py-2"><p className="font-medium text-slate-900">{s.name}{s.round > 0 && <RoundPill n={s.round} className="ms-1.5" />}</p><p className="text-xs text-slate-500" dir="ltr">{s.studentId}</p></td>
                         <td className="px-2 py-2 text-slate-600"><span dir="ltr">{`${s.grade} ${s.className}`.trim()}</span></td>
                         <td className="px-2 py-2 text-center text-emerald-700">{(s.att?.P || 0) + (s.att?.L || 0)}</td>
                         <td className={`px-2 py-2 text-center ${s.att?.A ? 'text-rose-700 font-bold' : 'text-slate-400'}`}>{s.att?.A || 0}</td>

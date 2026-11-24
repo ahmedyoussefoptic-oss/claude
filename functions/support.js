@@ -205,7 +205,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
 
   const enrollOut = (x, e, canManage) => ({
     id: x.id, studentId: e.studentId, name: e.name, branch: e.branch, grade: e.grade, className: e.className, section: e.section || "",
-    type: e.type, subjects: e.subjects || [], reason: e.reason || "", status: e.status, nominatedByName: e.nominatedByName || "", nominatedTeacher: e.nominatedTeacher || "", nominatedTeacherSubject: e.nominatedTeacherSubject || "", nominatedAt: ms(e.nominatedAt),
+    type: e.type, subjects: e.subjects || [], reason: e.reason || "", round: e.round || 0, status: e.status, nominatedByName: e.nominatedByName || "", nominatedTeacher: e.nominatedTeacher || "", nominatedTeacherSubject: e.nominatedTeacherSubject || "", nominatedAt: ms(e.nominatedAt),
     reviewNote: e.reviewNote || "", consent: e.consent ? { ...e.consent, at: ms(e.consent.at) } : null, decline: e.decline ? { ...e.decline, at: ms(e.decline.at) } : null,
     pledge: e.pledge ? { ...e.pledge, at: ms(e.pledge.at) } : null, groupId: e.groupId || "", att: e.att || {}, hasPhone: !!e.phone,
     wa: e.wa ? { status: e.wa.status || "", error: e.wa.error || "", consent: ms(e.wa.consent), remind: ms(e.wa.remind), pledge: ms(e.wa.pledge) } : null,
@@ -255,7 +255,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     if (!base.type && ids.some((x) => !per.get(x).type)) throw new HttpsError("invalid-argument", "اختر نوع البرنامج.");
     const [branchOf, elsewhere] = await Promise.all([branchResolver(), inOtherCycles(ref.id, ids)]);
     const now = Timestamp.now();
-    const result = { added: 0, already: 0, notFound: 0, outOfScope: 0, otherCycle: 0, notFoundIds: [], otherCycleList: [] };
+    const result = { added: 0, already: 0, retagged: 0, notFound: 0, outOfScope: 0, otherCycle: 0, notFoundIds: [], otherCycleList: [] };
     for (let i = 0; i < ids.length; i += 300) {
       const chunk = ids.slice(i, i + 300);
       const [stu, cur] = await Promise.all([db.getAll(...chunk.map((x) => db.collection("students").doc(x))), db.getAll(...chunk.map((x) => ref.collection("students").doc(x)))]);
@@ -266,7 +266,13 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         const branch = branchOf(s);
         const row = per.get(sid);
         if (((c.branches || []).length && !c.branches.includes(branch)) || !inScope(branch)) { result.outOfScope++; return; }
-        if (cur[j].exists && cur[j].data().status !== "WITHDRAWN" && cur[j].data().status !== "REJECTED") { result.already++; return; }
+        const round = row.round || base.round || 0;
+        if (cur[j].exists && cur[j].data().status !== "WITHDRAWN" && cur[j].data().status !== "REJECTED") {
+          result.already++;
+          // Already here: a file that says which Cycle they're from tags them.
+          if (round && (cur[j].data().round || 0) !== round) { batch.update(cur[j].ref, { round }); result.retagged++; }
+          return;
+        }
         const other = elsewhere.get(sid);
         if (other) {
           result.otherCycle++;
@@ -277,7 +283,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         batch.set(db.collection("supportLinks").doc(tk), { kind: "parent", cycleId: ref.id, studentId: sid, fails: 0 });
         batch.set(ref.collection("students").doc(sid), {
           studentId: sid, name: str(s.nameAr || s.name, 120), branch, grade: studentGrade(s), className: str(s.className, 20), section: studentSection(s) || "",
-          phone: toIntlNumber(s.mobile) || "", type: row.type || base.type, subjects: row.subjects || base.subjects, reason: row.reason || base.reason,
+          phone: toIntlNumber(s.mobile) || "", type: row.type || base.type, subjects: row.subjects || base.subjects, reason: row.reason || base.reason, ...(round ? { round } : {}),
           ...(row.teacher ? { nominatedTeacher: row.teacher } : {}), ...(by.teacherSubject ? { nominatedTeacherSubject: by.teacherSubject, nominatedTeacherStage: by.teacherStage } : {}), ...(by.via ? { nominatedVia: by.via } : {}), status: by.auto ? "APPROVED" : "NOMINATED",
           nominatedBy: by.uid || "", nominatedByName: by.name || "", nominatedAt: now, token: tk, att: {},
           ...(by.auto ? { reviewedBy: by.uid, reviewedByName: by.name || "", reviewedAt: now } : {}),
@@ -289,11 +295,14 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     await refreshCounts(ref);
     return result;
   }
+  // The Cycle (round) a student is from — Cycle 1 students carried over and
+  // Cycle 2's new ones sit in the same groups; the tag only tells them apart.
+  const roundOf = (v) => { const n = Math.floor(Number(v) || 0); return n >= 1 && n <= 9 ? n : 0; };
   // One row of the Excel form / the teachers' page → per-student overrides.
   const rowOf = (x) => {
     const rowSubjects = subjectsOf(x.subjects);
     return {
-      ...(TYPES.includes(x.type) ? { type: x.type } : {}), ...(rowSubjects.length ? { subjects: rowSubjects } : {}),
+      ...(TYPES.includes(x.type) ? { type: x.type } : {}), ...(rowSubjects.length ? { subjects: rowSubjects } : {}), ...(roundOf(x.round) ? { round: roundOf(x.round) } : {}),
       ...(str(x.reason, 600) ? { reason: str(x.reason, 600) } : {}), teacher: str(x.teacher, 80),
     };
   };
@@ -308,7 +317,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const per = new Map();
     (Array.isArray(dd.studentIds) ? dd.studentIds : []).forEach((x) => per.set(cleanId(x), {}));
     (Array.isArray(dd.entries) ? dd.entries : []).slice(0, 2000).forEach((x) => { if (x && typeof x === "object") per.set(cleanId(x.studentId), rowOf(x)); });
-    const base = { type: TYPES.includes(dd.type) ? dd.type : null, subjects: subjectsOf(dd.subjects), reason: str(dd.reason, 600) };
+    const base = { type: TYPES.includes(dd.type) ? dd.type : null, subjects: subjectsOf(dd.subjects), reason: str(dd.reason, 600), round: roundOf(dd.round) };
     const auto = c.requireApproval === false || manages(u, c);
     return nominate(ref, c, per, base, { uid: u.uid, name: u.name || "", auto }, (b) => callerAll(u) || manages(u, c) || callerHasBranch(u, b));
   });
@@ -506,6 +515,10 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         const first = sessionDays(c).find((x) => x >= riyadhDay() && (g.days || c.weekdays || [1, 4]).includes(new Date(`${x}T12:00:00Z`).getUTCDay())) || "";
         if (settings) Object.assign(res, await sendMany(settings, ref, c, rows, "confirmed", () => ({ group: g.name, room: g.room, first: first ? `${DAY_AR[new Date(`${first}T12:00:00Z`).getUTCDay()]} ${first}` : "" })));
       }
+    } else if (a === "setRound") {
+      const round = roundOf(dd.round);
+      await write(list, { round: round || FieldValue.delete() });
+      res.done = list.length;
     } else if (a === "edit") {
       if (list.length !== 1) throw new HttpsError("invalid-argument", "طلب غير صالح.");
       const patch = {};
@@ -557,7 +570,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const { ref, c } = await loadCycle(dd.id, u, { manage: true });
     const g = dd.group || {};
     const data = {
-      name: str(g.name, 80), type: TYPES.includes(g.type) ? g.type : "REMEDIAL", branch: str(g.branch, 40), subject: str(g.subject, 60),
+      name: str(g.name, 80), type: TYPES.includes(g.type) ? g.type : "REMEDIAL", branch: str(g.branch, 40), subject: str(g.subject, 120),
       grades: Array.isArray(g.grades) ? g.grades.map((x) => str(x, 10)).filter(Boolean).slice(0, 20) : [],
       teacher: str(g.teacher, 80), room: str(g.room, 40), capacity: Math.max(0, Math.min(200, Math.floor(Number(g.capacity) || 0))),
       supervisorId: str(g.supervisorId, 40), updatedAt: Timestamp.now(),
@@ -589,6 +602,9 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
   // branch, programme, stage and (first) subject. Matching groups that still
   // have room are filled first; the rest go into new groups of at most
   // `capacity` students (0 = one group each), split by grade then class.
+  // `merges` joins chosen groups of the plan into one (each a list of the
+  // plan's own names, as the unmerged preview gave them): same programme and
+  // branch only, at most one of them an existing group.
   // `apply` false only returns the plan.
   const STAGE_AR = { KG: "رياض الأطفال", PRIMARY: "الابتدائي", MIDDLE: "المتوسط", SECONDARY: "الثانوي", "": "أخرى" };
   const subjectKey = (x) => String(x || "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").split(/\s+/).map((w) => w.replace(/^ال/, "")).join("");
@@ -603,6 +619,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const groups = gr.docs.map((x) => ({ id: x.id, ...x.data() }));
     const size = new Map();
     st.docs.forEach((x) => { const e = x.data(); if (e.groupId && e.status === "CONSENTED") size.set(e.groupId, (size.get(e.groupId) || 0) + 1); });
+    const size0 = new Map(size);
     const todo = st.docs.map((x) => ({ id: x.id, ...x.data() })).filter((e) => e.status === "CONSENTED" && !e.groupId && (!onlyType || e.type === onlyType));
     // Same branch, programme, stage and subject → one bucket.
     const buckets = new Map();
@@ -642,8 +659,35 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         plan.push({ name, type: b.type, branch: b.branch, subject, stage: b.stage, students: list.slice(i * per, (i + 1) * per), existing: false });
       }
     });
+    plan.forEach((p) => { p.members = [p.name]; p.stages = [p.stage]; });
+    const merges = (Array.isArray(dd.merges) ? dd.merges : []).slice(0, 100).filter(Array.isArray).map((m) => [...new Set(m.map((x) => String(x)))]).filter((m) => m.length > 1);
+    merges.forEach((m) => {
+      const parts = plan.filter((p) => p.members.some((x) => m.includes(x)));
+      if (parts.length < 2) return;
+      if (new Set(parts.map((p) => p.type)).size > 1) throw new HttpsError("invalid-argument", "لا يمكن دمج مجموعتين من برنامجين مختلفين.");
+      if (new Set(parts.map((p) => p.branch)).size > 1) throw new HttpsError("invalid-argument", "لا يمكن دمج مجموعتين من فرعين مختلفين.");
+      const old = parts.filter((p) => p.existing);
+      if (old.length > 1) throw new HttpsError("invalid-argument", "لدمج مجموعتين قائمتين استخدم «دمج المجموعات» في صفحة البرنامج.");
+      const subjects = [...new Map(parts.filter((p) => p.subject).map((p) => [subjectKey(p.subject), p.subject])).values()];
+      const stages = TEACHER_STAGES.concat("").filter((x) => parts.some((p) => p.stages.includes(x)));
+      let name = old[0]?.name;
+      if (!name) {
+        parts.forEach((p) => names.delete(p.name));
+        const base = [`${parts[0].type === "ENRICHMENT" ? "إثراء" : "تقوية"}${subjects.length ? ` ${subjects.join(" / ")}` : ""}`, stages.map((x) => STAGE_AR[x]).join(" و"),
+          multiBranch && parts[0].branch ? branchName[parts[0].branch] || parts[0].branch : ""].filter(Boolean).join(" — ");
+        name = base;
+        for (let n = 2; names.has(name); n++) name = `${base} (${n})`;
+        names.add(name);
+      }
+      const merged = {
+        ...(old[0] ? { id: old[0].id } : {}), name, type: parts[0].type, branch: parts[0].branch, subject: subjects.join(" / "), stage: stages.length === 1 ? stages[0] : "",
+        stages, members: parts.flatMap((p) => p.members), students: parts.flatMap((p) => p.students).sort(byGrade), existing: !!old[0], merged: true,
+      };
+      plan.splice(plan.indexOf(parts[0]), 1, merged);
+      parts.slice(1).forEach((p) => plan.splice(plan.indexOf(p), 1));
+    });
     const rows = plan.map((p) => ({
-      name: p.name, type: p.type, branch: p.branch, subject: p.subject, stage: p.stage, existing: p.existing, count: p.students.length,
+      name: p.name, type: p.type, branch: p.branch, subject: p.subject, stage: p.stage, stages: p.stages, members: p.members, merged: !!p.merged, existing: p.existing, count: p.students.length,
       grades: [...new Set(p.students.map((e) => e.grade).filter(Boolean))].sort((a, b) => a.localeCompare(b, "en", { numeric: true })),
     }));
     if (!dd.apply) return { plan: rows, students: todo.length };
@@ -655,8 +699,17 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         const gRef = ref.collection("groups").doc();
         gid = gRef.id;
         writes.push((batch) => batch.set(gRef, {
-          name: p.name, type: p.type, branch: p.branch, subject: p.subject, grades: rows[i].grades, teacher: "", room: "", capacity, supervisorId: "",
+          name: p.name, type: p.type, branch: p.branch, subject: p.subject, grades: rows[i].grades, teacher: "", room: "", capacity: capacity ? Math.max(capacity, p.students.length) : 0, supervisorId: "",
           auto: true, createdAt: now, updatedAt: now,
+        }));
+      } else if (p.merged) {
+        // An existing group that took a merged part: its grades widen and its
+        // capacity grows to hold them.
+        const g = groups.find((x) => x.id === gid);
+        const total = (size0.get(gid) || 0) + p.students.length;
+        writes.push((batch) => batch.update(ref.collection("groups").doc(gid), {
+          grades: [...new Set([...(g.grades || []), ...rows[i].grades])].sort((a, b) => a.localeCompare(b, "en", { numeric: true })),
+          ...(g.capacity && total > g.capacity ? { capacity: Math.min(200, total) } : {}), updatedAt: now,
         }));
       }
       p.students.forEach((e) => writes.push((batch) => batch.update(ref.collection("students").doc(e.id), { groupId: gid })));
@@ -667,6 +720,45 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
       await batch.commit();
     }
     return { plan: rows, students: todo.length, created: plan.filter((p) => !p.existing).length, placed: plan.reduce((n, p) => n + p.students.length, 0) };
+  });
+  // Merging chosen groups of one programme and branch into one: the first
+  // (or `targetId`) keeps its id, teacher, room and supervisor (or takes the
+  // first another has); the others' students move into it and they are
+  // deleted. Their past attendance stays counted on each student.
+  out.supportMergeGroups = onCall(async (request) => {
+    const u = await caller(request);
+    const dd = request.data || {};
+    const { ref } = await loadCycle(dd.id, u, { manage: true });
+    const ids = [...new Set((Array.isArray(dd.groupIds) ? dd.groupIds : []).map(String))].filter((x) => /^[A-Za-z0-9]{6,40}$/.test(x)).slice(0, 20);
+    if (ids.length < 2) throw new HttpsError("invalid-argument", "اختر مجموعتين على الأقل.");
+    const snaps = await db.getAll(...ids.map((x) => ref.collection("groups").doc(x)));
+    if (snaps.some((x) => !x.exists)) throw new HttpsError("not-found", "المجموعة غير موجودة.");
+    const gs = snaps.map((x) => ({ id: x.id, ...x.data() }));
+    if (new Set(gs.map((g) => g.type)).size > 1) throw new HttpsError("invalid-argument", "لا يمكن دمج مجموعتين من برنامجين مختلفين.");
+    if (new Set(gs.map((g) => g.branch || "")).size > 1) throw new HttpsError("invalid-argument", "لا يمكن دمج مجموعتين من فرعين مختلفين.");
+    const target = gs.find((g) => g.id === dd.targetId) || gs[0];
+    const others = gs.filter((g) => g !== target);
+    const inside = await ref.collection("students").where("groupId", "in", ids).get();
+    const count = inside.docs.filter((x) => x.data().status === "CONSENTED").length;
+    const subjects = [...new Map(gs.filter((g) => g.subject).map((g) => [subjectKey(g.subject), g.subject])).values()];
+    const pick = (k) => target[k] || others.find((g) => g[k])?.[k] || "";
+    const caps = gs.map((g) => g.capacity || 0);
+    const patch = {
+      name: str(dd.name, 80) || target.name, subject: str(subjects.join(" / "), 120),
+      grades: [...new Set(gs.flatMap((g) => g.grades || []))].sort((a, b) => a.localeCompare(b, "en", { numeric: true })).slice(0, 20),
+      teacher: pick("teacher"), room: pick("room"), supervisorId: pick("supervisorId"),
+      capacity: caps.some((x) => !x) ? 0 : Math.min(200, Math.max(count, ...caps)),
+      mergedFrom: FieldValue.arrayUnion(...others.map((g) => g.name)), updatedAt: Timestamp.now(),
+    };
+    const writes = [(batch) => batch.update(ref.collection("groups").doc(target.id), patch)];
+    inside.docs.filter((x) => x.data().groupId !== target.id).forEach((x) => writes.push((batch) => batch.update(x.ref, { groupId: target.id })));
+    others.forEach((g) => writes.push((batch) => batch.delete(ref.collection("groups").doc(g.id))));
+    for (let i = 0; i < writes.length; i += 400) {
+      const batch = db.batch();
+      writes.slice(i, i + 400).forEach((w) => w(batch));
+      await batch.commit();
+    }
+    return { id: target.id, name: patch.name, moved: writes.length - 1 - others.length, count };
   });
   out.supportSaveSupervisor = onCall(async (request) => {
     const u = await caller(request);

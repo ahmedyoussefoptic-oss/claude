@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
-import { UserPlus, Loader2, Check, X, Send, BellRing, FileSignature, Layers, Undo2, Link2, MessageCircle, FileDown, Phone, Search, Upload, FileSpreadsheet, Copy, RefreshCw, Power } from 'lucide-react';
-import { NOMINATION_TEMPLATE_URL, readNominationRows } from '../../utils/supportNominationExcel';
-import { callSupport, SUPPORT_STATUSES, SUPPORT_TYPES, STATUS_STYLE, TYPE_STYLE, SUBJECTS, attRate } from '../../config/support';
+import { UserPlus, Loader2, Check, X, Send, BellRing, FileSignature, Layers, Undo2, Link2, MessageCircle, FileDown, Phone, Search, Upload, FileSpreadsheet, Copy, RefreshCw, Power, Tag } from 'lucide-react';
+import { NOMINATION_TEMPLATE_URL, readNominationRows, typeOf } from '../../utils/supportNominationExcel';
+import { callSupport, SUPPORT_STATUSES, SUPPORT_TYPES, STATUS_STYLE, TYPE_STYLE, SUBJECTS, ROUNDS, roundLabel, attRate } from '../../config/support';
+import RoundPill from './RoundPill';
 import { waLink } from '../../utils/whatsapp';
 import StudentPicker from '../platform/StudentPicker';
 import { Modal, Field, Pill, Tile, inputCls, btn } from '../platform/ui';
 
 const sel = 'px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white';
 const day = (ms) => (ms ? format(new Date(ms), 'yyyy-MM-dd') : '');
+// «Cycle 2 - فرع الملز.xlsx» → 2 (a file's Cycle guessed from its name).
+const roundOfName = (name) => { const m = /(?:cycle|دفعة|دفعه)\s*[-_ ]?\s*(\d)/i.exec(String(name)); return m ? Number(m[1]) : 0; };
 
 // The cycle's students: nominate (one by one or from Excel), filter by
 // state / type / branch / grade, and — for the coordinator — approve, send
@@ -23,6 +26,8 @@ export default function SupportStudents({ data, branchName, groupName, reload })
   const [type, setType] = useState('');
   const [branch, setBranch] = useState('');
   const [grade, setGrade] = useState('');
+  const [round, setRound] = useState('');
+  const [roundTo, setRoundTo] = useState('');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState('');
@@ -37,7 +42,9 @@ export default function SupportStudents({ data, branchName, groupName, reload })
   const counts = useMemo(() => { const m = {}; students.forEach((s) => { m[s.status] = (m[s.status] || 0) + 1; }); return m; }, [students]);
   const grades = [...new Set(students.map((s) => s.grade).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
   const branchesIn = [...new Set(students.map((s) => s.branch).filter(Boolean))];
+  const roundsIn = [...new Set(students.map((s) => s.round || 0))].sort();
   const shown = students.filter((s) => (!status || s.status === status) && (!type || s.type === type) && (!branch || s.branch === branch) && (!grade || s.grade === grade)
+    && (!round || String(s.round || 0) === round)
     && (!q || `${s.name} ${s.studentId} ${s.className}`.includes(q.trim())))
     .sort((a, b) => a.grade.localeCompare(b.grade, 'en', { numeric: true }) || a.name.localeCompare(b.name, 'ar'));
   const picked = shown.filter((s) => selected.includes(s.id));
@@ -72,7 +79,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
     const XLSX = await import('xlsx');
     const rows = shown.map((s) => ({
       [t('support.col.student')]: s.name, ID: s.studentId, [t('common.branch')]: branchName(s.branch), [t('support.col.grade')]: `${s.grade} ${s.className}`.trim(),
-      [t('support.col.type')]: t(`support.types.${s.type}`), [t('support.col.subjects')]: s.subjects.join('، '), [t('support.col.reason')]: s.reason,
+      [t('support.round.label')]: s.round ? roundLabel(s.round) : '', [t('support.col.type')]: t(`support.types.${s.type}`), [t('support.col.subjects')]: s.subjects.join('، '), [t('support.col.reason')]: s.reason,
       [t('support.col.status')]: t(`support.status.${s.status}`), [t('support.col.answer')]: s.consent ? `${s.consent.name} ${day(s.consent.at)}` : s.decline ? `${s.decline.name} ${day(s.decline.at)} — ${s.decline.reason || ''}` : '',
       [t('support.col.pledge')]: s.pledge ? `${s.pledge.name} ${day(s.pledge.at)}` : '', [t('support.col.group')]: groupName[s.groupId] || '',
       [t('support.col.present')]: (s.att.P || 0) + (s.att.L || 0), [t('support.col.absent')]: s.att.A || 0, [t('support.col.rate')]: attRate(s.att) ?? '',
@@ -101,6 +108,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
         <select value={type} onChange={(e) => setType(e.target.value)} className={sel}><option value="">{t('support.allTypes')}</option>{SUPPORT_TYPES.map((x) => <option key={x} value={x}>{t(`support.types.${x}`)}</option>)}</select>
         {branchesIn.length > 1 && <select value={branch} onChange={(e) => setBranch(e.target.value)} className={sel}><option value="">{t('common.allBranches')}</option>{branchesIn.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}</select>}
         <select value={grade} onChange={(e) => setGrade(e.target.value)} className={sel}><option value="">{t('support.allGrades')}</option>{grades.map((g) => <option key={g} value={g}>{g}</option>)}</select>
+        {roundsIn.some(Boolean) && <select value={round} onChange={(e) => setRound(e.target.value)} className={sel}><option value="">{t('support.round.all')}</option>{roundsIn.map((x) => <option key={x} value={String(x)}>{x ? `${roundLabel(x)} (${students.filter((s) => (s.round || 0) === x).length})` : t('support.round.untagged')}</option>)}</select>}
         <div className="flex-1" />
         {manage && waiting.length > 0 && (
           <button type="button" disabled={!!busy} onClick={() => { if (window.confirm(t('support.act.approveAllConfirm', { n: waiting.length }))) act('approve', {}, waiting.map((s) => s.id), 'approveAll'); }} className="px-3 py-2 rounded-xl text-sm font-medium bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60 flex items-center gap-1.5">
@@ -136,6 +144,14 @@ export default function SupportStudents({ data, branchName, groupName, reload })
               <button type="button" disabled={!groupTo || !!busy} onClick={() => act('setGroup', { groupId: groupTo === '__none' ? '' : groupTo, notify: notifyGroup })} className={btn.ghost}>{busy === 'setGroup' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Layers className="w-4 h-4" />}{t('support.act.setGroup')}</button>
             </span>
           )}
+          <span className="flex items-center gap-1.5">
+            <select value={roundTo} onChange={(e) => setRoundTo(e.target.value)} className={`${sel} py-1.5`}>
+              <option value="">{t('support.round.choose')}</option>
+              {ROUNDS.map((x) => <option key={x} value={String(x)}>{roundLabel(x)}</option>)}
+              <option value="0">{t('support.round.clear')}</option>
+            </select>
+            <button type="button" disabled={!roundTo || !!busy} onClick={() => act('setRound', { round: Number(roundTo) })} className={btn.ghost}>{busy === 'setRound' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Tag className="w-4 h-4" />}{t('support.round.set')}</button>
+          </span>
           {picked.some((s) => s.status === 'WITHDRAWN') ? bulk('restore', Undo2, t('support.act.restore')) : (
             <button type="button" disabled={!!busy} onClick={() => { const note = window.prompt(t('support.act.withdrawReason')); if (note !== null) act('withdraw', { note }); }} className={btn.ghost}><Undo2 className="w-4 h-4" />{t('support.act.withdraw')}</button>
           )}
@@ -143,7 +159,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
       )}
       {notice && (
         <div className={`text-sm rounded-xl p-3 border ${notice.error ? 'bg-red-50 text-red-700 border-red-100' : 'bg-emerald-50 text-emerald-800 border-emerald-100'}`}>
-          {notice.error || (notice.nominate ? <>{t('support.nomResult', notice.nominate)}{notice.nominate.otherCycleList?.length > 0 && <span className="block text-xs text-amber-800 mt-1">{t('support.nom.otherCycleList')}: {notice.nominate.otherCycleList.map((x) => `${x.name} (${x.cycle} — ${t(`support.types.${x.type}`)})`).join('، ')}</span>}{notice.nominate.notFoundIds?.length > 0 && <span className="block text-xs text-amber-800 mt-1">{t('support.nom.notFoundIds')}: <span dir="ltr">{notice.nominate.notFoundIds.join('، ')}</span></span>}</> : notice.copied != null ? t('support.copied', { n: notice.copied }) : notice.noWa ? t('support.noWa', { n: notice.done }) : notice.sent != null ? t('support.sentResult', { done: notice.done, sent: notice.sent, failed: notice.failed }) : t('support.doneN', { n: notice.done }))}
+          {notice.error || (notice.nominate ? <>{t('support.nomResult', notice.nominate)}{notice.nominate.retagged > 0 && <span className="block text-xs mt-1">{t('support.nom.retagged', { n: notice.nominate.retagged })}</span>}{notice.nominate.otherCycleList?.length > 0 && <span className="block text-xs text-amber-800 mt-1">{t('support.nom.otherCycleList')}: {notice.nominate.otherCycleList.map((x) => `${x.name} (${x.cycle} — ${t(`support.types.${x.type}`)})`).join('، ')}</span>}{notice.nominate.notFoundIds?.length > 0 && <span className="block text-xs text-amber-800 mt-1">{t('support.nom.notFoundIds')}: <span dir="ltr">{notice.nominate.notFoundIds.join('، ')}</span></span>}</> : notice.copied != null ? t('support.copied', { n: notice.copied }) : notice.noWa ? t('support.noWa', { n: notice.done }) : notice.sent != null ? t('support.sentResult', { done: notice.done, sent: notice.sent, failed: notice.failed }) : t('support.doneN', { n: notice.done }))}
         </div>
       )}
 
@@ -161,7 +177,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
               return (
                 <tr key={s.id} className="align-top">
                   {manage && <td className="px-2 py-2"><input type="checkbox" checked={selected.includes(s.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, s.id] : selected.filter((x) => x !== s.id))} /></td>}
-                  <td className="px-2 py-2"><p className="font-medium text-slate-900">{s.name}</p><p className="text-xs text-slate-500"><span dir="ltr">{s.studentId}</span> · {branchName(s.branch)} · <span dir="ltr">{s.grade} {s.className}</span></p></td>
+                  <td className="px-2 py-2"><p className="font-medium text-slate-900">{s.name}{s.round > 0 && <RoundPill n={s.round} className="ms-1.5" />}</p><p className="text-xs text-slate-500"><span dir="ltr">{s.studentId}</span> · {branchName(s.branch)} · <span dir="ltr">{s.grade} {s.className}</span></p></td>
                   <td className="px-2 py-2"><Pill className={TYPE_STYLE[s.type]}>{t(`support.types.${s.type}`)}</Pill>{s.subjects.length > 0 && <p className="text-xs text-slate-500 mt-1">{s.subjects.join('، ')}</p>}{s.reason && <p className="text-xs text-slate-400 mt-0.5 max-w-56">{s.reason}</p>}</td>
                   <td className="px-2 py-2 whitespace-nowrap"><Pill className={STATUS_STYLE[s.status]}>{t(`support.status.${s.status}`)}</Pill>{s.wa?.status === 'failed' && <p className="text-[11px] text-rose-600 mt-1 max-w-48 whitespace-normal" title={s.wa.error}>{t('support.waFailed')}</p>}{s.sentAt > 0 && <p className="text-[11px] text-slate-400 mt-1">{t('support.sentOn', { day: day(s.sentAt) })}</p>}{s.reviewNote && <p className="text-[11px] text-slate-500 mt-1">{s.reviewNote}</p>}</td>
                   <td className="px-2 py-2 text-xs">
@@ -207,35 +223,46 @@ export default function SupportStudents({ data, branchName, groupName, reload })
 // Nominating: the programme, subjects and reason, and the students — picked
 // one by one or read from Excel: the teachers' form (each row its own
 // programme, subject, reason and teacher; the choices here fill the blanks),
-// or any list with 10-digit IDs in it.
+// or any list with 10-digit IDs in it. Several files can go in at once — a
+// branch's Cycle 1 list, its Cycle 2 list, its enrichment list — each with
+// its own Cycle and, if chosen, its own programme.
 function NominateModal({ cycle, onClose, onDone }) {
   const { t } = useTranslation();
   const [type, setType] = useState('REMEDIAL');
   const [subjects, setSubjects] = useState([]);
   const [other, setOther] = useState('');
   const [reason, setReason] = useState('');
+  const [round, setRound] = useState('');
   const [list, setList] = useState([]);
-  const [fileRows, setFileRows] = useState([]);
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const chip = (on) => `px-3 py-1.5 rounded-lg text-sm border ${on ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'}`;
-  // Several files (one per teacher) add up; a later row for the same student wins.
   const readFiles = async (picked) => {
     setError(null);
     const XLSX = await import('xlsx');
-    const byId = new Map(fileRows.map((r) => [r.studentId, r]));
-    const names = [];
+    const added = [];
     for (const file of picked) {
       try {
         const { rows } = readNominationRows(XLSX, XLSX.read(await file.arrayBuffer()));
-        rows.forEach((r) => byId.set(r.studentId, r));
-        names.push(`${file.name} (${rows.length})`);
+        const guess = roundOfName(file.name);
+        added.push({ key: `${Date.now()}_${added.length}_${file.name}`, name: file.name, rows, round: guess ? String(guess) : '', type: typeOf(file.name) });
       } catch { setError(t('support.nom.badFile', { name: file.name })); }
     }
-    setFileRows([...byId.values()]);
-    setFiles((x) => [...x, ...names]);
+    setFiles((x) => [...x, ...added]);
   };
+  const setFile = (key, patch) => setFiles((x) => x.map((f) => (f.key === key ? { ...f, ...patch } : f)));
+  // Every file's rows with the file's own choices on them; a later file's row
+  // for the same student wins.
+  const { fileRows, repeated } = useMemo(() => {
+    const byId = new Map();
+    let rep = 0;
+    files.forEach((f) => f.rows.forEach((r) => {
+      if (byId.has(r.studentId)) rep++;
+      byId.set(r.studentId, { ...r, type: f.type || r.type, round: Number(f.round) || r.round || 0, file: f.name });
+    }));
+    return { fileRows: [...byId.values()], repeated: rep };
+  }, [files]);
   const fileIds = fileRows.map((r) => r.studentId);
   const ids = [...new Set([...list.map((s) => s.nationalId), ...fileIds])];
   const noType = fileRows.filter((r) => !r.type).length;
@@ -245,9 +272,9 @@ function NominateModal({ cycle, onClose, onDone }) {
     setBusy(true);
     try {
       const r = await callSupport('supportNominate', {
-        id: cycle.id, type, subjects: [...subjects, ...other.split(/[،,]/).map((x) => x.trim()).filter(Boolean)], reason,
+        id: cycle.id, type, subjects: [...subjects, ...other.split(/[،,]/).map((x) => x.trim()).filter(Boolean)], reason, round: Number(round) || 0,
         studentIds: list.map((s) => s.nationalId).filter((x) => !fileIds.includes(x)),
-        entries: fileRows.map(({ studentId, type: rowType, subjects: rowSubjects, reason: rowReason, teacher }) => ({ studentId, type: rowType, subjects: rowSubjects, reason: rowReason, teacher })),
+        entries: fileRows.map(({ studentId, type: rowType, subjects: rowSubjects, reason: rowReason, teacher, round: rowRound }) => ({ studentId, type: rowType, subjects: rowSubjects, reason: rowReason, teacher, round: rowRound || Number(round) || 0 })),
       });
       onDone(r);
     } catch (err) { setError(err.message); setBusy(false); }
@@ -262,6 +289,9 @@ function NominateModal({ cycle, onClose, onDone }) {
         <input value={other} onChange={(e) => setOther(e.target.value)} placeholder={t('support.nom.otherSubject')} className={`${inputCls} mt-2`} />
       </Field>
       <Field label={t('support.nom.reason')}><textarea rows={2} value={reason} onChange={(e) => setReason(e.target.value)} className={inputCls} /></Field>
+      <Field label={t('support.round.label')} hint={t('support.round.nomHint')}>
+        <div className="flex flex-wrap gap-1.5">{['', ...ROUNDS.map(String)].map((x) => <button key={x || 'none'} type="button" onClick={() => setRound(x)} className={chip(round === x)}>{x ? roundLabel(x) : t('support.round.none')}</button>)}</div>
+      </Field>
       <Field label={t('support.nom.students')}>
         <StudentPicker value={null} onChange={(s) => { if (s && !list.some((x) => x.nationalId === s.nationalId)) setList((x) => [...x, s]); }} />
         {list.length > 0 && <div className="flex flex-wrap gap-1.5 mt-2">{list.map((s) => <span key={s.nationalId} className="px-2 py-1 rounded-lg bg-sky-50 border border-sky-100 text-xs flex items-center gap-1">{s.nameAr || s.name}<button type="button" onClick={() => setList((x) => x.filter((y) => y.nationalId !== s.nationalId))}><X className="w-3 h-3" /></button></span>)}</div>}
@@ -274,16 +304,38 @@ function NominateModal({ cycle, onClose, onDone }) {
             <a href={NOMINATION_TEMPLATE_URL} download={t('support.nom.templateFile')} className="text-xs text-emerald-700 border border-emerald-200 bg-emerald-50 rounded-lg px-2.5 py-1.5 flex items-center gap-1"><FileSpreadsheet className="w-3.5 h-3.5" />{t('support.nom.template')}</a>
           </div>
           <p className="text-xs text-slate-500">{t('support.nom.templateHint')}</p>
-          {files.length > 0 && <p className="text-xs text-slate-600">{files.join(' · ')} <button type="button" onClick={() => { setFileRows([]); setFiles([]); }} className="text-rose-600 ms-1">{t('support.nom.clearFiles')}</button></p>}
-          {fileRows.some((r) => r.name || r.type || r.reason) && (
+          {files.length > 0 && (
+            <div className="space-y-1.5">
+              {files.map((f) => (
+                <div key={f.key} className="flex flex-wrap items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs">
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="font-medium text-slate-800 truncate max-w-56" title={f.name}>{f.name}</span>
+                  <span className="text-slate-500">({t('support.nom.rowsN', { n: f.rows.length })})</span>
+                  <span className="flex-1" />
+                  <select value={f.round} onChange={(e) => setFile(f.key, { round: e.target.value })} className="px-2 py-1 border border-slate-200 rounded-lg bg-white">
+                    <option value="">{round ? roundLabel(round) : t('support.round.fromFile')}</option>
+                    {ROUNDS.map((x) => <option key={x} value={String(x)}>{roundLabel(x)}</option>)}
+                  </select>
+                  <select value={f.type} onChange={(e) => setFile(f.key, { type: e.target.value })} className="px-2 py-1 border border-slate-200 rounded-lg bg-white">
+                    <option value="">{t('support.nom.typeFromFile')}</option>
+                    {SUPPORT_TYPES.map((x) => <option key={x} value={x}>{t(`support.types.${x}`)}</option>)}
+                  </select>
+                  <button type="button" title={t('support.nom.removeFile')} onClick={() => setFiles((x) => x.filter((y) => y.key !== f.key))} className="text-slate-400 hover:text-rose-600"><X className="w-3.5 h-3.5" /></button>
+                </div>
+              ))}
+              <p className="text-xs text-slate-500">{t('support.nom.filesHint')}{repeated > 0 && <span className="text-amber-700"> {t('support.nom.repeated', { n: repeated })}</span>} <button type="button" onClick={() => setFiles([])} className="text-rose-600 ms-1">{t('support.nom.clearFiles')}</button></p>
+            </div>
+          )}
+          {fileRows.length > 0 && (
             <div className="max-h-56 overflow-auto border border-slate-100 rounded-lg">
               <table className="w-full text-xs">
-                <thead className="bg-slate-50 text-slate-500 sticky top-0"><tr>{['col.student', 'col.grade', 'col.type', 'col.subjects', 'col.reason', 'nom.teacher'].map((k) => <th key={k} className="px-2 py-1.5 text-start font-medium">{t(`support.${k}`)}</th>)}</tr></thead>
+                <thead className="bg-slate-50 text-slate-500 sticky top-0"><tr>{['col.student', 'col.grade', 'round.label', 'col.type', 'col.subjects', 'col.reason', 'nom.teacher'].map((k) => <th key={k} className="px-2 py-1.5 text-start font-medium">{t(`support.${k}`)}</th>)}</tr></thead>
                 <tbody>
                   {fileRows.map((r) => (
                     <tr key={r.studentId} className="border-t border-slate-100">
                       <td className="px-2 py-1.5"><p className="text-slate-800">{r.name || '—'}</p><p className="text-slate-400" dir="ltr">{r.studentId}</p></td>
                       <td className="px-2 py-1.5" dir="ltr">{[r.grade, r.className].filter(Boolean).join(' ')}</td>
+                      <td className="px-2 py-1.5 whitespace-nowrap">{r.round || Number(round) ? <RoundPill n={r.round || Number(round)} /> : <span className="text-slate-300">—</span>}</td>
                       <td className="px-2 py-1.5">{r.type ? <Pill className={TYPE_STYLE[r.type]}>{t(`support.types.${r.type}`)}</Pill> : <span className="text-amber-700">{t(`support.types.${type}`)}*</span>}</td>
                       <td className="px-2 py-1.5">{r.subjects.join('، ')}</td>
                       <td className="px-2 py-1.5 max-w-48">{r.reason}</td>

@@ -5543,7 +5543,13 @@
       "badFile": "Could not read {{name}}.",
       "noTypeRows": "{{n}} rows without a programme — they go into «{{type}}» chosen above.",
       "notFoundIds": "IDs not found in the student roster (check the form)",
-      "otherCycleList": "Not nominated — already in another programme"
+      "otherCycleList": "Not nominated — already in another programme",
+      "rowsN": "{{n}} students",
+      "typeFromFile": "Programme from the file",
+      "removeFile": "Remove file",
+      "filesHint": "Upload several files per branch (Cycle 1, Cycle 2, enrichment…) and set each file's Cycle and programme. Students already nominated only get their Cycle updated.",
+      "repeated": "{{n}} students appear in more than one file — the last file wins.",
+      "retagged": "Cycle updated for {{n}} students already nominated."
     },
     "ans": {
       "title": "Answer of {{name}}'s parent",
@@ -5855,7 +5861,7 @@
     "auto": {
       "button": "Make groups automatically",
       "title": "Make groups automatically",
-      "hint": "Consented students with no group are placed by programme, stage and subject (and branch). Matching groups that still have seats are filled first, then new groups are made.",
+      "hint": "Consented students with no group are placed by programme, stage and subject (and branch): each stage in its own groups with its subject, Cycle 1 and Cycle 2 students together. Matching groups with seats are filled first, then new groups are made.",
       "capacity": "Max students per group",
       "capacityHint": "0 = one group per subject and stage",
       "preview": "Preview",
@@ -5873,6 +5879,33 @@
         "grades": "Grades",
         "count": "Students"
       }
+    },
+    "round": {
+      "label": "Cycle",
+      "nomHint": "Tells continuing Cycle 1 students from new Cycle 2 students — they attend the same groups. Each file below can have its own Cycle.",
+      "none": "None",
+      "fromFile": "Cycle from the file",
+      "all": "All cycles",
+      "untagged": "No Cycle",
+      "choose": "Set Cycle…",
+      "clear": "Remove Cycle",
+      "set": "Set"
+    },
+    "merge": {
+      "button": "Merge groups",
+      "selected": "Merge selected ({{n}})",
+      "pickHint": "Pick the groups to merge, then press «Merge selected».",
+      "mixed": "Groups of different programmes or branches cannot be merged.",
+      "autoHint": "Each stage gets its own groups with its subject. To merge groups (e.g. two small stages) tick them and press «Merge selected».",
+      "mergedN": "merged from {{n}}",
+      "undo": "Undo merge",
+      "done": "Groups merged into «{{name}}» — it now has {{n}} students.",
+      "title": "Merge {{n}} groups",
+      "apply": "Merge ({{n}} students)",
+      "keep": "Group that stays",
+      "keepHint": "Its teacher, room and supervisor stay; the other groups' students move into it and those groups are deleted.",
+      "name": "Name after merging",
+      "after": "Past attendance stays counted for each student. Send the new group notice to parents from the Students tab if needed."
     }
   }
 }
