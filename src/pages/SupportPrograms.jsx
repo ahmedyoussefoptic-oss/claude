@@ -93,10 +93,17 @@ function CycleDetails({ id, branchName, onBack, groupId, prog, openProg, openGro
   if (!data) return <div className="py-16 flex justify-center"><Loader2 className="w-7 h-7 animate-spin text-primary" /></div>;
   const c = data.cycle;
   const setStatus = async (action) => { setBusy(true); try { await callSupport('supportAction', { id, action, studentIds: [] }); await load(); } catch (err) { window.alert(err.message); } finally { setBusy(false); } };
+  // An active cycle asks for its title typed back; a closed one a plain yes.
   const remove = async () => {
-    if (!window.confirm(t('support.deleteConfirm', { title: c.title, n: data.students.length }))) return;
+    let confirmTitle = '';
+    if (c.status === 'ACTIVE') {
+      const typed = window.prompt(t('support.deleteActiveConfirm', { title: c.title, n: data.students.length }));
+      if (typed === null) return;
+      if (typed.trim() !== c.title.trim()) { window.alert(t('support.deleteTitleMismatch')); return; }
+      confirmTitle = typed.trim();
+    } else if (!window.confirm(t('support.deleteConfirm', { title: c.title, n: data.students.length }))) return;
     setBusy(true);
-    try { await callSupport('supportDeleteCycle', { id }); onBack(); } catch (err) { window.alert(err.message); setBusy(false); }
+    try { await callSupport('supportDeleteCycle', { id, confirmTitle }); onBack(); } catch (err) { window.alert(err.message); setBusy(false); }
   };
   const openedGroup = groupId && data.groups.find((g) => g.id === groupId);
   if (openedGroup) return <SupportGroupPage data={data} group={openedGroup} branchName={branchName} onBack={() => openGroup(null, prog || openedGroup.type)} />;
@@ -116,7 +123,7 @@ function CycleDetails({ id, branchName, onBack, groupId, prog, openProg, openGro
             {c.status === 'ACTIVE'
               ? <button type="button" disabled={busy} onClick={() => { if (window.confirm(t('support.closeConfirm'))) setStatus('close'); }} className={btn.ghost}><Lock className="w-4 h-4" />{t('support.close')}</button>
               : <button type="button" disabled={busy} onClick={() => setStatus('open')} className={btn.ghost}><Unlock className="w-4 h-4" />{t('support.reopen')}</button>}
-            {c.status === 'CLOSED' && <button type="button" disabled={busy} onClick={remove} className={`${btn.ghost} text-rose-700 border-rose-200 hover:bg-rose-50`}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}{t('support.deleteCycle')}</button>}
+            <button type="button" disabled={busy} onClick={remove} className={`${btn.ghost} text-rose-700 border-rose-200 hover:bg-rose-50`}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}{t('support.deleteCycle')}</button>
           </div>
         )}
       </div>

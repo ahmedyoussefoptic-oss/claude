@@ -5706,7 +5706,7 @@
       "openCycle": "Open the cycle"
     },
     "deleteCycle": "Delete cycle",
-    "deleteConfirm": "The cycle “{{title}}” will be deleted for good with its students ({{n}}), groups, supervisors and attendance, and the parent and supervisor links will stop working. This cannot be undone. Continue?",
+    "deleteConfirm": "The cycle «{{title}}» will be deleted for good with its students ({{n}}), groups, supervisors and attendance; parent, supervisor and teacher links stop and its waiting calls are cancelled. This cannot be undone. Continue?",
     "callKind": {
       "ABSENT": "Absence call",
       "NO_REPLY": "No-answer call",
@@ -5906,6 +5906,8 @@
       "keepHint": "Its teacher, room and supervisor stay; the other groups' students move into it and those groups are deleted.",
       "name": "Name after merging",
       "after": "Past attendance stays counted for each student. Send the new group notice to parents from the Students tab if needed."
-    }
+    },
+    "deleteActiveConfirm": "The cycle «{{title}}» is still open. It will be deleted for good with its students ({{n}}), groups, supervisors and attendance; parent, supervisor and teacher links stop and its waiting calls are cancelled. This cannot be undone.\n\nType the cycle's name to confirm:",
+    "deleteTitleMismatch": "The name does not match — the cycle was not deleted."
   }
 }
