@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
-import { ShoppingCart, Plus, Loader2, LayoutDashboard, ListChecks, Building2, Settings2, Save } from 'lucide-react';
+import { ShoppingCart, Plus, Loader2, LayoutDashboard, ListChecks, Building2, Settings2, Save, PiggyBank } from 'lucide-react';
 import PageHero from '../components/common/PageHero';
 import { Field, inputCls, btn } from '../components/platform/ui';
 import { useBranches } from '../hooks/useOrgData';
@@ -9,6 +9,7 @@ import { callProc, money } from '../config/procurement';
 import ProcDashboard from '../components/procurement/ProcDashboard';
 import ProcRequests from '../components/procurement/ProcRequests';
 import Suppliers from '../components/procurement/Suppliers';
+import Budgets from '../components/procurement/Budgets';
 import RequestForm from '../components/procurement/RequestForm';
 import RequestDetails from '../components/procurement/RequestDetails';
 
@@ -29,7 +30,7 @@ export default function Procurement() {
   const load = useCallback(() => callProc('list').then((r) => { setData(r); setError(null); }).catch((err) => setError(err.message)), []);
   useEffect(() => { load(); }, [load]);
   const roles = data?.roles || {};
-  const tabs = !data ? [] : [['dashboard', LayoutDashboard], ['requests', ListChecks], ...(roles.officer || roles.finance || roles.exec ? [['suppliers', Building2]] : []), ...(roles.admin ? [['settings', Settings2]] : [])];
+  const tabs = !data ? [] : [['dashboard', LayoutDashboard], ['requests', ListChecks], ...(roles.officer || roles.finance || roles.exec ? [['suppliers', Building2]] : []), ...(roles.viewer || roles.exec ? [['budgets', PiggyBank]] : []), ...(roles.admin ? [['settings', Settings2]] : [])];
   const current = tab || 'dashboard';
   const list = data?.requests || [];
 
@@ -53,6 +54,7 @@ export default function Procurement() {
               {current === 'dashboard' && <ProcDashboard requests={list} now={data.now} branchName={branchName} onOpen={(id) => setParams({ openId: id })} onFilter={(f) => { setFilter(f); setTab('requests'); }} />}
               {current === 'requests' && <ProcRequests requests={list} branchName={branchName} filter={filter} setFilter={setFilter} onOpen={(id) => setParams({ openId: id })} />}
               {current === 'suppliers' && <Suppliers />}
+              {current === 'budgets' && <Budgets />}
               {current === 'settings' && <ProcSettings initial={data.settings} onSaved={load} />}
             </>
           )}
@@ -83,6 +85,11 @@ function ProcSettings({ initial, onSaved }) {
         <Field label={t('proc.settings.execAbove')}>{num('execAbove')}</Field>
         <Field label={t('proc.settings.vatRate')}>{num('vatRate')}</Field>
         <Field label={t('proc.settings.overrunPct')}>{num('overrunPct')}</Field>
+        <Field label={t('proc.settings.quoteFrom')}>{num('quoteFrom')}</Field>
+        <Field label={t('proc.settings.quoteCount')}>{num('quoteCount')}</Field>
+        <Field label={t('proc.settings.fiscalStartMonth')}>
+          <select value={s.fiscalStartMonth} onChange={(e) => setS((p) => ({ ...p, fiscalStartMonth: Number(e.target.value) }))} className={inputCls}>{Array.from({ length: 12 }, (_, i) => i + 1).map((m) => <option key={m} value={m}>{t(`proc.months.${m}`)}</option>)}</select>
+        </Field>
       </div>
       <Field label={t('proc.settings.terms')}><textarea value={s.terms} onChange={(e) => setS((p) => ({ ...p, terms: e.target.value }))} rows={3} className={inputCls} /></Field>
       <div className="flex items-center gap-3">

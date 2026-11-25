@@ -10,6 +10,7 @@
 // payment status only — no money moves through the system.
 //   procRequests/{id}    the request: items, approval steps, purchase order, receipts, invoice, payment, log (append-only)
 //   procSuppliers/{id}   a supplier: CR / VAT numbers, contacts, categories, documents' expiry, rating
+//   procBudgets/{fy_branch_category}  a yearly budget line of a branch (all categories, or one); its use is counted from the requests
 // Read and written only here (firestore.rules deny these collections).
 // Two functions in all (procAction, procSweep) — many separate functions
 // make deploys fail with 429.
@@ -17,7 +18,7 @@
 const CATEGORIES = ["MAINTENANCE", "STATIONERY", "CLEANING", "IT", "FURNITURE", "EDUCATIONAL", "SERVICES", "OTHER"];
 const STATUSES = ["PENDING_APPROVAL", "RETURNED", "REJECTED", "APPROVED", "ORDERED", "PARTIAL", "RECEIVED", "INVOICED", "PAID", "CANCELLED"];
 const STEP_AR = { BRANCH: "مدير الفرع", FINANCE: "المالية", EXEC: "الإدارة العليا" };
-const DEFAULT_SETTINGS = { financeFrom: 2000, execAbove: 10000, vatRate: 15, overrunPct: 10, terms: "التوريد خلال المدة المحددة في أمر الشراء، والأسعار شاملة التوصيل والتركيب ما لم يُذكر غير ذلك. الدفع بعد الاستلام ومطابقة الفاتورة." };
+const DEFAULT_SETTINGS = { financeFrom: 2000, execAbove: 10000, vatRate: 15, overrunPct: 10, quoteFrom: 5000, quoteCount: 3, fiscalStartMonth: 1, terms: "التوريد خلال المدة المحددة في أمر الشراء، والأسعار شاملة التوصيل والتركيب ما لم يُذكر غير ذلك. الدفع بعد الاستلام ومطابقة الفاتورة." };
 const MAX_FILES = 3;
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -32,6 +33,28 @@ module.exports = function procurementModule(d) {
   const dayRe = /^\d{4}-\d{2}-\d{2}$/;
   const requests = () => db.collection("procRequests");
   const suppliers = () => db.collection("procSuppliers");
+  const budgets = () => db.collection("procBudgets");
+  // The financial year a moment falls in (named by the year it starts), and its span.
+  const fyOf = (msv, s) => { const d = new Date(msv + 3 * 3600e3); const m = d.getUTCMonth() + 1; return m >= Number(s.fiscalStartMonth || 1) ? d.getUTCFullYear() : d.getUTCFullYear() - 1; };
+  const fySpan = (fy, s) => { const m = Number(s.fiscalStartMonth || 1); return [Date.UTC(fy, m - 1, 1) - 3 * 3600e3, Date.UTC(fy + 1, m - 1, 1) - 3 * 3600e3]; };
+  // What a request weighs on its budget: committed once approved, spent once received.
+  const budgetUse = (r) => {
+    if (["APPROVED", "ORDERED", "PARTIAL"].includes(r.status)) return { committed: r.po?.total ?? r.approvedTotal ?? r.estTotal, spent: 0 };
+    if (["RECEIVED", "INVOICED", "PAID"].includes(r.status)) return { committed: 0, spent: r.invoice?.amount ?? r.po?.total ?? 0 };
+    return { committed: 0, spent: 0 };
+  };
+  // Every budget line of a year with what is committed and spent against it.
+  async function budgetLines(fy, s, branchFilter = null) {
+    const [b0, b1] = fySpan(fy, s);
+    const lines = (await budgets().where("fy", "==", fy).get()).docs.map((x) => ({ id: x.id, ...x.data() })).filter((x) => !branchFilter || branchFilter(x.branch));
+    const reqs = (await requests().where("approvedAt", ">=", Timestamp.fromMillis(b0)).get()).docs.map((x) => x.data()).filter((r) => ms(r.approvedAt) < b1);
+    return lines.map((l) => {
+      const mine = reqs.filter((r) => r.branch === l.branch && (l.category === "ALL" || r.category === l.category));
+      const committed = round2(mine.reduce((n, r) => n + budgetUse(r).committed, 0));
+      const spent = round2(mine.reduce((n, r) => n + budgetUse(r).spent, 0));
+      return { id: l.id, fy, branch: l.branch, category: l.category, amount: l.amount, committed, spent, remaining: round2(l.amount - committed - spent), pct: l.amount > 0 ? Math.round(((committed + spent) / l.amount) * 100) : 0, alerted: l.alerted || 0 };
+    });
+  }
   const fmt = (n) => round2(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   // --- who ------------------------------------------------------------------
@@ -87,6 +110,7 @@ module.exports = function procurementModule(d) {
       edit: r.status === "RETURNED" && mine,
       cancel: (["PENDING_APPROVAL", "RETURNED"].includes(r.status) && (mine || isOfficer(u))) || (["APPROVED", "ORDERED"].includes(r.status) && isOfficer(u)),
       order: r.status === "APPROVED" && isOfficer(u),
+      quote: r.status === "APPROVED" && isOfficer(u),
       returnBack: r.status === "APPROVED" && isOfficer(u),
       receive: ["ORDERED", "PARTIAL"].includes(r.status) && receives(u, r) && r.po?.issuedBy !== u.uid,
       closeReceipt: r.status === "PARTIAL" && isOfficer(u),
@@ -106,6 +130,7 @@ module.exports = function procurementModule(d) {
       estSubtotal: r.estSubtotal, estTotal: r.estTotal, steps: (r.steps || []).map((x) => ({ ...x })), stepIdx: r.stepIdx ?? 0,
       requesterUid: r.requesterUid, requesterName: r.requesterName || "", attachments: r.attachments || [], mntTicketId: r.mntTicketId || "", mntTicketNumber: r.mntTicketNumber || "",
       po: r.po ? { ...r.po, ...(can.seeSupplier || r.requesterUid === u?.uid || seesBranch(u, r.branch) ? {} : { supplierVat: "" }) } : null,
+      quotes: can.seeSupplier ? (r.quotes || []) : [], quoteChoice: can.seeSupplier ? (r.quoteChoice || null) : null,
       receipts: r.receipts || [], invoice: r.invoice || null, payment: r.payment || null, supplierRating: r.supplierRating || 0,
       receivedValue: recv, match: r.invoice && r.po ? { po: r.po.total, received: recv, invoice: r.invoice.amount, ok: Math.abs(r.invoice.amount - recv) <= 1 && Math.abs(recv - r.po.total) <= 1 } : null,
       createdAt: ms(r.createdAt), submittedAt: ms(r.submittedAt), approvedAt: ms(r.approvedAt), orderedAt: ms(r.orderedAt), receivedAt: ms(r.receivedAt), paidAt: ms(r.paidAt),
@@ -187,7 +212,16 @@ module.exports = function procurementModule(d) {
     },
     async get(u, dd) {
       const { r } = await loadReq(u, dd.id);
-      return { request: reqOut(dd.id, r, u, await loadSettings()) };
+      const s = await loadSettings();
+      const out = reqOut(dd.id, r, u, s);
+      // The budget lines this request draws on (for approvers, procurement, finance).
+      if (seesBranch(u, r.branch) && !["CANCELLED", "REJECTED"].includes(r.status)) {
+        const fy = fyOf(ms(r.approvedAt) || Date.now(), s);
+        const counted = ["APPROVED", "ORDERED", "PARTIAL", "RECEIVED", "INVOICED", "PAID"].includes(r.status);
+        out.budget = (await budgetLines(fy, s, (b) => b === r.branch)).filter((l) => l.category === "ALL" || l.category === r.category)
+          .map((l) => ({ ...l, thisRequest: counted ? 0 : r.estTotal }));
+      }
+      return { request: out };
     },
     async create(u, dd) {
       const branch = String(dd.branch || "");
@@ -252,7 +286,10 @@ module.exports = function procurementModule(d) {
       else {
         const word = { APPROVE: "اعتُمد", REJECT: "رُفض", RETURN: "أُعيد للتعديل" }[decision];
         notify([r.requesterUid], `${word} طلب الشراء ${r.number}`, `${r.title}${note ? ` — ${note}` : ""}`, ref.id, "PROC_DECIDED");
-        if (decision === "APPROVE") notify(await recipients("OFFICER", r.branch), `طلب شراء معتمد للتنفيذ ${r.number}`, `${r.title} — ${fmt(r.estTotal)} ر.س`, ref.id, "PROC_ORDER");
+        if (decision === "APPROVE") {
+          notify(await recipients("OFFICER", r.branch), `طلب شراء معتمد للتنفيذ ${r.number}`, `${r.title} — ${fmt(r.estTotal)} ر.س`, ref.id, "PROC_ORDER");
+          await budgetAlerts(r.branch, r.category, ref.id);
+        }
       }
       return handlers.get(u, { id: ref.id });
     },
@@ -295,6 +332,21 @@ module.exports = function procurementModule(d) {
       if (total > approved * (1 + Number(s.overrunPct) / 100) + 0.01 || chain.some((x) => !(r.approvedChain || []).includes(x))) {
         throw new HttpsError("failed-precondition", `إجمالي أمر الشراء ${fmt(total)} يتجاوز المبلغ المعتمد ${fmt(approved)} — أعد الطلب لصاحبه ليعدّله ويُعاد اعتماده.`);
       }
+      // Price quotes: from quoteFrom, quoteCount of them (or a sole supplier, with the reason); the
+      // order goes to one of the quoted suppliers, and not the cheapest only with a reason.
+      const quotes = r.quotes || [];
+      const needQuotes = approved >= Number(s.quoteFrom) && Number(s.quoteCount) > 0;
+      const soleReason = str(dd.soleSource, 500);
+      let quoteChoice = null;
+      if (needQuotes && quotes.length < Number(s.quoteCount) && !soleReason) throw new HttpsError("failed-precondition", `هذا الطلب يحتاج ${s.quoteCount} عروض أسعار (لديه ${quotes.length}) — أو اذكر سبب التعامل مع مورد وحيد.`);
+      if (quotes.length && !soleReason) {
+        const chosen = quotes.filter((q) => q.supplierId === dd.supplierId).sort((a, b) => a.total - b.total)[0];
+        if (!chosen) throw new HttpsError("failed-precondition", "اختر أحد الموردين الذين قدّموا عروض أسعار.");
+        const cheapest = Math.min(...quotes.map((q) => q.total));
+        const reason = str(dd.choiceReason, 500);
+        if (chosen.total > cheapest + 0.01 && !reason) throw new HttpsError("invalid-argument", "المورد المختار ليس الأقل سعراً — اكتب سبب الاختيار.");
+        quoteChoice = { quoteId: chosen.id, supplierName: chosen.supplierName, total: chosen.total, cheapest, reason };
+      } else if (soleReason) quoteChoice = { soleSource: true, reason: soleReason };
       const number = await nextRecordNumber("PO");
       const deliveryDate = dayRe.test(dd.deliveryDate || "") ? dd.deliveryDate : "";
       const po = {
@@ -302,7 +354,7 @@ module.exports = function procurementModule(d) {
         subtotal, vatRate: Number(s.vatRate), vat, total, terms: str(dd.terms, 3000) || s.terms, deliveryDate, issuedBy: u.uid, issuedByName: u.name || "", issuedAt: Date.now(),
       };
       const now = Timestamp.now();
-      await ref.update({ items, po, status: "ORDERED", orderedAt: now, updatedAt: now, log: FieldValue.arrayUnion(logEntry(u, "ORDERED", { note: `${number} — ${sp.name} — ${fmt(total)} ر.س` })) });
+      await ref.update({ items, po, ...(quoteChoice ? { quoteChoice } : {}), status: "ORDERED", orderedAt: now, updatedAt: now, log: FieldValue.arrayUnion(logEntry(u, "ORDERED", { note: `${number} — ${sp.name} — ${fmt(total)} ر.س` })) });
       await suppliers().doc(dd.supplierId).update({ orders: (sp.orders || 0) + 1, spent: round2((sp.spent || 0) + total) });
       notify([r.requesterUid], `صدر أمر الشراء ${number}`, `${r.title} — ${sp.name}${deliveryDate ? ` — التوريد ${deliveryDate}` : ""}`, ref.id, "PROC_ORDER");
       notify(await recipients("RECEIVE", r.branch, { except: [u.uid], fallback: false }), `توريد قادم ${number}`, `${r.title} — ${sp.name}${deliveryDate ? ` — ${deliveryDate}` : ""}`, ref.id, "PROC_ORDER");
@@ -388,6 +440,55 @@ module.exports = function procurementModule(d) {
       return handlers.get(u, { id: ref.id });
     },
 
+    // --- price quotes -----------------------------------------------------
+    async addQuote(u, dd) {
+      const { ref, r } = await loadReq(u, dd.id);
+      need(canOf(u, r).quote, "عروض الأسعار للمشتريات قبل أمر الشراء.");
+      if (!idRe.test(String(dd.supplierId || ""))) throw new HttpsError("invalid-argument", "اختر المورد.");
+      const sp = (await suppliers().doc(dd.supplierId).get()).data();
+      if (!sp || sp.active === false) throw new HttpsError("not-found", "المورد غير موجود.");
+      const total = round2(dd.total);
+      if (!(total > 0)) throw new HttpsError("invalid-argument", "اكتب إجمالي العرض شاملاً الضريبة.");
+      if ((r.quotes || []).length >= 8) throw new HttpsError("failed-precondition", "ثمانية عروض كحد أقصى.");
+      const files = await uploadFiles(dd.files, `procurement/${r.number}/quotes`, { pdf: true });
+      const q = { id: `q${Date.now().toString(36)}`, supplierId: dd.supplierId, supplierName: sp.name, total, validUntil: dayRe.test(dd.validUntil || "") ? dd.validUntil : "", note: str(dd.note, 500), files, by: u.uid, byName: u.name || "", at: Date.now() };
+      await ref.update({ quotes: FieldValue.arrayUnion(q), updatedAt: Timestamp.now(), log: FieldValue.arrayUnion(logEntry(u, "QUOTE", { note: `${sp.name} — ${fmt(total)} ر.س` })) });
+      return handlers.get(u, { id: ref.id });
+    },
+    async removeQuote(u, dd) {
+      const { ref, r } = await loadReq(u, dd.id);
+      need(canOf(u, r).quote, "عروض الأسعار للمشتريات قبل أمر الشراء.");
+      const q = (r.quotes || []).find((x) => x.id === dd.quoteId);
+      if (!q) throw new HttpsError("not-found", "العرض غير موجود.");
+      await ref.update({ quotes: (r.quotes || []).filter((x) => x.id !== dd.quoteId), updatedAt: Timestamp.now(), log: FieldValue.arrayUnion(logEntry(u, "QUOTE_REMOVED", { note: `${q.supplierName} — ${fmt(q.total)} ر.س` })) });
+      return handlers.get(u, { id: ref.id });
+    },
+
+    // --- budgets ----------------------------------------------------------
+    async budgets(u, dd) {
+      const s = await loadSettings();
+      const fy = Number.isInteger(dd.fy) ? dd.fy : fyOf(Date.now(), s);
+      const all = seesAll(u) || isExec(u);
+      need(all || u.isPrincipal === true, "الميزانيات للمالية والمشتريات والإدارة ومديري الفروع.");
+      return { fy, current: fyOf(Date.now(), s), fiscalStartMonth: Number(s.fiscalStartMonth || 1), lines: await budgetLines(fy, s, all ? null : (b) => callerHasBranch(u, b)), canEdit: isFinance(u) };
+    },
+    async saveBudget(u, dd) {
+      need(isFinance(u), "تحديد الميزانيات للمالية.");
+      const fy = Math.floor(Number(dd.fy));
+      const branch = String(dd.branch || "");
+      const category = dd.category === "ALL" || CATEGORIES.includes(dd.category) ? dd.category : "";
+      const amount = round2(dd.amount);
+      if (!(fy >= 2020 && fy <= 2100) || !branchRe.test(branch) || !category || !(amount >= 0)) throw new HttpsError("invalid-argument", "حدد السنة والفرع والبند والمبلغ.");
+      await budgets().doc(`${fy}_${branch}_${category}`).set({ fy, branch, category, amount, alerted: 0, updatedAt: Timestamp.now(), updatedBy: u.uid }, { merge: true });
+      return handlers.budgets(u, { fy });
+    },
+    async deleteBudget(u, dd) {
+      need(isFinance(u), "تحديد الميزانيات للمالية.");
+      if (!/^\d{4}_[A-Z0-9_]+$/.test(String(dd.lineId || ""))) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+      await budgets().doc(dd.lineId).delete();
+      return handlers.budgets(u, { fy: Number(String(dd.lineId).slice(0, 4)) });
+    },
+
     // --- suppliers --------------------------------------------------------
     async suppliers(u) {
       need(isOfficer(u) || isFinance(u) || isExec(u), "سجل الموردين للمشتريات والمالية والإدارة.");
@@ -429,6 +530,7 @@ module.exports = function procurementModule(d) {
       const num = (v, lo, hi, f) => { const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, round2(n))) : f; };
       const s = {
         financeFrom: num(dd.financeFrom, 0, 1e7, 2000), execAbove: num(dd.execAbove, 0, 1e8, 10000), vatRate: num(dd.vatRate, 0, 50, 15), overrunPct: num(dd.overrunPct, 0, 50, 10),
+        quoteFrom: num(dd.quoteFrom, 0, 1e8, 5000), quoteCount: Math.floor(num(dd.quoteCount, 0, 5, 3)), fiscalStartMonth: Math.floor(num(dd.fiscalStartMonth, 1, 12, 1)),
         terms: str(dd.terms, 3000) || DEFAULT_SETTINGS.terms, updatedAt: Timestamp.now(), updatedBy: u.uid,
       };
       if (s.execAbove < s.financeFrom) throw new HttpsError("invalid-argument", "حد الإدارة العليا يجب أن يكون أكبر من حد المالية.");
@@ -446,6 +548,20 @@ module.exports = function procurementModule(d) {
     const t = (await tRef.get()).data();
     if (t && t.status === "WAITING_PARTS") {
       await tRef.update({ status: "IN_PROGRESS", updatedAt: Timestamp.now(), log: FieldValue.arrayUnion(logEntry({ uid: "", name: "النظام" }, "IN_PROGRESS", { note: `وصلت القطع — طلب الشراء ${r.number}` })) });
+    }
+  }
+
+  // A branch's budget lines crossing 80% or 100% (each once): finance, procurement and the principal.
+  async function budgetAlerts(branch, category, id) {
+    const s = await loadSettings();
+    const fy = fyOf(Date.now(), s);
+    for (const l of (await budgetLines(fy, s, (b) => b === branch)).filter((x) => x.category === "ALL" || x.category === category)) {
+      const level = l.pct >= 100 ? 100 : l.pct >= 80 ? 80 : 0;
+      if (!level || l.alerted >= level) continue;
+      await budgets().doc(l.id).update({ alerted: level });
+      const users = await loadActiveUsers();
+      const ids = [...await recipients("FINANCE", branch, { users, fallback: false }), ...await recipients("OFFICER", branch, { users, fallback: false }), ...await recipients("BRANCH", branch, { users, fallback: false })];
+      notify(ids, level === 100 ? `⚠️ تجاوزت ميزانية ${l.category === "ALL" ? "الفرع" : "البند"} 100%` : `بلغت ميزانية ${l.category === "ALL" ? "الفرع" : "البند"} ${l.pct}%`, `الميزانية ${fmt(l.amount)} — الملتزم ${fmt(l.committed)} والمصروف ${fmt(l.spent)} ر.س`, id, "PROC_REMINDER");
     }
   }
 

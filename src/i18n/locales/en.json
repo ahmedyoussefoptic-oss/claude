@@ -5989,7 +5989,8 @@
     "sources": {
       "APP": "From the app",
       "QR": "Via QR code",
-      "COMPLAINT": "From a parent's note"
+      "COMPLAINT": "From a parent's note",
+      "PM": "Preventive"
     },
     "techKinds": {
       "TECH": "In-house technician",
@@ -6000,7 +6001,9 @@
       "tickets": "Reports",
       "places": "Places & QR",
       "techs": "Technicians",
-      "settings": "Deadlines"
+      "settings": "Deadlines",
+      "assets": "Equipment",
+      "plans": "Preventive maintenance"
     },
     "filters": {
       "OPEN": "Open",
@@ -6038,7 +6041,8 @@
       "cancel": "Reason for cancelling",
       "comment": "Note",
       "assign": "Note for the technician (optional)",
-      "approve": "Note (optional)"
+      "approve": "Note (optional)",
+      "cost": "Note (optional)"
     },
     "assign": "Assign",
     "reassign": "Change technician",
@@ -6070,7 +6074,8 @@
       "REOPENED": "Reopened",
       "CANCELLED": "Cancelled",
       "COMMENT": "Note",
-      "ESCALATED": "Escalated"
+      "ESCALATED": "Escalated",
+      "COST": "Cost"
     },
     "fromComplaint": "Turn into maintenance report",
     "fromComplaintTitle": "Maintenance report from note {{n}}",
@@ -6098,7 +6103,16 @@
       "none": "No data in the period.",
       "lastDays": "Last {{n}} days",
       "print": "Print report",
-      "reportTitle": "Facilities maintenance report"
+      "reportTitle": "Facilities maintenance report",
+      "cost": "Maintenance cost in the period",
+      "pm": "Preventive (done/all)",
+      "pmLate": "{{n}} overdue",
+      "costByBranch": "Cost by branch",
+      "costByCategory": "Cost by category",
+      "costByAsset": "Cost by equipment",
+      "topAssets": "Equipment with most faults",
+      "source": "Source",
+      "hours": "Hours to done"
     },
     "places": {
       "add": "Add place",
@@ -6170,7 +6184,86 @@
     },
     "buyParts": "Request parts",
     "buyTitle": "Parts for {{n}} — {{title}}",
-    "procRequest": "Purchase request {{n}}"
+    "procRequest": "Purchase request {{n}}",
+    "excel": "Export Excel",
+    "checklist": "Checklist",
+    "assetTypes": {
+      "AC": "Air conditioner",
+      "ELEVATOR": "Lift",
+      "GENERATOR": "Generator",
+      "EXTINGUISHER": "Fire extinguisher",
+      "FIRE_ALARM": "Fire alarm",
+      "PUMP": "Pump",
+      "WATER_TANK": "Water tank",
+      "LIGHTING": "Lighting",
+      "OTHER": "Other"
+    },
+    "freqs": {
+      "WEEKLY": "Weekly",
+      "MONTHLY": "Monthly",
+      "QUARTERLY": "Every 3 months",
+      "SEMIANNUAL": "Every 6 months",
+      "YEARLY": "Yearly"
+    },
+    "assets": {
+      "one": "Equipment",
+      "none": "No specific equipment",
+      "add": "Add equipment",
+      "edit": "Edit equipment",
+      "allTypes": "All types",
+      "name": "Name",
+      "nameHint": "e.g. Lab AC 1",
+      "type": "Type",
+      "brand": "Brand",
+      "model": "Model",
+      "serial": "Serial no.",
+      "installDate": "Installed",
+      "warrantyEnd": "Warranty ends",
+      "contractEnd": "Maintenance contract ends",
+      "contractor": "Contractor",
+      "supplier": "Supplier",
+      "notes": "Notes",
+      "faults": "Faults",
+      "cost": "Maintenance cost",
+      "faultsN": "{{n}} faults",
+      "noHistory": "No reports on this equipment.",
+      "warranty": "Warranty",
+      "contract": "Contract",
+      "expires": "{{what}} ends {{date}}",
+      "expired": "{{what}} ended {{date}}",
+      "printLabels": "Print QR labels",
+      "labelsTitle": "Equipment labels",
+      "empty": "No equipment in this branch yet.",
+      "deleteConfirm": "Delete “{{name}}”? Its past reports stay; its QR code stops working."
+    },
+    "plans": {
+      "add": "Add preventive task",
+      "edit": "Edit preventive task",
+      "title": "Task",
+      "titleHint": "e.g. Clean AC filters",
+      "freq": "Frequency",
+      "nextDue": "Next due",
+      "tech": "Technician",
+      "noTech": "Unassigned (the manager assigns)",
+      "assets": "Equipment covered",
+      "noAssets": "No equipment in this branch — add it in the Equipment tab.",
+      "checklist": "Checklist",
+      "checklistHint": "One item per line; the technician ticks them when done.",
+      "checklistExample": "Remove the filter\nWash and dry\nRefit and test",
+      "hint": "On each due day a work order is created automatically (7 am) and given to the technician; the next date moves on.",
+      "next": "Next",
+      "runNow": "Create now",
+      "runConfirm": "Create the “{{title}}” work order now? The next date moves on.",
+      "deleteConfirm": "Delete the preventive task “{{title}}”? Past work orders stay.",
+      "empty": "No preventive tasks yet.",
+      "onTime": "{{n}}% of {{total}} done on time"
+    },
+    "costs": {
+      "title": "Cost",
+      "labor": "Labour",
+      "parts": "Parts",
+      "contractor": "Contractor invoice"
+    }
   },
   "proc": {
     "title": "Procurement",
@@ -6236,7 +6329,8 @@
       "dashboard": "Dashboard",
       "requests": "Requests",
       "suppliers": "Suppliers",
-      "settings": "Settings"
+      "settings": "Settings",
+      "budgets": "Budgets"
     },
     "filters": {
       "ACTIVE": "In progress",
@@ -6279,7 +6373,8 @@
       "receive": "Receipt note (optional)",
       "pay": "Note",
       "rate": "Note (optional)",
-      "comment": "Note"
+      "comment": "Note",
+      "quote": "Note on the quote (optional)"
     },
     "forTicket": "For maintenance report {{n}}",
     "orderTotal": "Order total",
@@ -6329,7 +6424,9 @@
       "INVOICED": "Invoice attached",
       "PAID": "Payment recorded",
       "RATED": "Supplier rated",
-      "COMMENT": "Note"
+      "COMMENT": "Note",
+      "QUOTE": "Quote",
+      "QUOTE_REMOVED": "Quote removed"
     },
     "dash": {
       "mine": "Waiting for you ({{n}})",
@@ -6387,7 +6484,64 @@
       "vatRate": "VAT %",
       "overrunPct": "Allowed order overrun %",
       "terms": "Default purchase order terms",
-      "saved": "Saved."
+      "saved": "Saved.",
+      "quoteFrom": "Quotes required from",
+      "quoteCount": "Number of quotes",
+      "fiscalStartMonth": "Financial year starts"
+    },
+    "months": {
+      "1": "January",
+      "2": "February",
+      "3": "March",
+      "4": "April",
+      "5": "May",
+      "6": "June",
+      "7": "July",
+      "8": "August",
+      "9": "September",
+      "10": "October",
+      "11": "November",
+      "12": "December"
+    },
+    "quotes": {
+      "add": "Add quote",
+      "title": "Price quotes ({{n}})",
+      "total": "Total incl. VAT",
+      "validUntil": "Valid until",
+      "file": "Quote file (image or PDF)",
+      "lowest": "Lowest",
+      "removeConfirm": "Remove the quote from “{{name}}”?",
+      "required": "{{n}} quotes are required from {{from}} — it has {{have}}.",
+      "choiceReason": "Reason for the supplier chosen",
+      "choiceHint": "The lowest quote is {{min}} — why this supplier?",
+      "soleSource": "Sole supplier — reason",
+      "soleHint": "When the required quotes are not available (e.g. an exclusive agent)."
+    },
+    "budget": {
+      "tab": "Budgets",
+      "title": "Budget",
+      "year": "Financial year {{y}}",
+      "add": "Add line",
+      "line": "Line",
+      "allCategories": "Whole branch",
+      "amount": "Amount",
+      "committed": "Committed",
+      "spent": "Spent",
+      "remaining": "Remaining",
+      "hint": "Committed: approved, not yet received; spent: received. Alerts at 80% and 100%.",
+      "empty": "No budgets for this year.",
+      "deleteConfirm": "Delete this budget line?",
+      "over": "After this request it reaches {{n}}% — over budget.",
+      "overNow": "The budget is at {{n}}% — over budget."
+    },
+    "excel": {
+      "requester": "Requester",
+      "status": "Status",
+      "paid": "Paid on",
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "ordered": "Ordered",
+      "received": "Received"
     }
   }
 }

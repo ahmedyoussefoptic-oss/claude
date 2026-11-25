@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, Hammer } from 'lucide-react';
+import { Search, Hammer, FileDown } from 'lucide-react';
 import { Pill, inputCls } from '../platform/ui';
 import { money, PROC_STATUS_STYLE, PROC_CATEGORIES, PROC_ACTIVE } from '../../config/procurement';
 import { fmtDateTime } from '../../config/maintenance';
+import { exportXlsx } from '../../utils/exportXlsx';
 
 const selCls = `${inputCls.replace('w-full ', '')} w-auto`;
 const FILTERS = ['ACTIVE', 'PENDING_APPROVAL', 'RETURNED', 'APPROVED', 'INCOMING', 'RECEIVED', 'INVOICED', 'PAID', 'REJECTED', 'CANCELLED', 'ALL'];
@@ -30,6 +31,10 @@ export default function ProcRequests({ requests, branchName, filter, setFilter, 
         </div>
         {branches.length > 1 && <select value={f.branch} onChange={(e) => set('branch', e.target.value)} className={selCls}><option value="">{t('common.allBranches')}</option>{branches.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}</select>}
         <select value={f.category} onChange={(e) => set('category', e.target.value)} className={selCls}><option value="">{t('proc.allCategories')}</option>{PROC_CATEGORIES.map((c) => <option key={c} value={c}>{t(`proc.categories.${c}`)}</option>)}</select>
+        <button type="button" disabled={!rows.length} onClick={() => exportXlsx('procurement.xlsx', t('proc.title'),
+          [t('proc.requestNumber'), t('proc.branch'), t('proc.category'), t('proc.titleField'), t('proc.excel.requester'), t('proc.excel.status'), t('proc.estTotal'), t('proc.poNumber'), t('proc.supplier'), t('proc.orderTotal'), t('proc.invoice'), t('proc.excel.paid'), t('proc.excel.submitted'), t('proc.excel.approved'), t('proc.excel.ordered'), t('proc.excel.received')],
+          rows.map((r) => [r.number, branchName(r.branch), t(`proc.categories.${r.category}`), r.title, r.requesterName, t(`proc.status.${r.status}`), r.estTotal, r.po?.number || '', r.po?.supplierName || '', r.po?.total ?? '', r.invoice?.amount ?? '', r.payment?.date || '',
+            fmtDateTime(r.submittedAt), fmtDateTime(r.approvedAt), fmtDateTime(r.orderedAt), fmtDateTime(r.receivedAt)]))} className="px-3 py-2 rounded-xl text-sm border border-slate-300 bg-white text-slate-700 flex items-center gap-1.5 disabled:opacity-50"><FileDown className="w-4 h-4" />{t('mnt.excel')}</button>
       </div>
       {!rows.length ? <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-slate-500">{t('proc.empty')}</div> : (
         <div className="bg-white border border-slate-100 rounded-2xl shadow-sm divide-y divide-slate-100">

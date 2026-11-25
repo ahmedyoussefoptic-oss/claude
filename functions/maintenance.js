@@ -9,7 +9,9 @@
 //   mntPlaces/{id}     a place: branch, building, floor, room, kind, QR token
 //   mntTechs/{id}      a technician / contractor: name, phone, branches, categories, PIN, link token
 //   mntLinks/{token}   a place's QR or a technician's link → its record (wrong phone / PIN lock)
-//   mntTickets/{id}    a work order: place, category, priority, status, photos, log (append-only)
+//   mntTickets/{id}    a work order: place, asset, category, priority, status, photos, checklist, cost, log (append-only)
+//   mntAssets/{id}     equipment (AC, lift, generator, extinguisher…): place, serial, warranty and contract end, QR token
+//   mntPlans/{id}      preventive maintenance: what, how often, next due day, assets, checklist, technician
 // Read and written only here (firestore.rules deny these collections).
 // Three functions in all (mntAction, mntPublic, mntSweep) — many separate
 // functions make deploys fail with 429.
@@ -23,6 +25,10 @@ const CAT_AR = { ELECTRIC: "كهرباء", PLUMBING: "سباكة", AC: "تكيي
 const PRI_AR = { URGENT: "طارئ", HIGH: "عالية", NORMAL: "عادية", LOW: "منخفضة" };
 const STATUS_AR = { NEW: "جديد", ASSIGNED: "مُسند", IN_PROGRESS: "قيد التنفيذ", WAITING_PARTS: "بانتظار قطع", DONE: "منجز", CLOSED: "معتمد", CANCELLED: "ملغى" };
 const DEFAULT_SETTINGS = { urgentHours: 4, highDays: 1, normalDays: 3, lowDays: 7 };
+const ASSET_TYPES = ["AC", "ELEVATOR", "GENERATOR", "EXTINGUISHER", "FIRE_ALARM", "PUMP", "WATER_TANK", "LIGHTING", "OTHER"];
+const ASSET_CAT = { AC: "AC", ELEVATOR: "ELECTRIC", GENERATOR: "ELECTRIC", EXTINGUISHER: "SAFETY", FIRE_ALARM: "SAFETY", PUMP: "PLUMBING", WATER_TANK: "PLUMBING", LIGHTING: "ELECTRIC", OTHER: "OTHER" };
+// Preventive maintenance: every week, or every n months.
+const FREQS = { WEEKLY: { days: 7 }, MONTHLY: { months: 1 }, QUARTERLY: { months: 3 }, SEMIANNUAL: { months: 6 }, YEARLY: { months: 12 } };
 const LOCK = { fails: 10, ms: 15 * 60e3 };
 const MAX_PHOTOS = 3;
 const QR_DAILY_LIMIT = 30;
@@ -41,6 +47,17 @@ module.exports = function maintenanceModule(d) {
   const places = () => db.collection("mntPlaces");
   const techs = () => db.collection("mntTechs");
   const links = () => db.collection("mntLinks");
+  const assets = () => db.collection("mntAssets");
+  const plans = () => db.collection("mntPlans");
+  const dayRe = /^\d{4}-\d{2}-\d{2}$/;
+  // The next due day after `day` for a frequency.
+  const addFreq = (day, freq) => {
+    const f = FREQS[freq] || FREQS.MONTHLY;
+    const x = new Date(`${day}T12:00:00Z`);
+    if (f.days) x.setUTCDate(x.getUTCDate() + f.days);
+    else { const d0 = x.getUTCDate(); x.setUTCDate(1); x.setUTCMonth(x.getUTCMonth() + f.months); const last = new Date(Date.UTC(x.getUTCFullYear(), x.getUTCMonth() + 1, 0)).getUTCDate(); x.setUTCDate(Math.min(d0, last)); }
+    return x.toISOString().slice(0, 10);
+  };
   const phoneKey = (v) => normalizeDigits(v).replace(/\D/g, "").slice(-9);
   const oneOf = (list, v, dflt) => (list.includes(v) ? v : dflt);
 
@@ -98,11 +115,21 @@ module.exports = function maintenanceModule(d) {
     reporterUid: t.reporterUid || "", reporterName: t.reporterName || "", techId: t.techId || "", techName: t.techName || "", techKind: t.techKind || "",
     photos: t.photos || [], workPhotos: t.workPhotos || [], workNote: t.workNote || "", parts: t.parts || "", rating: t.rating || 0, ratingNote: t.ratingNote || "",
     createdAt: ms(t.createdAt), assignedAt: ms(t.assignedAt), startedAt: ms(t.startedAt), doneAt: ms(t.doneAt), closedAt: ms(t.closedAt), dueAt: ms(t.dueAt),
-    escalatedAt: ms(t.escalatedAt), procRequests: t.procRequests || [], log: (t.log || []).slice(-80),
+    escalatedAt: ms(t.escalatedAt), procRequests: t.procRequests || [],
+    assetId: t.assetId || "", assetName: t.assetName || "", planId: t.planId || "", checklist: t.checklist || [], cost: t.cost || null, log: (t.log || []).slice(-80),
     ...(u ? { canManage: manages(u, t.branch), canApprove: t.reporterUid === u.uid || manages(u, t.branch) } : {}),
   });
   const placeOut = (id, p) => ({ id, branch: p.branch, building: p.building || "", floor: p.floor || "", room: p.room || "", kind: p.kind || "OTHER", label: placeLabel(p), active: p.active !== false, qr: `${PUBLIC_APP_URL}/fix/${p.qrToken}` });
   const techOut = (id, x) => ({ id, name: x.name, phone: x.phone || "", kind: x.kind || "TECH", company: x.company || "", branches: x.branches || [], categories: x.categories || [], active: x.active !== false, pin: x.pin, link: `${PUBLIC_APP_URL}/tech/${x.token}` });
+  const assetOut = (id, a, withQr) => ({
+    id, branch: a.branch, placeId: a.placeId || "", place: a.place || "", name: a.name, type: a.type || "OTHER", brand: a.brand || "", model: a.model || "", serial: a.serial || "",
+    installDate: a.installDate || "", warrantyEnd: a.warrantyEnd || "", contractEnd: a.contractEnd || "", contractor: a.contractor || "", supplier: a.supplier || "", notes: a.notes || "",
+    active: a.active !== false, qr: withQr && a.qrToken ? `${PUBLIC_APP_URL}/fix/${a.qrToken}` : "",
+  });
+  const planOut = (id, x) => ({
+    id, branch: x.branch, title: x.title, category: x.category, priority: x.priority || "NORMAL", freq: x.freq, nextDue: x.nextDue, assetIds: x.assetIds || [], placeId: x.placeId || "",
+    techId: x.techId || "", checklist: x.checklist || [], active: x.active !== false, lastRun: x.lastRun || "", lastTicket: x.lastTicket || "",
+  });
   const logEntry = (by, action, extra = {}) => ({ at: Date.now(), by: by.uid || "", byName: by.name || "", action, ...extra });
 
   // Who hears about a work order in a branch: its managers (not the actor).
@@ -115,7 +142,7 @@ module.exports = function maintenanceModule(d) {
   const notify = (ids, title, body, ticketId, type) => notifyUsers(ids, { title, body, complaintId: ticketId, type }).catch((err) => console.error("mnt notify", err));
 
   // --- create ---------------------------------------------------------------
-  async function createTicket({ by, branch, place, category, priority, title, description, photos, source, complaint, placeText }) {
+  async function createTicket({ by, branch, place, category, priority, title, description, photos, source, complaint, placeText, extra = {}, quiet = false }) {
     const cfg = await loadSettings();
     const ref = tickets().doc();
     const number = await nextRecordNumber("MT");
@@ -125,10 +152,13 @@ module.exports = function maintenanceModule(d) {
       number, branch, placeId: place?.id || "", place: place ? placeLabel(place) : str(placeText, 120), category, priority, title, description,
       photos: uploaded, status: "NEW", source, reporterUid: by.uid || "", reporterName: by.name || "",
       ...(complaint ? { complaintId: complaint.id, complaintNumber: complaint.number || "" } : {}),
+      ...extra, ...(extra.techId ? { status: "ASSIGNED", assignedAt: Timestamp.fromMillis(now) } : {}),
       createdAt: Timestamp.fromMillis(now), updatedAt: Timestamp.fromMillis(now), dueAt: Timestamp.fromMillis(dueAt(priority, now, cfg)),
-      log: [logEntry(by, "CREATED", { note: source === "QR" ? "بلاغ عبر رمز QR" : source === "COMPLAINT" ? `محوّل من الملاحظة ${complaint?.number || ""}` : "" })],
+      log: [logEntry(by, "CREATED", { note: source === "QR" ? "بلاغ عبر رمز QR" : source === "COMPLAINT" ? `محوّل من الملاحظة ${complaint?.number || ""}` : source === "PM" ? "صيانة وقائية مجدولة" : "" }),
+        ...(extra.techId ? [logEntry(by, "ASSIGNED", { to: extra.techName })] : [])],
     };
     await ref.set(t);
+    if (quiet) return { id: ref.id, number };
     const managers = (await branchManagers(branch)).filter((x) => x !== by.uid);
     notify(managers, `${priority === "URGENT" ? "🚨 بلاغ صيانة طارئ" : "بلاغ صيانة جديد"} ${number}`, `${CAT_AR[category]} — ${title}${t.place ? ` (${t.place})` : ""}`, ref.id, priority === "URGENT" ? "MNT_URGENT" : "MNT_NEW");
     return { id: ref.id, number };
@@ -177,6 +207,15 @@ module.exports = function maintenanceModule(d) {
         place = { id: dd.placeId, ...p };
         branch = p.branch;
       }
+      let asset = null;
+      if (dd.assetId) {
+        if (!idRe.test(String(dd.assetId))) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+        const a = (await assets().doc(dd.assetId).get()).data();
+        if (!a || a.active === false) throw new HttpsError("not-found", "الجهاز غير موجود.");
+        asset = { id: dd.assetId, ...a };
+        branch = a.branch;
+        if (!place && a.placeId) { const p = (await places().doc(a.placeId).get()).data(); if (p) place = { id: a.placeId, ...p }; }
+      }
       let complaint = null;
       if (dd.complaintId) {
         if (!/^[A-Za-z0-9_-]{6,60}$/.test(String(dd.complaintId))) throw new HttpsError("invalid-argument", "طلب غير صالح.");
@@ -189,7 +228,8 @@ module.exports = function maintenanceModule(d) {
       if (!(u.role === "ADMIN" || callerAll(u) || callerHasBranch(u, branch))) throw new HttpsError("permission-denied", "اختر من فروعك فقط.");
       // Only a manager sets the priority above normal from the app, except a safety hazard.
       const priority = manages(u, branch) || r.category === "SAFETY" ? r.priority : (r.priority === "URGENT" ? "HIGH" : r.priority);
-      const out = await createTicket({ by: u, branch, place, ...r, priority, photos: dd.photos, source: complaint ? "COMPLAINT" : "APP", complaint, placeText: dd.placeText });
+      const out = await createTicket({ by: u, branch, place, ...r, priority, photos: dd.photos, source: complaint ? "COMPLAINT" : "APP", complaint, placeText: dd.placeText,
+        extra: asset ? { assetId: asset.id, assetName: asset.name } : {} });
       if (complaint) {
         await db.collection("complaints").doc(complaint.id).update({ maintenanceTicket: { id: out.id, number: out.number } }).catch(() => {});
       }
@@ -233,8 +273,19 @@ module.exports = function maintenanceModule(d) {
       const { ref, t } = await loadTicket(u, dd.id, { manage: true });
       const to = String(dd.to || "");
       if (!["IN_PROGRESS", "WAITING_PARTS", "DONE"].includes(to) || !OPEN.includes(t.status)) throw new HttpsError("failed-precondition", "لا يمكن تغيير الحالة.");
-      if (to === "DONE" && !str(dd.note, 1000)) throw new HttpsError("invalid-argument", "اكتب ما تم إنجازه.");
-      await setWorkStatus(ref, t, to, { by: u, note: str(dd.note, 1000), parts: str(dd.parts, 1000), photos: dd.photos });
+      const allTicked = (t.checklist || []).length > 0 && Array.isArray(dd.checklist) && t.checklist.every((_, i) => dd.checklist[i] === true);
+      if (to === "DONE" && !str(dd.note, 1000) && !allTicked) throw new HttpsError("invalid-argument", "اكتب ما تم إنجازه.");
+      await setWorkStatus(ref, t, to, { by: u, note: str(dd.note, 1000), parts: str(dd.parts, 1000), photos: dd.photos, checklist: dd.checklist });
+      return handlers.get(u, { id: ref.id });
+    },
+    // The cost of a work order: labour, parts, contractor's invoice.
+    async cost(u, dd) {
+      const { ref, t } = await loadTicket(u, dd.id, { manage: true });
+      const n = (v) => Math.max(0, Math.round((Number(v) || 0) * 100) / 100);
+      const c = { labor: n(dd.labor), parts: n(dd.parts), contractor: n(dd.contractor), note: str(dd.note, 500), by: u.uid, byName: u.name || "", at: Date.now() };
+      c.total = Math.round((c.labor + c.parts + c.contractor) * 100) / 100;
+      await ref.update({ cost: c, updatedAt: Timestamp.now(), log: FieldValue.arrayUnion(logEntry(u, "COST", { note: `${c.total.toFixed(2)} ر.س${c.note ? ` — ${c.note}` : ""}` })) });
+      void t;
       return handlers.get(u, { id: ref.id });
     },
     async comment(u, dd) {
@@ -382,6 +433,110 @@ module.exports = function maintenanceModule(d) {
       return { ok: true };
     },
 
+    // --- equipment --------------------------------------------------------
+    async assets(u) {
+      const all = u.role === "ADMIN" || u.isOwner === true || callerAll(u);
+      const docs = all ? (await assets().get()).docs : (await Promise.all(userBranchList(u).map((b) => assets().where("branch", "==", b).get()))).flatMap((q) => q.docs);
+      return { assets: docs.map((x) => assetOut(x.id, x.data(), manages(u, x.data().branch))).filter((a) => a.active).sort((a, b) => a.branch.localeCompare(b.branch) || a.name.localeCompare(b.name, "ar")) };
+    },
+    async saveAsset(u, dd) {
+      const branch = String(dd.branch || "");
+      if (!branchRe.test(branch) || !manages(u, branch)) throw new HttpsError("permission-denied", "سجل الأجهزة لمدير الصيانة في الفرع.");
+      const name = str(dd.name, 120);
+      if (!name) throw new HttpsError("invalid-argument", "اكتب اسم الجهاز.");
+      let place = null;
+      if (dd.placeId) {
+        if (!idRe.test(String(dd.placeId))) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+        const p = (await places().doc(dd.placeId).get()).data();
+        if (!p || p.branch !== branch) throw new HttpsError("invalid-argument", "الموقع ليس في هذا الفرع.");
+        place = p;
+      }
+      const day = (v) => (dayRe.test(v || "") ? v : "");
+      const a = {
+        branch, name, type: oneOf(ASSET_TYPES, dd.type, "OTHER"), placeId: place ? dd.placeId : "", place: place ? placeLabel(place) : "", brand: str(dd.brand, 60), model: str(dd.model, 60), serial: str(dd.serial, 80),
+        installDate: day(dd.installDate), warrantyEnd: day(dd.warrantyEnd), contractEnd: day(dd.contractEnd), contractor: str(dd.contractor, 120), supplier: str(dd.supplier, 120), notes: str(dd.notes, 1000),
+        active: true, updatedAt: Timestamp.now(),
+      };
+      if (dd.id) {
+        if (!idRe.test(String(dd.id))) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+        const ref = assets().doc(dd.id);
+        const old = (await ref.get()).data();
+        if (!old || !manages(u, old.branch)) throw new HttpsError("not-found", "الجهاز غير موجود.");
+        await ref.update({ ...a, ...(old.warrantyEnd !== a.warrantyEnd ? { warrantyNotified: "" } : {}), ...(old.contractEnd !== a.contractEnd ? { contractNotified: "" } : {}) });
+        return { asset: assetOut(dd.id, { ...old, ...a }, true) };
+      }
+      const ref = assets().doc();
+      const tk = token();
+      await Promise.all([ref.set({ ...a, qrToken: tk, createdAt: Timestamp.now(), createdBy: u.uid }), links().doc(tk).set({ kind: "asset", assetId: ref.id, fails: 0, createdAt: Timestamp.now() })]);
+      return { asset: assetOut(ref.id, { ...a, qrToken: tk }, true) };
+    },
+    async deleteAsset(u, dd) {
+      if (!idRe.test(String(dd.id || ""))) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+      const ref = assets().doc(dd.id);
+      const a = (await ref.get()).data();
+      if (!a || !manages(u, a.branch)) throw new HttpsError("not-found", "الجهاز غير موجود.");
+      await Promise.all([ref.update({ active: false, updatedAt: Timestamp.now() }), a.qrToken ? links().doc(a.qrToken).delete() : null]);
+      return { ok: true };
+    },
+
+    // --- preventive maintenance ------------------------------------------
+    async plans(u) {
+      if (!isManager(u)) throw new HttpsError("permission-denied", "للمدير فقط.");
+      const all = u.role === "ADMIN" || u.isOwner === true || callerAll(u);
+      return { plans: (await plans().get()).docs.map((x) => planOut(x.id, x.data())).filter((x) => x.active && (all || manages(u, x.branch))).sort((a, b) => a.nextDue.localeCompare(b.nextDue)) };
+    },
+    async savePlan(u, dd) {
+      const branch = String(dd.branch || "");
+      if (!branchRe.test(branch) || !manages(u, branch)) throw new HttpsError("permission-denied", "الصيانة الوقائية لمدير الصيانة في الفرع.");
+      const title = str(dd.title, 140);
+      if (!title) throw new HttpsError("invalid-argument", "اكتب اسم الصيانة الدورية.");
+      if (!dayRe.test(dd.nextDue || "")) throw new HttpsError("invalid-argument", "حدد تاريخ أول موعد.");
+      const assetIds = [...new Set((Array.isArray(dd.assetIds) ? dd.assetIds : []).filter((x) => idRe.test(String(x))))].slice(0, 100);
+      if (assetIds.length) {
+        const snaps = await Promise.all(assetIds.map((id) => assets().doc(id).get()));
+        if (snaps.some((x) => !x.exists || x.data().branch !== branch)) throw new HttpsError("invalid-argument", "اختر أجهزة من نفس الفرع.");
+      }
+      let techId = "";
+      if (dd.techId) {
+        if (!idRe.test(String(dd.techId))) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+        const x = (await techs().doc(dd.techId).get()).data();
+        if (!x || x.active === false || ((x.branches || []).length && !x.branches.includes(branch))) throw new HttpsError("invalid-argument", "الفني لا يغطي هذا الفرع.");
+        techId = dd.techId;
+      }
+      const p = {
+        branch, title, category: oneOf(CATEGORIES, dd.category, "OTHER"), priority: oneOf(PRIORITIES, dd.priority, "NORMAL"), freq: Object.prototype.hasOwnProperty.call(FREQS, dd.freq) ? dd.freq : "MONTHLY",
+        nextDue: dd.nextDue, assetIds, placeId: idRe.test(String(dd.placeId || "")) ? dd.placeId : "", techId,
+        checklist: (Array.isArray(dd.checklist) ? dd.checklist : []).map((x) => str(x, 200)).filter(Boolean).slice(0, 40), active: true, updatedAt: Timestamp.now(),
+      };
+      if (dd.id) {
+        if (!idRe.test(String(dd.id))) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+        const ref = plans().doc(dd.id);
+        const old = (await ref.get()).data();
+        if (!old || !manages(u, old.branch)) throw new HttpsError("not-found", "الخطة غير موجودة.");
+        await ref.update(p);
+        return { plan: planOut(dd.id, { ...old, ...p }) };
+      }
+      const ref = plans().doc();
+      await ref.set({ ...p, createdAt: Timestamp.now(), createdBy: u.uid });
+      return { plan: planOut(ref.id, p) };
+    },
+    async deletePlan(u, dd) {
+      if (!idRe.test(String(dd.id || ""))) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+      const ref = plans().doc(dd.id);
+      const x = (await ref.get()).data();
+      if (!x || !manages(u, x.branch)) throw new HttpsError("not-found", "الخطة غير موجودة.");
+      await ref.update({ active: false, updatedAt: Timestamp.now() });
+      return { ok: true };
+    },
+    // Make this round's work order now (instead of waiting for its day).
+    async runPlan(u, dd) {
+      if (!idRe.test(String(dd.id || ""))) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+      const ref = plans().doc(dd.id);
+      const x = (await ref.get()).data();
+      if (!x || x.active === false || !manages(u, x.branch)) throw new HttpsError("not-found", "الخطة غير موجودة.");
+      return runPlanTicket(ref, x, u);
+    },
+
     // --- settings ---------------------------------------------------------
     async settings(u) {
       return { settings: (await loadSettings()).mnt, canEdit: u.role === "ADMIN" || u.isOwner === true };
@@ -403,13 +558,39 @@ module.exports = function maintenanceModule(d) {
     return { ref, t };
   }
   // A work status (from the office or the technician's page).
-  async function setWorkStatus(ref, t, to, { by, note, parts, photos }) {
+  // A preventive plan's work order for this round: its assets, checklist and
+  // technician; the plan moves to its next day (past today).
+  async function runPlanTicket(ref, x, by) {
+    const assetDocs = x.assetIds?.length ? (await Promise.all(x.assetIds.map((id) => assets().doc(id).get()))).filter((d) => d.exists && d.data().active !== false) : [];
+    const placeDoc = x.placeId ? await places().doc(x.placeId).get() : null;
+    const tech = x.techId ? (await techs().doc(x.techId).get()).data() : null;
+    const names = assetDocs.map((d) => `${d.data().name}${d.data().place ? ` (${d.data().place})` : ""}`);
+    const out = await createTicket({
+      by: { uid: by.uid || "", name: by.name || "النظام" }, branch: x.branch, place: placeDoc?.exists ? { id: x.placeId, ...placeDoc.data() } : null, category: x.category, priority: x.priority || "NORMAL",
+      title: x.title, description: names.length ? `الأجهزة: ${names.join("، ")}` : "", photos: [], source: "PM", quiet: true,
+      extra: {
+        planId: ref.id, checklist: (x.checklist || []).map((text) => ({ text, done: false })),
+        ...(assetDocs.length === 1 ? { assetId: assetDocs[0].id, assetName: assetDocs[0].data().name } : {}),
+        ...(tech && tech.active !== false ? { techId: x.techId, techName: tech.kind === "CONTRACTOR" && tech.company ? `${tech.name} (${tech.company})` : tech.name, techKind: tech.kind || "TECH" } : {}),
+      },
+    });
+    const today = riyadhDay();
+    let next = x.nextDue;
+    for (let i = 0; i < 400 && next <= today; i++) next = addFreq(next, x.freq);
+    await ref.update({ nextDue: next, lastRun: today, lastTicket: out.number });
+    return { ...out, nextDue: next };
+  }
+  async function setWorkStatus(ref, t, to, { by, note, parts, photos, checklist }) {
     const uploaded = await uploadPhotos(photos, `maintenance/${t.number}/work`);
     const now = Timestamp.now();
+    // The checklist as ticked (preventive work); unticked items go in the log.
+    const list = (t.checklist || []).map((it, i) => ({ text: it.text, done: Array.isArray(checklist) ? checklist[i] === true : it.done === true }));
+    const missed = to === "DONE" ? list.filter((it) => !it.done).map((it) => it.text) : [];
     const patch = {
+      ...(list.length && Array.isArray(checklist) ? { checklist: list } : {}),
       status: to, updatedAt: now, ...(to === "IN_PROGRESS" && !t.startedAt ? { startedAt: now } : {}), ...(to === "DONE" ? { doneAt: now, workNote: note } : {}),
       ...(parts ? { parts } : {}), ...(uploaded.length ? { workPhotos: FieldValue.arrayUnion(...uploaded) } : {}),
-      log: FieldValue.arrayUnion(logEntry(by, to, { note: [note, parts ? `القطع: ${parts}` : ""].filter(Boolean).join(" — ") })),
+      log: FieldValue.arrayUnion(logEntry(by, to, { note: [note, parts ? `القطع: ${parts}` : "", missed.length ? `لم يُنجز: ${missed.join("، ")}` : ""].filter(Boolean).join(" — ") })),
     };
     await ref.update(patch);
     if (to === "DONE" && t.reporterUid && t.reporterUid !== by.uid) {
@@ -435,7 +616,7 @@ module.exports = function maintenanceModule(d) {
     if (typeof tk !== "string" || !/^[a-z0-9]{16,40}$/.test(tk)) throw new HttpsError("not-found", "الرابط غير صحيح.");
     const lRef = links().doc(tk);
     const l = (await lRef.get()).data();
-    if (!l || l.kind !== kind) throw new HttpsError("not-found", "الرابط غير صحيح أو انتهت صلاحيته.");
+    if (!l || !(Array.isArray(kind) ? kind.includes(l.kind) : l.kind === kind)) throw new HttpsError("not-found", "الرابط غير صحيح أو انتهت صلاحيته.");
     if (ms(l.lockedUntil) > Date.now()) throw new HttpsError("resource-exhausted", "تم إيقاف الرابط مؤقتاً بعد محاولات خاطئة كثيرة، حاول بعد 15 دقيقة.");
     return { lRef, l };
   }
@@ -444,12 +625,23 @@ module.exports = function maintenanceModule(d) {
     await lRef.update(fails >= LOCK.fails ? { fails: 0, lockedUntil: Timestamp.fromMillis(Date.now() + LOCK.ms) } : { fails });
     throw new HttpsError("permission-denied", fails >= LOCK.fails ? "تم إيقاف الرابط مؤقتاً بعد محاولات خاطئة كثيرة، حاول بعد 15 دقيقة." : `${what} غير صحيح. المحاولات المتبقية: ${LOCK.fails - fails}.`);
   }
+  // A room's QR label, or a device's (the device and its room).
   async function placeOf(tk) {
-    const { lRef, l } = await linkOf(tk, "place");
-    const p = (await places().doc(l.placeId).get()).data();
-    if (!p || p.active === false) throw new HttpsError("not-found", "الرابط غير صحيح أو انتهت صلاحيته.");
+    const { lRef, l } = await linkOf(tk, ["place", "asset"]);
+    let p = null; let asset = null;
+    if (l.kind === "asset") {
+      const a = (await assets().doc(l.assetId).get()).data();
+      if (!a || a.active === false) throw new HttpsError("not-found", "الرابط غير صحيح أو انتهت صلاحيته.");
+      asset = { id: l.assetId, ...a };
+      const pd = a.placeId ? (await places().doc(a.placeId).get()).data() : null;
+      p = pd ? { id: a.placeId, ...pd } : { id: "", branch: a.branch };
+    } else {
+      const pd = (await places().doc(l.placeId).get()).data();
+      if (!pd || pd.active === false) throw new HttpsError("not-found", "الرابط غير صحيح أو انتهت صلاحيته.");
+      p = { id: l.placeId, ...pd };
+    }
     const b = (await db.collection("branches").doc(p.branch).get()).data();
-    return { lRef, l, p: { id: l.placeId, ...p }, branchName: b?.name || p.branch };
+    return { lRef, l, p, asset, branchName: b?.name || p.branch };
   }
   async function techOf(dd) {
     const { lRef, l } = await linkOf(dd.token, "tech");
@@ -463,6 +655,7 @@ module.exports = function maintenanceModule(d) {
   const techTicket = (id, t) => ({
     id, number: t.number, place: t.place || "", category: t.category, priority: t.priority, title: t.title, description: t.description || "", status: t.status,
     photos: t.photos || [], workPhotos: t.workPhotos || [], workNote: t.workNote || "", parts: t.parts || "", createdAt: ms(t.createdAt), dueAt: ms(t.dueAt), doneAt: ms(t.doneAt),
+    checklist: t.checklist || [], assetName: t.assetName || "", source: t.source || "APP",
     reporterName: t.reporterName || "", branch: t.branch,
   });
   async function techState(x) {
@@ -478,11 +671,11 @@ module.exports = function maintenanceModule(d) {
   const publicHandlers = {
     // Before the phone: only the place's name.
     async placePeek(dd) {
-      const { p, branchName } = await placeOf(dd.token);
-      return { place: placeLabel(p), branchName, categories: CATEGORIES };
+      const { p, asset, branchName } = await placeOf(dd.token);
+      return { place: asset ? [asset.name, placeLabel(p)].filter(Boolean).join(" — ") : placeLabel(p), branchName, categories: CATEGORIES, category: asset ? ASSET_CAT[asset.type] || "OTHER" : "" };
     },
     async placeReport(dd) {
-      const { lRef, l, p } = await placeOf(dd.token);
+      const { lRef, l, p, asset } = await placeOf(dd.token);
       const key = phoneKey(dd.phone);
       if (key.length < 9) throw new HttpsError("invalid-argument", "اكتب رقم جوالك المسجّل في النظام.");
       const users = await loadActiveUsers();
@@ -496,7 +689,8 @@ module.exports = function maintenanceModule(d) {
       if (count >= QR_DAILY_LIMIT) throw new HttpsError("resource-exhausted", "تجاوز هذا الموقع الحد اليومي للبلاغات، تواصل مع إدارة المرافق.");
       await lRef.update({ day: today, count: count + 1 });
       const r = cleanReport(dd);
-      const out = await createTicket({ by: { uid: staff.id, name: staff.name || "" }, branch: p.branch, place: p, ...r, priority: r.priority === "URGENT" && r.category !== "SAFETY" ? "HIGH" : r.priority, photos: dd.photos, source: "QR" });
+      const out = await createTicket({ by: { uid: staff.id, name: staff.name || "" }, branch: p.branch, place: p.id ? p : null, ...r, priority: r.priority === "URGENT" && r.category !== "SAFETY" ? "HIGH" : r.priority, photos: dd.photos, source: "QR",
+        extra: asset ? { assetId: asset.id, assetName: asset.name } : {} });
       return { number: out.number, name: staff.name || "" };
     },
     async techOpen(dd) {
@@ -511,12 +705,13 @@ module.exports = function maintenanceModule(d) {
       const to = String(dd.to || "");
       if (!["IN_PROGRESS", "WAITING_PARTS", "DONE", "PHOTOS"].includes(to) || !OPEN.includes(t.status)) throw new HttpsError("failed-precondition", "لا يمكن تغيير الحالة.");
       const note = str(dd.note, 1000);
-      if (to === "DONE" && !note) throw new HttpsError("invalid-argument", "اكتب ما تم إنجازه.");
+      const allTicked = (t.checklist || []).length > 0 && Array.isArray(dd.checklist) && t.checklist.every((_, i) => dd.checklist[i] === true);
+      if (to === "DONE" && !note && !allTicked) throw new HttpsError("invalid-argument", "اكتب ما تم إنجازه.");
       const by = { uid: "", name: `${x.name} (فني)` };
       if (to === "PHOTOS") {
         const uploaded = await uploadPhotos(dd.photos, `maintenance/${t.number}/work`);
         if (uploaded.length || note) await ref.update({ updatedAt: Timestamp.now(), ...(uploaded.length ? { workPhotos: FieldValue.arrayUnion(...uploaded) } : {}), log: FieldValue.arrayUnion(logEntry(by, "COMMENT", { note: note || `أُضيفت ${uploaded.length} صورة` })) });
-      } else await setWorkStatus(ref, t, to, { by, note, parts: str(dd.parts, 1000), photos: dd.photos });
+      } else await setWorkStatus(ref, t, to, { by, note, parts: str(dd.parts, 1000), photos: dd.photos, checklist: dd.checklist });
       return techState(x);
     },
   };
@@ -550,6 +745,22 @@ module.exports = function maintenanceModule(d) {
     const today = riyadhDay();
     if ((await sRef.get()).data()?.summaryDay === today) return;
     await sRef.set({ summaryDay: today }, { merge: true });
+    // Preventive maintenance due today (or missed): its work order.
+    for (const x of (await plans().where("nextDue", "<=", today).get()).docs) {
+      if (x.data().active === false) continue;
+      try { open.push({ ...(await runPlanTicket(x.ref, x.data(), { uid: "", name: "النظام" })), branch: x.data().branch, status: "NEW", priority: x.data().priority || "NORMAL" }); } catch (err) { console.error("mnt plan", x.id, err); }
+    }
+    // Warranties and maintenance contracts ending within 30 days (once per date).
+    const soon = new Date(Date.now() + 33 * 86400e3).toISOString().slice(0, 10);
+    for (const x of (await assets().get()).docs) {
+      const a = x.data();
+      if (a.active === false) continue;
+      for (const [field, flag, word] of [["warrantyEnd", "warrantyNotified", "الضمان"], ["contractEnd", "contractNotified", "عقد الصيانة"]]) {
+        if (!a[field] || a[field] > soon || a[flag] === a[field]) continue;
+        await notify(mgrs(a.branch, false), `${a[field] < today ? "انتهى" : "ينتهي قريباً"} ${word}: ${a.name}`, `${a.place || ""} — ${a[field]}`, "", "MNT_STATUS");
+        await x.ref.update({ [flag]: a[field] });
+      }
+    }
     const byUser = new Map();
     for (const x of users.filter((y) => y.role !== "RECEPTIONIST" && y.modules?.maintenance !== false && (y.perms?.mntManage === true || y.department === "FACILITIES"))) {
       const mine = open.filter((t) => covers(x, t.branch));
@@ -569,3 +780,5 @@ module.exports = function maintenanceModule(d) {
 module.exports.CATEGORIES = CATEGORIES;
 module.exports.PRIORITIES = PRIORITIES;
 module.exports.STATUSES = STATUSES;
+module.exports.ASSET_TYPES = ASSET_TYPES;
+module.exports.FREQS = Object.keys(FREQS);

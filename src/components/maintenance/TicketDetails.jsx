@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Printer, UserCog, Play, PackageOpen, CheckCircle2, BadgeCheck, RotateCcw, XCircle, MessageSquare, Star, AlertTriangle, ShoppingCart } from 'lucide-react';
+import { Loader2, Printer, UserCog, Play, PackageOpen, CheckCircle2, BadgeCheck, RotateCcw, XCircle, MessageSquare, Star, AlertTriangle, ShoppingCart, Coins, CheckSquare, Square } from 'lucide-react';
 import { Modal, Pill, Field, inputCls, btn } from '../platform/ui';
 import { callMnt, photoPayload, MNT_CATEGORIES, MNT_PRIORITIES, MNT_OPEN, STATUS_STYLE, PRIORITY_STYLE, CATEGORY_ICON, fmtDateTime, isOverdue } from '../../config/maintenance';
 import PhotoPicker, { PhotoStrip } from './PhotoPicker';
@@ -26,6 +26,8 @@ export default function TicketDetails({ id, branchName, onClose, onChanged }) {
   const [techs, setTechs] = useState(null);
   const [techId, setTechId] = useState('');
   const [buying, setBuying] = useState(false);
+  const [ticks, setTicks] = useState([]);
+  const [cost, setCost] = useState({ labor: '', parts: '', contractor: '' });
   const { userData } = useAuthStore();
   const navigate = useNavigate();
 
@@ -42,7 +44,7 @@ export default function TicketDetails({ id, branchName, onClose, onChanged }) {
       const photos = files.length ? await Promise.all(files.map(photoPayload)) : [];
       const r = await callMnt(action, { id, ...data, photos });
       setTk(r.ticket);
-      setPanel(''); setNote(''); setParts(''); setFiles([]); setRating(0);
+      setPanel(''); setNote(''); setParts(''); setFiles([]); setRating(0); setTicks([]);
       onChanged?.();
     } catch (err) { setError(err.message); } finally { setBusy(''); }
   };
@@ -67,24 +69,29 @@ export default function TicketDetails({ id, branchName, onClose, onChanged }) {
     tk.canApprove && ['DONE', 'CLOSED'].includes(tk.status) && ['reopen', RotateCcw, t('mnt.reopen')],
     open && (tk.canManage || tk.status === 'NEW') && ['cancel', XCircle, t('mnt.cancel')],
     tk.canManage && open && canSeeModule(userData, 'procurement') && ['buy', ShoppingCart, t('mnt.buyParts')],
+    tk.canManage && tk.status !== 'CANCELLED' && ['cost', Coins, t('mnt.costs.title')],
     ['comment', MessageSquare, t('mnt.comment')],
   ].filter(Boolean);
   const submitPanel = () => {
     if (panel === 'assign') return run('assign', { techId, note });
-    if (['IN_PROGRESS', 'WAITING_PARTS', 'DONE'].includes(panel)) return run('status', { to: panel, note, parts });
+    if (['IN_PROGRESS', 'WAITING_PARTS', 'DONE'].includes(panel)) return run('status', { to: panel, note, parts, ...(tk.checklist.length ? { checklist: tk.checklist.map((_, i) => !!ticks[i]) } : {}) });
+    if (panel === 'cost') return run('cost', { ...cost, note });
     if (panel === 'approve') return run('approve', { rating, note });
     return run(panel, { note });
   };
-  const needsNote = ['DONE', 'reopen', 'cancel', 'comment'].includes(panel);
+  const allTicked = tk.checklist.length > 0 && tk.checklist.every((_, i) => ticks[i]);
+  const needsNote = (panel === 'DONE' && !allTicked) || ['reopen', 'cancel', 'comment'].includes(panel);
   const rows = [
     [t('mnt.branch'), branchName(tk.branch)],
     [t('mnt.place'), tk.place || '—'],
+    ...(tk.assetName ? [[t('mnt.assets.one'), tk.assetName]] : []),
     [t('mnt.category'), `${CATEGORY_ICON[tk.category]} ${t(`mnt.categories.${tk.category}`)}`],
     [t('mnt.reporter'), `${tk.reporterName || '—'}${tk.source !== 'APP' ? ` · ${t(`mnt.sources.${tk.source}`)}` : ''}${tk.complaintNumber ? ` (${tk.complaintNumber})` : ''}`],
     [t('mnt.createdAt'), <span key="c" dir="ltr">{fmtDateTime(tk.createdAt)}</span>],
     [t('mnt.dueAt'), <span key="d" dir="ltr" className={late ? 'text-rose-700 font-bold' : ''}>{fmtDateTime(tk.dueAt)}</span>],
     [t('mnt.assignee'), tk.techName ? `${tk.techName}${tk.techKind === 'CONTRACTOR' ? ` · ${t('mnt.techKinds.CONTRACTOR')}` : ''}` : '—'],
     ...(tk.doneAt ? [[t('mnt.doneAt'), <span key="n" dir="ltr">{fmtDateTime(tk.doneAt)}</span>]] : []),
+    ...(tk.cost ? [[t('mnt.costs.title'), `${tk.cost.total.toLocaleString('en-US')} ${t('proc.sar')} (${t('mnt.costs.labor')} ${tk.cost.labor} · ${t('mnt.costs.parts')} ${tk.cost.parts} · ${t('mnt.costs.contractor')} ${tk.cost.contractor})`]] : []),
     ...(tk.rating ? [[t('mnt.rating'), `${'★'.repeat(tk.rating)}${'☆'.repeat(5 - tk.rating)}${tk.ratingNote ? ` — ${tk.ratingNote}` : ''}`]] : []),
   ];
 
@@ -102,6 +109,12 @@ export default function TicketDetails({ id, branchName, onClose, onChanged }) {
       {tk.procRequests.length > 0 && (
         <div className="flex flex-wrap gap-1.5 text-xs">
           {tk.procRequests.map((p) => <button key={p.id} type="button" onClick={() => navigate(`/procurement?openId=${encodeURIComponent(p.id)}`)} className="px-2 py-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 flex items-center gap-1"><ShoppingCart className="w-3.5 h-3.5" />{t('mnt.procRequest', { n: p.number })}</button>)}
+        </div>
+      )}
+      {tk.checklist.length > 0 && (
+        <div className="border border-slate-200 rounded-xl p-3 space-y-1">
+          <p className="text-sm font-bold text-slate-800">{t('mnt.checklist')}</p>
+          {tk.checklist.map((c, i) => <p key={i} className={`text-sm flex items-center gap-1.5 ${c.done ? 'text-emerald-700' : 'text-slate-500'}`}>{c.done ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}{c.text}</p>)}
         </div>
       )}
       {(tk.workNote || tk.parts || tk.workPhotos.length > 0) && (
@@ -126,7 +139,7 @@ export default function TicketDetails({ id, branchName, onClose, onChanged }) {
 
       <div className="flex flex-wrap gap-2">
         {actions.map(([k, Icon, label]) => (
-          <button key={k} type="button" onClick={() => (k === 'buy' ? setBuying(true) : setPanel(panel === k ? '' : k))} className={`${btn.small} px-3 py-2 border ${panel === k ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200 hover:border-primary/40'}`}><Icon className="w-4 h-4" />{label}</button>
+          <button key={k} type="button" onClick={() => { if (k === 'buy') { setBuying(true); return; } if (k === 'cost') setCost({ labor: tk.cost?.labor ?? '', parts: tk.cost?.parts ?? '', contractor: tk.cost?.contractor ?? '' }); if (k === 'DONE') setTicks(tk.checklist.map((c) => c.done)); setPanel(panel === k ? '' : k); }} className={`${btn.small} px-3 py-2 border ${panel === k ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200 hover:border-primary/40'}`}><Icon className="w-4 h-4" />{label}</button>
         ))}
       </div>
       {panel && (
@@ -145,6 +158,17 @@ export default function TicketDetails({ id, branchName, onClose, onChanged }) {
             <div className="flex items-center gap-1">
               <span className="text-sm text-slate-600 me-2">{t('mnt.rateWork')}</span>
               {[1, 2, 3, 4, 5].map((n) => <button key={n} type="button" onClick={() => setRating(n)}><Star className={`w-6 h-6 ${n <= rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} /></button>)}
+            </div>
+          )}
+          {panel === 'DONE' && tk.checklist.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-slate-600">{t('mnt.checklist')}</p>
+              {tk.checklist.map((c, i) => <label key={i} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!!ticks[i]} onChange={(ev) => setTicks((x) => { const n = [...x]; n[i] = ev.target.checked; return n; })} />{c.text}</label>)}
+            </div>
+          )}
+          {panel === 'cost' && (
+            <div className="grid grid-cols-3 gap-2">
+              {['labor', 'parts', 'contractor'].map((k) => <Field key={k} label={t(`mnt.costs.${k}`)}><input type="number" min="0" step="any" dir="ltr" value={cost[k]} onChange={(ev) => setCost((c) => ({ ...c, [k]: ev.target.value }))} className={inputCls} /></Field>)}
             </div>
           )}
           {['WAITING_PARTS', 'DONE'].includes(panel) && <Field label={panel === 'WAITING_PARTS' ? t('mnt.partsNeeded') : t('mnt.partsUsed')}><input value={parts} onChange={(e) => setParts(e.target.value)} className={inputCls} /></Field>}

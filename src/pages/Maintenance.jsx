@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
-import { Hammer, Plus, Loader2, LayoutDashboard, ListChecks, MapPin, HardHat, Settings2, Save } from 'lucide-react';
+import { Hammer, Plus, Loader2, LayoutDashboard, ListChecks, MapPin, HardHat, Settings2, Save, Cpu, CalendarClock } from 'lucide-react';
 import PageHero from '../components/common/PageHero';
 import { Field, inputCls, btn } from '../components/platform/ui';
 import { useBranches } from '../hooks/useOrgData';
@@ -11,6 +11,8 @@ import MntDashboard from '../components/maintenance/MntDashboard';
 import MntTickets from '../components/maintenance/MntTickets';
 import MntPlaces from '../components/maintenance/MntPlaces';
 import MntTechs from '../components/maintenance/MntTechs';
+import MntAssets from '../components/maintenance/MntAssets';
+import MntPlans from '../components/maintenance/MntPlans';
 import TicketForm from '../components/maintenance/TicketForm';
 import TicketDetails from '../components/maintenance/TicketDetails';
 
@@ -37,7 +39,7 @@ export default function Maintenance() {
   const isAdmin = userData?.role === 'ADMIN' || userData?.isOwner === true;
   const tabs = !data ? [] : [
     ...(viewer ? [['dashboard', LayoutDashboard]] : []), ['tickets', ListChecks],
-    ...(data.canManage ? [['places', MapPin], ['techs', HardHat]] : []), ...(isAdmin ? [['settings', Settings2]] : []),
+    ...(data.canManage ? [['places', MapPin], ['assets', Cpu], ['plans', CalendarClock], ['techs', HardHat]] : []), ...(isAdmin ? [['settings', Settings2]] : []),
   ];
   const current = tab || (viewer ? 'dashboard' : 'tickets');
   const list = data?.tickets || [];
@@ -65,6 +67,8 @@ export default function Maintenance() {
               {current === 'dashboard' && <MntDashboard tickets={list} now={now} branchName={branchName} onFilter={(f) => { setFilter(f); setTab('tickets'); }} />}
               {current === 'tickets' && <MntTickets tickets={list} now={now} branchName={branchName} filter={filter} setFilter={setFilter} onOpen={(id) => setParams({ openId: id })} />}
               {current === 'places' && <MntPlaces branchName={branchName} manageBranches={data.manageBranches} />}
+              {current === 'assets' && <MntAssets branchName={branchName} manageBranches={data.manageBranches} tickets={list} onOpenTicket={(id) => setParams({ openId: id })} />}
+              {current === 'plans' && <MntPlans branchName={branchName} manageBranches={data.manageBranches} tickets={list} onOpenTicket={(id) => setParams({ openId: id })} />}
               {current === 'techs' && <MntTechs branchName={branchName} tickets={list} />}
               {current === 'settings' && <MntSettings />}
             </>

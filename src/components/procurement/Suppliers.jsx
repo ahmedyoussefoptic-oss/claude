@@ -44,7 +44,7 @@ export default function Suppliers() {
                 <p className="text-xs text-slate-500">{t('proc.vatNumber')}: <span dir="ltr">{s.vatNumber || '—'}</span> · {t('proc.crNumber')}: <span dir="ltr">{s.crNumber || '—'}</span></p>
                 {(s.contactName || s.phone) && <p className="text-xs text-slate-600">{s.contactName} <span dir="ltr">{s.phone}</span></p>}
                 <div className="flex flex-wrap gap-1">{s.categories.map((c) => <Pill key={c} className="bg-slate-50 text-slate-600 border-slate-200">{t(`proc.categories.${c}`)}</Pill>)}</div>
-                {(expired || soon) && <p className={`text-xs flex items-center gap-1 ${expired ? 'text-rose-700' : 'text-amber-700'}`}><AlertTriangle className="w-3.5 h-3.5" />{t(expired ? 'proc.sup.crExpired' : 'proc.sup.crSoon', { date: s.crExpiry })}</p>}
+                {(expired || soon) && <p className={`text-xs flex items-center gap-1 ${expired ? 'text-rose-700' : 'text-amber-700'}`}><AlertTriangle className="w-3.5 h-3.5" />{t(expired ? 'proc.sup.crExpired' : 'proc.sup.crSoon', { date: `\u2066${s.crExpiry}\u2069` })}</p>}
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <span>{t('proc.sup.orders', { n: s.orders })} · <span dir="ltr">{money(s.spent)}</span></span>
                   <span className="flex-1" />

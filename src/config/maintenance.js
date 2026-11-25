@@ -11,6 +11,11 @@ export const MNT_PRIORITIES = ['URGENT', 'HIGH', 'NORMAL', 'LOW'];
 export const MNT_STATUSES = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_PARTS', 'DONE', 'CLOSED', 'CANCELLED'];
 export const MNT_OPEN = ['NEW', 'ASSIGNED', 'IN_PROGRESS', 'WAITING_PARTS'];
 export const PLACE_KINDS = ['CLASSROOM', 'LAB', 'OFFICE', 'TOILET', 'HALL', 'YARD', 'CORRIDOR', 'KITCHEN', 'STORE', 'OTHER'];
+export const ASSET_TYPES = ['AC', 'ELEVATOR', 'GENERATOR', 'EXTINGUISHER', 'FIRE_ALARM', 'PUMP', 'WATER_TANK', 'LIGHTING', 'OTHER'];
+export const ASSET_ICON = { AC: '❄️', ELEVATOR: '🛗', GENERATOR: '🔋', EXTINGUISHER: '🧯', FIRE_ALARM: '🚨', PUMP: '⚙️', WATER_TANK: '💧', LIGHTING: '💡', OTHER: '🔧' };
+export const PLAN_FREQS = ['WEEKLY', 'MONTHLY', 'QUARTERLY', 'SEMIANNUAL', 'YEARLY'];
+export const riyadhToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Riyadh' }).format(new Date());
+export const daysFromToday = (day) => (day ? Math.round((Date.parse(`${day}T12:00:00Z`) - Date.parse(`${riyadhToday()}T12:00:00Z`)) / 86400e3) : null);
 export const CATEGORY_ICON = { ELECTRIC: '⚡', PLUMBING: '🚰', AC: '❄️', CARPENTRY: '🪚', PAINT: '🎨', CLEANING: '🧹', SAFETY: '🧯', OTHER: '🔧' };
 export const STATUS_STYLE = {
   NEW: 'bg-sky-50 text-sky-700 border-sky-200',

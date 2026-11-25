@@ -24,6 +24,7 @@ export default function MaintenanceTech() {
   const [note, setNote] = useState('');
   const [parts, setParts] = useState('');
   const [files, setFiles] = useState([]);
+  const [ticks, setTicks] = useState([]);
 
   const load = async () => {
     setBusy('load');
@@ -35,8 +36,9 @@ export default function MaintenanceTech() {
     setError(null);
     try {
       const photos = await Promise.all(files.map(photoPayload));
-      setState(await callMntPublic('techUpdate', { token, pin, id: panel.id, to: panel.to, note, parts, photos }));
-      setPanel(null); setNote(''); setParts(''); setFiles([]);
+      const tk = state.open.find((x) => x.id === panel.id);
+      setState(await callMntPublic('techUpdate', { token, pin, id: panel.id, to: panel.to, note, parts, photos, ...(tk?.checklist.length && panel.to === 'DONE' ? { checklist: tk.checklist.map((_, i) => !!ticks[i]) } : {}) }));
+      setPanel(null); setNote(''); setParts(''); setFiles([]); setTicks([]);
     } catch (err) { setError(err.message); } finally { setBusy(''); }
   };
   const branchName = (b) => state?.branchNames?.[b] || b;
@@ -76,8 +78,8 @@ export default function MaintenanceTech() {
                 <section key={x.id} className={`${card} space-y-2`}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
-                      <p className="font-bold text-slate-900">{CATEGORY_ICON[x.category]} {x.title}</p>
-                      <p className="text-xs text-slate-500 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{branchName(x.branch)}{x.place ? ` · ${x.place}` : ''} · <span dir="ltr">{x.number}</span></p>
+                      <p className="font-bold text-slate-900">{CATEGORY_ICON[x.category]} {x.title}{x.source === 'PM' && <span className="ms-2 text-[11px] px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">{t('mnt.sources.PM')}</span>}</p>
+                      <p className="text-xs text-slate-500 flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{branchName(x.branch)}{x.place ? ` · ${x.place}` : ''}{x.assetName ? ` · ${x.assetName}` : ''} · <span dir="ltr">{x.number}</span></p>
                     </div>
                     <span className="flex flex-wrap gap-1">
                       {x.priority !== 'NORMAL' && <span className={`${pill} ${PRIORITY_STYLE[x.priority]}`}>{t(`mnt.priorities.${x.priority}`)}</span>}
@@ -90,15 +92,21 @@ export default function MaintenanceTech() {
                   {x.workPhotos.length > 0 && <PhotoStrip photos={x.workPhotos} />}
                   <div className="flex flex-wrap gap-1.5">
                     {buttons.map(([to, Icon, label]) => (
-                      <button key={to} type="button" onClick={() => setPanel(mine && panel.to === to ? null : { id: x.id, to })} className={`px-3 py-2 rounded-xl border text-sm flex items-center gap-1.5 ${mine && panel.to === to ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200'}`}><Icon className="w-4 h-4" />{label}</button>
+                      <button key={to} type="button" onClick={() => { setTicks(x.checklist.map((c) => c.done)); setPanel(mine && panel.to === to ? null : { id: x.id, to }); }} className={`px-3 py-2 rounded-xl border text-sm flex items-center gap-1.5 ${mine && panel.to === to ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200'}`}><Icon className="w-4 h-4" />{label}</button>
                     ))}
                   </div>
                   {mine && (
                     <div className="border border-slate-200 rounded-xl p-3 space-y-2 bg-slate-50">
+                      {panel.to === 'DONE' && x.checklist.length > 0 && (
+                        <div className="space-y-1.5 bg-white rounded-lg border border-slate-200 p-2">
+                          <p className="text-xs font-bold text-slate-700">{t('mnt.checklist')}</p>
+                          {x.checklist.map((c, i) => <label key={i} className="flex items-center gap-2 text-sm py-0.5"><input type="checkbox" className="w-5 h-5" checked={!!ticks[i]} onChange={(ev) => setTicks((tt) => { const n = [...tt]; n[i] = ev.target.checked; return n; })} />{c.text}</label>)}
+                        </div>
+                      )}
                       {['WAITING_PARTS', 'DONE'].includes(panel.to) && <input value={parts} onChange={(e) => setParts(e.target.value)} placeholder={panel.to === 'WAITING_PARTS' ? t('mnt.partsNeeded') : t('mnt.partsUsed')} className={input} />}
                       <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={2} placeholder={panel.to === 'DONE' ? t('mnt.noteFor.DONE') : t('mnt.note')} className={input} />
                       <PhotoPicker files={files} setFiles={setFiles} label={t('mnt.workPhotos')} />
-                      <button type="button" disabled={busy === x.id || (panel.to === 'DONE' && !note.trim()) || (panel.to === 'PHOTOS' && !files.length && !note.trim())} onClick={act} className="w-full py-2.5 bg-primary text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-60">{busy === x.id && <Loader2 className="w-4 h-4 animate-spin" />}{t('mnt.confirm')}</button>
+                      <button type="button" disabled={busy === x.id || (panel.to === 'DONE' && !note.trim() && !(x.checklist.length && x.checklist.every((_, i) => ticks[i]))) || (panel.to === 'PHOTOS' && !files.length && !note.trim())} onClick={act} className="w-full py-2.5 bg-primary text-white rounded-xl font-bold flex items-center justify-center gap-2 disabled:opacity-60">{busy === x.id && <Loader2 className="w-4 h-4 animate-spin" />}{t('mnt.confirm')}</button>
                     </div>
                   )}
                 </section>

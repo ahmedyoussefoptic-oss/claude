@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Inbox, UserX, AlarmClock, Siren, CheckCircle2, Timer, Star, Printer } from 'lucide-react';
+import { Inbox, UserX, AlarmClock, Siren, CheckCircle2, Timer, Star, Printer, Coins, FileDown, CalendarCheck } from 'lucide-react';
 import { Tile, inputCls, btn } from '../platform/ui';
 import { MNT_CATEGORIES, MNT_OPEN, CATEGORY_ICON, isOverdue } from '../../config/maintenance';
 import { printPage, escapeHtml as e } from '../../utils/printPage';
+import { exportXlsx } from '../../utils/exportXlsx';
+import { fmtDateTime } from '../../config/maintenance';
 
 // A filter drop-down sized to its content.
 const selCls = `${inputCls.replace('w-full ', '')} w-auto`;
@@ -36,11 +38,18 @@ export default function MntDashboard({ tickets, branchName, onFilter, now }) {
       done: list.filter((x) => x.doneAt >= since).length, avgH: avg(list.filter((x) => x.doneAt >= since).map((x) => hours(x.createdAt, x.doneAt)).filter((h) => h != null)),
     });
     const rated = period.filter((x) => x.rating > 0);
+    const costed = scoped.filter((x) => x.cost?.total > 0 && Math.max(x.doneAt || 0, x.cost.at || 0) >= since);
+    const sumBy = (key) => { const m = new Map(); costed.forEach((x) => { const k = key(x); if (k) m.set(k, (m.get(k) || 0) + x.cost.total); }); return [...m.entries()].sort((a, b) => b[1] - a[1]); };
+    const pm = scoped.filter((x) => x.source === 'PM' && x.createdAt >= since);
     return {
       open: open.length, unassigned: open.filter((x) => x.status === 'NEW').length, late: open.filter((x) => isOverdue(x, now)).length,
       urgent: open.filter((x) => x.priority === 'URGENT').length, done: done.length, created: period.length,
       avgH: avg(done.map((x) => hours(x.createdAt, x.doneAt)).filter((h) => h != null)),
       onTime: done.length ? Math.round((done.filter((x) => !x.dueAt || x.doneAt <= x.dueAt).length / done.length) * 100) : null,
+      cost: costed.reduce((n, x) => n + x.cost.total, 0), costByBranch: sumBy((x) => x.branch), costByCat: sumBy((x) => x.category), costByAsset: sumBy((x) => x.assetName).slice(0, 10),
+      pmTotal: pm.length, pmDone: pm.filter((x) => ['DONE', 'CLOSED'].includes(x.status)).length, pmLate: pm.filter((x) => isOverdue(x, now)).length,
+      byAsset: [...group(period.filter((x) => x.source !== 'PM'), (x) => x.assetName)].map(([k, l]) => ({ k, n: l.length })).sort((a, b) => b.n - a.n).slice(0, 10),
+      scoped,
       rating: rated.length ? (rated.reduce((n, x) => n + x.rating, 0) / rated.length).toFixed(1) : null, ratedN: rated.length,
       byBranch: [...group([...period, ...open.filter((x) => x.createdAt < since)], (x) => x.branch)].map(([k, l]) => ({ k, ...line(l) })).sort((a, b) => b.open - a.open || b.total - a.total),
       byCat: MNT_CATEGORIES.map((c) => ({ k: c, ...line(period.filter((x) => x.category === c)) })).filter((r) => r.total),
@@ -62,12 +71,22 @@ export default function MntDashboard({ tickets, branchName, onFilter, now }) {
     printPage({ title: t('mnt.dash.reportTitle'), subtitle: `${t('mnt.dash.lastDays', { n: days })}${branch ? ` · ${branchName(branch)}` : ''}`, school: t('trips.print.school'), body, dir: i18n.dir(), lang: i18n.language });
   };
 
+  // Every work order of the period (and the open ones), for Excel.
+  const toExcel = () => {
+    const since = now - days * 86400e3;
+    const rows = s.scoped.filter((x) => x.createdAt >= since || MNT_OPEN.includes(x.status));
+    exportXlsx(`maintenance-${days}d.xlsx`, t('mnt.title'),
+      [t('mnt.number'), t('mnt.branch'), t('mnt.place'), t('mnt.assets.one'), t('mnt.category'), t('mnt.priority'), t('mnt.titleField'), t('mnt.statusLabel'), t('mnt.dash.source'), t('mnt.reporter'), t('mnt.assignee'), t('mnt.createdAt'), t('mnt.dueAt'), t('mnt.doneAt'), t('mnt.dash.hours'), t('mnt.overdue'), t('mnt.costs.title'), t('mnt.rating')],
+      rows.map((x) => [x.number, branchName(x.branch), x.place, x.assetName, t(`mnt.categories.${x.category}`), t(`mnt.priorities.${x.priority}`), x.title, t(`mnt.status.${x.status}`), t(`mnt.sources.${x.source}`), x.reporterName, x.techName,
+        fmtDateTime(x.createdAt), fmtDateTime(x.dueAt), fmtDateTime(x.doneAt), x.doneAt ? Math.round(hours(x.createdAt, x.doneAt) * 10) / 10 : '', isOverdue(x, now) || (x.doneAt && x.dueAt && x.doneAt > x.dueAt) ? '✓' : '', x.cost?.total || '', x.rating || '']));
+  };
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
         <select value={days} onChange={(ev) => setDays(Number(ev.target.value))} className={selCls}>{PERIODS.map((d) => <option key={d} value={d}>{t('mnt.dash.lastDays', { n: d })}</option>)}</select>
         {branches.length > 1 && <select value={branch} onChange={(ev) => setBranch(ev.target.value)} className={selCls}><option value="">{t('common.allBranches')}</option>{branches.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}</select>}
         <button type="button" onClick={print} className={btn.ghost}><Printer className="w-4 h-4" />{t('mnt.dash.print')}</button>
+        <button type="button" onClick={toExcel} className={btn.ghost}><FileDown className="w-4 h-4" />{t('mnt.excel')}</button>
       </div>
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Tile icon={Inbox} label={t('mnt.dash.open')} value={s.open} onClick={() => onFilter({ status: 'OPEN', branch })} />
@@ -79,6 +98,17 @@ export default function MntDashboard({ tickets, branchName, onFilter, now }) {
         <Tile icon={AlarmClock} label={t('mnt.dash.onTime')} value={s.onTime == null ? '—' : `${s.onTime}%`} />
         <Tile icon={Star} label={t('mnt.dash.rating')} value={s.rating ? `${s.rating}/5` : '—'} sub={s.ratedN ? t('mnt.dash.ratedN', { n: s.ratedN }) : ''} />
       </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Tile icon={Coins} label={t('mnt.dash.cost')} value={<span dir="ltr">{s.cost.toLocaleString('en-US', { maximumFractionDigits: 0 })}</span>} sub={t('proc.sar')} />
+        <Tile icon={CalendarCheck} label={t('mnt.dash.pm')} value={`${s.pmDone}/${s.pmTotal}`} sub={s.pmLate ? t('mnt.dash.pmLate', { n: s.pmLate }) : ''} tone={s.pmLate ? 'text-rose-700' : undefined} />
+      </div>
+      {s.cost > 0 && (
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          <MoneyList title={t('mnt.dash.costByBranch')} rows={s.costByBranch.map(([k, v]) => [branchName(k), v])} />
+          <MoneyList title={t('mnt.dash.costByCategory')} rows={s.costByCat.map(([k, v]) => [t(`mnt.categories.${k}`), v])} />
+          <MoneyList title={t('mnt.dash.costByAsset')} rows={s.costByAsset} />
+        </div>
+      )}
       <section className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4">
         <p className="font-bold text-slate-800 mb-3">{t('mnt.dash.byCategory')}</p>
         {!s.byCat.length ? <p className="text-sm text-slate-400">{t('mnt.dash.none')}</p> : (
@@ -97,6 +127,12 @@ export default function MntDashboard({ tickets, branchName, onFilter, now }) {
         <Table title={t('mnt.dash.byBranch')} rows={s.byBranch} name={branchName} />
         <Table title={t('mnt.dash.byTech')} rows={s.byTech} name={(k) => k} />
       </div>
+      {s.byAsset.length > 0 && (
+        <section className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4">
+          <p className="font-bold text-slate-800 mb-2">{t('mnt.dash.topAssets')}</p>
+          <ol className="text-sm space-y-1">{s.byAsset.map((r) => <li key={r.k} className="flex justify-between gap-2"><span>{r.k}</span><span className="tabular-nums font-bold">{r.n}</span></li>)}</ol>
+        </section>
+      )}
       <section className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4">
         <p className="font-bold text-slate-800 mb-2">{t('mnt.dash.topPlaces')}</p>
         {!s.byPlace.length ? <p className="text-sm text-slate-400">{t('mnt.dash.none')}</p> : (
@@ -123,6 +159,22 @@ function Table({ title, rows, name }) {
           ))}</tbody>
         </table>
       )}
+    </section>
+  );
+}
+
+function MoneyList({ title, rows }) {
+  const max = Math.max(1, ...rows.map((x) => x[1]));
+  return (
+    <section className="bg-white border border-slate-100 rounded-2xl shadow-sm p-4">
+      <p className="font-bold text-slate-800 mb-2">{title}</p>
+      {rows.slice(0, 10).map(([k, v]) => (
+        <div key={k} className="flex items-center gap-2 text-sm py-0.5">
+          <span className="w-32 shrink-0 truncate">{k}</span>
+          <span className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden"><span className="block h-full bg-amber-500/70" style={{ width: `${(v / max) * 100}%` }} /></span>
+          <span className="w-20 shrink-0 text-xs tabular-nums text-end" dir="ltr">{Math.round(v).toLocaleString('en-US')}</span>
+        </div>
+      ))}
     </section>
   );
 }

@@ -19,11 +19,15 @@ export default function TicketForm({ onClose, onSaved, initial = {}, canManage =
   const [form, setForm] = useState({ branch: initial.branch || '', placeId: '', placeText: '', category: initial.category || 'OTHER', priority: 'NORMAL', title: initial.title || '', description: initial.description || '' });
   const [files, setFiles] = useState([]);
   const [places, setPlaces] = useState(null);
+  const [assets, setAssets] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
 
-  useEffect(() => { callMnt('places').then((r) => setPlaces(r.places)).catch(() => setPlaces([])); }, []);
+  useEffect(() => {
+    callMnt('places').then((r) => setPlaces(r.places)).catch(() => setPlaces([]));
+    callMnt('assets').then((r) => setAssets(r.assets)).catch(() => setAssets([]));
+  }, []);
   // One branch: chosen already.
   const branchId = form.branch || (branches.length === 1 ? branches[0].id : '');
   const branchPlaces = (places || []).filter((p) => p.branch === branchId);
@@ -36,7 +40,7 @@ export default function TicketForm({ onClose, onSaved, initial = {}, canManage =
     setError(null);
     try {
       const photos = await Promise.all(files.map(photoPayload));
-      const r = await callMnt('create', { ...form, branch: branchId, placeId: form.placeId || '', complaintId: initial.complaintId || '', photos });
+      const r = await callMnt('create', { ...form, branch: branchId, assetId: form.assetId || '', placeId: form.placeId || '', complaintId: initial.complaintId || '', photos });
       onSaved?.(r);
     } catch (err) { setError(err.message); setBusy(false); }
   };
@@ -64,6 +68,14 @@ export default function TicketForm({ onClose, onSaved, initial = {}, canManage =
         </Field>
         {branchPlaces.length > 0 && !form.placeId && (
           <Field label={t('mnt.placeText')} className="md:col-span-2"><input value={form.placeText} onChange={(e) => set('placeText', e.target.value)} placeholder={t('mnt.placeTextHint')} className={inputCls} /></Field>
+        )}
+        {assets.some((a) => a.branch === branchId && (!form.placeId || a.placeId === form.placeId)) && (
+          <Field label={t('mnt.assets.one')} className="md:col-span-2">
+            <select value={form.assetId || ''} onChange={(e) => set('assetId', e.target.value)} className={inputCls}>
+              <option value="">{t('mnt.assets.none')}</option>
+              {assets.filter((a) => a.branch === branchId && (!form.placeId || a.placeId === form.placeId)).map((a) => <option key={a.id} value={a.id}>{a.name}{a.place ? ` — ${a.place}` : ''}</option>)}
+            </select>
+          </Field>
         )}
         <Field label={t('mnt.category')} className="md:col-span-2">
           <div className="flex flex-wrap gap-1.5">

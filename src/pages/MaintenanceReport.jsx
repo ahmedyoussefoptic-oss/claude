@@ -22,7 +22,7 @@ export default function MaintenanceReport() {
   const [done, setDone] = useState(null);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
-  useEffect(() => { callMntPublic('placePeek', { token }).then(setInfo).catch((err) => setError(err.message)); }, [token]);
+  useEffect(() => { callMntPublic('placePeek', { token }).then((r) => { setInfo(r); if (r.category) setF((p) => ({ ...p, category: p.category || r.category })); }).catch((err) => setError(err.message)); }, [token]);
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
