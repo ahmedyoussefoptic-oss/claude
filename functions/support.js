@@ -544,6 +544,13 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     return res;
   });
 
+  // The name typed back to delete an open cycle: spaces, dashes, diacritics,
+  // Arabic letter forms and digits don't count (same as the page).
+  const titleKey = (x) => String(x || "").normalize("NFKC")
+    .replace(/[\u064B-\u065F\u0670\u0640\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g, "")
+    .replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي")
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x660))
+    .replace(/[\s\-\u2010-\u2015_.،,«»"'()]+/g, "").toLowerCase();
   // Deleting a cycle: its students, groups, supervisors and attendance, the
   // parent / supervisor / teachers' links (they then show «not found»), and
   // its calls still waiting (its call campaign is closed; calls made stay).
@@ -551,7 +558,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
   out.supportDeleteCycle = onCall({ timeoutSeconds: 300, memory: "512MiB" }, async (request) => {
     const u = await caller(request);
     const { ref, c } = await loadCycle(request.data?.id, u, { manage: true });
-    if (c.status !== "CLOSED" && str(request.data?.confirmTitle, 120) !== str(c.title, 120)) throw new HttpsError("failed-precondition", "اكتب اسم الدورة كما هو لتأكيد الحذف.");
+    if (c.status !== "CLOSED" && titleKey(request.data?.confirmTitle) !== titleKey(c.title)) throw new HttpsError("failed-precondition", "اكتب اسم الدورة كما هو لتأكيد الحذف.");
     const campRef = db.collection("callCampaigns").doc(`support_${ref.id}`);
     const [camp, waitingCalls] = await Promise.all([campRef.get(), db.collection("callTasks").where("campaignId", "==", campRef.id).where("status", "==", "PENDING").get()]);
     for (let i = 0; i < waitingCalls.docs.length; i += 400) {

@@ -77,6 +77,14 @@ export default function SupportPrograms() {
   );
 }
 
+// A cycle's name as typed back to delete it: spaces, dashes, diacritics,
+// Arabic letter forms (أ/إ/آ→ا، ة→ه، ى→ي) and digits don't count.
+const titleKey = (x) => String(x || '').normalize('NFKC')
+  .replace(/[\u064B-\u065F\u0670\u0640\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g, '')
+  .replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي')
+  .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x660))
+  .replace(/[\s\-\u2010-\u2015_.،,«»"'()]+/g, '').toLowerCase();
+
 function CycleDetails({ id, branchName, onBack, groupId, prog, openProg, openGroup }) {
   const { t } = useTranslation();
   const [data, setData] = useState(null);
@@ -99,7 +107,7 @@ function CycleDetails({ id, branchName, onBack, groupId, prog, openProg, openGro
     if (c.status === 'ACTIVE') {
       const typed = window.prompt(t('support.deleteActiveConfirm', { title: c.title, n: data.students.length }));
       if (typed === null) return;
-      if (typed.trim() !== c.title.trim()) { window.alert(t('support.deleteTitleMismatch')); return; }
+      if (titleKey(typed) !== titleKey(c.title)) { window.alert(t('support.deleteTitleMismatch')); return; }
       confirmTitle = typed.trim();
     } else if (!window.confirm(t('support.deleteConfirm', { title: c.title, n: data.students.length }))) return;
     setBusy(true);
