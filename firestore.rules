@@ -606,7 +606,9 @@ service cloud.firestore {
         // Parent feedback forms: read and written only by functions/surveys.js.
         'surveyForms', 'surveyThrottle', 'supportCycles', 'supportLinks',
         // Facilities maintenance: read and written only by functions/maintenance.js.
-        'mntPlaces', 'mntTechs', 'mntLinks', 'mntTickets'
+        'mntPlaces', 'mntTechs', 'mntLinks', 'mntTickets',
+        // Purchasing: read and written only by functions/procurement.js.
+        'procRequests', 'procSuppliers'
       ]);
     }
   }

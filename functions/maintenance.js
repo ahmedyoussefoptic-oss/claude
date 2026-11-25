@@ -98,7 +98,7 @@ module.exports = function maintenanceModule(d) {
     reporterUid: t.reporterUid || "", reporterName: t.reporterName || "", techId: t.techId || "", techName: t.techName || "", techKind: t.techKind || "",
     photos: t.photos || [], workPhotos: t.workPhotos || [], workNote: t.workNote || "", parts: t.parts || "", rating: t.rating || 0, ratingNote: t.ratingNote || "",
     createdAt: ms(t.createdAt), assignedAt: ms(t.assignedAt), startedAt: ms(t.startedAt), doneAt: ms(t.doneAt), closedAt: ms(t.closedAt), dueAt: ms(t.dueAt),
-    escalatedAt: ms(t.escalatedAt), log: (t.log || []).slice(-80),
+    escalatedAt: ms(t.escalatedAt), procRequests: t.procRequests || [], log: (t.log || []).slice(-80),
     ...(u ? { canManage: manages(u, t.branch), canApprove: t.reporterUid === u.uid || manages(u, t.branch) } : {}),
   });
   const placeOut = (id, p) => ({ id, branch: p.branch, building: p.building || "", floor: p.floor || "", room: p.room || "", kind: p.kind || "OTHER", label: placeLabel(p), active: p.active !== false, qr: `${PUBLIC_APP_URL}/fix/${p.qrToken}` });

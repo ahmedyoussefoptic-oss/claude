@@ -19,6 +19,7 @@ export const NOTIFICATION_CATEGORIES = [
   { id: 'platform', types: ['LEAVE_REQUESTED', 'LEAD_NEW'] },
   { id: 'callTasks', types: ['CALL_ASSIGNED', 'CALL_DAILY', 'CALL_SUMMARY', 'CALL_WRONG_NUMBER'] },
   { id: 'support', types: ['SUPPORT_DECLINED', 'SUPPORT_ABSENCE', 'SUPPORT_NOT_TAKEN'] },
+  { id: 'procurement', types: ['PROC_APPROVAL', 'PROC_DECIDED', 'PROC_ORDER', 'PROC_RECEIVED', 'PROC_INVOICE', 'PROC_REMINDER'] },
   { id: 'maintenance', types: ['MNT_NEW', 'MNT_URGENT', 'MNT_DONE', 'MNT_OVERDUE', 'MNT_REOPENED', 'MNT_STATUS', 'MNT_DAILY'] },
   { id: 'leaves', types: ['LEAVE_APPROVED', 'LEAVE_CALLED', 'LEAVE_PREPARE', 'LEAVE_ARRIVED', 'LEAVE_CANCELLED', 'LEAVE_RESCHEDULED'] },
 ];

@@ -36,6 +36,7 @@ import SupportNominate from './pages/SupportNominate';
 import Maintenance from './pages/Maintenance';
 import MaintenanceReport from './pages/MaintenanceReport';
 import MaintenanceTech from './pages/MaintenanceTech';
+import Procurement from './pages/Procurement';
 import Settings from './pages/Settings';
 import DeletedComplaints from './pages/DeletedComplaints';
 import { ROLES } from './config/roles';
@@ -147,6 +148,7 @@ function App() {
           <Route path="surveys" element={<Surveys />} />
           <Route path="support-programs" element={<SupportPrograms />} />
           <Route path="maintenance" element={<Maintenance />} />
+          <Route path="procurement" element={<Procurement />} />
           <Route path="calls" element={<Calls />} />
           <Route path="wa-reports" element={<WaReports />} />
           <Route path="activity" element={<ActivityOnly><UserActivity /></ActivityOnly>} />

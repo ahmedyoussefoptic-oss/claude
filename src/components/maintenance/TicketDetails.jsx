@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Printer, UserCog, Play, PackageOpen, CheckCircle2, BadgeCheck, RotateCcw, XCircle, MessageSquare, Star, AlertTriangle } from 'lucide-react';
+import { Loader2, Printer, UserCog, Play, PackageOpen, CheckCircle2, BadgeCheck, RotateCcw, XCircle, MessageSquare, Star, AlertTriangle, ShoppingCart } from 'lucide-react';
 import { Modal, Pill, Field, inputCls, btn } from '../platform/ui';
 import { callMnt, photoPayload, MNT_CATEGORIES, MNT_PRIORITIES, MNT_OPEN, STATUS_STYLE, PRIORITY_STYLE, CATEGORY_ICON, fmtDateTime, isOverdue } from '../../config/maintenance';
 import PhotoPicker, { PhotoStrip } from './PhotoPicker';
 import { printWorkOrder } from './printWorkOrder';
+import RequestForm from '../procurement/RequestForm';
+import useAuthStore from '../../stores/useAuthStore';
+import { canSeeModule } from '../../utils/scope';
 
 // One work order: its details, photos, the history (append-only, kept by
 // the server), and what the viewer may do — assign, move the work along,
@@ -21,6 +25,9 @@ export default function TicketDetails({ id, branchName, onClose, onChanged }) {
   const [rating, setRating] = useState(0);
   const [techs, setTechs] = useState(null);
   const [techId, setTechId] = useState('');
+  const [buying, setBuying] = useState(false);
+  const { userData } = useAuthStore();
+  const navigate = useNavigate();
 
   const load = useCallback(() => callMnt('get', { id }).then((r) => { setTk(r.ticket); setError(null); }).catch((err) => setError(err.message)), [id]);
   useEffect(() => { load(); }, [load]);
@@ -59,6 +66,7 @@ export default function TicketDetails({ id, branchName, onClose, onChanged }) {
     tk.canApprove && tk.status === 'DONE' && ['approve', BadgeCheck, t('mnt.approve')],
     tk.canApprove && ['DONE', 'CLOSED'].includes(tk.status) && ['reopen', RotateCcw, t('mnt.reopen')],
     open && (tk.canManage || tk.status === 'NEW') && ['cancel', XCircle, t('mnt.cancel')],
+    tk.canManage && open && canSeeModule(userData, 'procurement') && ['buy', ShoppingCart, t('mnt.buyParts')],
     ['comment', MessageSquare, t('mnt.comment')],
   ].filter(Boolean);
   const submitPanel = () => {
@@ -91,6 +99,11 @@ export default function TicketDetails({ id, branchName, onClose, onChanged }) {
       </dl>
       {tk.description && <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-xl p-3">{tk.description}</p>}
       <PhotoStrip photos={tk.photos} />
+      {tk.procRequests.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 text-xs">
+          {tk.procRequests.map((p) => <button key={p.id} type="button" onClick={() => navigate(`/procurement?openId=${encodeURIComponent(p.id)}`)} className="px-2 py-1 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 flex items-center gap-1"><ShoppingCart className="w-3.5 h-3.5" />{t('mnt.procRequest', { n: p.number })}</button>)}
+        </div>
+      )}
       {(tk.workNote || tk.parts || tk.workPhotos.length > 0) && (
         <div className="border border-emerald-100 bg-emerald-50/40 rounded-xl p-3 space-y-2">
           <p className="text-sm font-bold text-emerald-800">{t('mnt.workDone')}</p>
@@ -113,7 +126,7 @@ export default function TicketDetails({ id, branchName, onClose, onChanged }) {
 
       <div className="flex flex-wrap gap-2">
         {actions.map(([k, Icon, label]) => (
-          <button key={k} type="button" onClick={() => setPanel(panel === k ? '' : k)} className={`${btn.small} px-3 py-2 border ${panel === k ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200 hover:border-primary/40'}`}><Icon className="w-4 h-4" />{label}</button>
+          <button key={k} type="button" onClick={() => (k === 'buy' ? setBuying(true) : setPanel(panel === k ? '' : k))} className={`${btn.small} px-3 py-2 border ${panel === k ? 'bg-primary text-white border-primary' : 'bg-white text-slate-700 border-slate-200 hover:border-primary/40'}`}><Icon className="w-4 h-4" />{label}</button>
         ))}
       </div>
       {panel && (
@@ -144,6 +157,7 @@ export default function TicketDetails({ id, branchName, onClose, onChanged }) {
         </div>
       )}
 
+      {buying && <RequestForm initial={{ branch: tk.branch, mntTicketId: tk.id, mntTicketNumber: tk.number, title: t('mnt.buyTitle', { n: tk.number, title: tk.title }), items: tk.parts ? [{ name: tk.parts, qty: 1, unit: '', estPrice: '' }] : [] }} onClose={() => setBuying(false)} onSaved={() => { setBuying(false); load(); onChanged?.(); }} />}
       <div>
         <p className="text-sm font-bold text-slate-800 mb-2">{t('mnt.history')}</p>
         <ol className="space-y-1.5 border-s-2 border-slate-200 ps-3">

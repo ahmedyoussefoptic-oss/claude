@@ -52,7 +52,7 @@ function meetingsByRole(userData) {
 // Admins see everything, reception only the branch visits, and
 // tripsAccess 'tripsOnly' / 'none' still apply. Mirrored in firestore.rules
 // (modAllowed / canAccessTechSupport) and functions (cleanUserModules).
-export const MODULE_KEYS = ['dashboard', 'complaints', 'finance', 'techSupport', 'lostFound', 'visits', 'trips', 'meetings', 'support', 'maintenance', 'students', 'search', 'flowMap', 'reports', 'calls', 'waReports', 'assistant'];
+export const MODULE_KEYS = ['dashboard', 'complaints', 'finance', 'techSupport', 'lostFound', 'visits', 'trips', 'meetings', 'support', 'maintenance', 'procurement', 'students', 'search', 'flowMap', 'reports', 'calls', 'waReports', 'assistant'];
 export function moduleDefault(userData, key) {
   if (key === 'techSupport') return techSupportByRole(userData);
   if (key === 'finance') return financeByRole(userData);
@@ -64,6 +64,11 @@ export function moduleDefault(userData, key) {
   // «صيانة المرافق»: every employee reports faults and follows their own
   // (mirrored in functions/maintenance.js sees()).
   if (key === 'maintenance') return true;
+  // «المشتريات»: principals, upper management, finance, procurement,
+  // facilities and those given a purchasing role (mirrored in
+  // functions/procurement.js sees()).
+  if (key === 'procurement') return userData?.isPrincipal === true || userData?.role === 'UPPER_MANAGEMENT' || ['FINANCE', 'PROCUREMENT', 'FACILITIES'].includes(userData?.department)
+    || ['procOfficer', 'procFinance', 'procReceive', 'mntManage'].some((k) => userData?.perms?.[k] === true);
   // Call analytics (Bevatel) is given per employee.
   if (key === 'calls' || key === 'waReports') return false;
   // «التقارير»: the system owner, admins and branch principals; anyone else

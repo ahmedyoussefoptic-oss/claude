@@ -233,6 +233,9 @@ exports.createStaffUser = onCall(async (request) => {
       tripFinance: !!perms?.tripFinance,
       supportManage: !!perms?.supportManage,
       mntManage: !!perms?.mntManage,
+      procOfficer: !!perms?.procOfficer,
+      procFinance: !!perms?.procFinance,
+      procReceive: !!perms?.procReceive,
       // Trip edit / delete / students / payments (unset = role-based default).
       ...Object.fromEntries(["tripEdit", "tripDelete", "tripStudents", "tripPayments", "tripAccounts"].filter((k) => typeof perms?.[k] === "boolean").map((k) => [k, perms[k]])),
     },
@@ -269,7 +272,7 @@ exports.createStaffUser = onCall(async (request) => {
 // (`modules`, missing key = the role's default) and whether they see every
 // record of their branches or only the ones assigned to them
 // (`recordScope`). Mirrored in src/utils/scope.js and firestore.rules.
-const USER_MODULE_KEYS = ["dashboard", "complaints", "finance", "techSupport", "lostFound", "visits", "trips", "meetings", "support", "maintenance", "students", "search", "flowMap", "reports"];
+const USER_MODULE_KEYS = ["dashboard", "complaints", "finance", "techSupport", "lostFound", "visits", "trips", "meetings", "support", "maintenance", "procurement", "students", "search", "flowMap", "reports"];
 function cleanUserModules(modules, recordScope) {
   const out = {};
   if (modules && typeof modules === "object") {
@@ -379,6 +382,7 @@ const NOTIFICATION_CATEGORIES = {
   platform: ["LEAVE_REQUESTED", "LEAD_NEW"],
   callTasks: ["CALL_ASSIGNED", "CALL_DAILY", "CALL_SUMMARY", "CALL_WRONG_NUMBER"],
   support: ["SUPPORT_DECLINED", "SUPPORT_ABSENCE", "SUPPORT_NOT_TAKEN"],
+  procurement: ["PROC_APPROVAL", "PROC_DECIDED", "PROC_ORDER", "PROC_RECEIVED", "PROC_INVOICE", "PROC_REMINDER"],
   maintenance: ["MNT_NEW", "MNT_URGENT", "MNT_DONE", "MNT_OVERDUE", "MNT_REOPENED", "MNT_STATUS", "MNT_DAILY"],
   leaves: ["LEAVE_APPROVED", "LEAVE_CALLED", "LEAVE_PREPARE", "LEAVE_ARRIVED", "LEAVE_CANCELLED", "LEAVE_RESCHEDULED"],
 };
@@ -8548,4 +8552,9 @@ Object.assign(exports, require("./maintenance")({
   db, Timestamp, FieldValue, HttpsError, onCall, onSchedule, crypto, str, callerHasBranch, callerAll, normalizeDigits,
   notifyUsers, loadActiveUsers, nextRecordNumber, uploadPublicAttachment, getBucket: () => getStorage().bucket(), normalizeSla, addBusinessMs,
   PUBLIC_APP_URL, riyadhDay: () => riyadhDay(),
+}));
+// «المشتريات» — see functions/procurement.js.
+Object.assign(exports, require("./procurement")({
+  db, Timestamp, FieldValue, HttpsError, onCall, onSchedule, str, callerHasBranch, callerAll, normalizeDigits,
+  notifyUsers, loadActiveUsers, nextRecordNumber, uploadPublicAttachment, getBucket: () => getStorage().bucket(), riyadhDay: () => riyadhDay(),
 }));
