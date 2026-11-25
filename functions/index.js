@@ -7036,6 +7036,39 @@ function callCampaignOut(id, c) {
   };
 }
 
+// A campaign's counters counted again from its calls. The stored ones are
+// running increments and can drift (they once showed 0 calls and −4
+// remaining); when they differ they are written back, keeping the WhatsApp
+// and notes counts. Returns the campaign with the counted figures.
+async function recountCallCampaign(ref, c, taskDocs) {
+  const counts = { total: 0, pending: 0, done: 0, answered: 0, noAnswer: 0, wrong: 0, failed: 0, unassigned: 0 };
+  const outcomeCounts = {};
+  taskDocs.forEach((x) => {
+    const k = x.data();
+    counts.total++;
+    if (k.status === "DONE") {
+      counts.done++;
+      counts.answered++;
+      if (k.outcome) outcomeCounts[k.outcome] = (outcomeCounts[k.outcome] || 0) + 1;
+    } else if (k.status === "FAILED") {
+      counts.failed++;
+      if (k.result === "WRONG_NUMBER") counts.wrong++;
+    } else {
+      counts.pending++;
+      if (!k.assignedTo) counts.unassigned++;
+    }
+    (k.history || []).forEach((h) => { if (h.result === "NO_ANSWER") counts.noAnswer++; });
+  });
+  const old = c.counts || {};
+  const oldOutcomes = c.outcomeCounts || {};
+  const same = Object.keys(counts).every((key) => (old[key] || 0) === counts[key])
+    && Object.keys({ ...oldOutcomes, ...outcomeCounts }).every((o) => (oldOutcomes[o] || 0) === (outcomeCounts[o] || 0));
+  if (same) return c;
+  const merged = { ...old, ...counts };
+  await ref.update({ counts: merged, outcomeCounts }).catch((err) => console.error("recountCallCampaign", ref.id, err.message));
+  return { ...c, counts: merged, outcomeCounts };
+}
+
 exports.saveCallCampaign = onCall({ timeoutSeconds: 300, memory: "1GiB" }, async (request) => {
   const caller = await callCaller(request, "supervisor");
   const d = request.data || {};
@@ -7117,7 +7150,7 @@ exports.getCallCampaign = onCall({ timeoutSeconds: 120, memory: "512MiB" }, asyn
   const { ref, c } = await loadCallCampaign(caller, request.data?.id);
   const [tasks, bev] = await Promise.all([db.collection("callTasks").where("campaignId", "==", ref.id).get(), db.collection("settings").doc("bevatel").get()]);
   return {
-    campaign: callCampaignOut(ref.id, c),
+    campaign: callCampaignOut(ref.id, await recountCallCampaign(ref, c, tasks.docs)),
     bevatelSyncAt: bev.data()?.lastSyncAt?.toMillis?.() || null,
     tasks: tasks.docs.map((x) => {
       const k = x.data();
@@ -7754,8 +7787,8 @@ exports.callTasksSummary = onSchedule({ schedule: "0 16 * * 0-4", timeZone: "Asi
   const today = riyadhDay();
   const camps = await db.collection("callCampaigns").where("status", "==", "ACTIVE").get();
   for (const cd of camps.docs) {
-    const c = cd.data();
     const tasks = await db.collection("callTasks").where("campaignId", "==", cd.id).get();
+    const c = await recountCallCampaign(cd.ref, cd.data(), tasks.docs);
     let attempts = 0;
     let answered = 0;
     tasks.docs.forEach((x) => (x.data().history || []).forEach((h) => { if (riyadhDayOf(h.at.toMillis()) === today) { attempts++; if (h.result === "ANSWERED") answered++; } }));
