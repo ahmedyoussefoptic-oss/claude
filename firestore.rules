@@ -604,7 +604,9 @@ service cloud.firestore {
         // Parent meetings: read and written only by functions/meetings.js.
         'meetings', 'meetingTokens', 'meetingMinutes', 'meetingVerify', 'meetingTeacherDirectory',
         // Parent feedback forms: read and written only by functions/surveys.js.
-        'surveyForms', 'surveyThrottle', 'supportCycles', 'supportLinks'
+        'surveyForms', 'surveyThrottle', 'supportCycles', 'supportLinks',
+        // Facilities maintenance: read and written only by functions/maintenance.js.
+        'mntPlaces', 'mntTechs', 'mntLinks', 'mntTickets'
       ]);
     }
   }

@@ -1,7 +1,7 @@
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import useAuthStore from '../../stores/useAuthStore';
-import { ChevronDown, Inbox, BarChart3, BookOpenCheck, ShieldCheck, Presentation, ClipboardCheck, LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText, Activity, PhoneOutgoing, HeartHandshake, Video, Wallet } from 'lucide-react';
+import { ChevronDown, Inbox, BarChart3, BookOpenCheck, ShieldCheck, Presentation, ClipboardCheck, LogOut, LayoutDashboard, FileText, Search, User, Menu, PackageSearch, Map, Settings, Wrench, FileBarChart, Archive, GraduationCap, QrCode, Armchair, Bus, LayoutGrid, DoorOpen, UserPlus, Settings2, PhoneCall, MessageSquareText, Activity, PhoneOutgoing, HeartHandshake, Video, Wallet, Hammer } from 'lucide-react';
 import AssistantPanel from '../assistant/AssistantPanel';
 import { useEffect, useState, useRef } from 'react';
 import { httpsCallable } from 'firebase/functions';
@@ -25,7 +25,7 @@ const ownerClaimTried = new Set();
 // alone.
 const NAV_GROUPS = [
   { id: 'home', paths: ['/dashboard'] },
-  { id: 'records', icon: Inbox, paths: ['/complaints', '/finance', '/tech-support', '/lost-found', '/visits'] },
+  { id: 'records', icon: Inbox, paths: ['/complaints', '/finance', '/tech-support', '/maintenance', '/lost-found', '/visits'] },
   { id: 'students', icon: GraduationCap, paths: ['/students', '/support-programs', '/meetings', '/surveys', '/trips', '/attendance'] },
   { id: 'calls', icon: PhoneOutgoing, paths: ['/call-tasks', '/calls', '/wa-reports'] },
   { id: 'reports', icon: BarChart3, paths: ['/reports', '/search', '/flow-map', '/activity'] },
@@ -101,6 +101,7 @@ export default function AppLayout() {
     ['finance', '/finance', Wallet, 'nav.finance'],
     ['lostFound', '/lost-found', PackageSearch, 'nav.lostFound'],
     ['techSupport', '/tech-support', Wrench, 'nav.techSupport'],
+    ['maintenance', '/maintenance', Hammer, 'nav.maintenance'],
     ['flowMap', '/flow-map', Map, 'nav.flowMap'],
     ['search', '/search', Search, 'nav.advancedSearch'],
     ['students', '/students', GraduationCap, 'nav.studentRecords'],

@@ -33,6 +33,9 @@ import SupportPrograms from './pages/SupportPrograms';
 import SupportParent from './pages/SupportParent';
 import SupportAttend from './pages/SupportAttend';
 import SupportNominate from './pages/SupportNominate';
+import Maintenance from './pages/Maintenance';
+import MaintenanceReport from './pages/MaintenanceReport';
+import MaintenanceTech from './pages/MaintenanceTech';
 import Settings from './pages/Settings';
 import DeletedComplaints from './pages/DeletedComplaints';
 import { ROLES } from './config/roles';
@@ -113,6 +116,8 @@ function App() {
         <Route path="/support/:token" element={<SupportParent />} />
         <Route path="/support-attend/:token" element={<SupportAttend />} />
         <Route path="/support-nominate/:token" element={<SupportNominate />} />
+        <Route path="/fix/:token" element={<MaintenanceReport />} />
+        <Route path="/tech/:token" element={<MaintenanceTech />} />
         <Route path="/leave" element={<LeaveRequest />} />
         <Route path="/sped/:formId" element={<SpecialEducationForm />} />
         <Route path="/join" element={<JoinInquiry />} />
@@ -141,6 +146,7 @@ function App() {
           <Route path="meetings" element={<Meetings />} />
           <Route path="surveys" element={<Surveys />} />
           <Route path="support-programs" element={<SupportPrograms />} />
+          <Route path="maintenance" element={<Maintenance />} />
           <Route path="calls" element={<Calls />} />
           <Route path="wa-reports" element={<WaReports />} />
           <Route path="activity" element={<ActivityOnly><UserActivity /></ActivityOnly>} />

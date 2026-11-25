@@ -1,8 +1,8 @@
 import { useTranslation } from 'react-i18next';
-import { Presentation, LayoutDashboard, FileText, Wrench, PackageSearch, Armchair, Bus, GraduationCap, Search, Map, FileBarChart, Eye, UserCheck, Building2, RotateCcw, PhoneCall, Sparkles, MessageCircle, Wallet, BookOpenCheck } from 'lucide-react';
+import { Presentation, LayoutDashboard, FileText, Wrench, PackageSearch, Armchair, Bus, GraduationCap, Search, Map, FileBarChart, Eye, UserCheck, Building2, RotateCcw, PhoneCall, Sparkles, MessageCircle, Wallet, BookOpenCheck, Hammer } from 'lucide-react';
 import { MODULE_KEYS, moduleDefault } from '../../utils/scope';
 
-const ICONS = { dashboard: LayoutDashboard, complaints: FileText, finance: Wallet, techSupport: Wrench, lostFound: PackageSearch, visits: Armchair, trips: Bus, meetings: Presentation, students: GraduationCap, search: Search, flowMap: Map, reports: FileBarChart, calls: PhoneCall, waReports: MessageCircle, assistant: Sparkles, support: BookOpenCheck };
+const ICONS = { dashboard: LayoutDashboard, complaints: FileText, finance: Wallet, techSupport: Wrench, lostFound: PackageSearch, visits: Armchair, trips: Bus, meetings: Presentation, students: GraduationCap, search: Search, flowMap: Map, reports: FileBarChart, calls: PhoneCall, waReports: MessageCircle, assistant: Sparkles, support: BookOpenCheck, maintenance: Hammer };
 const PRESETS = {
   default: null,
   complaintsOnly: ['dashboard', 'complaints'],

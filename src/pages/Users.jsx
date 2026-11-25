@@ -16,7 +16,7 @@ import PageHero from '../components/common/PageHero';
 
 // Specialist departments — the same ids as complaint categories (auto-
 // assignment matches them); FINANCE pairs with a category coded FINANCE.
-const DEPARTMENT_IDS = ['ADMINISTRATIVE', 'ACADEMIC', 'BEHAVIORAL', 'FINANCE', 'IT'];
+const DEPARTMENT_IDS = ['ADMINISTRATIVE', 'ACADEMIC', 'BEHAVIORAL', 'FINANCE', 'IT', 'FACILITIES', 'PROCUREMENT'];
 
 // Collapses a user's grade list into ranges in STAGES order for display,
 // e.g. [G1, G2, G3, G4, G5, G9] -> "G1–G5، G9".
@@ -43,7 +43,7 @@ const emptyForm = {
   role: ROLES.CUSTOMER_SERVICE,
   branches: [],
   access: 'branch',
-  perms: { edit: false, delete: false, users: false, trips: false, tripFinance: false, supportManage: false, tripEdit: false, tripDelete: false, tripStudents: false, tripPayments: false, tripAccounts: false },
+  perms: { edit: false, delete: false, users: false, trips: false, tripFinance: false, supportManage: false, mntManage: false, tripEdit: false, tripDelete: false, tripStudents: false, tripPayments: false, tripAccounts: false },
   isPrincipal: false,
   isQuality: false,
   isCounselor: false,
@@ -131,7 +131,7 @@ export default function Users() {
       branches: userBranches(u),
       access: u.access === 'all' ? 'all' : 'branch',
       perms: {
-        edit: !!u.perms?.edit, delete: !!u.perms?.delete, users: !!u.perms?.users, trips: !!u.perms?.trips, tripFinance: !!u.perms?.tripFinance, supportManage: !!u.perms?.supportManage,
+        edit: !!u.perms?.edit, delete: !!u.perms?.delete, users: !!u.perms?.users, trips: !!u.perms?.trips, tripFinance: !!u.perms?.tripFinance, supportManage: !!u.perms?.supportManage, mntManage: !!u.perms?.mntManage,
         // Trip permissions never set yet show what the role already allowed.
         ...tripPermDefaults(u),
       },
@@ -579,6 +579,15 @@ export default function Users() {
                     onChange={(e) => setForm((p) => ({ ...p, perms: { ...p.perms, supportManage: e.target.checked } }))}
                   />
                   🎓 {t('users.permSupportManage')}
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={!!form.perms.mntManage}
+                    disabled={isAdminRole}
+                    onChange={(e) => setForm((p) => ({ ...p, perms: { ...p.perms, mntManage: e.target.checked } }))}
+                  />
+                  🛠️ {t('users.permMntManage')}
                 </label>
               </div>
               <div className="mt-3 pt-3 border-t border-slate-200">

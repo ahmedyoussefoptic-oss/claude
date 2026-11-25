@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAdminPermissions, adminCan } from '../../config/adminPermissions';
 import { useNavigate } from 'react-router-dom';
-import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, MessageSquare, Trash2, Star, Link2, Mic, Square, Share2, Pencil, Wrench, Armchair, Handshake, Wallet } from 'lucide-react';
+import { X, Send, Paperclip, Clock, CheckCircle2, Circle, User, Phone, MapPin, Loader2, AlertCircle, Printer, UserPlus, MessageCircle, MessageSquare, Trash2, Star, Link2, Mic, Square, Share2, Pencil, Wrench, Armchair, Handshake, Wallet, Hammer } from 'lucide-react';
 import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db, functions } from '../../config/firebase';
 import { httpsCallable } from 'firebase/functions';
@@ -22,6 +22,7 @@ import ErrorBoundary from '../common/ErrorBoundary';
 import ComplaintEditForm from './ComplaintEditForm';
 import ComplaintConvertModal from './ComplaintConvertModal';
 import FinanceConvertModal from './FinanceConvertModal';
+import TicketForm from '../maintenance/TicketForm';
 import VisitDeclineDialog from '../visits/VisitDeclineDialog';
 import RecordViewers from '../common/RecordViewers';
 import AppointmentPanel from '../appointments/AppointmentPanel';
@@ -227,6 +228,8 @@ function ComplaintDetailsInner({ complaint, onClose }) {
   const [showEdit, setShowEdit] = useState(false);
   const [showConvert, setShowConvert] = useState(false);
   const [showFinance, setShowFinance] = useState(false);
+  // A parent's note about the building turned into a facilities work order.
+  const [showMnt, setShowMnt] = useState(false);
   const [showDecline, setShowDecline] = useState(false);
   // To a financial note: same record, moved to the finance section.
   const canFinance = canEdit && complaint.complaintType !== 'FINANCE' && !['SOLVED', 'CLOSED', 'REJECTED'].includes(complaint.status);
@@ -647,6 +650,17 @@ function ComplaintDetailsInner({ complaint, onClose }) {
               <button disabled={loading} onClick={() => setShowConvert(true)} className="px-4 py-2 bg-white border border-primary/40 text-primary rounded-lg text-sm font-medium hover:bg-primary/5 transition-colors flex items-center gap-2">
                 <Wrench className="w-4 h-4" />
                 {t('complaintDetails.convertToTechBtn')}
+              </button>
+            )}
+            {complaint.maintenanceTicket?.id ? (
+              <button onClick={() => navigate(`/maintenance?openId=${encodeURIComponent(complaint.maintenanceTicket.id)}`)} className="px-4 py-2 bg-white border border-amber-300 text-amber-800 rounded-lg text-sm font-medium hover:bg-amber-50 transition-colors flex items-center gap-2">
+                <Hammer className="w-4 h-4" />
+                {t('mnt.complaintTicket', { n: complaint.maintenanceTicket.number })}
+              </button>
+            ) : canEdit && canSeeModule(userData, 'maintenance') && (
+              <button disabled={loading} onClick={() => setShowMnt(true)} className="px-4 py-2 bg-white border border-amber-300 text-amber-800 rounded-lg text-sm font-medium hover:bg-amber-50 transition-colors flex items-center gap-2">
+                <Hammer className="w-4 h-4" />
+                {t('mnt.fromComplaint')}
               </button>
             )}
             {canFinance && (
@@ -1131,6 +1145,7 @@ function ComplaintDetailsInner({ complaint, onClose }) {
       {showEdit && <ComplaintEditForm complaint={complaint} onClose={() => setShowEdit(false)} />}
       {showDecline && <VisitDeclineDialog visit={complaint} branchName={branchName} onClose={() => setShowDecline(false)} />}
       {showConvert && <ComplaintConvertModal complaint={complaint} onClose={() => setShowConvert(false)} onConverted={handleConverted} />}
+      {showMnt && <TicketForm initial={{ branch: complaint.branch, title: complaint.subject || '', description: complaint.details || '', complaintId: complaint.id, complaintNumber: complaint.complaintId }} onClose={() => setShowMnt(false)} onSaved={(r) => { setShowMnt(false); alert(t('mnt.fromComplaintDone', { n: r.number })); }} />}
       {showFinance && <FinanceConvertModal complaint={complaint} onClose={() => setShowFinance(false)} onConverted={handleFinance} />}
     </div>
   );

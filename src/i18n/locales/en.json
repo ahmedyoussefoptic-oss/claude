@@ -80,7 +80,8 @@
       "admin": "Administration",
       "platform": "Al Moktashef platform"
     },
-    "support": "School programmes"
+    "support": "School programmes",
+    "maintenance": "Facilities maintenance"
   },
   "app": {
     "brand": "Al Moktashef International",
@@ -859,7 +860,9 @@
       "ACADEMIC": "Academic Affairs",
       "BEHAVIORAL": "Student Guidance & Counseling",
       "IT": "IT",
-      "FINANCE": "Finance"
+      "FINANCE": "Finance",
+      "FACILITIES": "Facilities",
+      "PROCUREMENT": "Procurement"
     },
     "departmentHint": "For administrative/academic/behavioral complaints, this determines which complaint types they handle. Choose \"IT\" for the tech support team — without a staff member in this department, tech support tickets won't be auto-assigned to anyone. Choose \"Finance\" for finance staff — financial feedback is assigned to them automatically.",
     "multiBranchHint": "More than one branch can be selected — the staff member will only see data for the branches checked here. Leave empty if they shouldn't see any branch.",
@@ -958,7 +961,8 @@
         "waReports": "Branch WhatsApp",
         "finance": "Financial feedback",
         "meetings": "Parent meetings",
-        "support": "Support programmes"
+        "support": "Support programmes",
+        "maintenance": "Facilities maintenance"
       },
       "noneWarning": "No section selected — the employee will see nothing after signing in.",
       "scopeTitle": "Record scope",
@@ -1030,7 +1034,8 @@
     },
     "attendanceAccess": "Virtual attendance",
     "attendanceAccessHint": "Sees virtual-class attendance for their branches' students, changes statuses and sends absence messages. System admins always have it.",
-    "permSupportManage": "Manage support programmes (remedial & enrichment)"
+    "permSupportManage": "Manage support programmes (remedial & enrichment)",
+    "permMntManage": "Manage facilities maintenance (assign reports, technicians, places)"
   },
   "settings": {
     "pageSubtitle": "Edit the branches, departments, and classifications used across the system's lists",
@@ -1833,7 +1838,8 @@
       "leaves": "Leave request steps",
       "callTasks": "Call tasks",
       "meetings": "Parent meetings",
-      "support": "Support programmes"
+      "support": "Support programmes",
+      "maintenance": "Facilities maintenance"
     },
     "hints": {
       "assigned": "When feedback, a tech ticket or lost item is assigned to you",
@@ -1852,7 +1858,8 @@
       "leaves": "Approval, calling and handover, and the parent's notices (on the way, arrived, changed, cancelled)",
       "callTasks": "New calls assigned, the morning reminder of today's calls, and the supervisor's daily summary",
       "meetings": "A low rating from a parent after a parent meeting",
-      "support": "A student absent repeatedly, a group whose attendance wasn't taken, a parent who declined"
+      "support": "A student absent repeatedly, a group whose attendance wasn't taken, a parent who declined",
+      "maintenance": "New or urgent maintenance reports, your report done, overdue work and the daily summary"
     },
     "channelsTitle": "Delivery (in addition to the in-app bell)",
     "channels": {
@@ -5912,5 +5919,247 @@
     },
     "deleteActiveConfirm": "The cycle «{{title}}» is still open. It will be deleted for good with its students ({{n}}), groups, supervisors and attendance; parent, supervisor and teacher links stop and its waiting calls are cancelled. This cannot be undone.\n\nType the cycle's name to confirm:",
     "deleteTitleMismatch": "The name does not match — the cycle was not deleted."
+  },
+  "mnt": {
+    "title": "Facilities maintenance",
+    "subtitle": "Report any fault in the building and follow your reports",
+    "subtitleManager": "Maintenance reports, work orders, technicians and places",
+    "newTicket": "New maintenance report",
+    "ticket": "Maintenance report",
+    "send": "Send report",
+    "branch": "Branch",
+    "chooseBranch": "Choose the branch",
+    "place": "Place",
+    "placeOther": "Place not listed (type it)",
+    "placeText": "Place",
+    "placeTextHint": "e.g. Building B · 2nd floor · Class 2/3",
+    "category": "Category",
+    "priority": "Priority",
+    "priorityHint": "“Urgent” is for safety hazards only; the maintenance manager adjusts the priority.",
+    "titleField": "Fault",
+    "titleHint": "Short description, e.g. AC not cooling",
+    "description": "Details",
+    "photos": "Photos (up to 3)",
+    "addPhoto": "Photo",
+    "categories": {
+      "ELECTRIC": "Electrical",
+      "PLUMBING": "Plumbing",
+      "AC": "Air conditioning",
+      "CARPENTRY": "Carpentry",
+      "PAINT": "Painting",
+      "CLEANING": "Cleaning",
+      "SAFETY": "Safety & security",
+      "OTHER": "Other"
+    },
+    "priorities": {
+      "URGENT": "Urgent",
+      "HIGH": "High",
+      "NORMAL": "Normal",
+      "LOW": "Low"
+    },
+    "status": {
+      "NEW": "New",
+      "ASSIGNED": "Assigned",
+      "IN_PROGRESS": "In progress",
+      "WAITING_PARTS": "Waiting for parts",
+      "DONE": "Done",
+      "CLOSED": "Approved",
+      "CANCELLED": "Cancelled"
+    },
+    "statusLabel": "Status",
+    "placeKinds": {
+      "CLASSROOM": "Classroom",
+      "LAB": "Lab",
+      "OFFICE": "Office",
+      "TOILET": "Toilet",
+      "HALL": "Hall",
+      "YARD": "Yard",
+      "CORRIDOR": "Corridor",
+      "KITCHEN": "Kitchen/canteen",
+      "STORE": "Store",
+      "OTHER": "Other"
+    },
+    "sources": {
+      "APP": "From the app",
+      "QR": "Via QR code",
+      "COMPLAINT": "From a parent's note"
+    },
+    "techKinds": {
+      "TECH": "In-house technician",
+      "CONTRACTOR": "Contractor"
+    },
+    "tabs": {
+      "dashboard": "Dashboard",
+      "tickets": "Reports",
+      "places": "Places & QR",
+      "techs": "Technicians",
+      "settings": "Deadlines"
+    },
+    "filters": {
+      "OPEN": "Open",
+      "LATE": "Overdue",
+      "NEW": "Unassigned",
+      "ASSIGNED": "Assigned",
+      "IN_PROGRESS": "In progress",
+      "WAITING_PARTS": "Waiting for parts",
+      "DONE": "Done",
+      "CLOSED": "Approved",
+      "CANCELLED": "Cancelled",
+      "ALL": "All"
+    },
+    "searchHint": "Search by number, fault, place or technician",
+    "allCategories": "All categories",
+    "allPriorities": "All priorities",
+    "noTickets": "No reports.",
+    "overdue": "Overdue",
+    "reporter": "Reported by",
+    "createdAt": "Reported on",
+    "dueAt": "Due",
+    "assignee": "Assigned to",
+    "doneAt": "Done on",
+    "rating": "Reporter's rating",
+    "number": "Report no.",
+    "workDone": "Work done",
+    "parts": "Parts",
+    "partsNeeded": "Parts needed",
+    "partsUsed": "Parts used",
+    "workPhotos": "Work photos (before/after)",
+    "note": "Note",
+    "noteFor": {
+      "DONE": "What was done",
+      "reopen": "Reason for reopening",
+      "cancel": "Reason for cancelling",
+      "comment": "Note",
+      "assign": "Note for the technician (optional)",
+      "approve": "Note (optional)"
+    },
+    "assign": "Assign",
+    "reassign": "Change technician",
+    "toInProgress": "Start work",
+    "toWaitingParts": "Waiting for parts",
+    "toDone": "Done",
+    "approve": "Approve",
+    "reopen": "Reopen",
+    "cancel": "Cancel report",
+    "comment": "Note",
+    "confirm": "Confirm",
+    "chooseTech": "Technician or contractor",
+    "noTechs": "No technicians for this branch — add them in the Technicians tab.",
+    "rateWork": "Rate the work:",
+    "history": "History",
+    "printOrder": "Print work order",
+    "workOrder": "Maintenance work order",
+    "signTech": "Technician's signature",
+    "signSupervisor": "Maintenance supervisor's signature",
+    "signReporter": "Reporter's signature (received)",
+    "log": {
+      "CREATED": "Reported",
+      "ASSIGNED": "Assigned",
+      "UPDATED": "Updated",
+      "IN_PROGRESS": "Work started",
+      "WAITING_PARTS": "Waiting for parts",
+      "DONE": "Done",
+      "CLOSED": "Approved",
+      "REOPENED": "Reopened",
+      "CANCELLED": "Cancelled",
+      "COMMENT": "Note",
+      "ESCALATED": "Escalated"
+    },
+    "fromComplaint": "Turn into maintenance report",
+    "fromComplaintTitle": "Maintenance report from note {{n}}",
+    "fromComplaintDone": "Maintenance report {{n}} created.",
+    "complaintTicket": "Maintenance report {{n}}",
+    "dash": {
+      "open": "Open",
+      "unassigned": "Unassigned",
+      "late": "Overdue",
+      "urgent": "Urgent open",
+      "done": "Done",
+      "doneTotal": "Done",
+      "created": "Reports",
+      "ofCreated": "of {{n}} reports in the period",
+      "avgTime": "Average time to done",
+      "onTime": "Done on time",
+      "rating": "Reporter satisfaction",
+      "ratedN": "{{n}} ratings",
+      "byBranch": "By branch",
+      "byCategory": "By category",
+      "byTech": "By technician",
+      "topPlaces": "Places with most faults",
+      "name": "Name",
+      "total": "Reports",
+      "none": "No data in the period.",
+      "lastDays": "Last {{n}} days",
+      "print": "Print report",
+      "reportTitle": "Facilities maintenance report"
+    },
+    "places": {
+      "add": "Add place",
+      "edit": "Edit place",
+      "bulk": "Add several places",
+      "addN": "Add {{n}} places",
+      "building": "Building",
+      "floor": "Floor",
+      "room": "Room / facility",
+      "kind": "Type",
+      "hint": "Each place has a QR label: staff scan it and report a fault with their registered phone, without signing in.",
+      "empty": "No places for this branch yet.",
+      "openLink": "Report link",
+      "printAll": "Print QR labels",
+      "printPicked": "Print {{n}} labels",
+      "labelsTitle": "Maintenance report labels",
+      "scanHint": "Scan to report a fault (staff)",
+      "deleteConfirm": "Delete the place “{{name}}”? Its past reports stay; its QR code stops working.",
+      "bulkHint": "One place per line: Building / Floor / Room — or just the room.",
+      "bulkExample": "Building A / Ground / Class 1\nBuilding A / Ground / Class 2\nLab"
+    },
+    "techs": {
+      "add": "Add technician",
+      "edit": "Edit technician",
+      "name": "Name",
+      "phone": "Mobile",
+      "kind": "Type",
+      "company": "Company",
+      "branches": "Branches",
+      "branchesHint": "None chosen = all branches (all-branch managers only).",
+      "categories": "Specialties",
+      "hint": "A technician works from a link and PIN, without an account — copy and send both.",
+      "empty": "No technicians yet.",
+      "openN": "{{n}} open",
+      "pin": "PIN",
+      "copy": "Copy link and PIN",
+      "newPin": "Create a new PIN (the old one stops)",
+      "deleteConfirm": "Delete the technician “{{name}}”? Their link stops.",
+      "shareText": "Hello {{name}}, this is your maintenance tasks link: {{link}}\nPIN: {{pin}}"
+    },
+    "settings": {
+      "title": "Deadlines",
+      "hint": "Urgent in working hours, the rest in working days (per the working days and hours in Settings). Overdue reports go to the branch principal.",
+      "urgentHours": "Urgent (hours)",
+      "highDays": "High (days)",
+      "normalDays": "Normal (days)",
+      "lowDays": "Low (days)",
+      "saved": "Saved."
+    },
+    "public": {
+      "title": "Maintenance report",
+      "urgent": "Safety hazard / urgent",
+      "phone": "Your mobile number registered in the system",
+      "phoneHint": "To confirm you are school staff.",
+      "thanks": "Thank you {{name}}, the report was received",
+      "number": "Report no.:",
+      "follow": "Follow it in the Facilities maintenance section of the system.",
+      "another": "Another report for this place"
+    },
+    "tech": {
+      "title": "Maintenance tasks",
+      "pinPrompt": "Enter the PIN you received with the link",
+      "enter": "Enter",
+      "refresh": "Refresh",
+      "openN": "Open tasks ({{n}})",
+      "noOpen": "No open tasks.",
+      "addPhotos": "Photos / note",
+      "recentDone": "Recently done"
+    }
   }
 }
