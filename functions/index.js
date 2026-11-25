@@ -8551,10 +8551,11 @@ Object.assign(exports, supportFunctions);
 Object.assign(exports, require("./maintenance")({
   db, Timestamp, FieldValue, HttpsError, onCall, onSchedule, crypto, str, callerHasBranch, callerAll, normalizeDigits,
   notifyUsers, loadActiveUsers, nextRecordNumber, uploadPublicAttachment, getBucket: () => getStorage().bucket(), normalizeSla, addBusinessMs,
-  PUBLIC_APP_URL, riyadhDay: () => riyadhDay(),
+  PUBLIC_APP_URL, riyadhDay: () => riyadhDay(), taqnyatSend, waParam, toIntlNumber, WA_API_ENABLED, WA_SECRETS,
 }));
 // «المشتريات» — see functions/procurement.js.
 Object.assign(exports, require("./procurement")({
   db, Timestamp, FieldValue, HttpsError, onCall, onSchedule, str, callerHasBranch, callerAll, normalizeDigits,
   notifyUsers, loadActiveUsers, nextRecordNumber, uploadPublicAttachment, getBucket: () => getStorage().bucket(), riyadhDay: () => riyadhDay(),
+  taqnyatSend, waParam, toIntlNumber, WA_API_ENABLED, WA_SECRETS, PUBLIC_APP_URL, SCHOOL_NAME, crypto,
 }));

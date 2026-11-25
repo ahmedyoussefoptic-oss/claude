@@ -1657,7 +1657,9 @@
       "appointmentReminder": "Visit reminder",
       "lostFoundFound": "Lost item found",
       "meetingNotice": "Parent meeting notice",
-      "supportNotice": "Support programmes notice"
+      "supportNotice": "Support programmes notice",
+      "mntTechAssigned": "Maintenance work order assigned (technician)",
+      "procPurchaseOrder": "Purchase order (supplier)"
     },
     "guideTitle": "Suggested template texts to submit for approval",
     "guideIntro": "Create these four templates in the Taqnyat portal (Message Templates) with the names above, and wait for WhatsApp approval before enabling.",
@@ -1690,7 +1692,9 @@
     "tripVars": "{{1}} student — {{2}} trip name — {{3}} date and time — {{4}} message (announcement, reminder, receipt accepted/rejected) — {{5}} trip page link. Same “contact the branch” button /contact/{{1}}.",
     "tripImageVars": "Template with an image header (Header: Image) — same variables as the trip notice: {{1}} student, {{2}} trip, {{3}} date, {{4}} fee and deadline, {{5}} trip link, plus the contact button. Used to announce trips that have an image; leave empty to send text.",
     "lostFoundVars": "{{1}} reporter — {{3}} item — {{4}} «found (place), collect it from the branch»",
-    "meetingVars": "{{1}} student (or siblings) — {{2}} meeting — {{3}} date and time — {{4}} the message (invitation, confirmation, reminder, thanks and survey, absence, cancellation) — {{5}} the family's own link. «Contact the branch» button as /contact/{{1}}. One template for every meeting message."
+    "meetingVars": "{{1}} student (or siblings) — {{2}} meeting — {{3}} date and time — {{4}} the message (invitation, confirmation, reminder, thanks and survey, absence, cancellation) — {{5}} the family's own link. «Contact the branch» button as /contact/{{1}}. One template for every meeting message.",
+    "mntTechVars": "{{1}} technician — {{2}} work order no. — {{3}} fault and place — {{4}} priority and deadline — {{5}} technician's tasks link (the PIN is not sent). Button «Contact the branch» /contact/{{1}}. Sent on assignment and when an assigned preventive task is created.",
+    "procPoVars": "{{1}} supplier — {{2}} PO no. — {{3}} total — {{4}} branch and delivery date — {{5}} link to view the PO. Button «Contact the branch» /contact/{{1}}. Sent to the supplier's mobile when the PO is issued."
   },
   "contactBranch": {
     "loading": "Opening the branch chat...",
@@ -6076,7 +6080,8 @@
       "CANCELLED": "Cancelled",
       "COMMENT": "Note",
       "ESCALATED": "Escalated",
-      "COST": "Cost"
+      "COST": "Cost",
+      "WHATSAPP": "WhatsApp"
     },
     "fromComplaint": "Turn into maintenance report",
     "fromComplaintTitle": "Maintenance report from note {{n}}",
@@ -6152,7 +6157,8 @@
       "copy": "Copy link and PIN",
       "newPin": "Create a new PIN (the old one stops)",
       "deleteConfirm": "Delete the technician “{{name}}”? Their link stops.",
-      "shareText": "Hello {{name}}, this is your maintenance tasks link: {{link}}\nPIN: {{pin}}"
+      "shareText": "Hello {{name}}, this is your maintenance tasks link: {{link}}\nPIN: {{pin}}",
+      "wa": "WhatsApp"
     },
     "settings": {
       "title": "Deadlines",
@@ -6331,7 +6337,8 @@
       "requests": "Requests",
       "suppliers": "Suppliers",
       "settings": "Settings",
-      "budgets": "Budgets"
+      "budgets": "Budgets",
+      "inventory": "Stock"
     },
     "filters": {
       "ACTIVE": "In progress",
@@ -6427,7 +6434,8 @@
       "RATED": "Supplier rated",
       "COMMENT": "Note",
       "QUOTE": "Quote",
-      "QUOTE_REMOVED": "Quote removed"
+      "QUOTE_REMOVED": "Quote removed",
+      "WHATSAPP": "WhatsApp"
     },
     "dash": {
       "mine": "Waiting for you ({{n}})",
@@ -6543,6 +6551,65 @@
       "approved": "Approved",
       "ordered": "Ordered",
       "received": "Received"
+    },
+    "poShare": {
+      "link": "Supplier link",
+      "copy": "Copy link",
+      "wa": "WhatsApp (from my phone)",
+      "send": "Send with template",
+      "text": "Dear {{supplier}},\nPurchase order {{number}} has been issued to you. To view and print it:\n{{link}}"
+    },
+    "inv": {
+      "tab": "Stock",
+      "item": "Item",
+      "code": "Code",
+      "qty": "Qty",
+      "min": "Reorder level",
+      "minDefault": "Default reorder level",
+      "minHint": "Can be changed per branch in the stock table.",
+      "lastPrice": "Last price",
+      "value": "Value",
+      "search": "Search by name or code",
+      "onlyLow": "Low only ({{n}})",
+      "newItem": "New item",
+      "editItem": "Edit item",
+      "deleteItem": "Retire item",
+      "deleteConfirm": "Retire “{{name}}” from the catalogue? Its movements stay.",
+      "reorder": "Purchase request for low ({{n}})",
+      "reorderTitle": "Restock {{branch}}",
+      "moves": "Movements",
+      "movesOf": "Movements of “{{name}}”",
+      "movesBranch": "Stock movements — {{branch}}",
+      "noMoves": "No movements.",
+      "empty": "No items — add items to the catalogue; stock comes in from received purchase orders or by adding.",
+      "low": "Low",
+      "current": "Current balance {{n}} {{unit}}",
+      "counted": "Actual quantity counted",
+      "ticket": "Maintenance report no.",
+      "ticketHint": "The value is added to the report's cost and logged in its history.",
+      "to": "Issued to",
+      "toHint": "Department or person (when not for a report)",
+      "toBranch": "To branch",
+      "when": "When",
+      "move": "Movement",
+      "after": "Balance after",
+      "details": "Details",
+      "inCatalog": "Catalogue item — goes into stock on receipt",
+      "catalogHint": "Pick the name from the stock catalogue so the item enters the branch's stock on receipt.",
+      "types": {
+        "OUT": "Issue",
+        "IN": "Add",
+        "COUNT": "Count",
+        "TRANSFER": "Transfer",
+        "MIN": "Reorder level"
+      },
+      "moveTypes": {
+        "OUT": "Issue",
+        "IN": "Add",
+        "COUNT": "Count",
+        "TRANSFER_OUT": "Transfer out",
+        "TRANSFER_IN": "Transfer in"
+      }
     }
   }
 }

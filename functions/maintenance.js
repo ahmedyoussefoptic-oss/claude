@@ -37,6 +37,7 @@ module.exports = function maintenanceModule(d) {
   const {
     db, Timestamp, FieldValue, HttpsError, onCall, onSchedule, crypto, str, callerHasBranch, callerAll, normalizeDigits,
     notifyUsers, loadActiveUsers, nextRecordNumber, uploadPublicAttachment, getBucket, normalizeSla, addBusinessMs, PUBLIC_APP_URL, riyadhDay,
+    taqnyatSend, waParam, toIntlNumber, WA_API_ENABLED, WA_SECRETS = [],
   } = d;
   const ms = (ts) => (ts?.toMillis ? ts.toMillis() : 0);
   const token = (n = 24) => Array.from(crypto.randomBytes(n), (b) => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31]).join("");
@@ -93,6 +94,32 @@ module.exports = function maintenanceModule(d) {
     const span = priority === "URGENT" ? Number(mnt.urgentHours) * 3600e3
       : Number(priority === "HIGH" ? mnt.highDays : priority === "LOW" ? mnt.lowDays : mnt.normalDays) * dayLen;
     return addBusinessMs(from, Math.max(0, span || 0), sla);
+  }
+
+  // --- WhatsApp to the technician (template «mntTechAssigned») ----------------
+  // {{1}} technician, {{2}} work order number, {{3}} fault and place,
+  // {{4}} priority and deadline, {{5}} their tasks link (the PIN is not sent)
+  // — and the "contact the branch" button. Without the template nothing is
+  // sent (the manager can still use the WhatsApp button on the technician).
+  async function waTech(ticketRef, t, x) {
+    if (!WA_API_ENABLED || !taqnyatSend || !x?.phone) return;
+    const ws = (await db.collection("settings").doc("whatsappApi").get()).data() || {};
+    const name = (ws.templates || {}).mntTechAssigned;
+    if (!ws.enabled || !name) return;
+    const due = ms(t.dueAt) ? new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Riyadh", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(new Date(ms(t.dueAt))) : "";
+    const vars = [x.name, t.number, [t.title, t.place].filter(Boolean).join(" — "), `${PRI_AR[t.priority] || ""}${due ? ` — المهلة \u2066${due}\u2069` : ""}`, `${PUBLIC_APP_URL}/tech/${x.token}`];
+    let note;
+    try {
+      await taqnyatSend({
+        to: toIntlNumber(x.phone), type: "template", template: { name, language: { code: ws.language || "ar" } },
+        components: [
+          { type: "body", parameters: vars.map((v) => ({ type: "text", text: waParam(v) })) },
+          { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: `BR-${t.branch || ""}` }] },
+        ],
+      }, { kind: "maintenance", ticketId: ticketRef.id });
+      note = `أُرسل واتساب للفني ${x.name}`;
+    } catch (err) { note = `تعذّر إرسال واتساب للفني: ${String(err.message || err).slice(0, 200)}`; }
+    await ticketRef.update({ log: FieldValue.arrayUnion({ at: Date.now(), by: "", byName: "النظام", action: "WHATSAPP", note }) }).catch(() => {});
   }
 
   // --- photos ---------------------------------------------------------------
@@ -249,6 +276,7 @@ module.exports = function maintenanceModule(d) {
         status: t.status === "NEW" ? "ASSIGNED" : t.status, assignedAt: Timestamp.fromMillis(now), updatedAt: Timestamp.fromMillis(now),
         log: FieldValue.arrayUnion(logEntry(u, "ASSIGNED", { to: x.name, note: str(dd.note, 500) })),
       });
+      await waTech(ref, { ...t, branch: t.branch }, x);
       return handlers.get(u, { id: ref.id });
     },
     async update(u, dd) {
@@ -578,6 +606,10 @@ module.exports = function maintenanceModule(d) {
     let next = x.nextDue;
     for (let i = 0; i < 400 && next <= today; i++) next = addFreq(next, x.freq);
     await ref.update({ nextDue: next, lastRun: today, lastTicket: out.number });
+    if (tech && tech.active !== false) {
+      const tRef = tickets().doc(out.id);
+      await waTech(tRef, (await tRef.get()).data(), tech);
+    }
     return { ...out, nextDue: next };
   }
   async function setWorkStatus(ref, t, to, { by, note, parts, photos, checklist }) {
@@ -603,7 +635,7 @@ module.exports = function maintenanceModule(d) {
   }
 
   const out = {};
-  out.mntAction = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+  out.mntAction = onCall({ timeoutSeconds: 120, memory: "512MiB", secrets: WA_SECRETS }, async (request) => {
     const u = await caller(request);
     const dd = request.data || {};
     const h = Object.prototype.hasOwnProperty.call(handlers, dd.action) ? handlers[dd.action] : null;
@@ -726,7 +758,7 @@ module.exports = function maintenanceModule(d) {
   // Every half hour in working hours: work past its deadline goes to the
   // branch principal and the maintenance managers (once). At 7:00 the
   // managers get the day's summary of their branches.
-  out.mntSweep = onSchedule({ schedule: "*/30 6-17 * * 0-4", timeZone: "Asia/Riyadh", timeoutSeconds: 300, memory: "512MiB" }, async () => {
+  out.mntSweep = onSchedule({ schedule: "*/30 6-17 * * 0-4", timeZone: "Asia/Riyadh", timeoutSeconds: 300, memory: "512MiB", secrets: WA_SECRETS }, async () => {
     const open = (await tickets().where("status", "in", OPEN).get()).docs.map((x) => ({ ref: x.ref, id: x.id, ...x.data() }));
     const now = Date.now();
     const users = await loadActiveUsers();

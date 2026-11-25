@@ -37,6 +37,7 @@ import Maintenance from './pages/Maintenance';
 import MaintenanceReport from './pages/MaintenanceReport';
 import MaintenanceTech from './pages/MaintenanceTech';
 import Procurement from './pages/Procurement';
+import PurchaseOrderPublic from './pages/PurchaseOrderPublic';
 import Settings from './pages/Settings';
 import DeletedComplaints from './pages/DeletedComplaints';
 import { ROLES } from './config/roles';
@@ -119,6 +120,7 @@ function App() {
         <Route path="/support-nominate/:token" element={<SupportNominate />} />
         <Route path="/fix/:token" element={<MaintenanceReport />} />
         <Route path="/tech/:token" element={<MaintenanceTech />} />
+        <Route path="/po/:token" element={<PurchaseOrderPublic />} />
         <Route path="/leave" element={<LeaveRequest />} />
         <Route path="/sped/:formId" element={<SpecialEducationForm />} />
         <Route path="/join" element={<JoinInquiry />} />

@@ -608,7 +608,7 @@ service cloud.firestore {
         // Facilities maintenance: read and written only by functions/maintenance.js.
         'mntPlaces', 'mntTechs', 'mntLinks', 'mntTickets', 'mntAssets', 'mntPlans',
         // Purchasing: read and written only by functions/procurement.js.
-        'procRequests', 'procSuppliers', 'procBudgets'
+        'procRequests', 'procSuppliers', 'procBudgets', 'procLinks', 'invItems', 'invStock', 'invMoves'
       ]);
     }
   }

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, Printer, Check, X, Undo2, Pencil, Ban, ShoppingCart, PackageCheck, PackageX, Receipt, BadgeDollarSign, Star, MessageSquare, CheckCircle2, AlertTriangle, Hammer, FileSpreadsheet, Trash2, PiggyBank } from 'lucide-react';
+import { Loader2, Printer, Check, X, Undo2, Pencil, Ban, ShoppingCart, PackageCheck, PackageX, Receipt, BadgeDollarSign, Star, MessageSquare, CheckCircle2, AlertTriangle, Hammer, FileSpreadsheet, Trash2, PiggyBank, Link2, MessageCircle, Send } from 'lucide-react';
 import { Modal, Pill, Field, inputCls, btn } from '../platform/ui';
 import { callProc, filePayload, money, round2, PROC_STATUS_STYLE, STEP_STYLE } from '../../config/procurement';
 import { fmtDateTime } from '../../config/maintenance';
 import FilePicker, { FileLinks } from './FilePicker';
 import RequestForm from './RequestForm';
 import { printPurchaseOrder } from './printPurchaseOrder';
+import { waLink } from '../../utils/whatsapp';
 
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Riyadh' }).format(new Date());
 
@@ -24,6 +25,7 @@ export default function RequestDetails({ id, branchName, settings, onClose, onCh
   const [form, setForm] = useState({});
   const [suppliers, setSuppliers] = useState(null);
   const [editing, setEditing] = useState(false);
+  const [poLink, setPoLink] = useState(null);
 
   const load = useCallback(() => callProc('get', { id }).then((x) => { setR(x.request); setError(null); }).catch((err) => setError(err.message)), [id]);
   useEffect(() => { load(); }, [load]);
@@ -105,7 +107,16 @@ export default function RequestDetails({ id, branchName, settings, onClose, onCh
     <Modal onClose={onClose} size="max-w-4xl"
       title={<span className="flex flex-wrap items-center gap-2"><span dir="ltr">{r.number}</span><Pill className={PROC_STATUS_STYLE[r.status]}>{t(`proc.status.${r.status}`)}</Pill>{r.urgent && <Pill className="bg-rose-600 text-white border-rose-600">{t('proc.urgentTag')}</Pill>}</span>}
       subtitle={`${r.title} · ${branchName(r.branch)} · ${t(`proc.categories.${r.category}`)} · ${r.requesterName}`}
-      footer={r.po && <button type="button" onClick={() => printPurchaseOrder({ r, t, i18n, branchName })} className={btn.ghost}><Printer className="w-4 h-4" />{t('proc.printOrder')}</button>}>
+      footer={r.po && <>
+        {c.share && <>
+          {!poLink ? <button type="button" onClick={() => callProc('poLink', { id }).then(setPoLink).catch((err) => setError(err.message))} className={btn.ghost}><Link2 className="w-4 h-4" />{t('proc.poShare.link')}</button> : <>
+            <button type="button" onClick={() => navigator.clipboard.writeText(poLink.link).catch(() => {})} className={btn.ghost}><Link2 className="w-4 h-4" />{t('proc.poShare.copy')}</button>
+            {poLink.phone && <a href={waLink(poLink.phone, t('proc.poShare.text', { supplier: poLink.supplier, number: r.po.number, link: poLink.link }))} target="_blank" rel="noreferrer" className={btn.ghost}><MessageCircle className="w-4 h-4" />{t('proc.poShare.wa')}</a>}
+            <button type="button" disabled={!!busy} onClick={() => { setBusy('send'); callProc('poLink', { id, send: true }).then((x) => { if (x.request) setR(x.request); }).catch((err) => setError(err.message)).finally(() => setBusy('')); }} className={btn.ghost}><Send className="w-4 h-4" />{t('proc.poShare.send')}</button>
+          </>}
+        </>}
+        <button type="button" onClick={() => printPurchaseOrder({ r, t, i18n, branchName })} className={btn.ghost}><Printer className="w-4 h-4" />{t('proc.printOrder')}</button>
+      </>}>
       {error && <p className="text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2">{error}</p>}
       {r.mntTicketNumber && <p className="text-xs text-amber-800 flex items-center gap-1"><Hammer className="w-3.5 h-3.5" />{t('proc.forTicket', { n: r.mntTicketNumber })}</p>}
       {r.justification && <p className="text-sm text-slate-700 whitespace-pre-wrap bg-slate-50 rounded-xl p-3">{r.justification}</p>}

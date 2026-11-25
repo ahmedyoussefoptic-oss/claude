@@ -8,7 +8,7 @@ import { useWhatsAppApi, DEFAULT_WA_API } from '../../hooks/useWhatsAppApi';
 import { toWhatsAppNumber } from '../../utils/whatsapp';
 import WhatsAppDiagnostics from './WhatsAppDiagnostics';
 
-const TEMPLATE_KEYS = ['complaintReceipt', 'complaintResolution', 'techReceipt', 'techResolution', 'visitMet', 'appointmentConfirmed', 'appointmentRescheduled', 'appointmentReminder', 'lostFoundReceipt', 'lostFoundFound', 'lostFoundReturned', 'tripNotice', 'tripAnnouncementImage', 'meetingNotice', 'supportNotice'];
+const TEMPLATE_KEYS = ['complaintReceipt', 'complaintResolution', 'techReceipt', 'techResolution', 'visitMet', 'appointmentConfirmed', 'appointmentRescheduled', 'appointmentReminder', 'lostFoundReceipt', 'lostFoundFound', 'lostFoundReturned', 'tripNotice', 'tripAnnouncementImage', 'meetingNotice', 'supportNotice', 'mntTechAssigned', 'procPurchaseOrder'];
 
 // Suggested template bodies to submit for approval in the Taqnyat portal.
 // All four share the same variables (see sendWhatsAppApiMessage):
@@ -31,6 +31,8 @@ const SUGGESTED = {
   tripNotice: `ولي أمر الطالب/ة {{1}}،\nبخصوص رحلة «{{2}}» يوم {{3}}:\n{{4}}\nتفاصيل الرحلة والموافقة: {{5}}\n\n${NOTICE}`,
   meetingNotice: `ولي أمر الطالب/ة {{1}}،\nبخصوص «{{2}}» يوم {{3}}:\n{{4}}\nالتفاصيل والتأكيد: {{5}}\n\n${NOTICE}`,
   supportNotice: `ولي أمر الطالب/ة {{1}}،\nبخصوص «{{2}}» ({{3}}):\n{{4}}\nالتفاصيل والرد: {{5}}\n\n${NOTICE}`,
+  mntTechAssigned: `مرحباً {{1}}،\nأُسند إليك أمر عمل صيانة رقم {{2}}:\n{{3}}\n{{4}}\nلفتح المهمة وتحديثها (بالرمز السري الذي لديك): {{5}}`,
+  procPurchaseOrder: `السادة {{1}}،\nصدر لكم أمر الشراء رقم {{2}} بإجمالي {{3}} شامل الضريبة.\n{{4}}\nلعرض أمر الشراء وطباعته: {{5}}`,
   tripAnnouncementImage: `رحلات مدارس المكتشف العالمية\nولي أمر الطالب/ة {{1}}،\nيسعدنا دعوتكم لرحلة «{{2}}» يوم {{3}}.\n{{4}}\nتفاصيل الرحلة والموافقة: {{5}}\n\n${NOTICE}`,
 };
 
@@ -38,7 +40,7 @@ const SUGGESTED = {
 const VAR_HINT = {
   complaintReceipt: 'receiptVars', techReceipt: 'receiptVars',
   complaintResolution: 'resolutionVars', techResolution: 'resolutionVars',
-  visitMet: 'visitVars', appointmentConfirmed: 'appointmentVars', appointmentRescheduled: 'appointmentVars', appointmentReminder: 'appointmentVars', lostFoundReceipt: 'lostReceiptVars', lostFoundFound: 'lostFoundVars', lostFoundReturned: 'lostReturnedVars', tripNotice: 'tripVars', tripAnnouncementImage: 'tripImageVars', meetingNotice: 'meetingVars', supportNotice: 'meetingVars',
+  visitMet: 'visitVars', appointmentConfirmed: 'appointmentVars', appointmentRescheduled: 'appointmentVars', appointmentReminder: 'appointmentVars', lostFoundReceipt: 'lostReceiptVars', lostFoundFound: 'lostFoundVars', lostFoundReturned: 'lostReturnedVars', tripNotice: 'tripVars', tripAnnouncementImage: 'tripImageVars', meetingNotice: 'meetingVars', supportNotice: 'meetingVars', mntTechAssigned: 'mntTechVars', procPurchaseOrder: 'procPoVars',
 };
 
 function CopyBox({ text }) {

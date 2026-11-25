@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Loader2, Send, Plus, Trash2 } from 'lucide-react';
 import { Modal, Field, inputCls, btn } from '../platform/ui';
@@ -8,7 +8,7 @@ import { userBranches } from '../../utils/scope';
 import { callProc, filePayload, money, round2, PROC_CATEGORIES } from '../../config/procurement';
 import FilePicker from './FilePicker';
 
-const emptyItem = () => ({ name: '', qty: 1, unit: '', estPrice: '' });
+const emptyItem = () => ({ name: '', qty: 1, unit: '', estPrice: '', itemId: '' });
 
 // A purchase request: items with quantities and estimated unit prices (before
 // VAT), the reason, attachments (quotes, photos). `initial` prefills it —
@@ -21,13 +21,21 @@ export default function RequestForm({ onClose, onSaved, initial = {}, settings }
   const editing = !!initial.id;
   const [f, setF] = useState({
     branch: initial.branch || '', title: initial.title || '', justification: initial.justification || '', category: initial.category || (initial.mntTicketId ? 'MAINTENANCE' : 'OTHER'), urgent: initial.urgent === true,
-    items: initial.items?.length ? initial.items.map((it) => ({ name: it.name, qty: it.qty, unit: it.unit || '', estPrice: it.estPrice ?? '' })) : [emptyItem()],
+    items: initial.items?.length ? initial.items.map((it) => ({ name: it.name, qty: it.qty, unit: it.unit || '', estPrice: it.estPrice ?? '', itemId: it.itemId || '' })) : [emptyItem()],
   });
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const setItem = (i, k, v) => setF((p) => ({ ...p, items: p.items.map((it, j) => (j === i ? { ...it, [k]: v } : it)) }));
+  // The stock catalogue (when the user may see it): a name picked from it
+  // ties the line to the catalogue item, so its receipt goes into the store.
+  const [catalog, setCatalog] = useState([]);
+  useEffect(() => { callProc('invList').then((r) => setCatalog(r.items)).catch(() => setCatalog([])); }, []);
+  const setName = (i, name) => {
+    const c = catalog.find((x) => x.name === name.trim());
+    setF((p) => ({ ...p, items: p.items.map((it, j) => (j !== i ? it : c ? { ...it, name, itemId: c.id, unit: it.unit || c.unit, estPrice: it.estPrice || c.lastPrice || '' } : { ...it, name, itemId: '' })) }));
+  };
   const branchId = f.branch || (branches.length === 1 ? branches[0].id : '');
   const vatRate = Number(settings?.vatRate ?? 15);
   const sub = round2(f.items.reduce((n, it) => n + (Number(it.qty) || 0) * (Number(it.estPrice) || 0), 0));
@@ -72,7 +80,7 @@ export default function RequestForm({ onClose, onSaved, initial = {}, settings }
         </div>
         {f.items.map((it, i) => (
           <div key={i} className="grid grid-cols-2 md:grid-cols-[1fr_80px_90px_110px_100px_32px] gap-2 items-center">
-            <input value={it.name} onChange={(e) => setItem(i, 'name', e.target.value)} placeholder={t('proc.item')} className={`${inputCls} col-span-2 md:col-span-1`} />
+            <input value={it.name} list="proc-catalog" onChange={(e) => setName(i, e.target.value)} placeholder={t('proc.item')} className={`${inputCls} col-span-2 md:col-span-1 ${it.itemId ? 'border-emerald-300' : ''}`} title={it.itemId ? t('proc.inv.inCatalog') : ''} />
             <input type="number" min="0" step="any" value={it.qty} onChange={(e) => setItem(i, 'qty', e.target.value)} placeholder={t('proc.qty')} className={inputCls} dir="ltr" />
             <input value={it.unit} onChange={(e) => setItem(i, 'unit', e.target.value)} placeholder={t('proc.unitHint')} className={inputCls} />
             <input type="number" min="0" step="any" value={it.estPrice} onChange={(e) => setItem(i, 'estPrice', e.target.value)} placeholder={t('proc.estPrice')} className={inputCls} dir="ltr" />
@@ -80,6 +88,8 @@ export default function RequestForm({ onClose, onSaved, initial = {}, settings }
             <button type="button" disabled={f.items.length === 1} onClick={() => setF((p) => ({ ...p, items: p.items.filter((_, j) => j !== i) }))} className="p-1.5 text-slate-400 hover:text-rose-600 disabled:opacity-30"><Trash2 className="w-4 h-4" /></button>
           </div>
         ))}
+        <datalist id="proc-catalog">{catalog.map((c) => <option key={c.id} value={c.name} />)}</datalist>
+        {catalog.length > 0 && <p className="text-xs text-slate-500">{t('proc.inv.catalogHint')}</p>}
         <button type="button" onClick={() => setF((p) => ({ ...p, items: [...p.items, emptyItem()] }))} className={`${btn.small} border border-slate-200 text-slate-600 px-3 py-1.5`}><Plus className="w-3.5 h-3.5" />{t('proc.addItem')}</button>
       </div>
 

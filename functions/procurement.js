@@ -10,9 +10,13 @@
 // payment status only — no money moves through the system.
 //   procRequests/{id}    the request: items, approval steps, purchase order, receipts, invoice, payment, log (append-only)
 //   procSuppliers/{id}   a supplier: CR / VAT numbers, contacts, categories, documents' expiry, rating
+//   invItems/{id}        the consumables catalogue (name, unit, category, default reorder level, last price)
+//   invStock/{item_branch} an item's balance in one branch's store, and its reorder level there
+//   invMoves/{id}        every stock movement (in from a receipt, out to a work order or department, count, transfer) — append-only
+//   procLinks/{token}    a purchase order's read-only link for the supplier (/po/<token>)
 //   procBudgets/{fy_branch_category}  a yearly budget line of a branch (all categories, or one); its use is counted from the requests
 // Read and written only here (firestore.rules deny these collections).
-// Two functions in all (procAction, procSweep) — many separate functions
+// Three functions in all (procAction, procSweep, procPublic) — many separate functions
 // make deploys fail with 429.
 
 const CATEGORIES = ["MAINTENANCE", "STATIONERY", "CLEANING", "IT", "FURNITURE", "EDUCATIONAL", "SERVICES", "OTHER"];
@@ -26,6 +30,7 @@ module.exports = function procurementModule(d) {
   const {
     db, Timestamp, FieldValue, HttpsError, onCall, onSchedule, str, callerHasBranch, callerAll, normalizeDigits,
     notifyUsers, loadActiveUsers, nextRecordNumber, uploadPublicAttachment, getBucket, riyadhDay,
+    taqnyatSend, waParam, toIntlNumber, WA_API_ENABLED, WA_SECRETS = [], PUBLIC_APP_URL = "", SCHOOL_NAME = "", crypto,
   } = d;
   const ms = (ts) => (ts?.toMillis ? ts.toMillis() : 0);
   const idRe = /^[A-Za-z0-9]{6,40}$/;
@@ -34,6 +39,11 @@ module.exports = function procurementModule(d) {
   const requests = () => db.collection("procRequests");
   const suppliers = () => db.collection("procSuppliers");
   const budgets = () => db.collection("procBudgets");
+  const invItems = () => db.collection("invItems");
+  const invStock = () => db.collection("invStock");
+  const invMoves = () => db.collection("invMoves");
+  const procLinks = () => db.collection("procLinks");
+  const linkToken = () => Array.from(crypto.randomBytes(24), (b) => "abcdefghjkmnpqrstuvwxyz23456789"[b % 31]).join("");
   // The financial year a moment falls in (named by the year it starts), and its span.
   const fyOf = (msv, s) => { const d = new Date(msv + 3 * 3600e3); const m = d.getUTCMonth() + 1; return m >= Number(s.fiscalStartMonth || 1) ? d.getUTCFullYear() : d.getUTCFullYear() - 1; };
   const fySpan = (fy, s) => { const m = Number(s.fiscalStartMonth || 1); return [Date.UTC(fy, m - 1, 1) - 3 * 3600e3, Date.UTC(fy + 1, m - 1, 1) - 3 * 3600e3]; };
@@ -111,6 +121,7 @@ module.exports = function procurementModule(d) {
       cancel: (["PENDING_APPROVAL", "RETURNED"].includes(r.status) && (mine || isOfficer(u))) || (["APPROVED", "ORDERED"].includes(r.status) && isOfficer(u)),
       order: r.status === "APPROVED" && isOfficer(u),
       quote: r.status === "APPROVED" && isOfficer(u),
+      share: !!r.po && r.status !== "CANCELLED" && isOfficer(u),
       returnBack: r.status === "APPROVED" && isOfficer(u),
       receive: ["ORDERED", "PARTIAL"].includes(r.status) && receives(u, r) && r.po?.issuedBy !== u.uid,
       closeReceipt: r.status === "PARTIAL" && isOfficer(u),
@@ -126,7 +137,7 @@ module.exports = function procurementModule(d) {
     const recv = r.po ? receivedValue(r, s) : 0;
     return {
       id, number: r.number, branch: r.branch, category: r.category, title: r.title, justification: r.justification || "", urgent: r.urgent === true, status: r.status,
-      items: (r.items || []).map((it) => ({ name: it.name, qty: it.qty, unit: it.unit || "", estPrice: it.estPrice, price: it.price ?? null, received: it.received || 0 })),
+      items: (r.items || []).map((it) => ({ name: it.name, qty: it.qty, unit: it.unit || "", estPrice: it.estPrice, price: it.price ?? null, received: it.received || 0, itemId: it.itemId || "" })),
       estSubtotal: r.estSubtotal, estTotal: r.estTotal, steps: (r.steps || []).map((x) => ({ ...x })), stepIdx: r.stepIdx ?? 0,
       requesterUid: r.requesterUid, requesterName: r.requesterName || "", attachments: r.attachments || [], mntTicketId: r.mntTicketId || "", mntTicketNumber: r.mntTicketNumber || "",
       po: r.po ? { ...r.po, ...(can.seeSupplier || r.requesterUid === u?.uid || seesBranch(u, r.branch) ? {} : { supplierVat: "" }) } : null,
@@ -167,6 +178,7 @@ module.exports = function procurementModule(d) {
   function cleanItems(list) {
     const items = (Array.isArray(list) ? list : []).slice(0, 60).map((it) => ({
       name: str(it?.name, 160), qty: Math.max(0, round2(it?.qty)), unit: str(it?.unit, 20), estPrice: Math.max(0, round2(it?.estPrice)),
+      ...(idRe.test(String(it?.itemId || "")) ? { itemId: it.itemId } : {}),
     })).filter((it) => it.name && it.qty > 0);
     if (!items.length) throw new HttpsError("invalid-argument", "أضف صنفاً واحداً على الأقل بكميته.");
     return items;
@@ -207,7 +219,7 @@ module.exports = function procurementModule(d) {
       const rows = [...seen.entries()].map(([id, r]) => reqOut(id, r, u, s)).sort((a, b) => b.createdAt - a.createdAt);
       return {
         requests: rows, settings: s, now: Date.now(),
-        roles: { officer: isOfficer(u), finance: isFinance(u), exec: isExec(u), admin: isAdmin(u), viewer: seesAll(u) || u.isPrincipal === true || u.role === "UPPER_MANAGEMENT" },
+        roles: { officer: isOfficer(u), finance: isFinance(u), exec: isExec(u), admin: isAdmin(u), viewer: seesAll(u) || u.isPrincipal === true || u.role === "UPPER_MANAGEMENT", inventory: invSees(u), store: u.perms?.procReceive === true },
       };
     },
     async get(u, dd) {
@@ -356,6 +368,7 @@ module.exports = function procurementModule(d) {
       const now = Timestamp.now();
       await ref.update({ items, po, ...(quoteChoice ? { quoteChoice } : {}), status: "ORDERED", orderedAt: now, updatedAt: now, log: FieldValue.arrayUnion(logEntry(u, "ORDERED", { note: `${number} — ${sp.name} — ${fmt(total)} ر.س` })) });
       await suppliers().doc(dd.supplierId).update({ orders: (sp.orders || 0) + 1, spent: round2((sp.spent || 0) + total) });
+      await sendPo(ref, { ...r, items, po }, sp, u);
       notify([r.requesterUid], `صدر أمر الشراء ${number}`, `${r.title} — ${sp.name}${deliveryDate ? ` — التوريد ${deliveryDate}` : ""}`, ref.id, "PROC_ORDER");
       notify(await recipients("RECEIVE", r.branch, { except: [u.uid], fallback: false }), `توريد قادم ${number}`, `${r.title} — ${sp.name}${deliveryDate ? ` — ${deliveryDate}` : ""}`, ref.id, "PROC_ORDER");
       return handlers.get(u, { id: ref.id });
@@ -376,6 +389,7 @@ module.exports = function procurementModule(d) {
         items, status: full ? "RECEIVED" : "PARTIAL", ...(full ? { receivedAt: now } : {}), updatedAt: now, receipts: FieldValue.arrayUnion(receipt),
         log: FieldValue.arrayUnion(logEntry(u, full ? "RECEIVED" : "PARTIAL", { note: receipt.note })),
       });
+      await stockIn(r, add, u);
       if (full) await afterReceived(ref.id, r, u);
       return handlers.get(u, { id: ref.id });
     },
@@ -438,6 +452,114 @@ module.exports = function procurementModule(d) {
       if (!note) throw new HttpsError("invalid-argument", "اكتب الملاحظة.");
       await ref.update({ updatedAt: Timestamp.now(), log: FieldValue.arrayUnion(logEntry(u, "COMMENT", { note })) });
       return handlers.get(u, { id: ref.id });
+    },
+
+    // The purchase order's link for the supplier (made once), and its WhatsApp text.
+    async poLink(u, dd) {
+      const { ref, r } = await loadReq(u, dd.id);
+      need(isOfficer(u) && r.po, "للمشتريات بعد إصدار أمر الشراء.");
+      const token = await poToken(ref, r);
+      const sp = (await suppliers().doc(r.po.supplierId).get()).data() || {};
+      if (dd.send) await sendPo(ref, r, sp, u, { force: true });
+      return { link: `${PUBLIC_APP_URL}/po/${token}`, phone: sp.phone || "", supplier: r.po.supplierName, request: dd.send ? (await handlers.get(u, { id: ref.id })).request : undefined };
+    },
+
+    // --- stock (consumables, one store per branch) -----------------------
+    async invList(u) {
+      need(invSees(u), "المخزون لأمناء المستودعات والمشتريات ومديري الفروع والصيانة.");
+      const all = invAll(u);
+      const [items, stock] = await Promise.all([invItems().get(), invStock().get()]);
+      const branchesSeen = all ? null : [...new Set([...(u.branches || []), u.branch].filter(Boolean))];
+      return {
+        items: items.docs.map((x) => ({ id: x.id, ...invItemOut(x.data()) })).filter((x) => x.active).sort((a, b) => a.name.localeCompare(b.name, "ar")),
+        stock: stock.docs.map((x) => x.data()).filter((x) => !branchesSeen || branchesSeen.includes(x.branch)).map((x) => ({ itemId: x.itemId, branch: x.branch, qty: x.qty || 0, min: x.min ?? null })),
+        canCatalog: isOfficer(u) || u.perms?.procReceive === true, moveBranches: all && invMovesAny(u) ? ["*"] : (branchesSeen || []).filter((b) => invMovesIn(u, b)),
+      };
+    },
+    async invSaveItem(u, dd) {
+      need(isOfficer(u) || u.perms?.procReceive === true, "دليل الأصناف للمشتريات وأمناء المستودعات.");
+      const name = str(dd.name, 120);
+      if (!name) throw new HttpsError("invalid-argument", "اكتب اسم الصنف.");
+      const x = { name, unit: str(dd.unit, 20), code: str(dd.code, 40), category: CATEGORIES.includes(dd.category) ? dd.category : "OTHER", minQty: Math.max(0, round2(dd.minQty)), active: true, updatedAt: Timestamp.now() };
+      if (dd.id) {
+        if (!idRe.test(String(dd.id))) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+        const ref = invItems().doc(dd.id);
+        if (!(await ref.get()).exists) throw new HttpsError("not-found", "الصنف غير موجود.");
+        await ref.update(x);
+        return { id: dd.id };
+      }
+      const dup = (await invItems().where("name", "==", name).get()).docs.find((y) => y.data().active !== false);
+      if (dup) throw new HttpsError("already-exists", "الصنف موجود في الدليل.");
+      const ref = invItems().doc();
+      await ref.set({ ...x, lastPrice: Math.max(0, round2(dd.lastPrice)), createdAt: Timestamp.now(), createdBy: u.uid });
+      return { id: ref.id };
+    },
+    async invDeleteItem(u, dd) {
+      need(isOfficer(u), "دليل الأصناف للمشتريات.");
+      if (!idRe.test(String(dd.id || ""))) throw new HttpsError("invalid-argument", "طلب غير صالح.");
+      await invItems().doc(dd.id).update({ active: false, updatedAt: Timestamp.now() });
+      return { ok: true };
+    },
+    // A movement: OUT (to a work order or a department), IN (outside a purchase order), COUNT (stocktaking), TRANSFER (to another branch).
+    async invMove(u, dd) {
+      const branch = String(dd.branch || "");
+      if (!branchRe.test(branch) || !invMovesIn(u, branch)) throw new HttpsError("permission-denied", "حركات المخزون لأمين مستودع الفرع أو المشتريات.");
+      if (!idRe.test(String(dd.itemId || ""))) throw new HttpsError("invalid-argument", "اختر الصنف.");
+      const item = (await invItems().doc(dd.itemId).get()).data();
+      if (!item || item.active === false) throw new HttpsError("not-found", "الصنف غير موجود.");
+      const type = String(dd.type || "");
+      const qty = round2(dd.qty);
+      const note = str(dd.note, 500);
+      if (!["OUT", "IN", "COUNT", "TRANSFER"].includes(type) || !(qty >= 0) || (type !== "COUNT" && !(qty > 0))) throw new HttpsError("invalid-argument", "اكتب الكمية.");
+      if (type === "COUNT" && !note) throw new HttpsError("invalid-argument", "اكتب ملاحظة الجرد.");
+      let ticket = null;
+      if (type === "OUT" && dd.ticketNumber) {
+        const tn = str(dd.ticketNumber, 30).toUpperCase();
+        const t = (await db.collection("mntTickets").where("number", "==", tn).get()).docs[0];
+        if (!t || t.data().branch !== branch) throw new HttpsError("not-found", "بلاغ الصيانة غير موجود في هذا الفرع.");
+        ticket = t;
+      }
+      const toBranch = String(dd.toBranch || "");
+      if (type === "TRANSFER" && (!branchRe.test(toBranch) || toBranch === branch)) throw new HttpsError("invalid-argument", "اختر الفرع المنقول إليه.");
+      const by = { uid: u.uid, name: u.name || "" };
+      const base = { itemId: dd.itemId, itemName: item.name, unit: item.unit || "", note, by: u.uid, byName: u.name || "", at: Date.now() };
+      if (type === "COUNT") {
+        const cur = await stockOf(dd.itemId, branch);
+        await applyMove(dd.itemId, branch, qty - cur.qty, { ...base, type: "COUNT", counted: qty }, item, by);
+      } else if (type === "TRANSFER") {
+        await applyMove(dd.itemId, branch, -qty, { ...base, type: "TRANSFER_OUT", toBranch }, item, by, { mustHave: true });
+        await applyMove(dd.itemId, toBranch, qty, { ...base, type: "TRANSFER_IN", fromBranch: branch }, item, by);
+      } else if (type === "OUT") {
+        const to = str(dd.to, 120);
+        if (!ticket && !to) throw new HttpsError("invalid-argument", "اكتب الجهة المصروف لها أو رقم بلاغ الصيانة.");
+        await applyMove(dd.itemId, branch, -qty, { ...base, type: "OUT", to, ...(ticket ? { ticketId: ticket.id, ticketNumber: ticket.data().number } : {}) }, item, by, { mustHave: true });
+        // A work order gets the parts in its history and their value in its cost.
+        if (ticket) {
+          const t = ticket.data();
+          const value = round2(qty * (item.lastPrice || 0));
+          const c = t.cost || { labor: 0, parts: 0, contractor: 0 };
+          const cost = { ...c, parts: round2((c.parts || 0) + value), total: round2((c.labor || 0) + (c.parts || 0) + value + (c.contractor || 0)), at: Date.now(), by: u.uid, byName: u.name || "" };
+          await ticket.ref.update({ ...(value ? { cost } : {}), updatedAt: Timestamp.now(), log: FieldValue.arrayUnion(logEntry(by, "COMMENT", { note: `صُرف من المخزون: ${item.name} × ${qty}${value ? ` (${fmt(value)} ر.س)` : ""}` })) });
+        }
+      } else await applyMove(dd.itemId, branch, qty, { ...base, type: "IN" }, item, by);
+      return handlers.invList(u);
+    },
+    async invSetMin(u, dd) {
+      const branch = String(dd.branch || "");
+      if (!branchRe.test(branch) || !invMovesIn(u, branch) || !idRe.test(String(dd.itemId || ""))) throw new HttpsError("permission-denied", "لأمين مستودع الفرع أو المشتريات.");
+      const min = dd.min === "" || dd.min == null ? null : Math.max(0, round2(dd.min));
+      await invStock().doc(`${dd.itemId}_${branch}`).set({ itemId: dd.itemId, branch, min, updatedAt: Timestamp.now() }, { merge: true });
+      return handlers.invList(u);
+    },
+    async invMoves(u, dd) {
+      need(invSees(u), "المخزون لأمناء المستودعات والمشتريات ومديري الفروع والصيانة.");
+      let q = invMoves();
+      if (idRe.test(String(dd.itemId || ""))) q = q.where("itemId", "==", dd.itemId);
+      else if (branchRe.test(String(dd.branch || ""))) q = q.where("branch", "==", dd.branch);
+      const all = invAll(u);
+      const rows = (await q.get()).docs.map((x) => x.data()).filter((m) => all || callerHasBranch(u, m.branch)).filter((m) => !dd.branch || m.branch === dd.branch)
+        .sort((a, b) => b.at - a.at).slice(0, 300);
+      return { moves: rows };
     },
 
     // --- price quotes -----------------------------------------------------
@@ -539,6 +661,81 @@ module.exports = function procurementModule(d) {
     },
   };
 
+  // --- stock helpers --------------------------------------------------------
+  const invAll = (u) => isOfficer(u) || isFinance(u) || isExec(u) || callerAll(u);
+  const invSees = (u) => invAll(u) || u.perms?.procReceive === true || u.isPrincipal === true || u.department === "FACILITIES" || u.perms?.mntManage === true;
+  const invMovesAny = (u) => isOfficer(u);
+  const invMovesIn = (u, b) => isOfficer(u) || (u.perms?.procReceive === true && callerHasBranch(u, b));
+  const invItemOut = (x) => ({ name: x.name, unit: x.unit || "", code: x.code || "", category: x.category || "OTHER", minQty: x.minQty || 0, lastPrice: x.lastPrice || 0, active: x.active !== false });
+  async function stockOf(itemId, branch) {
+    const snap = await invStock().doc(`${itemId}_${branch}`).get();
+    return { ref: invStock().doc(`${itemId}_${branch}`), qty: snap.exists ? snap.data().qty || 0 : 0, data: snap.data() || {} };
+  }
+  // One movement: the balance changes, the movement is kept, and a balance at
+  // or under its reorder level tells the storekeepers and procurement (once).
+  async function applyMove(itemId, branch, delta, move, item, by, { mustHave = false } = {}) {
+    const ref = invStock().doc(`${itemId}_${branch}`);
+    const after = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const cur = snap.exists ? snap.data().qty || 0 : 0;
+      if (mustHave && cur + delta < -0.0001) throw new HttpsError("failed-precondition", `الرصيد غير كافٍ (المتوفر ${cur}).`);
+      const next = round2(cur + delta);
+      tx.set(ref, { itemId, branch, qty: next, updatedAt: Timestamp.now() }, { merge: true });
+      return { next, data: snap.data() || {} };
+    });
+    await invMoves().doc().set({ ...move, branch, qty: round2(delta), after: after.next });
+    const min = after.data.min ?? item.minQty ?? 0;
+    if (min > 0 && after.next <= min && !after.data.lowAlerted) {
+      await ref.set({ lowAlerted: true }, { merge: true });
+      const users = await loadActiveUsers();
+      const ids = [...await recipients("RECEIVE", branch, { users, fallback: false }), ...await recipients("OFFICER", branch, { users })].filter((x) => x !== by.uid);
+      notify(ids, `مخزون منخفض: ${item.name}`, `الرصيد ${after.next} ${item.unit || ""} — حد إعادة الطلب ${min}`, "", "PROC_REMINDER");
+    } else if (after.next > min && after.data.lowAlerted) await ref.set({ lowAlerted: false }, { merge: true });
+    return after.next;
+  }
+  // What arrived for catalogue items goes into the branch's store at its price.
+  async function stockIn(r, add, u) {
+    for (let i = 0; i < r.items.length; i++) {
+      const it = r.items[i];
+      if (!it.itemId || !(add[i] > 0)) continue;
+      const item = (await invItems().doc(it.itemId).get()).data();
+      if (!item) continue;
+      await applyMove(it.itemId, r.branch, add[i], { itemId: it.itemId, itemName: item.name, unit: item.unit || "", type: "IN", ref: r.number, po: r.po?.number || "", note: "", by: u.uid, byName: u.name || "", at: Date.now() }, item, { uid: u.uid });
+      if (it.price > 0) await invItems().doc(it.itemId).update({ lastPrice: it.price });
+    }
+  }
+
+  // --- the purchase order to the supplier (link + WhatsApp «procPurchaseOrder») ---
+  // {{1}} supplier, {{2}} PO number, {{3}} total, {{4}} branch and delivery
+  // date, {{5}} the order's read-only link — and the "contact the branch" button.
+  async function poToken(ref, r) {
+    if (r.poToken) return r.poToken;
+    const token = linkToken();
+    await Promise.all([procLinks().doc(token).set({ requestId: ref.id, createdAt: Timestamp.now() }), ref.update({ poToken: token })]);
+    return token;
+  }
+  async function sendPo(ref, r, sp, u, { force = false } = {}) {
+    if (!WA_API_ENABLED || !taqnyatSend || !sp?.phone) return;
+    const ws = (await db.collection("settings").doc("whatsappApi").get()).data() || {};
+    const name = (ws.templates || {}).procPurchaseOrder;
+    if (!ws.enabled || !name || (!force && ws.procAutoSend === false)) return;
+    const token = await poToken(ref, r);
+    const b = (await db.collection("branches").doc(r.branch).get()).data();
+    const vars = [sp.name, r.po.number, `${fmt(r.po.total)} ر.س`, `${b?.name || r.branch}${r.po.deliveryDate ? ` — التوريد \u2066${r.po.deliveryDate}\u2069` : ""}`, `${PUBLIC_APP_URL}/po/${token}`];
+    let note;
+    try {
+      await taqnyatSend({
+        to: toIntlNumber(sp.phone), type: "template", template: { name, language: { code: ws.language || "ar" } },
+        components: [
+          { type: "body", parameters: vars.map((v) => ({ type: "text", text: waParam(v) })) },
+          { type: "button", sub_type: "url", index: "0", parameters: [{ type: "text", text: `BR-${r.branch}` }] },
+        ],
+      }, { kind: "procurement", requestId: ref.id });
+      note = `أُرسل أمر الشراء للمورد واتساب`;
+    } catch (err) { note = `تعذّر إرسال واتساب للمورد: ${String(err.message || err).slice(0, 200)}`; }
+    await ref.update({ log: FieldValue.arrayUnion(logEntry(u, "WHATSAPP", { note })) }).catch(() => {});
+  }
+
   // Everything arrived: the requester, finance, and the work order waiting for these parts.
   async function afterReceived(id, r, u) {
     notify([r.requesterUid].filter((x) => x !== u.uid), `استُلم طلب الشراء ${r.number}`, `${r.title} — ${r.po?.supplierName || ""}`, id, "PROC_RECEIVED");
@@ -566,12 +763,28 @@ module.exports = function procurementModule(d) {
   }
 
   const out = {};
-  out.procAction = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
+  out.procAction = onCall({ timeoutSeconds: 120, memory: "512MiB", secrets: WA_SECRETS }, async (request) => {
     const u = await caller(request);
     const dd = request.data || {};
     const h = Object.prototype.hasOwnProperty.call(handlers, dd.action) ? handlers[dd.action] : null;
     if (!h) throw new HttpsError("invalid-argument", "إجراء غير معروف.");
     return h(u, dd);
+  });
+
+  // /po/<token>: the purchase order, read-only, for the supplier.
+  out.procPublic = onCall({ timeoutSeconds: 60 }, async (request) => {
+    const tk = request.data?.token;
+    if (typeof tk !== "string" || !/^[a-z0-9]{16,40}$/.test(tk)) throw new HttpsError("not-found", "الرابط غير صحيح.");
+    const l = (await procLinks().doc(tk).get()).data();
+    const r = l ? (await requests().doc(l.requestId).get()).data() : null;
+    if (!r || !r.po || r.poToken !== tk || r.status === "CANCELLED") throw new HttpsError("not-found", "الرابط غير صحيح أو انتهت صلاحيته.");
+    const b = (await db.collection("branches").doc(r.branch).get()).data();
+    const { issuedBy, ...po } = r.po;
+    void issuedBy;
+    return {
+      school: SCHOOL_NAME, branch: r.branch, branchName: b?.name || r.branch, number: r.number, status: r.status,
+      items: r.items.map((it) => ({ name: it.name, qty: it.qty, unit: it.unit || "", price: it.price ?? 0, received: it.received || 0 })), po,
+    };
   });
 
   // Each working morning: approvals waiting more than two days (a reminder to

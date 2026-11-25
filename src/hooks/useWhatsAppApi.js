@@ -22,6 +22,8 @@ export const DEFAULT_WA_API = {
     tripNotice: 'trip_notice',
     meetingNotice: '', // empty until the template is approved: links are sent from the invitations list
     supportNotice: '', // empty: the meeting template is used (same five variables)
+    mntTechAssigned: '', // empty until approved: managers send the technician's link from their own WhatsApp
+    procPurchaseOrder: '', // empty until approved: procurement shares the order's link from their own WhatsApp
   },
 };
 

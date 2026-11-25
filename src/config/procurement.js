@@ -4,6 +4,8 @@ import { photoPayload } from './maintenance';
 
 // «المشتريات» — see functions/procurement.js (one function, procAction).
 export const callProc = (action, data = {}) => httpsCallable(functions, 'procAction')({ ...data, action }).then((r) => r.data);
+// The supplier's read-only purchase order (/po/<token>).
+export const callProcPublic = (data) => httpsCallable(functions, 'procPublic')(data).then((r) => r.data);
 
 export const PROC_CATEGORIES = ['MAINTENANCE', 'STATIONERY', 'CLEANING', 'IT', 'FURNITURE', 'EDUCATIONAL', 'SERVICES', 'OTHER'];
 export const PROC_STATUSES = ['PENDING_APPROVAL', 'RETURNED', 'REJECTED', 'APPROVED', 'ORDERED', 'PARTIAL', 'RECEIVED', 'INVOICED', 'PAID', 'CANCELLED'];

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
-import { ShoppingCart, Plus, Loader2, LayoutDashboard, ListChecks, Building2, Settings2, Save, PiggyBank } from 'lucide-react';
+import { ShoppingCart, Plus, Loader2, LayoutDashboard, ListChecks, Building2, Settings2, Save, PiggyBank, Boxes } from 'lucide-react';
 import PageHero from '../components/common/PageHero';
 import { Field, inputCls, btn } from '../components/platform/ui';
 import { useBranches } from '../hooks/useOrgData';
@@ -10,6 +10,7 @@ import ProcDashboard from '../components/procurement/ProcDashboard';
 import ProcRequests from '../components/procurement/ProcRequests';
 import Suppliers from '../components/procurement/Suppliers';
 import Budgets from '../components/procurement/Budgets';
+import Inventory from '../components/procurement/Inventory';
 import RequestForm from '../components/procurement/RequestForm';
 import RequestDetails from '../components/procurement/RequestDetails';
 
@@ -30,7 +31,7 @@ export default function Procurement() {
   const load = useCallback(() => callProc('list').then((r) => { setData(r); setError(null); }).catch((err) => setError(err.message)), []);
   useEffect(() => { load(); }, [load]);
   const roles = data?.roles || {};
-  const tabs = !data ? [] : [['dashboard', LayoutDashboard], ['requests', ListChecks], ...(roles.officer || roles.finance || roles.exec ? [['suppliers', Building2]] : []), ...(roles.viewer || roles.exec ? [['budgets', PiggyBank]] : []), ...(roles.admin ? [['settings', Settings2]] : [])];
+  const tabs = !data ? [] : [['dashboard', LayoutDashboard], ['requests', ListChecks], ...(roles.officer || roles.finance || roles.exec ? [['suppliers', Building2]] : []), ...(roles.inventory ? [['inventory', Boxes]] : []), ...(roles.viewer || roles.exec ? [['budgets', PiggyBank]] : []), ...(roles.admin ? [['settings', Settings2]] : [])];
   const current = tab || 'dashboard';
   const list = data?.requests || [];
 
@@ -55,6 +56,7 @@ export default function Procurement() {
               {current === 'requests' && <ProcRequests requests={list} branchName={branchName} filter={filter} setFilter={setFilter} onOpen={(id) => setParams({ openId: id })} />}
               {current === 'suppliers' && <Suppliers />}
               {current === 'budgets' && <Budgets />}
+              {current === 'inventory' && <Inventory settings={data.settings} onRequested={(r) => { load(); setParams({ openId: r.id }); }} />}
               {current === 'settings' && <ProcSettings initial={data.settings} onSaved={load} />}
             </>
           )}

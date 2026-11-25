@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Loader2, Pencil, Trash2, Copy, Check, KeyRound, HardHat } from 'lucide-react';
+import { Plus, Loader2, Pencil, Trash2, Copy, Check, KeyRound, HardHat, MessageCircle } from 'lucide-react';
 import { Modal, Field, Pill, inputCls, btn } from '../platform/ui';
 import { useBranches } from '../../hooks/useOrgData';
 import { callMnt, MNT_CATEGORIES, CATEGORY_ICON } from '../../config/maintenance';
+import { waLink } from '../../utils/whatsapp';
 
 // In-house technicians and contractors. Each works on a link + PIN page
 // (no account): the manager sends them both.
@@ -47,6 +48,7 @@ export default function MntTechs({ branchName, tickets }) {
               <div className="flex flex-wrap items-center gap-2 text-xs">
                 <span className="flex items-center gap-1 text-slate-600"><KeyRound className="w-3.5 h-3.5" />{t('mnt.techs.pin')}: <b dir="ltr" className="font-mono">{x.pin}</b></span>
                 <button type="button" onClick={() => copy(x)} className={`${btn.small} border border-slate-200 text-slate-600`}>{copied === x.id ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}{t('mnt.techs.copy')}</button>
+                {x.phone && <a href={waLink(x.phone, t('mnt.techs.shareText', { name: x.name, link: x.link, pin: x.pin }))} target="_blank" rel="noreferrer" className={`${btn.small} border border-emerald-200 text-emerald-700`}><MessageCircle className="w-3.5 h-3.5" />{t('mnt.techs.wa')}</a>}
                 <span className="flex-1" />
                 <button type="button" onClick={() => setEditing(x)} className="p-1.5 text-slate-500 hover:text-primary"><Pencil className="w-4 h-4" /></button>
                 <button type="button" onClick={() => remove(x)} className="p-1.5 text-slate-500 hover:text-rose-600"><Trash2 className="w-4 h-4" /></button>
