@@ -148,11 +148,14 @@ ${['group', 'branch', 'grade', 'teacher'].map((k) => `<h3>${esc(t(`support.dash.
     const chunks = [];
     for (let i = 0; i < days.length; i += 14) chunks.push(days.slice(i, i + 14));
     if (!chunks.length) chunks.push([]);
-    const meta = [g.subject && `${t('support.groups.subject')}: ${g.subject}`, g.teacher && `${t('support.groups.teacher')}: ${g.teacher}`, g.room && `${t('support.groups.room')}: ${g.room}`,
+    const shared = [...new Set(members.map((s) => s.curriculum || ''))];
+    const groupCur = g.curriculum || (shared.length === 1 ? shared[0] : '');
+    const perRow = !g.curriculum && shared.length > 1;
+    const meta = [groupCur && `${t('support.curriculum.label')}: ${t(`support.curriculum.${groupCur}`)}`, g.subject && `${t('support.groups.subject')}: ${g.subject}`, g.teacher && `${t('support.groups.teacher')}: ${g.teacher}`, g.room && `${t('support.groups.room')}: ${g.room}`,
       g.supervisorId && supName[g.supervisorId] && `${t('support.dash.supervisor')}: ${supName[g.supervisorId]}`, g.branch && branchName(g.branch), (g.grades || []).join('، ')].filter(Boolean).join(' · ');
     return chunks.map((ds, ci) => `<div class="sheet"><h3>${esc(g.name)} — ${esc(t(`support.types.${g.type}`))}${chunks.length > 1 ? ` (${ci + 1}/${chunks.length})` : ''}</h3><div class="meta">${esc(meta)}</div>
-<table><thead><tr><th class="c">#</th><th>${esc(t('support.col.student'))}</th><th>${esc(t('support.col.grade'))}</th>${ds.map((d) => `<th class="c" dir="ltr">${d.slice(5)}</th>`).join('')}<th class="c">${esc(t('support.marks.A'))}</th></tr></thead>
-<tbody>${members.map((s, i) => `<tr><td class="c">${i + 1}</td><td>${esc(s.name)}</td><td>${esc(`${s.grade} ${s.className}`)}</td>${ds.map((d) => `<td class="c">${esc(MARK_SIGN[marks[d]?.[s.studentId]?.s] || '')}</td>`).join('')}<td class="c">${s.att.A || 0}</td></tr>`).join('')}</tbody></table>
+<table><thead><tr><th class="c">#</th><th>${esc(t('support.col.student'))}</th><th>${esc(t('support.col.grade'))}</th>${perRow ? `<th>${esc(t('support.curriculum.label'))}</th>` : ''}${ds.map((d) => `<th class="c" dir="ltr">${d.slice(5)}</th>`).join('')}<th class="c">${esc(t('support.marks.A'))}</th></tr></thead>
+<tbody>${members.map((s, i) => `<tr><td class="c">${i + 1}</td><td>${esc(s.name)}</td><td>${esc(`${s.grade} ${s.className}`)}</td>${perRow ? `<td>${esc(s.curriculum ? t(`support.curriculum.${s.curriculum}`) : '—')}</td>` : ''}${ds.map((d) => `<td class="c">${esc(MARK_SIGN[marks[d]?.[s.studentId]?.s] || '')}</td>`).join('')}<td class="c">${s.att.A || 0}</td></tr>`).join('')}</tbody></table>
 <div class="meta">${esc(t('support.dash.legend'))}</div><div class="sign"><span>${esc(t('support.dash.signSupervisor'))}: ..................</span><span>${esc(t('support.dash.signCoordinator'))}: ..................</span></div></div>`).join('');
   };
   const printSheets = (groups) => print(t('support.dash.sheetTitle'), groups.map(sheetOf).join(''), true);
