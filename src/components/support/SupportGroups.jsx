@@ -1,40 +1,41 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Pencil, Trash2, Loader2, Users, DoorOpen, UserCheck, GraduationCap, ChevronLeft, ArrowRight, Layers, TrendingUp, Sparkles, Wand2, Combine } from 'lucide-react';
-import { callSupport, SUPPORT_TYPES, TYPE_STYLE, SUBJECTS } from '../../config/support';
+import { callSupport, SUPPORT_TYPES, SUPPORT_CURRICULA, CURRICULUM_STYLE, TYPE_STYLE, SUBJECTS } from '../../config/support';
 import { Modal, Field, Pill, inputCls, btn } from '../platform/ui';
 
 const PROGRAM_ICON = { REMEDIAL: TrendingUp, ENRICHMENT: Sparkles };
 const PROGRAM_TONE = { REMEDIAL: 'from-amber-50 border-amber-200 text-amber-800', ENRICHMENT: 'from-sky-50 border-sky-200 text-sky-700' };
 
 // «Make the groups»: the consented students with no group, into groups by
-// branch, programme, stage and subject — each stage apart with its own
+// branch, programme, curriculum, stage and subject — each stage apart with its own
 // subject (matching groups with room are filled first). Shows the plan;
 // ticked groups of the plan can be merged into one, then it makes it.
 export function AutoGroupsModal({ cycle, type = '', branchName, onClose, onDone }) {
   const { t } = useTranslation();
   const [capacity, setCapacity] = useState(15);
   const [by, setBy] = useState('grade');
+  const [curriculum, setCurriculum] = useState('');
   const [plan, setPlan] = useState(null);
   const [merges, setMerges] = useState([]);
   const [ticked, setTicked] = useState([]);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState(null);
-  const preview = async (cap = capacity, m = merges, how = by) => {
+  const preview = async (cap = capacity, m = merges, how = by, cur = curriculum) => {
     setBusy('preview');
     setError(null);
-    try { setPlan(await callSupport('supportAutoGroups', { id: cycle.id, type, by: how, capacity: Number(cap) || 0, merges: m })); setMerges(m); setTicked([]); } catch (err) { setError(err.message); } finally { setBusy(''); }
+    try { setPlan(await callSupport('supportAutoGroups', { id: cycle.id, type, by: how, curriculum: cur, capacity: Number(cap) || 0, merges: m })); setMerges(m); setTicked([]); } catch (err) { setError(err.message); } finally { setBusy(''); }
   };
   useEffect(() => { preview(15, []); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const apply = async () => {
     setBusy('apply');
     setError(null);
-    try { onDone(await callSupport('supportAutoGroups', { id: cycle.id, type, by, capacity: Number(capacity) || 0, merges, apply: true })); } catch (err) { setError(err.message); setBusy(''); }
+    try { onDone(await callSupport('supportAutoGroups', { id: cycle.id, type, by, curriculum, capacity: Number(capacity) || 0, merges, apply: true })); } catch (err) { setError(err.message); setBusy(''); }
   };
   const rows = plan?.plan || [];
   const keyOf = (r) => r.members.join('|');
   const tickedRows = rows.filter((r) => ticked.includes(keyOf(r)));
-  const mixed = new Set(tickedRows.map((r) => `${r.type}|${r.branch}`)).size > 1;
+  const mixed = new Set(tickedRows.map((r) => `${r.type}|${r.branch}`)).size > 1 || new Set(tickedRows.map((r) => r.curriculum).filter(Boolean)).size > 1;
   const merge = () => {
     const joined = [...new Set(tickedRows.flatMap((r) => r.members))];
     preview(capacity, [...merges.filter((m) => !m.some((x) => joined.includes(x))), joined]);
@@ -49,6 +50,9 @@ export function AutoGroupsModal({ cycle, type = '', branchName, onClose, onDone 
         <Field label={t('support.auto.by')}>
           <div className="flex gap-1.5">{['grade', 'stage'].map((x) => <button key={x} type="button" disabled={!!busy} onClick={() => { setBy(x); preview(capacity, [], x); }} className={`px-3 py-2 rounded-xl text-sm border ${by === x ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'}`}>{t(`support.auto.by_${x}`)}</button>)}</div>
         </Field>
+        <Field label={t('support.curriculum.label')}>
+          <div className="flex gap-1.5">{['', ...SUPPORT_CURRICULA].map((x) => <button key={x || 'all'} type="button" disabled={!!busy} onClick={() => { setCurriculum(x); preview(capacity, [], by, x); }} className={`px-3 py-2 rounded-xl text-sm border ${curriculum === x ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'}`}>{x ? t(`support.curriculum.${x}`) : t('support.curriculum.each')}</button>)}</div>
+        </Field>
         <Field label={t('support.auto.capacity')} hint={t('support.auto.capacityHint')}><input type="number" min={0} max={200} value={capacity} onChange={(e) => setCapacity(e.target.value)} className={`${inputCls} w-32`} /></Field>
         <button type="button" disabled={!!busy} onClick={() => preview(capacity, [])} className={`${btn.ghost} mb-1`}>{busy === 'preview' && <Loader2 className="w-4 h-4 animate-spin" />}{t('support.auto.preview')}</button>
         {rows.length > 1 && (
@@ -59,7 +63,7 @@ export function AutoGroupsModal({ cycle, type = '', branchName, onClose, onDone 
       {!plan ? <div className="py-8 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div> : !rows.length ? <p className="text-sm text-slate-500 text-center py-6">{t('support.auto.none')}</p> : (
         <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-96">
           <table className="w-full text-sm">
-            <thead className="bg-slate-50 text-slate-500 text-xs sticky top-0"><tr><th className="px-2 py-1.5" />{['group', 'program', 'stage', 'subject', 'grades', 'count'].map((k) => <th key={k} className="px-2 py-1.5 text-start font-medium">{t(`support.auto.col.${k}`)}</th>)}</tr></thead>
+            <thead className="bg-slate-50 text-slate-500 text-xs sticky top-0"><tr><th className="px-2 py-1.5" />{['group', 'program', 'curriculum', 'stage', 'subject', 'grades', 'count'].map((k) => <th key={k} className="px-2 py-1.5 text-start font-medium">{t(`support.auto.col.${k}`)}</th>)}</tr></thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((r) => (
                 <tr key={keyOf(r)} className={ticked.includes(keyOf(r)) ? 'bg-primary/5' : ''}>
@@ -68,6 +72,7 @@ export function AutoGroupsModal({ cycle, type = '', branchName, onClose, onDone 
                     {r.merged && <><span className="ms-1 text-[11px] px-1.5 py-0.5 rounded-full bg-violet-50 text-violet-700">{t('support.merge.mergedN', { n: r.members.length })}</span><button type="button" disabled={!!busy} onClick={() => unmerge(r)} className="ms-1 text-[11px] text-rose-600 hover:underline">{t('support.merge.undo')}</button></>}
                     {r.branch && branchName ? <span className="block text-xs text-slate-400">{branchName(r.branch)}</span> : null}</td>
                   <td className="px-2 py-1.5"><Pill className={TYPE_STYLE[r.type]}>{t(`support.types.${r.type}`)}</Pill></td>
+                  <td className="px-2 py-1.5 whitespace-nowrap">{r.curriculum ? <Pill className={CURRICULUM_STYLE[r.curriculum]}>{t(`support.curriculum.${r.curriculum}`)}</Pill> : <span className="text-xs text-slate-400">{t('support.curriculum.NONE')}</span>}</td>
                   <td className="px-2 py-1.5 text-xs">{(r.stages || [r.stage]).map((x) => t(`support.groups.stages.${x || 'OTHER'}`)).join('، ')}</td>
                   <td className="px-2 py-1.5 text-xs">{r.subject || '—'}</td>
                   <td className="px-2 py-1.5 text-xs" dir="ltr">{r.grades.join(', ')}</td>
@@ -78,6 +83,7 @@ export function AutoGroupsModal({ cycle, type = '', branchName, onClose, onDone 
           </table>
         </div>
       )}
+      {plan?.curricula?.NONE > 0 && <p className="text-xs text-amber-700">{t('support.curriculum.noneWaiting', { n: plan.curricula.NONE })}</p>}
       <p className="text-xs text-slate-500">{t('support.auto.after')}</p>
     </Modal>
   );
@@ -184,7 +190,7 @@ export default function SupportGroups({ data, type, branchName, reload, onOpen, 
               <div key={g.id} role="button" tabIndex={0} onClick={open} onKeyDown={(e) => { if (e.key === 'Enter') open(); }} className={`bg-white border rounded-2xl p-4 space-y-2 cursor-pointer hover:shadow-sm transition ${on ? 'border-primary ring-2 ring-primary/30' : 'border-slate-200 hover:border-primary/40'}`}>
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-bold text-slate-900 flex items-start gap-2">{picking && <input type="checkbox" checked={on} readOnly className="mt-1" />}{g.name}</p>
-                  <Pill className={TYPE_STYLE[g.type]}>{t(`support.types.${g.type}`)}</Pill>
+                  <span className="flex flex-wrap justify-end gap-1">{g.curriculum && <Pill className={CURRICULUM_STYLE[g.curriculum]}>{t(`support.curriculum.${g.curriculum}`)}</Pill>}<Pill className={TYPE_STYLE[g.type]}>{t(`support.types.${g.type}`)}</Pill></span>
                 </div>
                 <div className="text-xs text-slate-600 space-y-1">
                   {g.subject && <p className="flex items-center gap-1"><GraduationCap className="w-3.5 h-3.5 text-primary" />{g.subject}{g.grades?.length ? ` · ${g.grades.join('، ')}` : ''}</p>}
@@ -220,6 +226,7 @@ function MergeModal({ cycle, groups, members, branchName, onClose, onDone }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const branches = new Set(groups.map((g) => g.branch || ''));
+  const curricula = new Set(groups.map((g) => g.curriculum).filter(Boolean));
   const total = groups.reduce((n, g) => n + members(g.id).length, 0);
   const save = async () => {
     setBusy(true);
@@ -228,16 +235,16 @@ function MergeModal({ cycle, groups, members, branchName, onClose, onDone }) {
   };
   return (
     <Modal title={t('support.merge.title', { n: groups.length })} onClose={onClose} size="max-w-lg"
-      footer={<><button type="button" onClick={onClose} className={btn.ghost}>{t('common.cancel')}</button><button type="button" disabled={busy || branches.size > 1 || !name.trim()} onClick={save} className={btn.primary}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Combine className="w-4 h-4" />}{t('support.merge.apply', { n: total })}</button></>}>
+      footer={<><button type="button" onClick={onClose} className={btn.ghost}>{t('common.cancel')}</button><button type="button" disabled={busy || branches.size > 1 || curricula.size > 1 || !name.trim()} onClick={save} className={btn.primary}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Combine className="w-4 h-4" />}{t('support.merge.apply', { n: total })}</button></>}>
       {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl p-3">{error}</div>}
-      {branches.size > 1 && <div className="bg-amber-50 text-amber-800 text-sm rounded-xl p-3">{t('support.merge.mixed')}</div>}
+      {(branches.size > 1 || curricula.size > 1) && <div className="bg-amber-50 text-amber-800 text-sm rounded-xl p-3">{t('support.merge.mixed')}</div>}
       <Field label={t('support.merge.keep')} hint={t('support.merge.keepHint')}>
         <div className="space-y-1.5">
           {groups.map((g) => (
             <label key={g.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm cursor-pointer ${target === g.id ? 'border-primary bg-primary/5' : 'border-slate-200'}`}>
               <input type="radio" checked={target === g.id} onChange={() => { setTarget(g.id); setName(g.name); }} />
               <span className="font-medium text-slate-900">{g.name}</span>
-              <span className="text-xs text-slate-500">{[g.subject, (g.grades || []).join('، '), branchName(g.branch), g.teacher].filter(Boolean).join(' · ')}</span>
+              <span className="text-xs text-slate-500">{[g.curriculum ? t(`support.curriculum.${g.curriculum}`) : '', g.subject, (g.grades || []).join('، '), branchName(g.branch), g.teacher].filter(Boolean).join(' · ')}</span>
               <span className="ms-auto text-xs text-slate-600">{t('support.groups.count', { n: members(g.id).length })}</span>
             </label>
           ))}
@@ -253,7 +260,7 @@ function GroupEditor({ data, branchName, group, onClose, onSaved }) {
   const { t } = useTranslation();
   const c = data.cycle;
   const [f, setF] = useState({
-    name: group.name || '', type: group.type || 'REMEDIAL', branch: group.branch || c.branches[0] || '', subject: group.subject || '', grades: (group.grades || []).join('، '),
+    name: group.name || '', type: group.type || 'REMEDIAL', curriculum: group.curriculum || '', branch: group.branch || c.branches[0] || '', subject: group.subject || '', grades: (group.grades || []).join('، '),
     teacher: group.teacher || '', room: group.room || '', capacity: group.capacity || '', supervisorId: group.supervisorId || '',
   });
   const [busy, setBusy] = useState(false);
@@ -275,6 +282,7 @@ function GroupEditor({ data, branchName, group, onClose, onSaved }) {
       {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl p-3">{error}</div>}
       <Field label={t('support.groups.name')} required><input value={f.name} onChange={set('name')} placeholder={t('support.groups.namePh')} className={inputCls} /></Field>
       <Field label={t('support.col.type')}><div className="flex gap-2">{SUPPORT_TYPES.map((x) => <button key={x} type="button" onClick={() => setF((y) => ({ ...y, type: x }))} className={chip(f.type === x)}>{t(`support.types.${x}`)}</button>)}</div></Field>
+      <Field label={t('support.curriculum.label')} hint={t('support.curriculum.groupHint')}><div className="flex flex-wrap gap-2">{['', ...SUPPORT_CURRICULA].map((x) => <button key={x || 'both'} type="button" onClick={() => setF((y) => ({ ...y, curriculum: x }))} className={chip(f.curriculum === x)}>{x ? t(`support.curriculum.${x}`) : t('support.curriculum.both')}</button>)}</div></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label={t('common.branch')}><select value={f.branch} onChange={set('branch')} className={inputCls}><option value="">—</option>{branchOptions.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}</select></Field>
         <Field label={t('support.groups.subject')}><input list="support-subjects" value={f.subject} onChange={set('subject')} className={inputCls} /><datalist id="support-subjects">{SUBJECTS.map((s) => <option key={s} value={s} />)}</datalist></Field>

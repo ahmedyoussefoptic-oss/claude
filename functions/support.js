@@ -15,6 +15,13 @@
 // Read and written only here (firestore.rules deny these collections).
 
 const TYPES = ["REMEDIAL", "ENRICHMENT"];
+// The curriculum (المنهج) a student is nominated under and a group is for —
+// the roster's section (stage_name) unless chosen when nominating.
+const CURRICULA = ["AMERICAN", "BRITISH"];
+const CURRICULUM_AR = { AMERICAN: "أمريكي", BRITISH: "بريطاني" };
+const curriculumOf = (v) => (CURRICULA.includes(v) ? v : "");
+// An enrollment's curriculum: its own, or (older ones) the roster section.
+const enrollCurriculum = (e) => curriculumOf(e.curriculum) || curriculumOf(e.section);
 const STATUSES = ["NOMINATED", "REJECTED", "APPROVED", "PENDING_CONSENT", "CONSENTED", "DECLINED", "PLEDGE_SENT", "PLEDGE_SIGNED", "WITHDRAWN"];
 const MARKS = ["P", "A", "L", "E"];
 const TYPE_AR = { REMEDIAL: "التقوية", ENRICHMENT: "الإثرائية" };
@@ -204,7 +211,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
   });
 
   const enrollOut = (x, e, canManage) => ({
-    id: x.id, studentId: e.studentId, name: e.name, branch: e.branch, grade: e.grade, className: e.className, section: e.section || "",
+    id: x.id, studentId: e.studentId, name: e.name, branch: e.branch, grade: e.grade, className: e.className, section: e.section || "", curriculum: enrollCurriculum(e),
     type: e.type, subjects: e.subjects || [], reason: e.reason || "", round: e.round || 0, status: e.status, nominatedByName: e.nominatedByName || "", nominatedTeacher: e.nominatedTeacher || "", nominatedTeacherSubject: e.nominatedTeacherSubject || "", nominatedAt: ms(e.nominatedAt),
     reviewNote: e.reviewNote || "", consent: e.consent ? { ...e.consent, at: ms(e.consent.at) } : null, decline: e.decline ? { ...e.decline, at: ms(e.decline.at) } : null,
     pledge: e.pledge ? { ...e.pledge, at: ms(e.pledge.at) } : null, groupId: e.groupId || "", att: e.att || {}, hasPhone: !!e.phone,
@@ -267,10 +274,13 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         const row = per.get(sid);
         if (((c.branches || []).length && !c.branches.includes(branch)) || !inScope(branch)) { result.outOfScope++; return; }
         const round = row.round || base.round || 0;
+        const curriculum = row.curriculum || base.curriculum || curriculumOf(studentSection(s));
         if (cur[j].exists && cur[j].data().status !== "WITHDRAWN" && cur[j].data().status !== "REJECTED") {
           result.already++;
           // Already here: a file that says which Cycle they're from tags them.
           if (round && (cur[j].data().round || 0) !== round) { batch.update(cur[j].ref, { round }); result.retagged++; }
+          // …and a curriculum chosen for them is set on them.
+          if ((row.curriculum || base.curriculum) && enrollCurriculum(cur[j].data()) !== curriculum) batch.update(cur[j].ref, { curriculum });
           return;
         }
         const other = elsewhere.get(sid);
@@ -283,7 +293,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         batch.set(db.collection("supportLinks").doc(tk), { kind: "parent", cycleId: ref.id, studentId: sid, fails: 0 });
         batch.set(ref.collection("students").doc(sid), {
           studentId: sid, name: str(s.nameAr || s.name, 120), branch, grade: studentGrade(s), className: str(s.className, 20), section: studentSection(s) || "",
-          phone: toIntlNumber(s.mobile) || "", type: row.type || base.type, subjects: row.subjects || base.subjects, reason: row.reason || base.reason, ...(round ? { round } : {}),
+          phone: toIntlNumber(s.mobile) || "", type: row.type || base.type, subjects: row.subjects || base.subjects, reason: row.reason || base.reason, ...(round ? { round } : {}), ...(curriculum ? { curriculum } : {}),
           ...(row.teacher ? { nominatedTeacher: row.teacher } : {}), ...(by.teacherSubject ? { nominatedTeacherSubject: by.teacherSubject, nominatedTeacherStage: by.teacherStage } : {}), ...(by.via ? { nominatedVia: by.via } : {}), status: by.auto ? "APPROVED" : "NOMINATED",
           nominatedBy: by.uid || "", nominatedByName: by.name || "", nominatedAt: now, token: tk, att: {},
           ...(by.auto ? { reviewedBy: by.uid, reviewedByName: by.name || "", reviewedAt: now } : {}),
@@ -303,7 +313,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const rowSubjects = subjectsOf(x.subjects);
     return {
       ...(TYPES.includes(x.type) ? { type: x.type } : {}), ...(rowSubjects.length ? { subjects: rowSubjects } : {}), ...(roundOf(x.round) ? { round: roundOf(x.round) } : {}),
-      ...(str(x.reason, 600) ? { reason: str(x.reason, 600) } : {}), teacher: str(x.teacher, 80),
+      ...(curriculumOf(x.curriculum) ? { curriculum: x.curriculum } : {}), ...(str(x.reason, 600) ? { reason: str(x.reason, 600) } : {}), teacher: str(x.teacher, 80),
     };
   };
 
@@ -317,7 +327,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const per = new Map();
     (Array.isArray(dd.studentIds) ? dd.studentIds : []).forEach((x) => per.set(cleanId(x), {}));
     (Array.isArray(dd.entries) ? dd.entries : []).slice(0, 2000).forEach((x) => { if (x && typeof x === "object") per.set(cleanId(x.studentId), rowOf(x)); });
-    const base = { type: TYPES.includes(dd.type) ? dd.type : null, subjects: subjectsOf(dd.subjects), reason: str(dd.reason, 600), round: roundOf(dd.round) };
+    const base = { type: TYPES.includes(dd.type) ? dd.type : null, subjects: subjectsOf(dd.subjects), reason: str(dd.reason, 600), round: roundOf(dd.round), curriculum: curriculumOf(dd.curriculum) };
     const auto = c.requireApproval === false || manages(u, c);
     return nominate(ref, c, per, base, { uid: u.uid, name: u.name || "", auto }, (b) => callerAll(u) || manages(u, c) || callerHasBranch(u, b));
   });
@@ -343,7 +353,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
   const teacherLinkOut = (c) => (c.teacherLink?.token ? { link: `${PUBLIC_APP_URL}/support-nominate/${c.teacherLink.token}`, pin: c.teacherLink.pin, enabled: c.teacherLink.enabled !== false } : null);
   const teachersOut = async (ref) => (await ref.collection("teachers").get()).docs.map((x) => {
     const t = x.data();
-    return { id: x.id, name: t.name, subject: t.subject || "", stage: t.stage || "", opens: t.opens || 0, nominated: t.nominated || 0, firstAt: ms(t.firstAt), lastAt: ms(t.lastAt) };
+    return { id: x.id, name: t.name, subject: t.subject || "", stage: t.stage || "", curriculum: t.curriculum || "", opens: t.opens || 0, nominated: t.nominated || 0, firstAt: ms(t.firstAt), lastAt: ms(t.lastAt) };
   }).sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0));
   out.supportTeacherLink = onCall(async (request) => {
     const u = await caller(request);
@@ -376,24 +386,28 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     if (c.teacherLink.enabled === false) throw new HttpsError("failed-precondition", "أُوقف رابط الترشيح، يرجى التواصل مع منسق البرنامج.");
     if (c.status !== "ACTIVE") throw new HttpsError("failed-precondition", "انتهت هذه الدورة.");
     const t = dd.teacher && typeof dd.teacher === "object" ? dd.teacher : {};
-    const teacher = { name: str(t.name, 80), subject: str(t.subject, 60), stage: TEACHER_STAGES.includes(t.stage) ? t.stage : "" };
+    const teacher = { name: str(t.name, 80), subject: str(t.subject, 60), stage: TEACHER_STAGES.includes(t.stage) ? t.stage : "", curriculum: curriculumOf(t.curriculum) };
     if (!teacher.name) throw new HttpsError("invalid-argument", "اكتب اسم المعلم.");
     if (!teacher.subject) throw new HttpsError("invalid-argument", "اختر المادة التي تدرّسها.");
     if (!teacher.stage) throw new HttpsError("invalid-argument", "اختر المرحلة.");
-    // One record per teacher (name + subject + stage, spaces ignored).
+    // One record per teacher (name + subject + stage, spaces ignored; the
+    // curriculum is kept as last given).
     const tid = crypto.createHash("sha256").update(`${teacher.name}|${teacher.subject}|${teacher.stage}`.replace(/\s+/g, "")).digest("base64url").slice(0, 20);
     return { cRef, c, tk: dd.token, teacher, tRef: cRef.collection("teachers").doc(tid) };
   }
-  // The cycle's branches' students (active), with whether each is already in
-  // this cycle or another active one.
-  async function teacherRoster(cRef, c, tk, stage) {
+  // The cycle's branches' students (active) of the teacher's stage and
+  // curriculum (a student with no American/British section — KG, SEN — is
+  // shown to both), with whether each is already in this cycle or another
+  // active one.
+  const inCurriculum = (curriculum, s) => { const x = curriculumOf(studentSection(s)); return !curriculum || !x || x === curriculum; };
+  async function teacherRoster(cRef, c, tk, stage, curriculum = "") {
     const [branchOf, snap, mine, brSnap] = await Promise.all([
-      branchResolver(), db.collection("students").select("nameAr", "name", "branch", "branchName", "gradeName", "className", "active").get(),
+      branchResolver(), db.collection("students").select("nameAr", "name", "branch", "branchName", "gradeName", "className", "stageName", "active").get(),
       cRef.collection("students").get(), db.collection("branches").get(),
     ]);
     const all = !(c.branches || []).length;
     const rows = snap.docs.filter((x) => x.data().active !== false).map((x) => ({ id: x.id, s: x.data(), branch: branchOf(x.data()) }))
-      .filter((x) => /^\d{6,15}$/.test(x.id) && x.branch && (all || c.branches.includes(x.branch)) && inStage(stage, studentGrade(x.s)));
+      .filter((x) => /^\d{6,15}$/.test(x.id) && x.branch && (all || c.branches.includes(x.branch)) && inStage(stage, studentGrade(x.s)) && inCurriculum(curriculum, x.s));
     const here = new Map(mine.docs.filter((x) => !["WITHDRAWN", "REJECTED"].includes(x.data().status)).map((x) => [x.id, x.data().type]));
     const elsewhere = await inOtherCycles(cRef.id, rows.map((x) => x.id).filter((x) => !here.has(x)));
     const branchName = Object.fromEntries(brSnap.docs.map((x) => [x.id, x.data().name || x.id]));
@@ -414,7 +428,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const now = Timestamp.now();
     const seen = await tRef.get();
     await tRef.set({ ...teacher, lastAt: now, opens: FieldValue.increment(1), ...(seen.exists ? {} : { firstAt: now, nominated: 0 }) }, { merge: true });
-    return teacherRoster(cRef, c, tk, teacher.stage);
+    return teacherRoster(cRef, c, tk, teacher.stage, teacher.curriculum);
   });
   out.supportTeacherNominate = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
     const { cRef, c, tk, teacher, tRef } = await teacherOf(request);
@@ -433,10 +447,10 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const per = new Map();
     entries.forEach((x) => { const sid = byKey.get(x.k); if (sid) per.set(sid, rowOf({ ...x, teacher: teacher.name })); });
     // A row without a subject takes the teacher's own.
-    const result = await nominate(cRef, c, per, { type: null, subjects: [teacher.subject], reason: "" },
+    const result = await nominate(cRef, c, per, { type: null, subjects: [teacher.subject], reason: "", curriculum: teacher.curriculum },
       { uid: "", name: `${teacher.name} (رابط المعلمين)`, auto: c.requireApproval === false, via: "TEACHER_LINK", teacherSubject: teacher.subject, teacherStage: teacher.stage }, () => true);
     if (result.added) await tRef.update({ nominated: FieldValue.increment(result.added), lastAt: Timestamp.now() }).catch(() => {});
-    return { result, state: await teacherRoster(cRef, (await cRef.get()).data(), tk, teacher.stage) };
+    return { result, state: await teacherRoster(cRef, (await cRef.get()).data(), tk, teacher.stage, teacher.curriculum) };
   });
 
   // --- the coordinator's actions -----------------------------------------------
@@ -503,7 +517,10 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         g = (await ref.collection("groups").doc(gid).get()).data();
         if (!g) throw new HttpsError("not-found", "المجموعة غير موجودة.");
       }
-      const rows = list.filter((e) => e.status === "CONSENTED" && (!g || e.type === g.type));
+      // A group for one curriculum takes only its students (and those with none).
+      const fits = (e) => !g || (e.type === g.type && (!g.curriculum || !enrollCurriculum(e) || enrollCurriculum(e) === g.curriculum));
+      const rows = list.filter((e) => e.status === "CONSENTED" && fits(e));
+      res.otherCurriculum = list.filter((e) => e.status === "CONSENTED" && g && e.type === g.type && !fits(e)).length;
       if (g && g.capacity) {
         const inGroup = (await ref.collection("students").where("groupId", "==", gid).get()).size;
         if (inGroup + rows.filter((e) => e.groupId !== gid).length > g.capacity) throw new HttpsError("failed-precondition", `المجموعة تتسع لـ ${g.capacity} طالباً فقط.`);
@@ -515,6 +532,10 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         const first = sessionDays(c).find((x) => x >= riyadhDay() && (g.days || c.weekdays || [1, 4]).includes(new Date(`${x}T12:00:00Z`).getUTCDay())) || "";
         if (settings) Object.assign(res, await sendMany(settings, ref, c, rows, "confirmed", () => ({ group: g.name, room: g.room, first: first ? `${DAY_AR[new Date(`${first}T12:00:00Z`).getUTCDay()]} ${first}` : "" })));
       }
+    } else if (a === "setCurriculum") {
+      const curriculum = curriculumOf(dd.curriculum);
+      await write(list, { curriculum: curriculum || FieldValue.delete() });
+      res.done = list.length;
     } else if (a === "setRound") {
       const round = roundOf(dd.round);
       await write(list, { round: round || FieldValue.delete() });
@@ -525,6 +546,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
       if (TYPES.includes(dd.type)) patch.type = dd.type;
       if (Array.isArray(dd.subjects)) patch.subjects = [...new Set(dd.subjects.map((s) => str(s, 60)).filter(Boolean))].slice(0, 12);
       if (typeof dd.reason === "string") patch.reason = str(dd.reason, 600);
+      if (typeof dd.curriculum === "string") patch.curriculum = curriculumOf(dd.curriculum) || FieldValue.delete();
       await list[0].ref.update(patch);
       res.done = 1;
     } else if (a === "linkNote") {
@@ -586,7 +608,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const { ref, c } = await loadCycle(dd.id, u, { manage: true });
     const g = dd.group || {};
     const data = {
-      name: str(g.name, 80), type: TYPES.includes(g.type) ? g.type : "REMEDIAL", branch: str(g.branch, 40), subject: str(g.subject, 120),
+      name: str(g.name, 80), type: TYPES.includes(g.type) ? g.type : "REMEDIAL", branch: str(g.branch, 40), curriculum: curriculumOf(g.curriculum), subject: str(g.subject, 120),
       grades: Array.isArray(g.grades) ? g.grades.map((x) => str(x, 10)).filter(Boolean).slice(0, 20) : [],
       teacher: str(g.teacher, 80), room: str(g.room, 40), capacity: Math.max(0, Math.min(200, Math.floor(Number(g.capacity) || 0))),
       supervisorId: str(g.supervisorId, 40), updatedAt: Timestamp.now(),
@@ -615,7 +637,8 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     return { ok: true, freed: inside.size };
   });
   // Groups made by themselves: the consented students with no group, by
-  // branch, programme, stage and (first) subject. Matching groups that still
+  // branch, programme, curriculum, stage and (first) subject (`curriculum`
+  // takes only that curriculum's students; none = each apart). Matching groups that still
   // have room are filled first; the rest go into new groups of at most
   // `capacity` students (0 = one group each), split by grade then class.
   // `merges` joins chosen groups of the plan into one (each a list of the
@@ -633,6 +656,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const dd = request.data || {};
     const { ref, c } = await loadCycle(dd.id, u, { manage: true });
     const onlyType = TYPES.includes(dd.type) ? dd.type : "";
+    const onlyCurriculum = curriculumOf(dd.curriculum);
     const capacity = Math.max(0, Math.min(200, Math.floor(Number(dd.capacity) || 0)));
     const [st, gr, br] = await Promise.all([ref.collection("students").get(), ref.collection("groups").get(), db.collection("branches").get()]);
     const branchName = Object.fromEntries(br.docs.map((x) => [x.id, String(x.data().name || x.id).replace(/^فرع\s+/, "")]));
@@ -640,46 +664,55 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const size = new Map();
     st.docs.forEach((x) => { const e = x.data(); if (e.groupId && e.status === "CONSENTED") size.set(e.groupId, (size.get(e.groupId) || 0) + 1); });
     const size0 = new Map(size);
-    const todo = st.docs.map((x) => ({ id: x.id, ...x.data() })).filter((e) => e.status === "CONSENTED" && !e.groupId && (!onlyType || e.type === onlyType));
+    const todo = st.docs.map((x) => ({ id: x.id, ...x.data() })).filter((e) => e.status === "CONSENTED" && !e.groupId && (!onlyType || e.type === onlyType) && (!onlyCurriculum || enrollCurriculum(e) === onlyCurriculum));
     // By grade (the default — each grade apart with its subject) or by stage.
     const byGradeOnly = dd.by !== "stage";
-    // Same branch, programme, grade (or stage) and subject → one bucket.
+    // Same branch, programme, curriculum, grade (or stage) and subject → one bucket.
     const buckets = new Map();
     todo.forEach((e) => {
       const subject = String((e.subjects || [])[0] || "").trim();
       const stage = stageOfGrade(e.grade);
       const grade = byGradeOnly ? String(e.grade || "") : "";
-      const key = [e.branch || "", e.type, stage, grade, subjectKey(subject)].join("|");
-      if (!buckets.has(key)) buckets.set(key, { branch: e.branch || "", type: e.type, stage, grade, subjects: new Map(), list: [] });
+      const curriculum = enrollCurriculum(e);
+      const key = [e.branch || "", e.type, curriculum, stage, grade, subjectKey(subject)].join("|");
+      if (!buckets.has(key)) buckets.set(key, { branch: e.branch || "", type: e.type, curriculum, stage, grade, subjects: new Map(), list: [] });
       const b = buckets.get(key);
       if (subject) b.subjects.set(subject, (b.subjects.get(subject) || 0) + 1);
       b.list.push(e);
     });
     const multiBranch = new Set(todo.map((e) => e.branch || "")).size > 1 || (c.branches || []).length > 1;
+    // A group's curriculum: its own, or — an older group without one — its
+    // members' when they all share it.
+    const allEnrolled = st.docs.map((x) => x.data());
+    const groupCurriculum = (g) => {
+      if (g.curriculum) return g.curriculum;
+      const set = new Set(allEnrolled.filter((e) => e.groupId === g.id && e.status === "CONSENTED").map(enrollCurriculum));
+      return set.size === 1 ? [...set][0] : set.size ? "MIXED" : "";
+    };
     const names = new Set(groups.map((g) => g.name));
     const byGrade = (a, b) => String(a.grade).localeCompare(String(b.grade), "en", { numeric: true }) || String(a.className).localeCompare(String(b.className), "en", { numeric: true }) || String(a.name).localeCompare(String(b.name), "ar");
     const plan = [];
-    [...buckets.values()].sort((a, b) => a.type.localeCompare(b.type) || a.branch.localeCompare(b.branch) || TEACHER_STAGES.indexOf(a.stage) - TEACHER_STAGES.indexOf(b.stage) || gradeSort(a.grade, b.grade)).forEach((b) => {
+    [...buckets.values()].sort((a, b) => a.type.localeCompare(b.type) || a.branch.localeCompare(b.branch) || a.curriculum.localeCompare(b.curriculum) || TEACHER_STAGES.indexOf(a.stage) - TEACHER_STAGES.indexOf(b.stage) || gradeSort(a.grade, b.grade)).forEach((b) => {
       const subject = [...b.subjects.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] || "";
       const list = b.list.sort(byGrade);
       // Existing groups of the same kind with room.
-      groups.filter((g) => g.type === b.type && (g.branch || "") === b.branch && subjectKey(g.subject) === subjectKey(subject)
+      groups.filter((g) => g.type === b.type && (g.branch || "") === b.branch && subjectKey(g.subject) === subjectKey(subject) && [b.curriculum, ""].includes(groupCurriculum(g)) && (!g.curriculum || g.curriculum === b.curriculum)
         && (g.grades || []).length && g.grades.every((x) => (byGradeOnly ? x === b.grade : stageOfGrade(x) === b.stage))).forEach((g) => {
         const room = g.capacity ? g.capacity - (size.get(g.id) || 0) : Infinity;
         if (room <= 0 || !list.length) return;
         const take = list.splice(0, room === Infinity ? list.length : room);
         size.set(g.id, (size.get(g.id) || 0) + take.length);
-        plan.push({ id: g.id, name: g.name, type: g.type, branch: b.branch, subject, stage: b.stage, students: take, existing: true });
+        plan.push({ id: g.id, name: g.name, type: g.type, branch: b.branch, curriculum: b.curriculum, subject, stage: b.stage, students: take, existing: true });
       });
       if (!list.length) return;
       const parts = capacity ? Math.ceil(list.length / capacity) : 1;
       const per = Math.ceil(list.length / parts);
-      const base = [`${b.type === "ENRICHMENT" ? "إثراء" : "تقوية"}${subject ? ` ${subject}` : ""}`, byGradeOnly ? gradeAr(b.grade) : STAGE_AR[b.stage], multiBranch && b.branch ? branchName[b.branch] || b.branch : ""].filter(Boolean).join(" — ");
+      const base = [`${b.type === "ENRICHMENT" ? "إثراء" : "تقوية"}${subject ? ` ${subject}` : ""}`, byGradeOnly ? gradeAr(b.grade) : STAGE_AR[b.stage], CURRICULUM_AR[b.curriculum] || "", multiBranch && b.branch ? branchName[b.branch] || b.branch : ""].filter(Boolean).join(" — ");
       for (let i = 0; i < parts; i++) {
         let name = parts > 1 ? `${base} (${i + 1})` : base;
         for (let n = 2; names.has(name); n++) name = `${base} (${parts > 1 ? `${i + 1}-` : ""}${n})`;
         names.add(name);
-        plan.push({ name, type: b.type, branch: b.branch, subject, stage: b.stage, students: list.slice(i * per, (i + 1) * per), existing: false });
+        plan.push({ name, type: b.type, branch: b.branch, curriculum: b.curriculum, subject, stage: b.stage, students: list.slice(i * per, (i + 1) * per), existing: false });
       }
     });
     plan.forEach((p) => { p.members = [p.name]; p.stages = [p.stage]; });
@@ -689,6 +722,8 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
       if (parts.length < 2) return;
       if (new Set(parts.map((p) => p.type)).size > 1) throw new HttpsError("invalid-argument", "لا يمكن دمج مجموعتين من برنامجين مختلفين.");
       if (new Set(parts.map((p) => p.branch)).size > 1) throw new HttpsError("invalid-argument", "لا يمكن دمج مجموعتين من فرعين مختلفين.");
+      const curricula = new Set(parts.map((p) => p.curriculum).filter(Boolean));
+      if (curricula.size > 1) throw new HttpsError("invalid-argument", "لا يمكن دمج مجموعتين من منهجين مختلفين (أمريكي وبريطاني).");
       const old = parts.filter((p) => p.existing);
       if (old.length > 1) throw new HttpsError("invalid-argument", "لدمج مجموعتين قائمتين استخدم «دمج المجموعات» في صفحة البرنامج.");
       const subjects = [...new Map(parts.filter((p) => p.subject).map((p) => [subjectKey(p.subject), p.subject])).values()];
@@ -698,24 +733,24 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         parts.forEach((p) => names.delete(p.name));
         const grades = [...new Set(parts.flatMap((p) => p.students.map((e) => String(e.grade || ""))))].sort(gradeSort);
         const where = byGradeOnly ? (grades.length > 1 && grades.every((x) => /^G\d+$/i.test(x)) ? `الصفوف ${grades.map((x) => ORD_AR[Number(x.slice(1))] || x).join(" و")}` : grades.map(gradeAr).join(" و")) : stages.map((x) => STAGE_AR[x]).join(" و");
-        const base = [`${parts[0].type === "ENRICHMENT" ? "إثراء" : "تقوية"}${subjects.length ? ` ${subjects.join(" / ")}` : ""}`, where,
+        const base = [`${parts[0].type === "ENRICHMENT" ? "إثراء" : "تقوية"}${subjects.length ? ` ${subjects.join(" / ")}` : ""}`, where, CURRICULUM_AR[[...curricula][0]] || "",
           multiBranch && parts[0].branch ? branchName[parts[0].branch] || parts[0].branch : ""].filter(Boolean).join(" — ");
         name = base;
         for (let n = 2; names.has(name); n++) name = `${base} (${n})`;
         names.add(name);
       }
       const merged = {
-        ...(old[0] ? { id: old[0].id } : {}), name, type: parts[0].type, branch: parts[0].branch, subject: subjects.join(" / "), stage: stages.length === 1 ? stages[0] : "",
+        ...(old[0] ? { id: old[0].id } : {}), name, type: parts[0].type, branch: parts[0].branch, curriculum: [...curricula][0] || "", subject: subjects.join(" / "), stage: stages.length === 1 ? stages[0] : "",
         stages, members: parts.flatMap((p) => p.members), students: parts.flatMap((p) => p.students).sort(byGrade), existing: !!old[0], merged: true,
       };
       plan.splice(plan.indexOf(parts[0]), 1, merged);
       parts.slice(1).forEach((p) => plan.splice(plan.indexOf(p), 1));
     });
     const rows = plan.map((p) => ({
-      name: p.name, type: p.type, branch: p.branch, subject: p.subject, stage: p.stage, stages: p.stages, members: p.members, merged: !!p.merged, existing: p.existing, count: p.students.length,
+      name: p.name, type: p.type, branch: p.branch, curriculum: p.curriculum || "", subject: p.subject, stage: p.stage, stages: p.stages, members: p.members, merged: !!p.merged, existing: p.existing, count: p.students.length,
       grades: [...new Set(p.students.map((e) => e.grade).filter(Boolean))].sort((a, b) => a.localeCompare(b, "en", { numeric: true })),
     }));
-    if (!dd.apply) return { plan: rows, students: todo.length, by: byGradeOnly ? "grade" : "stage" };
+    if (!dd.apply) return { plan: rows, students: todo.length, by: byGradeOnly ? "grade" : "stage", curricula: Object.fromEntries(["AMERICAN", "BRITISH", ""].map((k) => [k || "NONE", todo.filter((e) => enrollCurriculum(e) === k).length])) };
     const now = Timestamp.now();
     const writes = [];
     plan.forEach((p, i) => {
@@ -724,7 +759,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         const gRef = ref.collection("groups").doc();
         gid = gRef.id;
         writes.push((batch) => batch.set(gRef, {
-          name: p.name, type: p.type, branch: p.branch, subject: p.subject, grades: rows[i].grades, teacher: "", room: "", capacity: capacity ? Math.max(capacity, p.students.length) : 0, supervisorId: "",
+          name: p.name, type: p.type, branch: p.branch, curriculum: p.curriculum || "", subject: p.subject, grades: rows[i].grades, teacher: "", room: "", capacity: capacity ? Math.max(capacity, p.students.length) : 0, supervisorId: "",
           auto: true, createdAt: now, updatedAt: now,
         }));
       } else if (p.merged) {
@@ -733,7 +768,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         const g = groups.find((x) => x.id === gid);
         const total = (size0.get(gid) || 0) + p.students.length;
         writes.push((batch) => batch.update(ref.collection("groups").doc(gid), {
-          grades: [...new Set([...(g.grades || []), ...rows[i].grades])].sort((a, b) => a.localeCompare(b, "en", { numeric: true })),
+          grades: [...new Set([...(g.grades || []), ...rows[i].grades])].sort((a, b) => a.localeCompare(b, "en", { numeric: true })), ...(!g.curriculum && p.curriculum ? { curriculum: p.curriculum } : {}),
           ...(g.capacity && total > g.capacity ? { capacity: Math.min(200, total) } : {}), updatedAt: now,
         }));
       }
@@ -761,6 +796,8 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const gs = snaps.map((x) => ({ id: x.id, ...x.data() }));
     if (new Set(gs.map((g) => g.type)).size > 1) throw new HttpsError("invalid-argument", "لا يمكن دمج مجموعتين من برنامجين مختلفين.");
     if (new Set(gs.map((g) => g.branch || "")).size > 1) throw new HttpsError("invalid-argument", "لا يمكن دمج مجموعتين من فرعين مختلفين.");
+    const curricula = new Set(gs.map((g) => g.curriculum).filter(Boolean));
+    if (curricula.size > 1) throw new HttpsError("invalid-argument", "لا يمكن دمج مجموعتين من منهجين مختلفين (أمريكي وبريطاني).");
     const target = gs.find((g) => g.id === dd.targetId) || gs[0];
     const others = gs.filter((g) => g !== target);
     const inside = await ref.collection("students").where("groupId", "in", ids).get();
@@ -769,7 +806,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const pick = (k) => target[k] || others.find((g) => g[k])?.[k] || "";
     const caps = gs.map((g) => g.capacity || 0);
     const patch = {
-      name: str(dd.name, 80) || target.name, subject: str(subjects.join(" / "), 120),
+      name: str(dd.name, 80) || target.name, subject: str(subjects.join(" / "), 120), curriculum: [...curricula][0] || "",
       grades: [...new Set(gs.flatMap((g) => g.grades || []))].sort((a, b) => a.localeCompare(b, "en", { numeric: true })).slice(0, 20),
       teacher: pick("teacher"), room: pick("room"), supervisorId: pick("supervisorId"),
       capacity: caps.some((x) => !x) ? 0 : Math.min(200, Math.max(count, ...caps)),

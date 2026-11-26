@@ -5864,7 +5864,8 @@
       "already": "{{n}} were already nominated.",
       "mySubject": "Subject you teach",
       "myStage": "Stage",
-      "leave": "Sign out / another teacher"
+      "leave": "Sign out / another teacher",
+      "myCurriculum": "Curriculum"
     },
     "programs": {
       "REMEDIAL": "Interventional programmes",
@@ -5896,7 +5897,8 @@
         "stage": "Stage",
         "subject": "Subject",
         "grades": "Grades",
-        "count": "Students"
+        "count": "Students",
+        "curriculum": "Curriculum"
       },
       "by": "Group by",
       "by_grade": "Grade",
@@ -5917,7 +5919,7 @@
       "button": "Merge groups",
       "selected": "Merge selected ({{n}})",
       "pickHint": "Pick the groups to merge, then press «Merge selected».",
-      "mixed": "Groups of different programmes or branches cannot be merged.",
+      "mixed": "Groups of different programmes, branches or curricula cannot be merged.",
       "autoHint": "Each grade gets its own groups with its subject. To merge groups (e.g. two small grades) tick them and press «Merge selected».",
       "mergedN": "merged from {{n}}",
       "undo": "Undo merge",
@@ -5930,7 +5932,25 @@
       "after": "Past attendance stays counted for each student. Send the new group notice to parents from the Students tab if needed."
     },
     "deleteActiveConfirm": "The cycle «{{title}}» is still open. It will be deleted for good with its students ({{n}}), groups, supervisors and attendance; parent, supervisor and teacher links stop and its waiting calls are cancelled. This cannot be undone.\n\nType the cycle's name to confirm:",
-    "deleteTitleMismatch": "The name does not match — the cycle was not deleted."
+    "deleteTitleMismatch": "The name does not match — the cycle was not deleted.",
+    "curriculum": {
+      "label": "Curriculum",
+      "AMERICAN": "American",
+      "BRITISH": "British",
+      "NONE": "No curriculum",
+      "all": "All curricula",
+      "fromRoster": "From the student record",
+      "fromFile": "Curriculum from the file",
+      "nomHint": "Set on the nominated students. «From the student record» takes it from the roster (KG has none).",
+      "choose": "Change curriculum…",
+      "clear": "Clear curriculum",
+      "set": "Apply curriculum",
+      "skipped": "{{n}} students were not added: their curriculum differs from the group’s.",
+      "each": "Each curriculum apart",
+      "both": "Both",
+      "groupHint": "A single-curriculum group only takes its own students (and those with none).",
+      "noneWaiting": "{{n}} students have no curriculum — they are grouped apart; set it from the students tab if needed."
+    }
   },
   "mnt": {
     "title": "Facilities maintenance",

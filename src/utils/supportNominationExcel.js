@@ -19,11 +19,20 @@ const FIELDS = [
   ['reason', /سبب|الاحتياج|ملاحظ|reason|note/i],
   ['teacher', /المعلم|teacher/i],
   ['round', /cycle|دفعة|دفعه|الدورة/i],
+  ['curriculum', /المنهج|منهج|curricul/i],
 ];
 export const typeOf = (v) => {
   const s = clean(v).toLowerCase();
   if (/تقوي|علاج|دعم|remed/.test(s)) return 'REMEDIAL';
   if (/إثراء|اثراء|ثراء|تميز|enrich/.test(s)) return 'ENRICHMENT';
+  return '';
+};
+
+// «أمريكي» / «American» → AMERICAN; «بريطاني» / «British» → BRITISH.
+export const curriculumOf = (v) => {
+  const s = clean(v).toLowerCase();
+  if (/أمري|امري|american|\bus\b/.test(s)) return 'AMERICAN';
+  if (/بريطان|british|\buk\b|igcse/.test(s)) return 'BRITISH';
   return '';
 };
 
@@ -37,7 +46,7 @@ export const roundOf = (v) => {
   return i >= 0 ? i + 1 : 0;
 };
 
-// One sheet → { rows: [{studentId, name, grade, className, type, subjects, reason, teacher, round}], form: bool }.
+// One sheet → { rows: [{studentId, name, grade, className, type, subjects, reason, teacher, round, curriculum}], form: bool }.
 // `form` is false for a plain list (no header row found): then every
 // 10-digit number anywhere in it is a student, as before.
 export function readNominationRows(XLSX, wb) {
@@ -46,7 +55,7 @@ export function readNominationRows(XLSX, wb) {
   const headAt = aoa.findIndex((r) => r.some((v) => FIELDS[0][1].test(clean(v))));
   if (headAt < 0) {
     const ids = [...new Set(aoa.flat().map(idOf).filter(Boolean))];
-    return { form: false, rows: ids.map((studentId) => ({ studentId, name: '', grade: '', className: '', type: '', subjects: [], reason: '', teacher: '', round: 0 })) };
+    return { form: false, rows: ids.map((studentId) => ({ studentId, name: '', grade: '', className: '', type: '', subjects: [], reason: '', teacher: '', round: 0, curriculum: '' })) };
   }
   const col = {};
   aoa[headAt].forEach((h, i) => {
@@ -65,7 +74,7 @@ export function readNominationRows(XLSX, wb) {
     rows.push({
       studentId, name: get('name'), grade: get('grade'), className: get('className'),
       type: typeOf(get('type')), subjects: get('subjects').split(/[،,؛;/]+/).map(clean).filter(Boolean),
-      reason: get('reason'), teacher: get('teacher'), round: roundOf(get('round')),
+      reason: get('reason'), teacher: get('teacher'), round: roundOf(get('round')), curriculum: curriculumOf(get('curriculum')),
     });
   });
   return { form: true, rows };

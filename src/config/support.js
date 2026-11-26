@@ -4,6 +4,9 @@ import { functions } from './firebase';
 // «برامج الدعم» — see functions/support.js.
 export const callSupport = (name, data) => httpsCallable(functions, name)(data).then((r) => r.data);
 export const SUPPORT_TYPES = ['REMEDIAL', 'ENRICHMENT'];
+// The curriculum (المنهج) a student is nominated under / a group is for.
+export const SUPPORT_CURRICULA = ['AMERICAN', 'BRITISH'];
+export const CURRICULUM_STYLE = { AMERICAN: 'bg-blue-50 text-blue-700 border-blue-200', BRITISH: 'bg-rose-50 text-rose-700 border-rose-200' };
 export const SUPPORT_STATUSES = ['NOMINATED', 'APPROVED', 'PENDING_CONSENT', 'CONSENTED', 'DECLINED', 'PLEDGE_SENT', 'PLEDGE_SIGNED', 'REJECTED', 'WITHDRAWN'];
 export const STATUS_STYLE = {
   NOMINATED: 'bg-slate-50 text-slate-700 border-slate-200',

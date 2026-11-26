@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { format } from 'date-fns';
-import { UserPlus, Loader2, Check, X, Send, BellRing, FileSignature, Layers, Undo2, Link2, MessageCircle, FileDown, Phone, Search, Upload, FileSpreadsheet, Copy, RefreshCw, Power, Tag } from 'lucide-react';
-import { NOMINATION_TEMPLATE_URL, readNominationRows, typeOf } from '../../utils/supportNominationExcel';
-import { callSupport, SUPPORT_STATUSES, SUPPORT_TYPES, STATUS_STYLE, TYPE_STYLE, SUBJECTS, ROUNDS, roundLabel, attRate } from '../../config/support';
+import { UserPlus, Loader2, Check, X, Send, BellRing, FileSignature, Layers, Undo2, Link2, MessageCircle, FileDown, Phone, Search, Upload, FileSpreadsheet, Copy, RefreshCw, Power, Tag, GraduationCap } from 'lucide-react';
+import { NOMINATION_TEMPLATE_URL, readNominationRows, typeOf, curriculumOf } from '../../utils/supportNominationExcel';
+import { callSupport, SUPPORT_STATUSES, SUPPORT_TYPES, SUPPORT_CURRICULA, CURRICULUM_STYLE, STATUS_STYLE, TYPE_STYLE, SUBJECTS, ROUNDS, roundLabel, attRate } from '../../config/support';
 import RoundPill from './RoundPill';
 import { waLink } from '../../utils/whatsapp';
 import StudentPicker from '../platform/StudentPicker';
@@ -28,6 +28,8 @@ export default function SupportStudents({ data, branchName, groupName, reload })
   const [grade, setGrade] = useState('');
   const [round, setRound] = useState('');
   const [roundTo, setRoundTo] = useState('');
+  const [curriculum, setCurriculum] = useState('');
+  const [curriculumTo, setCurriculumTo] = useState('');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState('');
@@ -44,7 +46,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
   const branchesIn = [...new Set(students.map((s) => s.branch).filter(Boolean))];
   const roundsIn = [...new Set(students.map((s) => s.round || 0))].sort();
   const shown = students.filter((s) => (!status || s.status === status) && (!type || s.type === type) && (!branch || s.branch === branch) && (!grade || s.grade === grade)
-    && (!round || String(s.round || 0) === round)
+    && (!round || String(s.round || 0) === round) && (!curriculum || (s.curriculum || 'NONE') === curriculum)
     && (!q || `${s.name} ${s.studentId} ${s.className}`.includes(q.trim())))
     .sort((a, b) => a.grade.localeCompare(b.grade, 'en', { numeric: true }) || a.name.localeCompare(b.name, 'ar'));
   const picked = shown.filter((s) => selected.includes(s.id));
@@ -79,7 +81,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
     const XLSX = await import('xlsx');
     const rows = shown.map((s) => ({
       [t('support.col.student')]: s.name, ID: s.studentId, [t('common.branch')]: branchName(s.branch), [t('support.col.grade')]: `${s.grade} ${s.className}`.trim(),
-      [t('support.round.label')]: s.round ? roundLabel(s.round) : '', [t('support.col.type')]: t(`support.types.${s.type}`), [t('support.col.subjects')]: s.subjects.join('، '), [t('support.col.reason')]: s.reason,
+      [t('support.round.label')]: s.round ? roundLabel(s.round) : '', [t('support.curriculum.label')]: s.curriculum ? t(`support.curriculum.${s.curriculum}`) : '', [t('support.col.type')]: t(`support.types.${s.type}`), [t('support.col.subjects')]: s.subjects.join('، '), [t('support.col.reason')]: s.reason,
       [t('support.col.status')]: t(`support.status.${s.status}`), [t('support.col.answer')]: s.consent ? `${s.consent.name} ${day(s.consent.at)}` : s.decline ? `${s.decline.name} ${day(s.decline.at)} — ${s.decline.reason || ''}` : '',
       [t('support.col.pledge')]: s.pledge ? `${s.pledge.name} ${day(s.pledge.at)}` : '', [t('support.col.group')]: groupName[s.groupId] || '',
       [t('support.col.present')]: (s.att.P || 0) + (s.att.L || 0), [t('support.col.absent')]: s.att.A || 0, [t('support.col.rate')]: attRate(s.att) ?? '',
@@ -108,6 +110,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
         <select value={type} onChange={(e) => setType(e.target.value)} className={sel}><option value="">{t('support.allTypes')}</option>{SUPPORT_TYPES.map((x) => <option key={x} value={x}>{t(`support.types.${x}`)}</option>)}</select>
         {branchesIn.length > 1 && <select value={branch} onChange={(e) => setBranch(e.target.value)} className={sel}><option value="">{t('common.allBranches')}</option>{branchesIn.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}</select>}
         <select value={grade} onChange={(e) => setGrade(e.target.value)} className={sel}><option value="">{t('support.allGrades')}</option>{grades.map((g) => <option key={g} value={g}>{g}</option>)}</select>
+        <select value={curriculum} onChange={(e) => setCurriculum(e.target.value)} className={sel}><option value="">{t('support.curriculum.all')}</option>{[...SUPPORT_CURRICULA, 'NONE'].map((x) => <option key={x} value={x}>{`${t(`support.curriculum.${x}`)} (${students.filter((s) => (s.curriculum || 'NONE') === x).length})`}</option>)}</select>
         {roundsIn.some(Boolean) && <select value={round} onChange={(e) => setRound(e.target.value)} className={sel}><option value="">{t('support.round.all')}</option>{roundsIn.map((x) => <option key={x} value={String(x)}>{x ? `${roundLabel(x)} (${students.filter((s) => (s.round || 0) === x).length})` : t('support.round.untagged')}</option>)}</select>}
         <div className="flex-1" />
         {manage && waiting.length > 0 && (
@@ -137,7 +140,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
             <span className="flex items-center gap-1.5">
               <select value={groupTo} onChange={(e) => setGroupTo(e.target.value)} className={`${sel} py-1.5`}>
                 <option value="">{t('support.act.chooseGroup')}</option>
-                {data.groups.map((g) => <option key={g.id} value={g.id}>{g.name} — {t(`support.types.${g.type}`)}</option>)}
+                {data.groups.map((g) => <option key={g.id} value={g.id}>{g.name} — {t(`support.types.${g.type}`)}{g.curriculum ? ` · ${t(`support.curriculum.${g.curriculum}`)}` : ''}</option>)}
                 <option value="__none">{t('support.act.noGroup')}</option>
               </select>
               <label className="flex items-center gap-1 text-xs text-slate-600"><input type="checkbox" checked={notifyGroup} onChange={(e) => setNotifyGroup(e.target.checked)} />{t('support.act.notify')}</label>
@@ -152,6 +155,14 @@ export default function SupportStudents({ data, branchName, groupName, reload })
             </select>
             <button type="button" disabled={!roundTo || !!busy} onClick={() => act('setRound', { round: Number(roundTo) })} className={btn.ghost}>{busy === 'setRound' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Tag className="w-4 h-4" />}{t('support.round.set')}</button>
           </span>
+          <span className="flex items-center gap-1.5">
+            <select value={curriculumTo} onChange={(e) => setCurriculumTo(e.target.value)} className={`${sel} py-1.5`}>
+              <option value="">{t('support.curriculum.choose')}</option>
+              {SUPPORT_CURRICULA.map((x) => <option key={x} value={x}>{t(`support.curriculum.${x}`)}</option>)}
+              <option value="NONE">{t('support.curriculum.clear')}</option>
+            </select>
+            <button type="button" disabled={!curriculumTo || !!busy} onClick={() => act('setCurriculum', { curriculum: curriculumTo === 'NONE' ? '' : curriculumTo })} className={btn.ghost}>{busy === 'setCurriculum' ? <Loader2 className="w-4 h-4 animate-spin" /> : <GraduationCap className="w-4 h-4" />}{t('support.curriculum.set')}</button>
+          </span>
           {picked.some((s) => s.status === 'WITHDRAWN') ? bulk('restore', Undo2, t('support.act.restore')) : (
             <button type="button" disabled={!!busy} onClick={() => { const note = window.prompt(t('support.act.withdrawReason')); if (note !== null) act('withdraw', { note }); }} className={btn.ghost}><Undo2 className="w-4 h-4" />{t('support.act.withdraw')}</button>
           )}
@@ -160,6 +171,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
       {notice && (
         <div className={`text-sm rounded-xl p-3 border ${notice.error ? 'bg-red-50 text-red-700 border-red-100' : 'bg-emerald-50 text-emerald-800 border-emerald-100'}`}>
           {notice.error || (notice.nominate ? <>{t('support.nomResult', notice.nominate)}{notice.nominate.retagged > 0 && <span className="block text-xs mt-1">{t('support.nom.retagged', { n: notice.nominate.retagged })}</span>}{notice.nominate.otherCycleList?.length > 0 && <span className="block text-xs text-amber-800 mt-1">{t('support.nom.otherCycleList')}: {notice.nominate.otherCycleList.map((x) => `${x.name} (${x.cycle} — ${t(`support.types.${x.type}`)})`).join('، ')}</span>}{notice.nominate.notFoundIds?.length > 0 && <span className="block text-xs text-amber-800 mt-1">{t('support.nom.notFoundIds')}: <span dir="ltr">{notice.nominate.notFoundIds.join('، ')}</span></span>}</> : notice.copied != null ? t('support.copied', { n: notice.copied }) : notice.noWa ? t('support.noWa', { n: notice.done }) : notice.sent != null ? t('support.sentResult', { done: notice.done, sent: notice.sent, failed: notice.failed }) : t('support.doneN', { n: notice.done }))}
+          {notice.otherCurriculum > 0 && <span className="block text-xs text-amber-800 mt-1">{t('support.curriculum.skipped', { n: notice.otherCurriculum })}</span>}
         </div>
       )}
 
@@ -177,7 +189,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
               return (
                 <tr key={s.id} className="align-top">
                   {manage && <td className="px-2 py-2"><input type="checkbox" checked={selected.includes(s.id)} onChange={(e) => setSelected(e.target.checked ? [...selected, s.id] : selected.filter((x) => x !== s.id))} /></td>}
-                  <td className="px-2 py-2"><p className="font-medium text-slate-900">{s.name}{s.round > 0 && <RoundPill n={s.round} className="ms-1.5" />}</p><p className="text-xs text-slate-500"><span dir="ltr">{s.studentId}</span> · {branchName(s.branch)} · <span dir="ltr">{s.grade} {s.className}</span></p></td>
+                  <td className="px-2 py-2"><p className="font-medium text-slate-900">{s.name}{s.round > 0 && <RoundPill n={s.round} className="ms-1.5" />}{s.curriculum && <Pill className={`ms-1.5 ${CURRICULUM_STYLE[s.curriculum]}`}>{t(`support.curriculum.${s.curriculum}`)}</Pill>}</p><p className="text-xs text-slate-500"><span dir="ltr">{s.studentId}</span> · {branchName(s.branch)} · <span dir="ltr">{s.grade} {s.className}</span></p></td>
                   <td className="px-2 py-2"><Pill className={TYPE_STYLE[s.type]}>{t(`support.types.${s.type}`)}</Pill>{s.subjects.length > 0 && <p className="text-xs text-slate-500 mt-1">{s.subjects.join('، ')}</p>}{s.reason && <p className="text-xs text-slate-400 mt-0.5 max-w-56">{s.reason}</p>}</td>
                   <td className="px-2 py-2 whitespace-nowrap"><Pill className={STATUS_STYLE[s.status]}>{t(`support.status.${s.status}`)}</Pill>{s.wa?.status === 'failed' && <p className="text-[11px] text-rose-600 mt-1 max-w-48 whitespace-normal" title={s.wa.error}>{t('support.waFailed')}</p>}{s.sentAt > 0 && <p className="text-[11px] text-slate-400 mt-1">{t('support.sentOn', { day: day(s.sentAt) })}</p>}{s.reviewNote && <p className="text-[11px] text-slate-500 mt-1">{s.reviewNote}</p>}</td>
                   <td className="px-2 py-2 text-xs">
@@ -233,6 +245,7 @@ function NominateModal({ cycle, onClose, onDone }) {
   const [other, setOther] = useState('');
   const [reason, setReason] = useState('');
   const [round, setRound] = useState('');
+  const [curriculum, setCurriculum] = useState('');
   const [list, setList] = useState([]);
   const [files, setFiles] = useState([]);
   const [busy, setBusy] = useState(false);
@@ -246,7 +259,7 @@ function NominateModal({ cycle, onClose, onDone }) {
       try {
         const { rows } = readNominationRows(XLSX, XLSX.read(await file.arrayBuffer()));
         const guess = roundOfName(file.name);
-        added.push({ key: `${Date.now()}_${added.length}_${file.name}`, name: file.name, rows, round: guess ? String(guess) : '', type: typeOf(file.name) });
+        added.push({ key: `${Date.now()}_${added.length}_${file.name}`, name: file.name, rows, round: guess ? String(guess) : '', type: typeOf(file.name), curriculum: curriculumOf(file.name) });
       } catch { setError(t('support.nom.badFile', { name: file.name })); }
     }
     setFiles((x) => [...x, ...added]);
@@ -259,7 +272,7 @@ function NominateModal({ cycle, onClose, onDone }) {
     let rep = 0;
     files.forEach((f) => f.rows.forEach((r) => {
       if (byId.has(r.studentId)) rep++;
-      byId.set(r.studentId, { ...r, type: f.type || r.type, round: Number(f.round) || r.round || 0, file: f.name });
+      byId.set(r.studentId, { ...r, type: f.type || r.type, round: Number(f.round) || r.round || 0, curriculum: f.curriculum || r.curriculum || '', file: f.name });
     }));
     return { fileRows: [...byId.values()], repeated: rep };
   }, [files]);
@@ -272,9 +285,9 @@ function NominateModal({ cycle, onClose, onDone }) {
     setBusy(true);
     try {
       const r = await callSupport('supportNominate', {
-        id: cycle.id, type, subjects: [...subjects, ...other.split(/[،,]/).map((x) => x.trim()).filter(Boolean)], reason, round: Number(round) || 0,
+        id: cycle.id, type, subjects: [...subjects, ...other.split(/[،,]/).map((x) => x.trim()).filter(Boolean)], reason, round: Number(round) || 0, curriculum,
         studentIds: list.map((s) => s.nationalId).filter((x) => !fileIds.includes(x)),
-        entries: fileRows.map(({ studentId, type: rowType, subjects: rowSubjects, reason: rowReason, teacher, round: rowRound }) => ({ studentId, type: rowType, subjects: rowSubjects, reason: rowReason, teacher, round: rowRound || Number(round) || 0 })),
+        entries: fileRows.map(({ studentId, type: rowType, subjects: rowSubjects, reason: rowReason, teacher, round: rowRound, curriculum: rowCurriculum }) => ({ studentId, type: rowType, subjects: rowSubjects, reason: rowReason, teacher, round: rowRound || Number(round) || 0, curriculum: rowCurriculum || curriculum })),
       });
       onDone(r);
     } catch (err) { setError(err.message); setBusy(false); }
@@ -284,6 +297,9 @@ function NominateModal({ cycle, onClose, onDone }) {
       footer={<><button type="button" onClick={onClose} className={btn.ghost}>{t('common.cancel')}</button><button type="button" disabled={busy} onClick={save} className={btn.primary}>{busy && <Loader2 className="w-4 h-4 animate-spin" />}{t('support.nom.submit', { n: ids.length })}</button></>}>
       {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl p-3">{error}</div>}
       <Field label={t('support.nom.type')} required><div className="flex gap-2">{SUPPORT_TYPES.map((x) => <button key={x} type="button" onClick={() => setType(x)} className={chip(type === x)}>{t(`support.types.${x}`)}</button>)}</div></Field>
+      <Field label={t('support.curriculum.label')} hint={t('support.curriculum.nomHint')}>
+        <div className="flex flex-wrap gap-1.5">{['', ...SUPPORT_CURRICULA].map((x) => <button key={x || 'roster'} type="button" onClick={() => setCurriculum(x)} className={chip(curriculum === x)}>{x ? t(`support.curriculum.${x}`) : t('support.curriculum.fromRoster')}</button>)}</div>
+      </Field>
       <Field label={t('support.nom.subjects')} hint={t('support.nom.subjectsHint')}>
         <div className="flex flex-wrap gap-1.5">{SUBJECTS.map((s) => <button key={s} type="button" onClick={() => setSubjects((x) => (x.includes(s) ? x.filter((y) => y !== s) : [...x, s]))} className={chip(subjects.includes(s))}>{s}</button>)}</div>
         <input value={other} onChange={(e) => setOther(e.target.value)} placeholder={t('support.nom.otherSubject')} className={`${inputCls} mt-2`} />
@@ -316,6 +332,10 @@ function NominateModal({ cycle, onClose, onDone }) {
                     <option value="">{round ? roundLabel(round) : t('support.round.fromFile')}</option>
                     {ROUNDS.map((x) => <option key={x} value={String(x)}>{roundLabel(x)}</option>)}
                   </select>
+                  <select value={f.curriculum} onChange={(e) => setFile(f.key, { curriculum: e.target.value })} className="px-2 py-1 border border-slate-200 rounded-lg bg-white">
+                    <option value="">{curriculum ? t(`support.curriculum.${curriculum}`) : t('support.curriculum.fromFile')}</option>
+                    {SUPPORT_CURRICULA.map((x) => <option key={x} value={x}>{t(`support.curriculum.${x}`)}</option>)}
+                  </select>
                   <select value={f.type} onChange={(e) => setFile(f.key, { type: e.target.value })} className="px-2 py-1 border border-slate-200 rounded-lg bg-white">
                     <option value="">{t('support.nom.typeFromFile')}</option>
                     {SUPPORT_TYPES.map((x) => <option key={x} value={x}>{t(`support.types.${x}`)}</option>)}
@@ -329,13 +349,14 @@ function NominateModal({ cycle, onClose, onDone }) {
           {fileRows.length > 0 && (
             <div className="max-h-56 overflow-auto border border-slate-100 rounded-lg">
               <table className="w-full text-xs">
-                <thead className="bg-slate-50 text-slate-500 sticky top-0"><tr>{['col.student', 'col.grade', 'round.label', 'col.type', 'col.subjects', 'col.reason', 'nom.teacher'].map((k) => <th key={k} className="px-2 py-1.5 text-start font-medium">{t(`support.${k}`)}</th>)}</tr></thead>
+                <thead className="bg-slate-50 text-slate-500 sticky top-0"><tr>{['col.student', 'col.grade', 'round.label', 'curriculum.label', 'col.type', 'col.subjects', 'col.reason', 'nom.teacher'].map((k) => <th key={k} className="px-2 py-1.5 text-start font-medium">{t(`support.${k}`)}</th>)}</tr></thead>
                 <tbody>
                   {fileRows.map((r) => (
                     <tr key={r.studentId} className="border-t border-slate-100">
                       <td className="px-2 py-1.5"><p className="text-slate-800">{r.name || '—'}</p><p className="text-slate-400" dir="ltr">{r.studentId}</p></td>
                       <td className="px-2 py-1.5" dir="ltr">{[r.grade, r.className].filter(Boolean).join(' ')}</td>
                       <td className="px-2 py-1.5 whitespace-nowrap">{r.round || Number(round) ? <RoundPill n={r.round || Number(round)} /> : <span className="text-slate-300">—</span>}</td>
+                      <td className="px-2 py-1.5 whitespace-nowrap">{r.curriculum || curriculum ? <Pill className={CURRICULUM_STYLE[r.curriculum || curriculum]}>{t(`support.curriculum.${r.curriculum || curriculum}`)}</Pill> : <span className="text-slate-300">—</span>}</td>
                       <td className="px-2 py-1.5">{r.type ? <Pill className={TYPE_STYLE[r.type]}>{t(`support.types.${r.type}`)}</Pill> : <span className="text-amber-700">{t(`support.types.${type}`)}*</span>}</td>
                       <td className="px-2 py-1.5">{r.subjects.join('، ')}</td>
                       <td className="px-2 py-1.5 max-w-48">{r.reason}</td>
@@ -408,7 +429,7 @@ function TeacherLinkModal({ cycle, initial, onClose }) {
                       <tr key={x.id}>
                         <td className="px-2 py-1.5 font-medium text-slate-900">{x.name}</td>
                         <td className="px-2 py-1.5">{x.subject}</td>
-                        <td className="px-2 py-1.5">{x.stage ? t(`support.groups.stages.${x.stage}`) : ''}</td>
+                        <td className="px-2 py-1.5">{x.stage ? t(`support.groups.stages.${x.stage}`) : ''}{x.curriculum ? ` · ${t(`support.curriculum.${x.curriculum}`)}` : ''}</td>
                         <td className="px-2 py-1.5 text-center">{x.nominated}</td>
                         <td className="px-2 py-1.5 whitespace-nowrap" dir="ltr">{x.lastAt ? new Date(x.lastAt).toLocaleString('en-GB', { timeZone: 'Asia/Riyadh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}</td>
                         <td className="px-2 py-1.5"><button type="button" title={t('support.tlink.remove')} disabled={!!busy} onClick={() => { if (window.confirm(t('support.tlink.removeConfirm', { name: x.name }))) run('removeTeacher', { teacherId: x.id }); }} className="text-slate-400 hover:text-rose-600"><X className="w-3.5 h-3.5" /></button></td>
