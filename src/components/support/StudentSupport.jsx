@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { BookOpenCheck, Loader2, ChevronDown, Printer, FileText, Phone, MessageCircle, AlertTriangle, ExternalLink } from 'lucide-react';
-import { callSupport, STATUS_STYLE, TYPE_STYLE, MARK_STYLE, attRate } from '../../config/support';
+import { callSupport, STATUS_STYLE, TYPE_STYLE, MARK_STYLE, RATING_STYLE, FINAL_STYLE, attRate } from '../../config/support';
 import { printPage, escapeHtml as esc } from '../../utils/printPage';
 import { Pill } from '../platform/ui';
 
@@ -11,7 +11,8 @@ const time = (ms) => (ms ? new Date(ms).toLocaleTimeString('en-GB', { timeZone: 
 
 // «برامج الدعم» in the student record: each nomination and its reason, the
 // parent's answer, the pledge (printable as PDF), the group and teacher, the
-// attendance rate, every class and its mark, and how the parent was reached
+// attendance rate, every class and its mark, the teacher's rating at each
+// class (with its topic) and final evaluation, and how the parent was reached
 // on each absence (WhatsApp, the call team's calls and their results), and
 // the notes opened on the case. Hidden when there are none (or the user
 // can't see the section).
@@ -98,6 +99,34 @@ ${x.decline ? `<tr><td>${esc(t('support.student.declinedOn'))}</td><td>${esc(x.d
                             </span>
                           ))}
                         </div>
+                      </div>
+                    )}
+
+                    {(x.ratings?.length > 0 || x.final) && (
+                      <div className="space-y-1">
+                        {x.final && (
+                          <p className="text-xs flex flex-wrap items-center gap-1.5">
+                            <span className="font-bold text-slate-700">{t('support.groups.final')}:</span>
+                            <span className={`px-2 py-0.5 rounded-full border ${FINAL_STYLE[x.final.r]?.pill || ''}`}>{t(`support.finals.${x.final.r}`)}</span>
+                            {x.final.note && <span className="text-slate-600">{x.final.note}</span>}
+                            {x.final.byName && <span className="text-slate-400">· {x.final.byName}</span>}
+                          </p>
+                        )}
+                        {x.ratings?.length > 0 && (
+                          <>
+                            <p className="text-xs font-bold text-slate-700">{t('support.student.ratings', { n: x.ratings.length })}</p>
+                            <ul className="text-xs space-y-0.5">
+                              {x.ratings.map((r) => (
+                                <li key={r.day} className="flex flex-wrap items-center gap-1.5 text-slate-600">
+                                  <span dir="ltr" className="text-slate-500">{r.day}</span>
+                                  <span className={`px-1.5 py-0.5 rounded-md border text-[11px] ${RATING_STYLE[r.r]?.on || ''}`}>{t(`support.ratings.${r.r}`)}</span>
+                                  {r.topic && <span>{r.topic}</span>}
+                                  {r.note && <span className="text-slate-400">— {r.note}</span>}
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
                       </div>
                     )}
 

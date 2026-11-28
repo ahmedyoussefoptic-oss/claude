@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Plus, Pencil, Trash2, Loader2, Users, DoorOpen, UserCheck, GraduationCap, ChevronLeft, ArrowRight, Layers, TrendingUp, Sparkles, Wand2, Combine } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Users, DoorOpen, UserCheck, GraduationCap, ChevronLeft, ArrowRight, Layers, TrendingUp, Sparkles, Wand2, Combine, BookOpen, Copy, Check, MessageCircle, Power, RefreshCw } from 'lucide-react';
 import { callSupport, SUPPORT_TYPES, SUPPORT_CURRICULA, CURRICULUM_STYLE, TYPE_STYLE, SUBJECTS } from '../../config/support';
 import { Modal, Field, Pill, inputCls, btn } from '../platform/ui';
 import { subjectKey, subjectFamily } from '../../utils/supportSubjects';
@@ -100,15 +100,18 @@ export function SupportProgramTypes({ data, onOpen, branchName, reload }) {
   const { t } = useTranslation();
   const [auto, setAuto] = useState(false);
   const [done, setDone] = useState(null);
+  const [classLink, setClassLink] = useState(false);
   const waitingAll = data.students.filter((s) => s.status === 'CONSENTED' && !s.groupId).length;
   return (
     <div className="space-y-3">
-    {data.cycle.canManage && waitingAll > 0 && (
+    {data.cycle.canManage && (
       <div className="flex flex-wrap items-center gap-2">
-        <button type="button" onClick={() => setAuto(true)} className={btn.primary}><Wand2 className="w-4 h-4" />{t('support.auto.button')}</button>
-        <p className="text-sm text-amber-700">{t('support.groups.waiting', { n: waitingAll })}</p>
+        {waitingAll > 0 && <button type="button" onClick={() => setAuto(true)} className={btn.primary}><Wand2 className="w-4 h-4" />{t('support.auto.button')}</button>}
+        {waitingAll > 0 && <p className="text-sm text-amber-700">{t('support.groups.waiting', { n: waitingAll })}</p>}
+        <button type="button" onClick={() => setClassLink(true)} className={`${btn.ghost} ms-auto`}><BookOpen className="w-4 h-4" />{t('support.clink.button')}</button>
       </div>
     )}
+    {classLink && <ClassLinkModal cycle={data.cycle} initial={data.classLink} onClose={() => { setClassLink(false); reload?.(); }} />}
     {done && <p className="text-sm rounded-xl p-3 border bg-emerald-50 text-emerald-800 border-emerald-100">{t('support.auto.done', { groups: done.created, n: done.placed })}</p>}
     {auto && <AutoGroupsModal cycle={data.cycle} branchName={branchName} onClose={() => setAuto(false)} onDone={async (r) => { setAuto(false); setDone(r); await reload?.(); }} />}
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -413,6 +416,77 @@ function GroupEditor({ data, branchName, group, onClose, onSaved }) {
       <Field label={t('support.groups.supervisor')} hint={data.supervisors.length ? '' : t('support.groups.addSupervisorsFirst')}>
         <select value={f.supervisorId} onChange={set('supervisorId')} className={inputCls}><option value="">—</option>{data.supervisors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
       </Field>
+    </Modal>
+  );
+}
+
+// The class teachers' link (one per cycle) and its PIN: copy / send, a new
+// link (the old one stops), pause — and each group teacher's follow-up:
+// classes written of those due, final evaluations, last entry.
+function ClassLinkModal({ cycle, initial, onClose }) {
+  const { t } = useTranslation();
+  const [link, setLink] = useState(initial);
+  const [busy, setBusy] = useState(initial ? 'list' : '');
+  const [error, setError] = useState(null);
+  const [copied, setCopied] = useState(false);
+  const run = async (action) => {
+    setBusy(action);
+    setError(null);
+    try { setLink(await callSupport('supportClassLink', { id: cycle.id, action })); } catch (err) { setError(err.message); } finally { setBusy(''); }
+  };
+  useEffect(() => {
+    if (!initial) return;
+    callSupport('supportClassLink', { id: cycle.id, action: 'list' }).then((r) => r && setLink(r)).catch((err) => setError(err.message)).finally(() => setBusy(''));
+  }, [cycle.id, initial]);
+  const teachers = link?.teachers || [];
+  const message = link?.link ? t('support.clink.message', { cycle: cycle.title, link: link.link, pin: link.pin }) : '';
+  const copy = async () => { try { await navigator.clipboard.writeText(message); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { window.prompt('', message); } };
+  const when = (ms) => (ms ? new Date(ms).toLocaleString('en-GB', { timeZone: 'Asia/Riyadh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—');
+  return (
+    <Modal title={t('support.clink.title')} onClose={onClose} size="max-w-2xl" footer={<button type="button" onClick={onClose} className={btn.ghost}>{t('common.close')}</button>}>
+      {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl p-3">{error}</div>}
+      <p className="text-sm text-slate-600">{t('support.clink.hint')}</p>
+      {!link?.link ? (
+        <button type="button" disabled={!!busy} onClick={() => run('create')} className={btn.primary}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <BookOpen className="w-4 h-4" />}{t('support.tlink.create')}</button>
+      ) : (
+        <div className="space-y-3">
+          <div className={`rounded-xl border p-3 space-y-2 ${link.enabled ? 'border-slate-200 bg-slate-50' : 'border-rose-200 bg-rose-50'}`}>
+            {!link.enabled && <p className="text-sm font-bold text-rose-700">{t('support.clink.paused')}</p>}
+            <p className="text-xs text-slate-500">{t('support.tlink.link')}</p>
+            <p className="text-sm font-mono break-all" dir="ltr">{link.link}</p>
+            <p className="text-xs text-slate-500">{t('support.tlink.pin')}</p>
+            <p className="text-2xl font-mono tracking-[0.3em]" dir="ltr">{link.pin}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={copy} className={btn.primary}>{copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}{copied ? t('support.sup.copied') : t('support.tlink.copy')}</button>
+            <a href={`https://wa.me/?text=${encodeURIComponent(message)}`} target="_blank" rel="noreferrer" className={btn.ghost}><MessageCircle className="w-4 h-4" />{t('support.tlink.whatsapp')}</a>
+            <button type="button" disabled={!!busy} onClick={() => run(link.enabled ? 'disable' : 'enable')} className={btn.ghost}>{busy === 'disable' || busy === 'enable' ? <Loader2 className="w-4 h-4 animate-spin" /> : <Power className="w-4 h-4" />}{link.enabled ? t('support.tlink.pause') : t('support.tlink.resume')}</button>
+            <button type="button" disabled={!!busy} onClick={() => { if (window.confirm(t('support.tlink.renewConfirm'))) run('renew'); }} className={btn.ghost}>{busy === 'renew' ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}{t('support.tlink.renew')}</button>
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm font-bold text-slate-900 flex items-center gap-2">{t('support.clink.teachers', { n: teachers.length })}{busy === 'list' && <Loader2 className="w-4 h-4 animate-spin text-primary" />}</p>
+            {link.noTeacher?.length > 0 && <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">{t('support.clink.noTeacherGroups', { list: link.noTeacher.join('، ') })}</p>}
+            {!teachers.length ? (busy !== 'list' && <p className="text-xs text-slate-400">{t('support.clink.noTeachers')}</p>) : (
+              <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-80">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 text-slate-500 sticky top-0"><tr>{['tName', 'tGroups', 'tLessons', 'tFinals', 'tLast'].map((k) => <th key={k} className="px-2 py-1.5 text-start font-medium">{t(`support.clink.${k}`)}</th>)}</tr></thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {teachers.map((x) => (
+                      <tr key={x.name}>
+                        <td className="px-2 py-1.5 font-medium text-slate-900">{x.name}</td>
+                        <td className="px-2 py-1.5 text-slate-600">{x.groups.join('، ')}</td>
+                        <td className={`px-2 py-1.5 text-center whitespace-nowrap ${x.due && x.lessons < x.due ? 'text-amber-700 font-bold' : 'text-emerald-700'}`}>{x.lessons} / {x.due}</td>
+                        <td className="px-2 py-1.5 text-center whitespace-nowrap">{x.finals} / {x.students}</td>
+                        <td className="px-2 py-1.5 whitespace-nowrap" dir="ltr">{when(x.lastAt)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </Modal>
   );
 }

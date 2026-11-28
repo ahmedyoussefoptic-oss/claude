@@ -5616,7 +5616,14 @@
       "noSessions": "This group's classes haven't started yet.",
       "notTaken": "Attendance not taken for this class",
       "notMarked": "Not marked",
-      "legend": "Days from oldest to newest"
+      "legend": "Days from oldest to newest",
+      "lessons": "Classes and topics",
+      "lessonDay": "Day",
+      "lessonTopic": "Topic",
+      "lessonNote": "Note",
+      "perf": "Teacher's rating",
+      "final": "Final evaluation",
+      "notRated": "Not rated"
     },
     "sup": {
       "add": "New supervisor",
@@ -5722,7 +5729,8 @@
       "remaining": "Classes left: {{n}} ({{when}})",
       "classes": "Classes: {{n}} · absent {{absent}}",
       "contact": "Contact on absence",
-      "openCycle": "Open the cycle"
+      "openCycle": "Open the cycle",
+      "ratings": "Teacher's ratings at the classes ({{n}})"
     },
     "deleteCycle": "Delete cycle",
     "deleteConfirm": "The cycle «{{title}}» will be deleted for good with its students ({{n}}), groups, supervisors and attendance; parent, supervisor and teacher links stop and its waiting calls are cancelled. This cannot be undone. Continue?",
@@ -5968,6 +5976,64 @@
       "keeps": "stays",
       "done": "{{n}} proposals merged ({{groups}} groups removed after moving their students).",
       "partial": "{{n}} merged, then stopped"
+    },
+    "ratings": {
+      "EXCELLENT": "Excellent",
+      "GOOD": "Good",
+      "WEAK": "Needs follow-up"
+    },
+    "finals": {
+      "CLEAR": "Clear improvement",
+      "PARTIAL": "Partial improvement",
+      "NONE": "No improvement"
+    },
+    "cls": {
+      "title": "Remedial & enrichment class teachers",
+      "pinPrompt": "Enter the PIN the programme coordinator sent you.",
+      "enter": "Enter",
+      "pick": "Choose your name",
+      "pickHint": "Names as the coordinator wrote them on the cycle's groups. If yours is missing, contact the programme coordinator.",
+      "noTeachers": "No group has a teacher yet; please contact the programme coordinator.",
+      "notFound": "Your name is no longer on a group; choose from the list.",
+      "notMe": "Change teacher",
+      "tabs": {
+        "lesson": "Classes",
+        "final": "Final evaluation"
+      },
+      "day": "Class day",
+      "noClassToday": "No class today — showing the last class day.",
+      "notStarted": "The cycle's classes haven't started yet.",
+      "written": "Classes written: {{n}} of {{total}}",
+      "topic": "Class topic / lesson taught",
+      "note": "General note on the class (optional)",
+      "rateTitle": "Rate the students at this class",
+      "allGood": "The rest: Good",
+      "studentNote": "Note on the student (optional)",
+      "save": "Save the class ({{n}} of {{total}} rated)",
+      "saved": "{{n}} students rated",
+      "savedAt": "Saved {{time}}",
+      "needTopic": "Write the class topic.",
+      "noStudents": "No students in this group yet.",
+      "finalHint": "At the end of the cycle: rate how much each student improved, with a recommendation (for the parent or the school). You can change it later.",
+      "att": "Attendance {{rate}}%",
+      "recommend": "Recommendation (optional)",
+      "saveFinal": "Save final evaluation ({{n}} of {{total}})",
+      "finalSaved": "{{n}} students evaluated"
+    },
+    "clink": {
+      "button": "Class teachers' link",
+      "title": "Remedial & enrichment class teachers' link",
+      "hint": "One link for the cycle with a PIN, sent to the groups' teachers. A teacher picks their name (as in the group's «Teacher» field) and sees only their groups and students, without national IDs; they write each class's topic and each student's rating, then each student's final evaluation. The link works until two weeks after the cycle ends. To shut out former teachers: «New link and PIN».",
+      "paused": "The link is paused — teachers can't record from it.",
+      "message": "Dear teachers,\nThe link to record the remedial & enrichment classes — {{cycle}} (each class's topic, the students' ratings and the final evaluation):\n{{link}}\nPIN: {{pin}}",
+      "teachers": "Group teachers ({{n}})",
+      "noTeachers": "No group has a teacher name yet — add it from «Edit group».",
+      "noTeacherGroups": "Groups without a teacher (not on the link): {{list}}",
+      "tName": "Teacher",
+      "tGroups": "Groups",
+      "tLessons": "Classes written",
+      "tFinals": "Final evaluation",
+      "tLast": "Last entry"
     }
   },
   "mnt": {

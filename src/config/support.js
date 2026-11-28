@@ -38,3 +38,16 @@ export const riyadhDay = (d = new Date()) => new Intl.DateTimeFormat('en-CA', { 
 export const time12 = (t) => { const [h, m] = String(t || '').split(':').map(Number); return `${((h + 11) % 12) + 1}:${String(m || 0).padStart(2, '0')}`; };
 // Attendance rate of an enrollment: present + late over the marked classes.
 export const attRate = (att = {}) => { const n = (att.P || 0) + (att.L || 0) + (att.A || 0) + (att.E || 0); return n ? Math.round((((att.P || 0) + (att.L || 0)) / n) * 100) : null; };
+// The class teachers' link: each student's rating at a class, and the final evaluation.
+export const RATINGS = ['EXCELLENT', 'GOOD', 'WEAK'];
+export const RATING_STYLE = {
+  EXCELLENT: { on: 'bg-emerald-600 text-white border-emerald-600', off: 'text-emerald-700 border-emerald-200 bg-white' },
+  GOOD: { on: 'bg-sky-600 text-white border-sky-600', off: 'text-sky-700 border-sky-200 bg-white' },
+  WEAK: { on: 'bg-amber-500 text-white border-amber-500', off: 'text-amber-700 border-amber-200 bg-white' },
+};
+export const FINALS = ['CLEAR', 'PARTIAL', 'NONE'];
+export const FINAL_STYLE = {
+  CLEAR: { on: 'bg-emerald-600 text-white border-emerald-600', off: 'text-emerald-700 border-emerald-200 bg-white', pill: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  PARTIAL: { on: 'bg-sky-600 text-white border-sky-600', off: 'text-sky-700 border-sky-200 bg-white', pill: 'bg-sky-50 text-sky-700 border-sky-200' },
+  NONE: { on: 'bg-rose-600 text-white border-rose-600', off: 'text-rose-700 border-rose-200 bg-white', pill: 'bg-rose-50 text-rose-700 border-rose-200' },
+};

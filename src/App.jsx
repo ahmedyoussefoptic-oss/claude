@@ -33,6 +33,7 @@ import SupportPrograms from './pages/SupportPrograms';
 import SupportParent from './pages/SupportParent';
 import SupportAttend from './pages/SupportAttend';
 import SupportNominate from './pages/SupportNominate';
+import SupportClass from './pages/SupportClass';
 import Maintenance from './pages/Maintenance';
 import MaintenanceReport from './pages/MaintenanceReport';
 import MaintenanceTech from './pages/MaintenanceTech';
@@ -118,6 +119,7 @@ function App() {
         <Route path="/support/:token" element={<SupportParent />} />
         <Route path="/support-attend/:token" element={<SupportAttend />} />
         <Route path="/support-nominate/:token" element={<SupportNominate />} />
+        <Route path="/support-class/:token" element={<SupportClass />} />
         <Route path="/fix/:token" element={<MaintenanceReport />} />
         <Route path="/tech/:token" element={<MaintenanceTech />} />
         <Route path="/po/:token" element={<PurchaseOrderPublic />} />

@@ -11,7 +11,8 @@
 //   supportCycles/{id}/groups/{gid}        a group: type, branch, grades, subject, teacher, room, capacity, supervisor
 //   supportCycles/{id}/supervisors/{sid}   a supervisor: name, link token, PIN
 //   supportCycles/{id}/sessions/{day_gid}  one class: the marks
-//   supportLinks/{token}                   a parent's, supervisor's or the teachers' link → its cycle (wrong-ID / PIN lock)
+//   supportCycles/{id}/lessons/{day_gid}   one class as its teacher wrote it: topic, note, each student's rating
+//   supportLinks/{token}                   a parent's, supervisor's, the teachers' (nominating) or the class teachers' link → its cycle (wrong-ID / PIN lock)
 // Read and written only here (firestore.rules deny these collections).
 
 const TYPES = ["REMEDIAL", "ENRICHMENT"];
@@ -218,6 +219,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     wa: e.wa ? { status: e.wa.status || "", error: e.wa.error || "", consent: ms(e.wa.consent), remind: ms(e.wa.remind), pledge: ms(e.wa.pledge) } : null,
     sentAt: ms(e.sentAt), pledgeSentAt: ms(e.pledgeSentAt), withdrawNote: e.withdrawNote || "",
     calls: (e.calls || []).map((x) => ({ id: x.id, kind: x.kind, day: x.day || "", at: ms(x.at) })), notes: e.notes || [],
+    final: e.final ? { r: e.final.r, note: e.final.note || "", byName: e.final.byName || "", at: ms(e.final.at) } : null,
     absenceAlert: e.absenceAlert ? { level: e.absenceAlert.level || 0, count: e.absenceAlert.count || 0, at: ms(e.absenceAlert.at) } : null,
     ...(canManage ? { link: e.token ? parentLink(e) : "", phone: e.phone || "" } : {}),
   });
@@ -235,6 +237,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
       supervisors: sv.docs.map((x) => ({ id: x.id, name: x.data().name, phone: x.data().phone || "", branch: x.data().branch || "", pin: x.data().pin, link: `${PUBLIC_APP_URL}/support-attend/${x.data().token}` })),
       hasWa: !!(await waSettings()),
       teacherLink: canManage ? teacherLinkOut(c) : null,
+      classLink: canManage ? classLinkOut(c) : null,
     };
   });
 
@@ -589,8 +592,8 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
       await batch.commit();
     }
     if (camp.exists) await campRef.update({ status: "CLOSED", closedAt: Timestamp.now(), updatedAt: Timestamp.now() });
-    const subs = await Promise.all(["students", "groups", "supervisors", "sessions", "teachers"].map((n) => ref.collection(n).get()));
-    const tokens = [...subs[0].docs, ...subs[2].docs].map((x) => x.data().token).concat(c.teacherLink?.token || []).filter((tk) => typeof tk === "string" && tk);
+    const subs = await Promise.all(["students", "groups", "supervisors", "sessions", "teachers", "lessons"].map((n) => ref.collection(n).get()));
+    const tokens = [...subs[0].docs, ...subs[2].docs].map((x) => x.data().token).concat(c.teacherLink?.token || [], c.classLink?.token || []).filter((tk) => typeof tk === "string" && tk);
     const refs = [...tokens.map((tk) => db.collection("supportLinks").doc(tk)), ...subs.flatMap((sn) => sn.docs.map((x) => x.ref))];
     for (let i = 0; i < refs.length; i += 400) {
       const batch = db.batch();
@@ -877,7 +880,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
   out.supportAttendance = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
     const u = await caller(request);
     const { ref, c } = await loadCycle(request.data?.id, u);
-    const [snap, calls] = await Promise.all([ref.collection("sessions").get(), db.collection("callTasks").where("campaignId", "==", `support_${ref.id}`).get()]);
+    const [snap, calls, ls] = await Promise.all([ref.collection("sessions").get(), db.collection("callTasks").where("campaignId", "==", `support_${ref.id}`).get(), ref.collection("lessons").get()]);
     return {
       sessions: snap.docs.map((x) => {
         const s = x.data();
@@ -886,6 +889,8 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
       }),
       calls: calls.docs.map((x) => callOut(x)),
       notTaken: c.notTaken || {},
+      // What the class teachers wrote (the class teachers' link).
+      lessons: ls.docs.map((x) => { const l = x.data(); return { id: x.id, day: l.day, groupId: l.groupId, topic: l.topic || "", note: l.note || "", ratings: l.ratings || {}, byName: l.byName || "", at: ms(l.at) }; }),
     };
   });
   // A «برامج الدعم» call, as the cycle and the student record show it.
@@ -1065,6 +1070,178 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     return { ok: true, saved: Object.keys(marks).length, notified, pendingNotice, state: await supervisorState(cRef, c, s, supervisorId, day) };
   });
 
+  // --- the class teachers' link ------------------------------------------------
+  // /support-class/<token> + PIN, one per cycle, for the teachers who teach
+  // the classes: a teacher picks their name (a group's «teacher»), then for
+  // each class of their groups writes what was taught and rates each student
+  // (excellent / good / needs follow-up, with a note); at the end, a final
+  // evaluation of each student (clear / partial / no improvement, with a
+  // recommendation). No accounts, no national IDs on the page (students go
+  // by teacherKey). Open while the cycle runs, and two weeks after its end.
+  //   supportCycles/{id}/lessons/{day_gid}   one class: topic, note, ratings
+  //   enrollment.perf.{day}                  the student's rating that day
+  //   enrollment.final                       the final evaluation
+  const RATINGS = ["EXCELLENT", "GOOD", "WEAK"];
+  const FINALS = ["CLEAR", "PARTIAL", "NONE"];
+  const plusDays = (day, n) => new Date(Date.parse(`${day}T12:00:00Z`) + n * 86400e3).toISOString().slice(0, 10);
+  const classLinkOut = (c) => (c.classLink?.token ? { link: `${PUBLIC_APP_URL}/support-class/${c.classLink.token}`, pin: c.classLink.pin, enabled: c.classLink.enabled !== false } : null);
+  // The groups' teachers, by name (spaces, diacritics and letter forms ignored).
+  const teachersOfGroups = (groups) => {
+    const m = new Map();
+    groups.forEach((g) => {
+      const k = titleKey(g.teacher);
+      if (!k) return;
+      if (!m.has(k)) m.set(k, { key: k, name: str(g.teacher, 80).replace(/\s+/g, " "), groups: [] });
+      m.get(k).groups.push(g);
+    });
+    return m;
+  };
+  // For the coordinator: each teacher's groups, classes written of those due, and final evaluations.
+  async function classTeachersOut(ref, c) {
+    const [gr, ls, st] = await Promise.all([ref.collection("groups").get(), ref.collection("lessons").get(), ref.collection("students").where("status", "==", "CONSENTED").get()]);
+    const groups = gr.docs.map((x) => ({ id: x.id, ...x.data() }));
+    const due = sessionDays(c).filter((x) => x <= riyadhDay()).length;
+    const lessons = ls.docs.map((x) => x.data());
+    const kids = st.docs.map((x) => x.data());
+    const teachers = [...teachersOfGroups(groups).values()].map((t) => {
+      const ids = new Set(t.groups.map((g) => g.id));
+      const mine = lessons.filter((l) => ids.has(l.groupId));
+      const students = kids.filter((e) => ids.has(e.groupId));
+      return {
+        name: t.name, groups: t.groups.map((g) => g.name), students: students.length, lessons: mine.length, due: due * ids.size,
+        finals: students.filter((e) => FINALS.includes(e.final?.r)).length, lastAt: Math.max(0, ...mine.map((l) => ms(l.at))),
+      };
+    }).sort((a, b) => a.name.localeCompare(b.name, "ar"));
+    return { teachers, noTeacher: groups.filter((g) => !titleKey(g.teacher)).map((g) => g.name) };
+  }
+  out.supportClassLink = onCall(async (request) => {
+    const u = await caller(request);
+    const dd = request.data || {};
+    const { ref, c } = await loadCycle(dd.id, u, { manage: true });
+    const old = c.classLink || {};
+    let cur = c;
+    if (dd.action === "renew" || (dd.action === "create" && !old.token)) {
+      const tk = token();
+      if (old.token) await db.collection("supportLinks").doc(old.token).delete().catch(() => {});
+      await db.collection("supportLinks").doc(tk).set({ kind: "class", cycleId: ref.id, fails: 0 });
+      await ref.update({ classLink: { token: tk, pin: pin(), enabled: true } });
+      cur = (await ref.get()).data();
+    } else if ((dd.action === "disable" || dd.action === "enable") && old.token) {
+      await ref.update({ "classLink.enabled": dd.action === "enable" });
+      cur = (await ref.get()).data();
+    }
+    if (!cur.classLink?.token) return null;
+    return { ...classLinkOut(cur), ...(await classTeachersOut(ref, cur)) };
+  });
+  async function classTeacherOf(request) {
+    const dd = request.data || {};
+    const { lRef, l } = await linkOf(dd.token, "class");
+    const cRef = cycles().doc(l.cycleId);
+    const c = (await cRef.get()).data();
+    if (!c || c.classLink?.token !== dd.token) throw new HttpsError("not-found", "الرابط غير صحيح أو انتهت صلاحيته.");
+    if (String(dd.pin || "") !== String(c.classLink.pin)) await wrong(lRef, l, "الرمز");
+    if (l.fails) await lRef.update({ fails: 0 });
+    if (c.classLink.enabled === false) throw new HttpsError("failed-precondition", "أُوقف رابط معلمي الحصص، يرجى التواصل مع منسق البرنامج.");
+    if (c.status !== "ACTIVE" && riyadhDay() > plusDays(c.endDay, 14)) throw new HttpsError("failed-precondition", "انتهت هذه الدورة.");
+    const groups = (await cRef.collection("groups").get()).docs.map((x) => ({ id: x.id, ...x.data() }));
+    const teachers = teachersOfGroups(groups);
+    const key = titleKey(dd.teacher);
+    return { cRef, c, tk: dd.token, teachers, me: key ? teachers.get(key) || null : null };
+  }
+  async function classState(cRef, c, tk, me, day) {
+    const days = sessionDays(c);
+    const today = riyadhDay();
+    const past = days.filter((x) => x <= today);
+    const theDay = past.includes(day) ? day : past[past.length - 1] || "";
+    const groups = me.groups;
+    const ids = groups.map((g) => g.id);
+    const chunks = [];
+    for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+    const [lists, lessonSnaps, sessions] = await Promise.all([
+      Promise.all(groups.map((g) => cRef.collection("students").where("groupId", "==", g.id).get())),
+      Promise.all(chunks.map((x) => cRef.collection("lessons").where("groupId", "in", x).get())),
+      theDay ? db.getAll(...groups.map((g) => cRef.collection("sessions").doc(`${theDay}_${g.id}`))) : Promise.resolve([]),
+    ]);
+    const lessons = new Map(lessonSnaps.flatMap((s) => s.docs).map((x) => [x.id, x.data()]));
+    const perfCount = (e) => { const n = {}; Object.values(e.perf || {}).forEach((p) => { if (RATINGS.includes(p?.r)) n[p.r] = (n[p.r] || 0) + 1; }); return n; };
+    return {
+      cycle: c.title, when: whenText(c), from: c.startDay, to: c.endDay, school: SCHOOL_NAME, teacher: me.name,
+      day: theDay, today, days: past, isClassDay: days.includes(today), total: days.length,
+      groups: groups.map((g, i) => {
+        const lesson = theDay ? lessons.get(`${theDay}_${g.id}`) : null;
+        const marks = sessions[i]?.exists ? sessions[i].data().marks || {} : {};
+        return {
+          id: g.id, name: g.name, type: g.type, subject: g.subject || "", room: g.room || "", curriculum: curriculumOf(g.curriculum),
+          written: past.filter((d) => lessons.has(`${d}_${g.id}`)),
+          lesson: lesson ? { topic: lesson.topic || "", note: lesson.note || "", byName: lesson.byName || "", at: ms(lesson.at) } : null,
+          students: lists[i].docs.map((x) => x.data()).filter((e) => e.status === "CONSENTED").map((e) => ({
+            k: teacherKey(tk, e.studentId), name: e.name, grade: e.grade || "", className: e.className || "", subjects: e.subjects || [], reason: e.reason || "",
+            mark: marks[e.studentId]?.s || "", rating: lesson?.ratings?.[e.studentId] || null, att: e.att || {}, perf: perfCount(e),
+            final: e.final ? { r: e.final.r, note: e.final.note || "", byName: e.final.byName || "", at: ms(e.final.at) } : null,
+          })).sort((a, b) => a.name.localeCompare(b.name, "ar")),
+        };
+      }),
+    };
+  }
+  out.supportClass = onCall({ timeoutSeconds: 60 }, async (request) => {
+    const { cRef, c, tk, teachers, me } = await classTeacherOf(request);
+    if (!me) {
+      return {
+        pick: true, cycle: c.title, when: whenText(c), from: c.startDay, to: c.endDay, school: SCHOOL_NAME, notFound: !!request.data?.teacher,
+        teachers: [...teachers.values()].map((x) => x.name).sort((a, b) => a.localeCompare(b, "ar")),
+      };
+    }
+    return classState(cRef, c, tk, me, request.data?.day);
+  });
+  out.supportClassSave = onCall({ timeoutSeconds: 60 }, async (request) => {
+    const { cRef, c, tk, me } = await classTeacherOf(request);
+    if (!me) throw new HttpsError("permission-denied", "اختر اسمك من القائمة.");
+    const dd = request.data || {};
+    const g = me.groups.find((x) => x.id === dd.groupId);
+    if (!g) throw new HttpsError("permission-denied", "المجموعة ليست من مجموعاتك.");
+    const members = (await cRef.collection("students").where("groupId", "==", g.id).get()).docs.map((x) => x.data()).filter((e) => e.status === "CONSENTED");
+    const byKey = new Map(members.map((e) => [teacherKey(tk, e.studentId), e]));
+    const now = Timestamp.now();
+    if (dd.what === "final") {
+      const batch = db.batch();
+      let saved = 0;
+      Object.entries(dd.finals && typeof dd.finals === "object" ? dd.finals : {}).forEach(([k, f]) => {
+        const e = byKey.get(k);
+        if (!e) return;
+        const eRef = cRef.collection("students").doc(e.studentId);
+        if (FINALS.includes(f?.r)) {
+          batch.update(eRef, { final: { r: f.r, note: str(f.note, 500), byName: me.name, groupId: g.id, at: now } });
+          saved++;
+        } else if (e.final) batch.update(eRef, { final: FieldValue.delete() });
+      });
+      await batch.commit();
+      return { ok: true, saved, state: await classState(cRef, c, tk, me, dd.day) };
+    }
+    const day = String(dd.day || "");
+    if (!sessionDays(c).includes(day) || day > riyadhDay()) throw new HttpsError("failed-precondition", "ليس يوم حصة.");
+    const topic = str(dd.topic, 300);
+    if (!topic) throw new HttpsError("invalid-argument", "اكتب موضوع الحصة.");
+    const ratings = {};
+    Object.entries(dd.ratings && typeof dd.ratings === "object" ? dd.ratings : {}).forEach(([k, r]) => {
+      const e = byKey.get(k);
+      if (e && RATINGS.includes(r?.r)) ratings[e.studentId] = { r: r.r, note: str(r.note, 300) };
+    });
+    const lRef = cRef.collection("lessons").doc(`${day}_${g.id}`);
+    await db.runTransaction(async (tx) => {
+      const prev = (await tx.get(lRef)).data()?.ratings || {};
+      tx.set(lRef, { day, groupId: g.id, topic, note: str(dd.note, 1000), ratings, byName: me.name, at: now });
+      // Each rating is kept on the enrollment too (the student record).
+      members.forEach((e) => {
+        const a = ratings[e.studentId];
+        const b = prev[e.studentId];
+        if ((a?.r || "") !== (b?.r || "") || (a?.note || "") !== (b?.note || "")) {
+          tx.update(cRef.collection("students").doc(e.studentId), { [`perf.${day}`]: a ? { r: a.r, note: a.note, g: g.id } : FieldValue.delete() });
+        }
+      });
+    });
+    return { ok: true, rated: Object.keys(ratings).length, state: await classState(cRef, c, tk, me, day) };
+  });
+
   // --- absence: WhatsApp, call, repeated-absence alert ----------------------------
   // Who follows a cycle's student: the cycle's creator, the branch's
   // principals and those given supportManage in the branch.
@@ -1220,12 +1397,15 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
       if (!(callerAll(u) || manages(u, all[i].data()) || callerHasBranch(u, e.branch))) continue;
       const cRef = all[i].ref;
       const c = all[i].data();
-      const [groupsSnap, callSnaps, legacy] = await Promise.all([
+      const perf = Object.entries(e.perf || {}).filter(([, p]) => p && p.g);
+      const [groupsSnap, callSnaps, legacy, lessonSnaps] = await Promise.all([
         cRef.collection("groups").get(),
         (e.calls || []).length ? db.getAll(...e.calls.map((x) => db.collection("callTasks").doc(x.id))) : Promise.resolve([]),
         // Classes marked before the marks were kept on the enrollment.
         MARKS.reduce((n, k) => n + (e.att?.[k] || 0), 0) > Object.keys(e.hist || {}).length ? cRef.collection("sessions").get() : Promise.resolve(null),
+        perf.length ? db.getAll(...perf.map(([day, p]) => cRef.collection("lessons").doc(`${day}_${p.g}`))) : Promise.resolve([]),
       ]);
+      const topics = Object.fromEntries(lessonSnaps.filter((x) => x.exists).map((x) => [x.id, x.data().topic || ""]));
       const groups = Object.fromEntries(groupsSnap.docs.map((x) => [x.id, x.data()]));
       const g = e.groupId ? groups[e.groupId] : null;
       const hist = e.hist || {};
@@ -1245,6 +1425,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
         sessions: Object.entries(hist).sort(([a], [b]) => b.localeCompare(a)).map(([day, m]) => ({ day, s: m.s, note: m.note || "", group: groups[m.g]?.name || "", notified: notified[day] || null })),
         remaining: e.status === "CONSENTED" ? days.filter((x) => x > riyadhDay()).length : 0,
         callList: callSnaps.filter((x) => x.exists).map(callOut),
+        ratings: perf.sort(([a], [b]) => b.localeCompare(a)).map(([day, p]) => ({ day, r: p.r, note: p.note || "", topic: topics[`${day}_${p.g}`] || "", group: groups[p.g]?.name || "" })),
       });
     }
     return { items };

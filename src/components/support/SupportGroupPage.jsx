@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowRight, Printer, Users, DoorOpen, UserCheck, GraduationCap, Loader2 } from 'lucide-react';
-import { TYPE_STYLE, CURRICULUM_STYLE, attRate, callSupport, riyadhDay, MARKS, MARK_STYLE, roundLabel } from '../../config/support';
+import { ArrowRight, Printer, Users, DoorOpen, UserCheck, GraduationCap, Loader2, BookOpen } from 'lucide-react';
+import { TYPE_STYLE, CURRICULUM_STYLE, attRate, callSupport, riyadhDay, MARKS, MARK_STYLE, roundLabel, RATINGS, RATING_STYLE, FINAL_STYLE } from '../../config/support';
 import RoundPill from './RoundPill';
 import { printPage, escapeHtml as esc } from '../../utils/printPage';
 import { Pill, btn } from '../platform/ui';
@@ -16,16 +16,27 @@ const stageOf = (grade) => {
   return n <= 6 ? 'PRIMARY' : n <= 9 ? 'MIDDLE' : n <= 12 ? 'SECONDARY' : 'OTHER';
 };
 const byGrade = (a, b) => String(a).localeCompare(String(b), 'en', { numeric: true });
+const RATING_SIGN = { EXCELLENT: '★', GOOD: '✓', WEAK: '!' };
 
 // One support group on its own page: its details and its (consented)
 // students, split by stage and then by grade, with their attendance totals
-// and their mark at each of the group's classes so far.
+// and their mark at each of the group's classes so far; what the teacher
+// wrote (the class teachers' link): each class's topic, each student's
+// rating at it, and the final evaluation.
 export default function SupportGroupPage({ data, group: g, branchName, onBack }) {
   const { t, i18n } = useTranslation();
   const c = data.cycle;
   const supName = data.supervisors.find((s) => s.id === g.supervisorId)?.name || '';
   const [sessions, setSessions] = useState(null);
-  useEffect(() => { callSupport('supportAttendance', { id: c.id }).then((r) => setSessions(r.sessions || [])).catch(() => setSessions([])); }, [c.id]);
+  const [lessonList, setLessonList] = useState([]);
+  useEffect(() => {
+    callSupport('supportAttendance', { id: c.id }).then((r) => { setSessions(r.sessions || []); setLessonList(r.lessons || []); }).catch(() => setSessions([]));
+  }, [c.id]);
+  const lessons = useMemo(() => lessonList.filter((x) => x.groupId === g.id).sort((a, b) => a.day.localeCompare(b.day)), [lessonList, g.id]);
+  // One student's ratings: { day, topic, r, note } at the classes the teacher wrote.
+  const ratingsOf = (st) => lessons.map((l) => ({ day: l.day, topic: l.topic, ...(l.ratings?.[st.studentId] || {}) }));
+  const ratingTitle = (x) => [x.day, x.topic, x.r ? t(`support.ratings.${x.r}`) : t('support.groups.notRated'), x.note].filter(Boolean).join(' — ');
+  const finalText = (s) => (s.final ? `${t(`support.finals.${s.final.r}`)}${s.final.note ? ` — ${s.final.note}` : ''}` : '');
   const today = riyadhDay();
   const days = useMemo(() => c.sessions.filter((d) => d <= today), [c.sessions, today]);
   const byDay = useMemo(() => Object.fromEntries((sessions || []).filter((x) => x.groupId === g.id).map((x) => [x.day, x])), [sessions, g.id]);
@@ -51,14 +62,16 @@ export default function SupportGroupPage({ data, group: g, branchName, onBack })
     `${t('support.groups.supervisor')}: ${supName || t('support.groups.noSupervisor')}`].filter(Boolean);
 
   const print = () => {
-    const head = ['#', t('support.col.student'), t('support.col.grade'), ...(perRow ? [t('support.curriculum.label')] : []), t('support.marks.P'), t('support.marks.A'), t('support.col.rate'), ...(days.length ? [t('support.groups.attendance')] : [])];
+    const head = ['#', t('support.col.student'), t('support.col.grade'), ...(perRow ? [t('support.curriculum.label')] : []), t('support.marks.P'), t('support.marks.A'), t('support.col.rate'), ...(days.length ? [t('support.groups.attendance')] : []), ...(lessons.length ? [t('support.groups.perf')] : []), t('support.groups.final')];
+    const rstrip = (s) => (lessons.length ? `<td class="m">${ratingsOf(s).map((x) => `<span class="k r${x.r || 'N'}" title="${esc(ratingTitle(x))}">${x.r ? RATING_SIGN[x.r] : '·'}</span>`).join('')}</td>` : '');
+    const lessonTable = lessons.length ? `<h3>${esc(t('support.groups.lessons'))} (${lessons.length})</h3><table><thead><tr><th>${esc(t('support.groups.lessonDay'))}</th><th>${esc(t('support.groups.lessonTopic'))}</th><th>${esc(t('support.groups.lessonNote'))}</th><th>${esc(t('support.groups.teacher'))}</th></tr></thead><tbody>${lessons.map((l) => `<tr><td><span dir="ltr">${esc(l.day)}</span></td><td>${esc(l.topic)}</td><td>${esc(l.note || '')}</td><td>${esc(l.byName || '')}</td></tr>`).join('')}</tbody></table>` : '';
     const strip = (s) => (days.length ? `<td class="m">${marksOf(s).map((m) => `<span class="k k${m.s ?? 'N'}" title="${m.day}">${m.s ? esc(markLetter(m.s)) : m.s === '' ? '·' : '–'}</span>`).join('')}</td>` : '');
     const body = `<p class="meta">${esc(info.join(' · '))}</p><p class="meta">${esc(g.capacity ? t('support.groups.countOf', { n: list.length, cap: g.capacity }) : t('support.groups.count', { n: list.length }))}</p>
-${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.count})</h3>${st.grades.map((gr) => `<h4>${esc(gr.grade || '—')} (${gr.students.length})</h4><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${gr.students.map((s, i) => `<tr><td class="c">${i + 1}</td><td>${esc(s.name)}${s.round ? ` <small dir="ltr">(${esc(roundLabel(s.round))})</small>` : ''}</td><td><span dir="ltr">${esc(`${s.grade} ${s.className}`.trim())}</span></td>${perRow ? `<td>${esc(curName(s.curriculum) || '—')}</td>` : ''}<td class="c">${(s.att?.P || 0) + (s.att?.L || 0)}</td><td class="c">${s.att?.A || 0}</td><td class="c">${esc(rateText(s))}</td>${strip(s)}</tr>`).join('')}</tbody></table>`).join('')}`).join('')}`;
+${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.count})</h3>${st.grades.map((gr) => `<h4>${esc(gr.grade || '—')} (${gr.students.length})</h4><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${gr.students.map((s, i) => `<tr><td class="c">${i + 1}</td><td>${esc(s.name)}${s.round ? ` <small dir="ltr">(${esc(roundLabel(s.round))})</small>` : ''}</td><td><span dir="ltr">${esc(`${s.grade} ${s.className}`.trim())}</span></td>${perRow ? `<td>${esc(curName(s.curriculum) || '—')}</td>` : ''}<td class="c">${(s.att?.P || 0) + (s.att?.L || 0)}</td><td class="c">${s.att?.A || 0}</td><td class="c">${esc(rateText(s))}</td>${strip(s)}${rstrip(s)}<td>${esc(finalText(s))}</td></tr>`).join('')}</tbody></table>`).join('')}`).join('')}${lessonTable}`;
     printPage({
       title: g.name, subtitle: [c.title, t(`support.types.${g.type}`), curName(groupCur)].filter(Boolean).join(' · '), school: t('trips.print.school'), body, dir: i18n.dir(), lang: i18n.language,
-      css: 'table{width:100%;border-collapse:collapse;margin:4px 0 10px}th,td{border:1px solid #cbd5e1;padding:3px 5px;text-align:start;font-size:9pt}th{background:#f1f5f9}h3{margin:12px 0 4px;color:#0369a1;font-size:12pt}h4{margin:6px 0 2px;font-size:10pt;color:#334155}.c{text-align:center}.meta{color:#475569;font-size:9pt;margin:0 0 4px}.m{white-space:nowrap}.k{display:inline-block;width:14px;text-align:center;font-size:8pt;border-radius:3px;margin:0 1px}.kP{background:#d1fae5;color:#047857}.kL{background:#fef3c7;color:#b45309}.kA{background:#ffe4e6;color:#be123c;font-weight:bold}.kE{background:#e2e8f0;color:#475569}.kN,.k{color:#94a3b8}',
-      landscape: days.length > 12,
+      css: 'table{width:100%;border-collapse:collapse;margin:4px 0 10px}th,td{border:1px solid #cbd5e1;padding:3px 5px;text-align:start;font-size:9pt}th{background:#f1f5f9}h3{margin:12px 0 4px;color:#0369a1;font-size:12pt}h4{margin:6px 0 2px;font-size:10pt;color:#334155}.c{text-align:center}.meta{color:#475569;font-size:9pt;margin:0 0 4px}.m{white-space:nowrap}.k{display:inline-block;width:14px;text-align:center;font-size:8pt;border-radius:3px;margin:0 1px}.kP{background:#d1fae5;color:#047857}.kL{background:#fef3c7;color:#b45309}.kA{background:#ffe4e6;color:#be123c;font-weight:bold}.kE{background:#e2e8f0;color:#475569}.kN,.k{color:#94a3b8}.rEXCELLENT{background:#d1fae5;color:#047857}.rGOOD{background:#e0f2fe;color:#0369a1}.rWEAK{background:#fef3c7;color:#b45309;font-weight:bold}',
+      landscape: days.length > 8 || lessons.length > 0,
     });
   };
 
@@ -84,6 +97,25 @@ ${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.c
           <span className="flex items-center gap-1"><span className="w-5 h-5 rounded border border-dashed border-slate-300 flex items-center justify-center text-slate-400">–</span>{t('support.att.notTaken')}</span>
           <span className="text-slate-400">· {t('support.groups.legend')}</span>
         </div>
+      )}
+
+      {lessons.length > 0 && (
+        <section className="bg-white border border-slate-200 rounded-2xl p-4 space-y-2">
+          <p className="font-bold text-slate-900 flex items-center gap-2"><BookOpen className="w-4 h-4 text-primary" />{t('support.groups.lessons')} <span className="text-xs text-slate-500 font-normal">({lessons.length} / {days.length})</span></p>
+          <ul className="divide-y divide-slate-100 max-h-72 overflow-y-auto">
+            {[...lessons].reverse().map((l) => (
+              <li key={l.id} className="py-1.5 text-sm flex flex-wrap gap-x-3 gap-y-0.5">
+                <span className="text-xs text-slate-500 w-24 shrink-0" dir="ltr">{l.day}</span>
+                <span className="font-medium text-slate-900">{l.topic}</span>
+                {l.note && <span className="text-xs text-slate-500">— {l.note}</span>}
+                <span className="text-xs text-slate-400 ms-auto">{l.byName}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600 pt-1">
+            {RATINGS.map((k) => <span key={k} className="flex items-center gap-1"><span className={`w-5 h-5 rounded border flex items-center justify-center text-[11px] ${RATING_STYLE[k].on}`}>{RATING_SIGN[k]}</span>{t(`support.ratings.${k}`)}</span>)}
+          </div>
+        </section>
       )}
 
       {(stages.length > 1 || list.some((s) => s.round)) && (
@@ -113,6 +145,8 @@ ${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.c
                       <th className="px-2 py-1.5 text-center">{t('support.marks.A')}</th>
                       <th className="px-2 py-1.5 text-center">{t('support.col.rate')}</th>
                       <th className="px-2 py-1.5 text-start">{t('support.groups.attendance')}</th>
+                      {lessons.length > 0 && <th className="px-2 py-1.5 text-start">{t('support.groups.perf')}</th>}
+                      <th className="px-2 py-1.5 text-start">{t('support.groups.final')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -137,6 +171,19 @@ ${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.c
                                   ))}
                                 </div>
                               )}
+                        </td>
+                        {lessons.length > 0 && (
+                          <td className="px-2 py-2">
+                            <div className="flex flex-wrap gap-1 min-w-[6rem]">
+                              {ratingsOf(s).map((x) => (
+                                <span key={x.day} title={ratingTitle(x)} className={`w-6 h-6 rounded border flex items-center justify-center text-[11px] font-bold ${x.r ? RATING_STYLE[x.r].on : 'border-slate-200 text-slate-300'}`}>{x.r ? RATING_SIGN[x.r] : '·'}</span>
+                              ))}
+                            </div>
+                          </td>
+                        )}
+                        <td className="px-2 py-2 text-xs">
+                          {s.final ? <span title={[s.final.note, s.final.byName].filter(Boolean).join(' — ')} className={`inline-block px-2 py-0.5 rounded-full border ${FINAL_STYLE[s.final.r]?.pill || ''}`}>{t(`support.finals.${s.final.r}`)}</span> : <span className="text-slate-300">—</span>}
+                          {s.final?.note && <p className="text-[11px] text-slate-500 mt-0.5 max-w-48">{s.final.note}</p>}
                         </td>
                       </tr>
                     ))}
