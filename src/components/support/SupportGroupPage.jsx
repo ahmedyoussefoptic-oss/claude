@@ -34,8 +34,8 @@ export default function SupportGroupPage({ data, group: g, branchName, onBack })
   }, [c.id]);
   const lessons = useMemo(() => lessonList.filter((x) => x.groupId === g.id).sort((a, b) => a.day.localeCompare(b.day)), [lessonList, g.id]);
   // One student's ratings: { day, topic, r, note } at the classes the teacher wrote.
-  const ratingsOf = (st) => lessons.map((l) => ({ day: l.day, topic: l.topic, ...(l.ratings?.[st.studentId] || {}) }));
-  const ratingTitle = (x) => [x.day, x.topic, x.r ? t(`support.ratings.${x.r}`) : t('support.groups.notRated'), x.note].filter(Boolean).join(' — ');
+  const ratingsOf = (st) => lessons.map((l) => ({ day: l.day, subject: l.subject, topic: l.topic, ...(l.ratings?.[st.studentId] || {}) }));
+  const ratingTitle = (x) => [x.day, x.subject, x.topic, x.r ? t(`support.ratings.${x.r}`) : t('support.groups.notRated'), x.note].filter(Boolean).join(' — ');
   const finalText = (s) => (s.final ? `${t(`support.finals.${s.final.r}`)}${s.final.note ? ` — ${s.final.note}` : ''}` : '');
   const today = riyadhDay();
   const days = useMemo(() => c.sessions.filter((d) => d <= today), [c.sessions, today]);
@@ -64,7 +64,7 @@ export default function SupportGroupPage({ data, group: g, branchName, onBack })
   const print = () => {
     const head = ['#', t('support.col.student'), t('support.col.grade'), ...(perRow ? [t('support.curriculum.label')] : []), t('support.marks.P'), t('support.marks.A'), t('support.col.rate'), ...(days.length ? [t('support.groups.attendance')] : []), ...(lessons.length ? [t('support.groups.perf')] : []), t('support.groups.final')];
     const rstrip = (s) => (lessons.length ? `<td class="m">${ratingsOf(s).map((x) => `<span class="k r${x.r || 'N'}" title="${esc(ratingTitle(x))}">${x.r ? RATING_SIGN[x.r] : '·'}</span>`).join('')}</td>` : '');
-    const lessonTable = lessons.length ? `<h3>${esc(t('support.groups.lessons'))} (${lessons.length})</h3><table><thead><tr><th>${esc(t('support.groups.lessonDay'))}</th><th>${esc(t('support.groups.lessonTopic'))}</th><th>${esc(t('support.groups.lessonNote'))}</th><th>${esc(t('support.groups.teacher'))}</th></tr></thead><tbody>${lessons.map((l) => `<tr><td><span dir="ltr">${esc(l.day)}</span></td><td>${esc(l.topic)}</td><td>${esc(l.note || '')}</td><td>${esc(l.byName || '')}</td></tr>`).join('')}</tbody></table>` : '';
+    const lessonTable = lessons.length ? `<h3>${esc(t('support.groups.lessons'))} (${lessons.length})</h3><table><thead><tr><th>${esc(t('support.groups.lessonDay'))}</th><th>${esc(t('support.cls.subject'))}</th><th>${esc(t('support.groups.lessonTopic'))}</th><th>${esc(t('support.groups.lessonNote'))}</th><th>${esc(t('support.groups.teacher'))}</th></tr></thead><tbody>${lessons.map((l) => `<tr><td><span dir="ltr">${esc(l.day)}</span></td><td>${esc(l.subject || '')}</td><td>${esc(l.topic)}</td><td>${esc(l.note || '')}</td><td>${esc(l.byName || '')}</td></tr>`).join('')}</tbody></table>` : '';
     const strip = (s) => (days.length ? `<td class="m">${marksOf(s).map((m) => `<span class="k k${m.s ?? 'N'}" title="${m.day}">${m.s ? esc(markLetter(m.s)) : m.s === '' ? '·' : '–'}</span>`).join('')}</td>` : '');
     const body = `<p class="meta">${esc(info.join(' · '))}</p><p class="meta">${esc(g.capacity ? t('support.groups.countOf', { n: list.length, cap: g.capacity }) : t('support.groups.count', { n: list.length }))}</p>
 ${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.count})</h3>${st.grades.map((gr) => `<h4>${esc(gr.grade || '—')} (${gr.students.length})</h4><table><thead><tr>${head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${gr.students.map((s, i) => `<tr><td class="c">${i + 1}</td><td>${esc(s.name)}${s.round ? ` <small dir="ltr">(${esc(roundLabel(s.round))})</small>` : ''}</td><td><span dir="ltr">${esc(`${s.grade} ${s.className}`.trim())}</span></td>${perRow ? `<td>${esc(curName(s.curriculum) || '—')}</td>` : ''}<td class="c">${(s.att?.P || 0) + (s.att?.L || 0)}</td><td class="c">${s.att?.A || 0}</td><td class="c">${esc(rateText(s))}</td>${strip(s)}${rstrip(s)}<td>${esc(finalText(s))}</td></tr>`).join('')}</tbody></table>`).join('')}`).join('')}${lessonTable}`;
@@ -106,6 +106,7 @@ ${stages.map((st) => `<h3>${esc(t(`support.groups.stages.${st.stage}`))} (${st.c
             {[...lessons].reverse().map((l) => (
               <li key={l.id} className="py-1.5 text-sm flex flex-wrap gap-x-3 gap-y-0.5">
                 <span className="text-xs text-slate-500 w-24 shrink-0" dir="ltr">{l.day}</span>
+                {l.subject && <span className="text-xs px-1.5 py-0.5 rounded-md bg-slate-100 text-slate-600">{l.subject}</span>}
                 <span className="font-medium text-slate-900">{l.topic}</span>
                 {l.note && <span className="text-xs text-slate-500">— {l.note}</span>}
                 <span className="text-xs text-slate-400 ms-auto">{l.byName}</span>

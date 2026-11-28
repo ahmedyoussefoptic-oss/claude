@@ -421,8 +421,9 @@ function GroupEditor({ data, branchName, group, onClose, onSaved }) {
 }
 
 // The class teachers' link (one per cycle) and its PIN: copy / send, a new
-// link (the old one stops), pause — and each group teacher's follow-up:
-// classes written of those due, final evaluations, last entry.
+// link (the old one stops), pause — and the follow-up: who taught (groups,
+// subjects, classes, final evaluations, last entry) and each group's classes
+// written of those due.
 function ClassLinkModal({ cycle, initial, onClose }) {
   const { t } = useTranslation();
   const [link, setLink] = useState(initial);
@@ -439,6 +440,7 @@ function ClassLinkModal({ cycle, initial, onClose }) {
     callSupport('supportClassLink', { id: cycle.id, action: 'list' }).then((r) => r && setLink(r)).catch((err) => setError(err.message)).finally(() => setBusy(''));
   }, [cycle.id, initial]);
   const teachers = link?.teachers || [];
+  const groups = link?.groups || [];
   const message = link?.link ? t('support.clink.message', { cycle: cycle.title, link: link.link, pin: link.pin }) : '';
   const copy = async () => { try { await navigator.clipboard.writeText(message); setCopied(true); setTimeout(() => setCopied(false), 2000); } catch { window.prompt('', message); } };
   const when = (ms) => (ms ? new Date(ms).toLocaleString('en-GB', { timeZone: 'Asia/Riyadh', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—');
@@ -465,18 +467,18 @@ function ClassLinkModal({ cycle, initial, onClose }) {
           </div>
           <div className="space-y-2">
             <p className="text-sm font-bold text-slate-900 flex items-center gap-2">{t('support.clink.teachers', { n: teachers.length })}{busy === 'list' && <Loader2 className="w-4 h-4 animate-spin text-primary" />}</p>
-            {link.noTeacher?.length > 0 && <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">{t('support.clink.noTeacherGroups', { list: link.noTeacher.join('، ') })}</p>}
-            {!teachers.length ? (busy !== 'list' && <p className="text-xs text-slate-400">{t('support.clink.noTeachers')}</p>) : (
+            {!teachers.length ? (busy !== 'list' && <p className="text-xs text-slate-400">{t('support.clink.noTeachersYet')}</p>) : (
               <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-80">
                 <table className="w-full text-xs">
-                  <thead className="bg-slate-50 text-slate-500 sticky top-0"><tr>{['tName', 'tGroups', 'tLessons', 'tFinals', 'tLast'].map((k) => <th key={k} className="px-2 py-1.5 text-start font-medium">{t(`support.clink.${k}`)}</th>)}</tr></thead>
+                  <thead className="bg-slate-50 text-slate-500 sticky top-0"><tr>{['tName', 'tSubjects', 'tGroups', 'tLessons', 'tFinals', 'tLast'].map((k) => <th key={k} className="px-2 py-1.5 text-start font-medium">{t(`support.clink.${k}`)}</th>)}</tr></thead>
                   <tbody className="divide-y divide-slate-100">
                     {teachers.map((x) => (
                       <tr key={x.name}>
                         <td className="px-2 py-1.5 font-medium text-slate-900">{x.name}</td>
-                        <td className="px-2 py-1.5 text-slate-600">{x.groups.join('، ')}</td>
-                        <td className={`px-2 py-1.5 text-center whitespace-nowrap ${x.due && x.lessons < x.due ? 'text-amber-700 font-bold' : 'text-emerald-700'}`}>{x.lessons} / {x.due}</td>
-                        <td className="px-2 py-1.5 text-center whitespace-nowrap">{x.finals} / {x.students}</td>
+                        <td className="px-2 py-1.5 text-slate-600">{x.subjects.join('، ') || '—'}</td>
+                        <td className="px-2 py-1.5 text-slate-600">{x.groups.join('، ') || '—'}</td>
+                        <td className="px-2 py-1.5 text-center">{x.lessons}</td>
+                        <td className="px-2 py-1.5 text-center">{x.finals}</td>
                         <td className="px-2 py-1.5 whitespace-nowrap" dir="ltr">{when(x.lastAt)}</td>
                       </tr>
                     ))}
@@ -485,6 +487,25 @@ function ClassLinkModal({ cycle, initial, onClose }) {
               </div>
             )}
           </div>
+          {groups.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-bold text-slate-900">{t('support.clink.coverage')}</p>
+              <div className="border border-slate-200 rounded-xl overflow-x-auto max-h-64">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 text-slate-500 sticky top-0"><tr><th className="px-2 py-1.5 text-start font-medium">{t('support.col.group')}</th><th className="px-2 py-1.5 text-center font-medium">{t('support.clink.tLessons')}</th><th className="px-2 py-1.5 text-center font-medium">{t('support.groups.count', { n: '' }).trim()}</th></tr></thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {groups.map((x) => (
+                      <tr key={x.name}>
+                        <td className="px-2 py-1.5 text-slate-900">{x.name}</td>
+                        <td className={`px-2 py-1.5 text-center whitespace-nowrap ${x.written < x.due ? 'text-amber-700 font-bold' : 'text-emerald-700'}`}>{x.written} / {x.due}</td>
+                        <td className="px-2 py-1.5 text-center">{x.students}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </Modal>

@@ -120,8 +120,10 @@ ${x.decline ? `<tr><td>${esc(t('support.student.declinedOn'))}</td><td>${esc(x.d
                                 <li key={r.day} className="flex flex-wrap items-center gap-1.5 text-slate-600">
                                   <span dir="ltr" className="text-slate-500">{r.day}</span>
                                   <span className={`px-1.5 py-0.5 rounded-md border text-[11px] ${RATING_STYLE[r.r]?.on || ''}`}>{t(`support.ratings.${r.r}`)}</span>
+                                  {r.subject && <span className="text-slate-500">{r.subject}:</span>}
                                   {r.topic && <span>{r.topic}</span>}
                                   {r.note && <span className="text-slate-400">— {r.note}</span>}
+                                  {r.by && <span className="text-slate-400">· {r.by}</span>}
                                 </li>
                               ))}
                             </ul>
