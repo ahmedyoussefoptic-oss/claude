@@ -68,12 +68,13 @@ export default function SupportDashboard({ data, branchName, groupName, reload }
     absences.sort((a, b) => b.day.localeCompare(a.day) || (byId[a.sid]?.name || '').localeCompare(byId[b.sid]?.name || '', 'ar'));
     const passed = c.sessions.filter((d) => d <= today);
     const expected = passed.length * data.groups.filter((g) => students.some((s) => s.groupId === g.id && s.status === 'CONSENTED')).length;
-    const taken = new Set((att?.sessions || []).filter((s) => s.day <= today).map((s) => s.id)).size;
+    // Only the groups still there (a merged / deleted group's classes don't count).
+    const taken = new Set((att?.sessions || []).filter((s) => s.day <= today && groupsById[s.groupId] && passed.includes(s.day)).map((s) => s.id)).size;
     return { ...out, absences, expected, taken, passed };
   }, [att, groupsById, byId, c.sessions, data.groups, students, today]);
 
   const rowsBy = (key) => Object.entries(stats[key]).map(([k, x]) => ({
-    key: k, label: key === 'group' ? (groupName[k] || k) : key === 'branch' ? (branchName(k) || '—') : (k || '—'),
+    key: k, label: key === 'group' ? (groupName[k] || t('support.dash.goneGroup')) : key === 'branch' ? (branchName(k) || '—') : (k || '—'),
     students: x.students.size, sessions: x.sessions.size, P: x.P, L: x.L, A: x.A, E: x.E, rate: rateOf(x),
   })).sort((a, b) => (a.rate ?? 101) - (b.rate ?? 101));
   const mostAbsent = students.filter((s) => (s.att.A || 0) > 0).sort((a, b) => (b.att.A || 0) - (a.att.A || 0)).slice(0, 40);

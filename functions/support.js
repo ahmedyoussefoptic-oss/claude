@@ -650,7 +650,21 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
   // «G7» → «الصف السابع»; KG / SEN as they are.
   const gradeAr = (g) => { const m = /^G(\d{1,2})$/i.exec(String(g || "")); return m && ORD_AR[Number(m[1])] ? `الصف ${ORD_AR[Number(m[1])]}` : String(g || "") || "أخرى"; };
   const gradeSort = (a, b) => String(a).localeCompare(String(b), "en", { numeric: true });
-  const subjectKey = (x) => String(x || "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").split(/\s+/).map((w) => w.replace(/^ال/, "")).join("");
+  // A subject as typed («الرياضيات», «رياضيات», «Math») → one key; its
+  // family also joins related ones (physics, chemistry, biology → science;
+  // Quran → Islamic studies). Mirrored in src/utils/supportSubjects.js.
+  const SUBJECT_KEYS = [
+    ["حاسب", /حاسب|حاسوب|كمبيوتر|\bict\b|comput/], ["رياضيات", /رياض|math/], ["انجليزي", /انجليز|انكليز|english|phonics/], ["فرنسي", /فرنس|french/],
+    ["عربي", /عربي|لغتي|نحو|املاء|arabic/], ["فيزياء", /فيزي|physic/], ["كيمياء", /كيمي|chemi/], ["احياء", /احيا|biolog/], ["علوم", /علوم|science/],
+    ["قران", /قران|تجويد|quran/], ["اسلامي", /اسلامي|توحيد|فقه|حديث|تفسير|islam/], ["اجتماعيات", /اجتماع|social|تاريخ|جغراف/],
+  ];
+  const SUBJECT_FAMILY = { فيزياء: "علوم", كيمياء: "علوم", احياء: "علوم", قران: "اسلامي" };
+  const subjectKey = (x) => {
+    const t = String(x || "").toLowerCase().replace(/[\u064B-\u065F\u0670\u0640]/g, "").replace(/[أإآ]/g, "ا").replace(/ة/g, "ه").replace(/ى/g, "ي").trim();
+    const hit = SUBJECT_KEYS.find(([, re]) => re.test(t));
+    return hit ? hit[0] : t.split(/\s+/).map((w) => w.replace(/^ال/, "")).join("");
+  };
+  const subjectFamily = (x) => { const k = subjectKey(String(x || "").split("/")[0]); return SUBJECT_FAMILY[k] || k; };
   out.supportAutoGroups = onCall({ timeoutSeconds: 120, memory: "512MiB" }, async (request) => {
     const u = await caller(request);
     const dd = request.data || {};
@@ -667,6 +681,9 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const todo = st.docs.map((x) => ({ id: x.id, ...x.data() })).filter((e) => e.status === "CONSENTED" && !e.groupId && (!onlyType || e.type === onlyType) && (!onlyCurriculum || enrollCurriculum(e) === onlyCurriculum));
     // By grade (the default — each grade apart with its subject) or by stage.
     const byGradeOnly = dd.by !== "stage";
+    // Related subjects (the sciences…) together, or each subject apart.
+    const related = dd.related === true;
+    const subjKey = related ? subjectFamily : subjectKey;
     // Same branch, programme, curriculum, grade (or stage) and subject → one bucket.
     const buckets = new Map();
     todo.forEach((e) => {
@@ -674,7 +691,7 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
       const stage = stageOfGrade(e.grade);
       const grade = byGradeOnly ? String(e.grade || "") : "";
       const curriculum = enrollCurriculum(e);
-      const key = [e.branch || "", e.type, curriculum, stage, grade, subjectKey(subject)].join("|");
+      const key = [e.branch || "", e.type, curriculum, stage, grade, subjKey(subject)].join("|");
       if (!buckets.has(key)) buckets.set(key, { branch: e.branch || "", type: e.type, curriculum, stage, grade, subjects: new Map(), list: [] });
       const b = buckets.get(key);
       if (subject) b.subjects.set(subject, (b.subjects.get(subject) || 0) + 1);
@@ -693,10 +710,14 @@ const whenText = (c) => `${(c.weekdays || [1, 4]).map((w) => DAY_AR[w]).join(" �
     const byGrade = (a, b) => String(a.grade).localeCompare(String(b.grade), "en", { numeric: true }) || String(a.className).localeCompare(String(b.className), "en", { numeric: true }) || String(a.name).localeCompare(String(b.name), "ar");
     const plan = [];
     [...buckets.values()].sort((a, b) => a.type.localeCompare(b.type) || a.branch.localeCompare(b.branch) || a.curriculum.localeCompare(b.curriculum) || TEACHER_STAGES.indexOf(a.stage) - TEACHER_STAGES.indexOf(b.stage) || gradeSort(a.grade, b.grade)).forEach((b) => {
-      const subject = [...b.subjects.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] || "";
+      // The most common spelling of each subject; related ones joined.
+      const spelled = new Map();
+      const ar = (x) => Number(/[\u0600-\u06FF]/.test(x));
+      [...b.subjects.entries()].sort((x, y) => y[1] - x[1] || ar(y[0]) - ar(x[0])).forEach(([name]) => { if (!spelled.has(subjectKey(name))) spelled.set(subjectKey(name), name); });
+      const subject = related ? [...spelled.values()].join(" / ") : [...spelled.values()][0] || "";
       const list = b.list.sort(byGrade);
       // Existing groups of the same kind with room.
-      groups.filter((g) => g.type === b.type && (g.branch || "") === b.branch && subjectKey(g.subject) === subjectKey(subject) && [b.curriculum, ""].includes(groupCurriculum(g)) && (!g.curriculum || g.curriculum === b.curriculum)
+      groups.filter((g) => g.type === b.type && (g.branch || "") === b.branch && subjKey(g.subject) === subjKey(subject) && [b.curriculum, ""].includes(groupCurriculum(g)) && (!g.curriculum || g.curriculum === b.curriculum)
         && (g.grades || []).length && g.grades.every((x) => (byGradeOnly ? x === b.grade : stageOfGrade(x) === b.stage))).forEach((g) => {
         const room = g.capacity ? g.capacity - (size.get(g.id) || 0) : Infinity;
         if (room <= 0 || !list.length) return;

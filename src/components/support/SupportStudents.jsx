@@ -10,6 +10,10 @@ import StudentPicker from '../platform/StudentPicker';
 import { Modal, Field, Pill, Tile, inputCls, btn } from '../platform/ui';
 
 const sel = 'px-3 py-2 border border-slate-200 rounded-xl text-sm bg-white';
+const STATUS_TONE = {
+  NOMINATED: 'text-slate-700', APPROVED: 'text-sky-700', PENDING_CONSENT: 'text-amber-700', CONSENTED: 'text-emerald-700', DECLINED: 'text-rose-700',
+  PLEDGE_SENT: 'text-orange-700', PLEDGE_SIGNED: 'text-violet-700', REJECTED: 'text-slate-500', WITHDRAWN: 'text-slate-500',
+};
 const day = (ms) => (ms ? format(new Date(ms), 'yyyy-MM-dd') : '');
 // «Cycle 2 - فرع الملز.xlsx» → 2 (a file's Cycle guessed from its name).
 const roundOfName = (name) => { const m = /(?:cycle|دفعة|دفعه)\s*[-_ ]?\s*(\d)/i.exec(String(name)); return m ? Number(m[1]) : 0; };
@@ -30,6 +34,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
   const [roundTo, setRoundTo] = useState('');
   const [curriculum, setCurriculum] = useState('');
   const [curriculumTo, setCurriculumTo] = useState('');
+  const [groupF, setGroupF] = useState('');
   const [q, setQ] = useState('');
   const [selected, setSelected] = useState([]);
   const [busy, setBusy] = useState('');
@@ -41,13 +46,19 @@ export default function SupportStudents({ data, branchName, groupName, reload })
   const [linkOpen, setLinkOpen] = useState(false);
 
   const students = data.students;
-  const counts = useMemo(() => { const m = {}; students.forEach((s) => { m[s.status] = (m[s.status] || 0) + 1; }); return m; }, [students]);
   const grades = [...new Set(students.map((s) => s.grade).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'en', { numeric: true }));
   const branchesIn = [...new Set(students.map((s) => s.branch).filter(Boolean))];
   const roundsIn = [...new Set(students.map((s) => s.round || 0))].sort();
-  const shown = students.filter((s) => (!status || s.status === status) && (!type || s.type === type) && (!branch || s.branch === branch) && (!grade || s.grade === grade)
+  // Every filter but the state — the tiles count within it, so they follow
+  // the programme / branch / grade / curriculum / group chosen.
+  const inFilter = students.filter((s) => (!type || s.type === type) && (!branch || s.branch === branch) && (!grade || s.grade === grade)
     && (!round || String(s.round || 0) === round) && (!curriculum || (s.curriculum || 'NONE') === curriculum)
-    && (!q || `${s.name} ${s.studentId} ${s.className}`.includes(q.trim())))
+    && (!groupF || (groupF === '__none' ? s.status === 'CONSENTED' && !s.groupId : s.groupId === groupF))
+    && (!q || `${s.name} ${s.studentId} ${s.className}`.includes(q.trim())));
+  const counts = {};
+  inFilter.forEach((s) => { counts[s.status] = (counts[s.status] || 0) + 1; });
+  const noGroupN = students.filter((s) => s.status === 'CONSENTED' && !s.groupId).length;
+  const shown = inFilter.filter((s) => !status || s.status === status)
     .sort((a, b) => a.grade.localeCompare(b.grade, 'en', { numeric: true }) || a.name.localeCompare(b.name, 'ar'));
   const picked = shown.filter((s) => selected.includes(s.id));
   // Every nominated student in the current filter, for «approve all».
@@ -98,9 +109,9 @@ export default function SupportStudents({ data, branchName, groupName, reload })
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-9 gap-2">
-        <Tile label={t('support.all')} value={students.length} tone="text-slate-900" onClick={() => setStatus('')} active={!status} />
-        {SUPPORT_STATUSES.map((k) => <Tile key={k} label={t(`support.status.${k}`)} value={counts[k] || 0} tone="text-slate-900" onClick={() => setStatus(status === k ? '' : k)} active={status === k} />)}
+      <div className="grid grid-cols-2 sm:grid-cols-5 xl:grid-cols-10 gap-2">
+        <Tile label={t('support.all')} value={inFilter.length} tone="text-slate-900" onClick={() => setStatus('')} active={!status} sub={inFilter.length !== students.length ? t('support.ofAll', { n: students.length }) : ''} />
+        {SUPPORT_STATUSES.map((k) => <Tile key={k} label={t(`support.status.${k}`)} value={counts[k] || 0} tone={counts[k] ? STATUS_TONE[k] : 'text-slate-300'} onClick={() => setStatus(status === k ? '' : k)} active={status === k} />)}
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-3 flex flex-wrap items-center gap-2">
@@ -110,6 +121,7 @@ export default function SupportStudents({ data, branchName, groupName, reload })
         <select value={type} onChange={(e) => setType(e.target.value)} className={sel}><option value="">{t('support.allTypes')}</option>{SUPPORT_TYPES.map((x) => <option key={x} value={x}>{t(`support.types.${x}`)}</option>)}</select>
         {branchesIn.length > 1 && <select value={branch} onChange={(e) => setBranch(e.target.value)} className={sel}><option value="">{t('common.allBranches')}</option>{branchesIn.map((b) => <option key={b} value={b}>{branchName(b)}</option>)}</select>}
         <select value={grade} onChange={(e) => setGrade(e.target.value)} className={sel}><option value="">{t('support.allGrades')}</option>{grades.map((g) => <option key={g} value={g}>{g}</option>)}</select>
+        {data.groups.length > 0 && <select value={groupF} onChange={(e) => setGroupF(e.target.value)} className={sel}><option value="">{t('support.allGroups')}</option><option value="__none">{`${t('support.dash.tile.noGroup')} (${noGroupN})`}</option>{data.groups.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}</select>}
         <select value={curriculum} onChange={(e) => setCurriculum(e.target.value)} className={sel}><option value="">{t('support.curriculum.all')}</option>{[...SUPPORT_CURRICULA, 'NONE'].map((x) => <option key={x} value={x}>{`${t(`support.curriculum.${x}`)} (${students.filter((s) => (s.curriculum || 'NONE') === x).length})`}</option>)}</select>
         {roundsIn.some(Boolean) && <select value={round} onChange={(e) => setRound(e.target.value)} className={sel}><option value="">{t('support.round.all')}</option>{roundsIn.map((x) => <option key={x} value={String(x)}>{x ? `${roundLabel(x)} (${students.filter((s) => (s.round || 0) === x).length})` : t('support.round.untagged')}</option>)}</select>}
         <div className="flex-1" />

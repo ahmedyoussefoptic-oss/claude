@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Plus, Pencil, Trash2, Loader2, Users, DoorOpen, UserCheck, GraduationCap, ChevronLeft, ArrowRight, Layers, TrendingUp, Sparkles, Wand2, Combine } from 'lucide-react';
 import { callSupport, SUPPORT_TYPES, SUPPORT_CURRICULA, CURRICULUM_STYLE, TYPE_STYLE, SUBJECTS } from '../../config/support';
 import { Modal, Field, Pill, inputCls, btn } from '../platform/ui';
+import { subjectKey, subjectFamily } from '../../utils/supportSubjects';
 
 const PROGRAM_ICON = { REMEDIAL: TrendingUp, ENRICHMENT: Sparkles };
 const PROGRAM_TONE = { REMEDIAL: 'from-amber-50 border-amber-200 text-amber-800', ENRICHMENT: 'from-sky-50 border-sky-200 text-sky-700' };
@@ -16,21 +17,22 @@ export function AutoGroupsModal({ cycle, type = '', branchName, onClose, onDone 
   const [capacity, setCapacity] = useState(15);
   const [by, setBy] = useState('grade');
   const [curriculum, setCurriculum] = useState('');
+  const [related, setRelated] = useState(false);
   const [plan, setPlan] = useState(null);
   const [merges, setMerges] = useState([]);
   const [ticked, setTicked] = useState([]);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState(null);
-  const preview = async (cap = capacity, m = merges, how = by, cur = curriculum) => {
+  const preview = async (cap = capacity, m = merges, how = by, cur = curriculum, rel = related) => {
     setBusy('preview');
     setError(null);
-    try { setPlan(await callSupport('supportAutoGroups', { id: cycle.id, type, by: how, curriculum: cur, capacity: Number(cap) || 0, merges: m })); setMerges(m); setTicked([]); } catch (err) { setError(err.message); } finally { setBusy(''); }
+    try { setPlan(await callSupport('supportAutoGroups', { id: cycle.id, type, by: how, curriculum: cur, related: rel, capacity: Number(cap) || 0, merges: m })); setMerges(m); setTicked([]); } catch (err) { setError(err.message); } finally { setBusy(''); }
   };
   useEffect(() => { preview(15, []); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const apply = async () => {
     setBusy('apply');
     setError(null);
-    try { onDone(await callSupport('supportAutoGroups', { id: cycle.id, type, by, curriculum, capacity: Number(capacity) || 0, merges, apply: true })); } catch (err) { setError(err.message); setBusy(''); }
+    try { onDone(await callSupport('supportAutoGroups', { id: cycle.id, type, by, curriculum, related, capacity: Number(capacity) || 0, merges, apply: true })); } catch (err) { setError(err.message); setBusy(''); }
   };
   const rows = plan?.plan || [];
   const keyOf = (r) => r.members.join('|');
@@ -52,6 +54,9 @@ export function AutoGroupsModal({ cycle, type = '', branchName, onClose, onDone 
         </Field>
         <Field label={t('support.curriculum.label')}>
           <div className="flex gap-1.5">{['', ...SUPPORT_CURRICULA].map((x) => <button key={x || 'all'} type="button" disabled={!!busy} onClick={() => { setCurriculum(x); preview(capacity, [], by, x); }} className={`px-3 py-2 rounded-xl text-sm border ${curriculum === x ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'}`}>{x ? t(`support.curriculum.${x}`) : t('support.curriculum.each')}</button>)}</div>
+        </Field>
+        <Field label={t('support.autoMerge.subjects')}>
+          <div className="flex gap-1.5">{[false, true].map((x) => <button key={String(x)} type="button" disabled={!!busy} onClick={() => { setRelated(x); preview(capacity, [], by, curriculum, x); }} className={`px-3 py-2 rounded-xl text-sm border ${related === x ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'}`}>{t(`support.autoMerge.${x ? 'related' : 'same'}`)}</button>)}</div>
         </Field>
         <Field label={t('support.auto.capacity')} hint={t('support.auto.capacityHint')}><input type="number" min={0} max={200} value={capacity} onChange={(e) => setCapacity(e.target.value)} className={`${inputCls} w-32`} /></Field>
         <button type="button" disabled={!!busy} onClick={() => preview(capacity, [])} className={`${btn.ghost} mb-1`}>{busy === 'preview' && <Loader2 className="w-4 h-4 animate-spin" />}{t('support.auto.preview')}</button>
@@ -149,6 +154,7 @@ export default function SupportGroups({ data, type, branchName, reload, onOpen, 
   const [picking, setPicking] = useState(false);
   const [picked, setPicked] = useState([]);
   const [merging, setMerging] = useState(false);
+  const [autoMerge, setAutoMerge] = useState(false);
   const groups = data.groups.filter((g) => g.type === type);
   const members = (gid) => data.students.filter((s) => s.groupId === gid && s.status === 'CONSENTED');
   const waiting = data.students.filter((s) => s.status === 'CONSENTED' && !s.groupId && s.type === type);
@@ -172,13 +178,17 @@ export default function SupportGroups({ data, type, branchName, reload, onOpen, 
             <button type="button" disabled={picked.length < 2} onClick={() => setMerging(true)} className={btn.primary}><Combine className="w-4 h-4" />{t('support.merge.selected', { n: picked.length })}</button>
             <button type="button" onClick={() => { setPicking(false); setPicked([]); }} className={btn.ghost}>{t('common.cancel')}</button>
           </>
-        ) : <button type="button" onClick={() => setPicking(true)} className={btn.ghost}><Combine className="w-4 h-4" />{t('support.merge.button')}</button>)}
+        ) : <>
+          <button type="button" onClick={() => setAutoMerge(true)} className={btn.ghost}><Wand2 className="w-4 h-4" />{t('support.autoMerge.button')}</button>
+          <button type="button" onClick={() => setPicking(true)} className={btn.ghost}><Combine className="w-4 h-4" />{t('support.merge.button')}</button>
+        </>)}
         <p className={`text-sm ${waiting.length ? 'text-amber-700' : 'text-slate-500'}`}>{t('support.groups.waiting', { n: waiting.length })}</p>
       </div>
       {picking && <p className="text-xs text-slate-500">{t('support.merge.pickHint')}</p>}
-      {done && <p className="text-sm rounded-xl p-3 border bg-emerald-50 text-emerald-800 border-emerald-100">{done.merged ? t('support.merge.done', { name: done.name, n: done.count }) : t('support.auto.done', { groups: done.created, n: done.placed })}</p>}
+      {done && <p className="text-sm rounded-xl p-3 border bg-emerald-50 text-emerald-800 border-emerald-100">{done.autoMerged != null ? t('support.autoMerge.done', { n: done.autoMerged, groups: done.removed }) : done.merged ? t('support.merge.done', { name: done.name, n: done.count }) : t('support.auto.done', { groups: done.created, n: done.placed })}</p>}
       {merging && <MergeModal cycle={c} groups={groups.filter((g) => picked.includes(g.id))} members={members} branchName={branchName} onClose={() => setMerging(false)} onDone={async (r) => { setMerging(false); setPicking(false); setPicked([]); setDone({ merged: true, ...r }); await reload(); }} />}
       {auto && <AutoGroupsModal cycle={c} type={type} branchName={branchName} onClose={() => setAuto(false)} onDone={async (r) => { setAuto(false); setDone(r); await reload(); }} />}
+      {autoMerge && <AutoMergeModal cycle={c} groups={groups} members={members} branchName={branchName} onClose={() => setAutoMerge(false)} onDone={async (r) => { setAutoMerge(false); setDone(r); await reload(); }} />}
       {!groups.length ? <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center text-slate-500">{t('support.programs.empty')}</div> : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {groups.map((g) => {
@@ -214,6 +224,115 @@ export default function SupportGroups({ data, type, branchName, reload, onOpen, 
       )}
       {editing && <GroupEditor data={data} branchName={branchName} group={editing} onClose={() => setEditing(null)} onSaved={async () => { setEditing(null); await reload(); }} />}
     </div>
+  );
+}
+
+// «Merge by itself»: this programme's groups of the same branch, curriculum,
+// grade (or stage) and subject — or related subjects (the sciences…) — put
+// together, each merged group up to `max` students (0 = no limit). Shows the
+// proposals (each can be left out and renamed), then merges them one by one.
+const STAGE_OF = (grade) => { const g = String(grade || ''); if (/^KG/i.test(g)) return 'KG'; const n = Number((g.match(/\d+/) || [])[0]); return !n ? 'OTHER' : n <= 6 ? 'PRIMARY' : n <= 9 ? 'MIDDLE' : n <= 12 ? 'SECONDARY' : 'OTHER'; };
+const gradeSort = (a, b) => String(a).localeCompare(String(b), 'en', { numeric: true });
+const baseName = (name) => String(name || '').replace(/\s*\(\d+(?:-\d+)?\)\s*$/, '').trim();
+function mergeProposals(groups, members, { by = 'grade', subjects = 'same', max = 0 } = {}) {
+  const keyOf = subjects === 'related' ? subjectFamily : subjectKey;
+  const clusters = new Map();
+  groups.forEach((g) => {
+    const list = members(g.id);
+    const grades = [...new Set((list.length ? list.map((s) => s.grade) : g.grades || []).filter(Boolean))].sort(gradeSort);
+    if (!grades.length || !String(g.subject || '').trim()) return;
+    const curs = [...new Set(list.map((s) => s.curriculum || ''))];
+    const cur = g.curriculum || (curs.length === 1 ? curs[0] : curs.length ? 'MIXED' : '');
+    const where = by === 'stage' ? [...new Set(grades.map(STAGE_OF))].sort().join(',') : grades.join(',');
+    const key = [g.branch || '', cur, where, keyOf(g.subject)].join('|');
+    if (!clusters.has(key)) clusters.set(key, []);
+    clusters.get(key).push({ g, n: list.length, grades });
+  });
+  const limit = Number(max) > 0 ? Number(max) : Infinity;
+  const out = [];
+  clusters.forEach((items) => {
+    if (items.length < 2) return;
+    const bins = [];
+    // Smallest first: the small groups join up before a large one is topped up.
+    [...items].sort((a, b) => a.n - b.n).forEach((x) => {
+      const bin = bins.find((b) => b.total + x.n <= limit);
+      if (bin) { bin.items.push(x); bin.total += x.n; } else bins.push({ items: [x], total: x.n });
+    });
+    bins.filter((b) => b.items.length > 1).forEach((b) => {
+      // The one that stays: the one already set up (teacher, supervisor, room), else the largest.
+      const target = [...b.items].sort((x, y) => Number(!!(y.g.teacher || y.g.supervisorId || y.g.room)) - Number(!!(x.g.teacher || x.g.supervisorId || x.g.room)) || y.n - x.n)[0].g;
+      out.push({ key: b.items.map((x) => x.g.id).sort().join('|'), target: target.id, name: baseName(target.name), groups: b.items.map((x) => ({ ...x.g, n: x.n })), total: b.total,
+        grades: [...new Set(b.items.flatMap((x) => x.grades))].sort(gradeSort), subjects: [...new Set(b.items.map((x) => x.g.subject))] });
+    });
+  });
+  // Names unique among the groups that remain.
+  const taken = new Set(groups.filter((g) => !out.some((p) => p.groups.some((x) => x.id === g.id))).map((g) => g.name));
+  out.forEach((p) => { let name = p.name; for (let i = 2; taken.has(name); i++) name = `${p.name} (${i})`; taken.add(name); p.name = name; });
+  return out;
+}
+
+function AutoMergeModal({ cycle, groups, members, branchName, onClose, onDone }) {
+  const { t } = useTranslation();
+  const [by, setBy] = useState('grade');
+  const [subjects, setSubjects] = useState('same');
+  const [max, setMax] = useState(25);
+  const [skip, setSkip] = useState([]);
+  const [names, setNames] = useState({});
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const proposals = useMemo(() => mergeProposals(groups, members, { by, subjects, max }), [groups, members, by, subjects, max]);
+  const chosen = proposals.filter((p) => !skip.includes(p.key));
+  const nameOf = (p) => names[p.key] ?? p.name;
+  const apply = async () => {
+    setBusy(true);
+    setError(null);
+    let merged = 0;
+    let removed = 0;
+    try {
+      for (const p of chosen) {
+        await callSupport('supportMergeGroups', { id: cycle.id, groupIds: p.groups.map((g) => g.id), targetId: p.target, name: nameOf(p).trim() || p.name });
+        merged++;
+        removed += p.groups.length - 1;
+      }
+      onDone({ autoMerged: merged, removed });
+    } catch (err) {
+      setError(merged ? `${t('support.autoMerge.partial', { n: merged })} — ${err.message}` : err.message);
+      setBusy(false);
+    }
+  };
+  const chip = (on) => `px-3 py-2 rounded-xl text-sm border ${on ? 'bg-primary text-white border-primary' : 'bg-white text-slate-600 border-slate-200'}`;
+  return (
+    <Modal title={t('support.autoMerge.title')} onClose={onClose} size="max-w-3xl"
+      footer={<><button type="button" onClick={onClose} className={btn.ghost}>{t('common.cancel')}</button><button type="button" disabled={busy || !chosen.length} onClick={apply} className={btn.primary}>{busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Combine className="w-4 h-4" />}{t('support.autoMerge.apply', { n: chosen.length })}</button></>}>
+      {error && <div className="bg-red-50 text-red-600 text-sm rounded-xl p-3">{error}</div>}
+      <p className="text-sm text-slate-600">{t('support.autoMerge.hint')}</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label={t('support.auto.by')}><div className="flex gap-1.5">{['grade', 'stage'].map((x) => <button key={x} type="button" onClick={() => setBy(x)} className={chip(by === x)}>{t(`support.auto.by_${x}`)}</button>)}</div></Field>
+        <Field label={t('support.autoMerge.subjects')}><div className="flex gap-1.5">{['same', 'related'].map((x) => <button key={x} type="button" onClick={() => setSubjects(x)} className={chip(subjects === x)}>{t(`support.autoMerge.${x}`)}</button>)}</div></Field>
+        <Field label={t('support.autoMerge.max')} hint={t('support.autoMerge.maxHint')}><input type="number" min={0} max={200} value={max} onChange={(e) => setMax(e.target.value)} className={`${inputCls} w-28`} /></Field>
+      </div>
+      {!proposals.length ? <p className="text-sm text-slate-500 text-center py-6">{t('support.autoMerge.none')}</p> : (
+        <div className="space-y-2 max-h-[28rem] overflow-y-auto">
+          {proposals.map((p) => {
+            const on = !skip.includes(p.key);
+            return (
+              <div key={p.key} className={`border rounded-xl p-3 space-y-2 ${on ? 'border-primary/40 bg-primary/5' : 'border-slate-200 opacity-60'}`}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input type="checkbox" checked={on} onChange={(e) => setSkip((x) => (e.target.checked ? x.filter((y) => y !== p.key) : [...x, p.key]))} />
+                  <input value={nameOf(p)} onChange={(e) => setNames((x) => ({ ...x, [p.key]: e.target.value }))} disabled={!on} className={`${inputCls} flex-1 min-w-48 py-1.5`} />
+                  <span className="text-sm font-bold text-slate-800">{t('support.groups.count', { n: p.total })}</span>
+                </div>
+                <p className="text-xs text-slate-500">{[p.subjects.join(' / '), p.grades.join('، '), branchName(p.groups[0].branch), p.groups[0].curriculum ? t(`support.curriculum.${p.groups[0].curriculum}`) : ''].filter(Boolean).join(' · ')}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {p.groups.map((g) => <span key={g.id} className={`text-xs px-2 py-1 rounded-lg border ${g.id === p.target ? 'bg-white border-primary text-primary font-medium' : 'bg-white border-slate-200 text-slate-600'}`}>{g.name} ({g.n}){g.id === p.target ? ` — ${t('support.autoMerge.keeps')}` : ''}</span>)}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <p className="text-xs text-slate-500">{t('support.merge.after')}</p>
+    </Modal>
   );
 }
 

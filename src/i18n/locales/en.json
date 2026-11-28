@@ -5808,7 +5808,8 @@
       "openOnly": "Open calls only",
       "alerted": "Alerted {{day}}",
       "toNote": "Open a note",
-      "noteDetails": "Repeated absence from {{program}} in «{{cycle}}»: absent {{n}} times (attendance {{rate}}%). Days absent: {{days}}."
+      "noteDetails": "Repeated absence from {{program}} in «{{cycle}}»: absent {{n}} times (attendance {{rate}}%). Days absent: {{days}}.",
+      "goneGroup": "Merged / deleted group"
     },
     "tlink": {
       "button": "Teachers' nomination link",
@@ -5950,6 +5951,23 @@
       "both": "Both",
       "groupHint": "A single-curriculum group only takes its own students (and those with none).",
       "noneWaiting": "{{n}} students have no curriculum — they are grouped apart; set it from the students tab if needed."
+    },
+    "ofAll": "of {{n}}",
+    "allGroups": "All groups",
+    "autoMerge": {
+      "button": "Auto-merge",
+      "title": "Merge similar groups automatically",
+      "hint": "Groups of this programme with the same branch, curriculum, grade (or stage) and subject — or related subjects — are put into one group up to the maximum. The group with a teacher, supervisor or room (or the largest) stays and the others’ students move into it.",
+      "subjects": "Subjects",
+      "same": "Same subject",
+      "related": "Related subjects together",
+      "max": "Group maximum",
+      "maxHint": "0 = no limit",
+      "none": "No similar groups to merge with these settings.",
+      "apply": "Merge {{n}} proposals",
+      "keeps": "stays",
+      "done": "{{n}} proposals merged ({{groups}} groups removed after moving their students).",
+      "partial": "{{n}} merged, then stopped"
     }
   },
   "mnt": {
